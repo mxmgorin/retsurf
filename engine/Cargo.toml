@@ -1,0 +1,13 @@
+[package]
+name = "engine"
+version = "0.1.0"
+edition = "2024"
+authors = ["troidem <mxmgorin@gmail.com>"]
+
+[dependencies]
+tokio = { version = "1.38" }
+anyhow = "1.0"
+reqwest = "0.12.23"
+html5ever = "0.35.0"
+fontdue = "0.9"
+tendril = "0.4"
