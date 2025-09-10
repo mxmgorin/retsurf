@@ -14,4 +14,8 @@ impl AppWindow {
     pub fn show(&mut self) {
         self.renderer.show();
     }
+
+    pub fn close(self) {
+        self.renderer.deinit();
+    }
 }

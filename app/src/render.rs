@@ -16,6 +16,10 @@ pub struct AppRender {
 }
 
 impl AppRender {
+    pub fn deinit(self) {
+        self.renderer.deinit();
+    }
+
     pub fn new(sdl: &sdl2::Sdl, config: &InterfaceConfig) -> Self {
         let video_subsystem = sdl.video().unwrap();
         let gl_attr = video_subsystem.gl_attr();

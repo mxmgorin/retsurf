@@ -2,7 +2,9 @@ mod app;
 mod config;
 mod render;
 mod window;
+mod input;
 
+use input::handler::InputHandler;
 use crate::app::App;
 
 #[tokio::main]
@@ -13,6 +15,7 @@ async fn main() {
     env_logger::init_from_env(env);
     log::info!("Starting app");
     let mut sdl = sdl2::init().unwrap();
-    let mut app = App::new(&mut sdl, config::AppConfig::default()).unwrap();
-    app.run();
+    let app = App::new(&mut sdl, config::AppConfig::default()).unwrap();
+    let mut input = InputHandler::new(&sdl).unwrap();
+    app.run(&mut input);
 }
