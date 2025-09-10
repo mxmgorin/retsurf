@@ -1,8 +1,7 @@
 use crate::config::InterfaceConfig;
+use webrender::RenderApi;
 use webrender_api::{
-    units::{DeviceIntSize, LayoutPoint, LayoutRect, LayoutSideOffsets, LayoutSize},
-    BorderDetails, BorderRadius, BorderSide, BorderStyle, ClipMode, ColorF, CommonItemProperties,
-    DisplayListBuilder, NormalBorder, PipelineId, PrimitiveFlags, SpaceAndClipInfo,
+    units::{DeviceIntSize, LayoutPoint, LayoutRect, LayoutSideOffsets, LayoutSize}, BorderDetails, BorderRadius, BorderSide, BorderStyle, ClipMode, ColorF, CommonItemProperties, DisplayListBuilder, DocumentId, Epoch, NormalBorder, PipelineId, PrimitiveFlags, SpaceAndClipInfo
 };
 
 pub struct AppRender {
@@ -11,8 +10,10 @@ pub struct AppRender {
     window: sdl2::video::Window,
     renderer: webrender::Renderer,
     device_size: DeviceIntSize,
-    builder: DisplayListBuilder,
     pipeline_id: PipelineId,
+    api: RenderApi,
+    epoch: Epoch,
+    document_id: DocumentId,
 }
 
 impl AppRender {
@@ -53,43 +54,34 @@ impl AppRender {
         let notifier = Box::new(AppRenderNotifier::new());
         let (renderer, sender) =
             webrender::create_webrender_instance(gl.clone(), notifier, opts, None).unwrap();
-        let mut api = sender.create_api();
+        let api = sender.create_api();
         let device_size =
             webrender_api::units::DeviceIntSize::new(config.width as i32, config.height as i32);
         let document_id = api.add_document(device_size);
-
         let epoch = webrender_api::Epoch(0);
         let pipeline_id = webrender_api::PipelineId(0, 0);
-        let mut builder = webrender_api::DisplayListBuilder::new(pipeline_id);
-        builder.begin();
 
-        let mut obj = Self {
+        Self {
             _video_subsystem: video_subsystem,
             _gl_ctx: gl_ctx,
             window,
             renderer,
             device_size,
-            builder,
             pipeline_id,
-        };
-
-        obj.render();
-
-        let mut txn = webrender::Transaction::new();
-        txn.set_display_list(epoch, obj.builder.end());
-        txn.set_root_pipeline(pipeline_id);
-        txn.generate_frame(0, true, webrender_api::RenderReasons::empty());
-        api.send_transaction(document_id, txn);
-
-        obj
+            api,
+            epoch,
+            document_id,
+        }
     }
 
-    fn render(&mut self) {
+    pub fn render(&mut self) {
+        let mut builder = webrender_api::DisplayListBuilder::new(self.pipeline_id);
+        builder.begin();
         let content_bounds = LayoutRect::from_size(LayoutSize::new(800.0, 600.0));
         let root_space_and_clip = SpaceAndClipInfo::root_scroll(self.pipeline_id);
         let spatial_id = root_space_and_clip.spatial_id;
 
-        self.builder.push_simple_stacking_context(
+        builder.push_simple_stacking_context(
             content_bounds.min,
             spatial_id,
             PrimitiveFlags::IS_BACKFACE_VISIBLE,
@@ -100,12 +92,12 @@ impl AppRender {
             BorderRadius::uniform(20.0),
             ClipMode::Clip,
         );
-        let clip_id = self
-            .builder
+        let clip_id =
+            builder
             .define_clip_rounded_rect(root_space_and_clip.spatial_id, complex);
-        let clip_chain_id = self.builder.define_clip_chain(None, [clip_id]);
+        let clip_chain_id = builder.define_clip_chain(None, [clip_id]);
 
-        self.builder.push_rect(
+        builder.push_rect(
             &CommonItemProperties::new(
                 (100, 100).to(200, 200),
                 SpaceAndClipInfo {
@@ -117,7 +109,7 @@ impl AppRender {
             ColorF::new(0.0, 1.0, 0.0, 1.0),
         );
 
-        self.builder.push_rect(
+        builder.push_rect(
             &CommonItemProperties::new(
                 (250, 100).to(350, 200),
                 SpaceAndClipInfo {
@@ -143,7 +135,7 @@ impl AppRender {
         });
 
         let bounds = (100, 100).to(200, 200);
-        self.builder.push_border(
+        builder.push_border(
             &CommonItemProperties::new(
                 bounds,
                 webrender_api::SpaceAndClipInfo {
@@ -156,7 +148,12 @@ impl AppRender {
             border_details,
         );
 
-        self.builder.pop_stacking_context();
+        builder.pop_stacking_context();
+        let mut txn = webrender::Transaction::new();
+        txn.set_display_list(self.epoch, builder.end());
+        txn.set_root_pipeline(self.pipeline_id);
+        txn.generate_frame(0, true, webrender_api::RenderReasons::empty());
+        self.api.send_transaction(self.document_id, txn);
     }
 
     pub fn show(&mut self) {

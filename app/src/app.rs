@@ -30,6 +30,7 @@ impl App {
     pub fn run(mut self, input: &mut InputHandler) {
         while self.state == AppState::Running {
             input.handle_events(&mut self);
+            self.window.update();
             self.window.show();
             thread::sleep(Duration::from_millis(30));
         }

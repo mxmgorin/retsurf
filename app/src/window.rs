@@ -11,6 +11,10 @@ impl AppWindow {
         Ok(Self { renderer })
     }
 
+    pub fn update(&mut self) {
+        self.renderer.render();
+    }
+
     pub fn show(&mut self) {
         self.renderer.show();
     }
