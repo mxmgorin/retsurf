@@ -1,7 +1,9 @@
 use crate::config::InterfaceConfig;
 use webrender::RenderApi;
 use webrender_api::{
-    units::{DeviceIntSize, LayoutPoint, LayoutRect, LayoutSideOffsets, LayoutSize}, BorderDetails, BorderRadius, BorderSide, BorderStyle, ClipMode, ColorF, CommonItemProperties, DisplayListBuilder, DocumentId, Epoch, NormalBorder, PipelineId, PrimitiveFlags, SpaceAndClipInfo
+    units::{DeviceIntSize, LayoutPoint, LayoutRect, LayoutSideOffsets, LayoutSize},
+    BorderDetails, BorderRadius, BorderSide, BorderStyle, ClipMode, ColorF, CommonItemProperties,
+    DocumentId, Epoch, NormalBorder, PipelineId, PrimitiveFlags, SpaceAndClipInfo,
 };
 
 pub struct AppRender {
@@ -55,8 +57,7 @@ impl AppRender {
         let (renderer, sender) =
             webrender::create_webrender_instance(gl.clone(), notifier, opts, None).unwrap();
         let api = sender.create_api();
-        let device_size =
-            webrender_api::units::DeviceIntSize::new(config.width as i32, config.height as i32);
+        let device_size = DeviceIntSize::new(config.width as i32, config.height as i32);
         let document_id = api.add_document(device_size);
         let epoch = webrender_api::Epoch(0);
         let pipeline_id = webrender_api::PipelineId(0, 0);
@@ -77,7 +78,11 @@ impl AppRender {
     pub fn render(&mut self) {
         let mut builder = webrender_api::DisplayListBuilder::new(self.pipeline_id);
         builder.begin();
-        let content_bounds = LayoutRect::from_size(LayoutSize::new(800.0, 600.0));
+        let layout_size = LayoutSize::new(
+            self.device_size.width as f32,
+            self.device_size.height as f32,
+        );
+        let content_bounds = LayoutRect::from_size(layout_size);
         let root_space_and_clip = SpaceAndClipInfo::root_scroll(self.pipeline_id);
         let spatial_id = root_space_and_clip.spatial_id;
 
@@ -92,9 +97,7 @@ impl AppRender {
             BorderRadius::uniform(20.0),
             ClipMode::Clip,
         );
-        let clip_id =
-            builder
-            .define_clip_rounded_rect(root_space_and_clip.spatial_id, complex);
+        let clip_id = builder.define_clip_rounded_rect(root_space_and_clip.spatial_id, complex);
         let clip_chain_id = builder.define_clip_chain(None, [clip_id]);
 
         builder.push_rect(
