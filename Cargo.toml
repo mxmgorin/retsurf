@@ -5,25 +5,19 @@ edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
 
 [dependencies]
+rust-embed="8.7.2"
+rustls = {version = "0.23.31", features = ["ring"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0.99"
-sdl2 = { version = "0.38", default-features = false, features = ["unsafe_textures"] }
+sdl2 = { version = "0.38", default-features = false, features = ["unsafe_textures", "raw-window-handle"] }
+raw-window-handle = "0.6.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.141"
-
 log = "0.4.27"
 env_logger = "0.11.8"
-webrender = { git = "https://github.com/servo/webrender", branch = "0.67" }
-webrender_api = { git = "https://github.com/servo/webrender", branch = "0.67" }
-euclid = "0.22"
-gleam = "0.15"
-glutin = "0.28"
-
-reqwest = "0.12.23"
-html5ever = "0.35.0"
-fontdue = "0.9"
-tendril = "0.4"
-markup5ever_rcdom = "0.35.0" # provides RcDom for DOM tree
+libservo = { git = "https://github.com/mxmgorin/servo" }
+dpi = "*"
+url = "2.5.7"
 
 [target.'cfg(target_os="macos")'.dependencies.sdl2]
 features=["bundled", "static-link"]
