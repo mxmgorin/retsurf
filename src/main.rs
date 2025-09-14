@@ -15,7 +15,7 @@ async fn main() {
         .install_default()
         .expect("Error initializing crypto provider");
     let env = env_logger::Env::default()
-        .filter_or("RETSURF_LOG_LEVEL", "debug")
+        .filter_or("RETSURF_LOG_LEVEL", "info")
         .write_style_or("RETSURF_LOG_STYLE", "always");
     env_logger::init_from_env(env);
     let mut sdl = sdl2::init().unwrap();

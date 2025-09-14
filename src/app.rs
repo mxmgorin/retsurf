@@ -20,7 +20,7 @@ pub struct App {
     config: AppConfig,
     window: AppWindow,
     state: AppState,
-    browser: AppBrowser,
+    pub browser: AppBrowser,
     _resources: AppResources,
 }
 
@@ -60,7 +60,6 @@ impl App {
     }
 
     fn draw(&self) {
-        log::debug!("draw");
         self.browser.draw();
         self.window.show();
     }

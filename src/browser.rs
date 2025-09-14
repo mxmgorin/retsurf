@@ -28,7 +28,7 @@ impl AppBrowserInner {
         self.tabs.borrow_mut().push(tab);
     }
 
-    pub fn get_active_tab(&self) -> Option<WebView> {
+    pub fn get_focused_tab(&self) -> Option<WebView> {
         self.tabs.borrow().last().cloned()
     }
 }
@@ -84,8 +84,14 @@ impl AppBrowser {
     }
 
     pub fn draw(&self) {
-        if let Some(tab) = self.inner.get_active_tab() {
+        if let Some(tab) = self.inner.get_focused_tab() {
             tab.paint();
+        }
+    }
+
+    pub fn handle_input(&self, input: servo::InputEvent) {
+        if let Some(tab) = self.inner.get_focused_tab() {
+            tab.notify_input_event(input);
         }
     }
 }

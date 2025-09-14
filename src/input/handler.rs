@@ -1,6 +1,9 @@
-use sdl2::event::Event;
-use crate::{app::{App, AppCmd}, input::user::handle_user};
 use super::{gamepad::handle_gamepad, keyboard::handle_keyboard};
+use crate::{
+    app::{App, AppCmd},
+    input::{mouse::{handle_mouse_button, handle_mouse_move}, user::handle_user},
+};
+use sdl2::event::Event;
 
 pub struct InputHandler {
     event_pump: sdl2::EventPump,
@@ -40,22 +43,27 @@ impl InputHandler {
                 self.game_controllers.retain(|c| c.instance_id() != which);
                 log::info!("Controller {which} disconnected");
             }
+            Event::MouseButtonUp {
+                mouse_btn, x, y, ..
+            } => handle_mouse_button(app, mouse_btn, x, y, false),
+            Event::MouseButtonDown {
+                mouse_btn, x, y, ..
+            } => handle_mouse_button(app, mouse_btn, x, y, true),
+            Event::MouseMotion { x, y, .. } => handle_mouse_move(app, x, y),
             Event::KeyDown {
-                keycode: Some(keycode),
+                keycode: Some(kc),
+                scancode: Some(sc),
+                keymod,
+                repeat,
                 ..
-            } => {
-                if let Some(cmd) = handle_keyboard(keycode, true) {
-                    app.handle_cmd(cmd);
-                }
-            }
+            } => handle_keyboard(app, kc, sc, keymod, true, repeat),
             Event::KeyUp {
-                keycode: Some(keycode),
+                keycode: Some(kc),
+                scancode: Some(sc),
+                keymod,
+                repeat,
                 ..
-            } => {
-                if let Some(cmd) = handle_keyboard(keycode, false) {
-                    app.handle_cmd(cmd);
-                }
-            }
+            } => handle_keyboard(app, kc, sc, keymod, false, repeat),
             Event::ControllerButtonDown { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, true) {
                     app.handle_cmd(cmd);

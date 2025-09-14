@@ -18,6 +18,7 @@ env_logger = "0.11.8"
 libservo = { git = "https://github.com/mxmgorin/servo" }
 dpi = "*"
 url = "2.5.7"
+keyboard-types = "0.8.1"
 
 [target.'cfg(target_os="macos")'.dependencies.sdl2]
 features=["bundled", "static-link"]

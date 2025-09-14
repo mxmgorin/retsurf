@@ -5073,6 +5073,7 @@ dependencies = [
  "anyhow",
  "dpi",
  "env_logger",
+ "keyboard-types",
  "libservo",
  "log",
  "raw-window-handle",
