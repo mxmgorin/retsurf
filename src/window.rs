@@ -6,8 +6,7 @@ use servo::RenderingContext;
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
-    // _gl_ctx: sdl2::video::GLContext,
-    window: sdl2::video::Window,
+    _window: sdl2::video::Window,
     rending_ctx: Rc<dyn servo::RenderingContext>,
 }
 
@@ -36,14 +35,12 @@ impl AppWindow {
         Ok(Self {
             _video_subsystem: video_subsystem,
             // _gl_ctx: gl_ctx,
-            window,
+            _window: window,
             rending_ctx: Rc::new(rending_ctx),
         })
     }
 
-    pub fn update(&mut self) {}
-
-    pub fn show(&mut self) {
+    pub fn show(&self) {
         self.rending_ctx.present();
     }
 

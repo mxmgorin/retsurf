@@ -1,7 +1,5 @@
 use sdl2::event::Event;
-
-use crate::app::{App, AppCmd};
-
+use crate::{app::{App, AppCmd}, input::user::handle_user};
 use super::{gamepad::handle_gamepad, keyboard::handle_keyboard};
 
 pub struct InputHandler {
@@ -29,58 +27,58 @@ impl InputHandler {
         })
     }
 
-    pub fn handle_events(&mut self, app: &mut App) {
-        while let Some(event) = self.event_pump.poll_event() {
-            match event {
-                Event::ControllerDeviceAdded { which, .. } => {
-                    if let Ok(controller) = self.game_controller_subsystem.open(which) {
-                        self.game_controllers.push(controller);
-                        log::info!("Controller {which} connected");
-                    }
+    pub fn wait_event(&mut self, app: &mut App) {
+        let event = self.event_pump.wait_event();
+        match event {
+            Event::ControllerDeviceAdded { which, .. } => {
+                if let Ok(controller) = self.game_controller_subsystem.open(which) {
+                    self.game_controllers.push(controller);
+                    log::info!("Controller {which} connected");
                 }
-                Event::ControllerDeviceRemoved { which, .. } => {
-                    self.game_controllers.retain(|c| c.instance_id() != which);
-                    log::info!("Controller {which} disconnected");
-                }
-                Event::KeyDown {
-                    keycode: Some(keycode),
-                    ..
-                } => {
-                    if let Some(cmd) = handle_keyboard(keycode, true) {
-                        app.handle_cmd(cmd);
-                    }
-                }
-                Event::KeyUp {
-                    keycode: Some(keycode),
-                    ..
-                } => {
-                    if let Some(cmd) = handle_keyboard(keycode, false) {
-                        app.handle_cmd(cmd);
-                    }
-                }
-                Event::ControllerButtonDown { button, .. } => {
-                    if let Some(cmd) =
-                        handle_gamepad(button, true)
-                    {
-                        app.handle_cmd(cmd);
-                    }
-                }
-                Event::ControllerButtonUp { button, .. } => {
-                    if let Some(cmd) =
-                        handle_gamepad(button, false)
-                    {
-                        app.handle_cmd(cmd);
-                    }
-                }
-                Event::Quit { .. } => app.handle_cmd(AppCmd::Quit),
-                Event::Window {
-                    win_event: sdl2::event::WindowEvent::Close,
-                    ..
-                } => {
-                        app.handle_cmd(AppCmd::Quit);
-                }
-                _ => {}
             }
+            Event::ControllerDeviceRemoved { which, .. } => {
+                self.game_controllers.retain(|c| c.instance_id() != which);
+                log::info!("Controller {which} disconnected");
+            }
+            Event::KeyDown {
+                keycode: Some(keycode),
+                ..
+            } => {
+                if let Some(cmd) = handle_keyboard(keycode, true) {
+                    app.handle_cmd(cmd);
+                }
+            }
+            Event::KeyUp {
+                keycode: Some(keycode),
+                ..
+            } => {
+                if let Some(cmd) = handle_keyboard(keycode, false) {
+                    app.handle_cmd(cmd);
+                }
+            }
+            Event::ControllerButtonDown { button, .. } => {
+                if let Some(cmd) = handle_gamepad(button, true) {
+                    app.handle_cmd(cmd);
+                }
+            }
+            Event::ControllerButtonUp { button, .. } => {
+                if let Some(cmd) = handle_gamepad(button, false) {
+                    app.handle_cmd(cmd);
+                }
+            }
+            Event::Quit { .. } => app.handle_cmd(AppCmd::Quit),
+            Event::User { code, .. } => {
+                if let Some(cmd) = handle_user(code) {
+                    app.handle_cmd(cmd);
+                }
+            }
+            Event::Window {
+                win_event: sdl2::event::WindowEvent::Close,
+                ..
+            } => {
+                app.handle_cmd(AppCmd::Quit);
+            }
+            _ => {}
         }
     }
 }
