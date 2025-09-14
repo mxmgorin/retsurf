@@ -44,7 +44,7 @@ impl AppWindow {
     pub fn update(&mut self) {}
 
     pub fn show(&mut self) {
-        self.window.gl_swap_window();
+        self.rending_ctx.present();
     }
 
     pub fn close(self) {}

@@ -60,9 +60,11 @@ impl App {
 
     pub fn run(mut self, input: &mut InputHandler) {
         log::info!("Run app");
+        self.browser.open_tab(&self.config.home_url);
 
         while self.state == AppState::Running {
             input.handle_events(&mut self);
+            self.browser.update();
             self.window.update();
             self.window.show();
             thread::sleep(Duration::from_millis(30));

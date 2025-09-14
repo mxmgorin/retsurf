@@ -1,7 +1,10 @@
+use std::cell::{RefCell};
+use servo::WebView;
 use crate::window::AppWindow;
 
 pub struct AppBrowser {
     servo: servo::Servo,
+    tab: RefCell<Option<WebView>>
 }
 
 impl Drop for AppBrowser {
@@ -16,10 +19,10 @@ impl AppBrowser {
         let builder = servo::ServoBuilder::new(window.get_rendering_ctx());
         let servo = builder.build();
 
-        Ok(Self { servo })
+        Ok(Self { servo, tab: RefCell::new(None) })
     }
 
-    pub fn go(&mut self, url: &str) {
+    pub fn open_tab(&mut self, url: &str) {
         let url = url::Url::parse(url).unwrap();
         let webview = servo::WebViewBuilder::new(&self.servo)
             .url(url)
@@ -27,5 +30,13 @@ impl AppBrowser {
             .build();
 
         webview.focus_and_raise_to_top(true);
+        self.tab.replace(Some(webview));
+    }
+
+    pub fn update(&self) {
+        self.servo.spin_event_loop();
+        if let Some(ref tab) = *self.tab.borrow() {
+            tab.paint();
+        }
     }
 }
