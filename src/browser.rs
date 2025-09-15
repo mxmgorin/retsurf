@@ -92,18 +92,28 @@ impl AppBrowser {
 
     pub fn handle_input(&self, event: servo::InputEvent) {
         if let Some(tab) = self.inner.get_focused_tab() {
-            let we = match event {
-                servo::InputEvent::Wheel(we) => Some(we),
-                _ => None,
-            };
+            tab.notify_input_event(event.clone());
 
-            tab.notify_input_event(event);
-
-            if let Some(we) = we {
-                let (dx, dy) = into_scroll_delta(we.delta);
-                let (x, y) = we.point.to_i32().to_tuple();
-                scroll(&tab, dx, dy, x, y);
-                self.inner.servo.spin_event_loop(); // doesn't scroll without this
+            match event {
+                servo::InputEvent::Wheel(we) => {
+                    let (dx, dy) = into_scroll_delta(we.delta);
+                    let (x, y) = we.point.to_i32().to_tuple();
+                    scroll(&tab, dx, dy, x, y);
+                    self.inner.servo.spin_event_loop(); // doesn't scroll without this
+                }
+                servo::InputEvent::MouseButton(be) => {
+                    if be.action == servo::MouseButtonAction::Down {
+                        match be.button {
+                            servo::MouseButton::Left
+                            | servo::MouseButton::Middle
+                            | servo::MouseButton::Right
+                            | servo::MouseButton::Other(_) => {}
+                            servo::MouseButton::Back => _ = tab.go_back(1),
+                            servo::MouseButton::Forward => _ = tab.go_forward(1),
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
