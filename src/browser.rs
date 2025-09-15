@@ -1,5 +1,7 @@
 use crate::{
-    input::user::{UserEvent, UserEventSender}, resources::ServoResources, window::AppWindow
+    input::user::{UserEvent, UserEventSender},
+    resources::ServoResources,
+    window::AppWindow,
 };
 use servo::{EventLoopWaker, WebView};
 use std::{cell::RefCell, rc::Rc};
@@ -105,13 +107,22 @@ impl AppBrowser {
             }
         }
     }
+
+    pub fn resize(&self, w: u32, h: u32) {
+        if let Some(tab) = self.inner.get_focused_tab() {
+            let mut rect = tab.rect();
+            rect.set_size(servo::euclid::Size2D::new(w as f32, h as f32));
+            tab.move_resize(rect);
+            tab.resize(dpi::PhysicalSize::new(w, h));
+        }
+    }
 }
 
 fn scroll(tab: &WebView, dx: f32, dy: f32, x: i32, y: i32) {
-    let scroll_location =
+    let location =
         servo::webrender_api::ScrollLocation::Delta(-servo::euclid::Vector2D::new(dx, dy));
     let point = servo::webrender_api::units::DeviceIntPoint::new(x, y);
-    tab.notify_scroll_event(scroll_location, point);
+    tab.notify_scroll_event(location, point);
 }
 
 fn into_scroll_delta(wd: servo::WheelDelta) -> (f32, f32) {

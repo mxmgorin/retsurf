@@ -13,7 +13,8 @@ pub enum AppCmd {
     Quit,
     Draw,
     Update,
-    HandleInput(servo::InputEvent)
+    HandleInput(servo::InputEvent),
+    Resize(u32, u32),
 }
 
 pub struct App {
@@ -59,6 +60,7 @@ impl App {
             AppCmd::Draw => self.draw(),
             AppCmd::Update => self.browser.update(),
             AppCmd::HandleInput(input_event) => self.browser.handle_input(input_event),
+            AppCmd::Resize(w, h) => self.browser.resize(w, h),
         }
     }
 

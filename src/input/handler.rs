@@ -4,6 +4,7 @@ use crate::{
     input::{
         mouse::{handle_mouse_button, handle_mouse_move, handle_mouse_wheel},
         user::handle_user,
+        window::handle_window,
     },
 };
 use sdl2::event::Event;
@@ -91,12 +92,7 @@ impl AppInputHandler {
                     return vec![cmd];
                 }
             }
-            Event::Window {
-                win_event: sdl2::event::WindowEvent::Close,
-                ..
-            } => {
-                return vec![AppCmd::Quit];
-            }
+            Event::Window { win_event, .. } => return handle_window(win_event),
             _ => {}
         }
 
