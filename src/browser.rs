@@ -2,7 +2,7 @@ use crate::{
     input::user::{UserEvent, UserEventSender},
     window::AppWindow,
 };
-use servo::{EventLoopWaker, WebView, WheelDelta};
+use servo::{EventLoopWaker, WebView};
 use std::{cell::RefCell, rc::Rc};
 
 pub struct AppBrowser {
@@ -33,13 +33,6 @@ impl AppBrowserInner {
     }
 }
 
-impl Drop for AppBrowserInner {
-    fn drop(&mut self) {
-        self.servo.deinit();
-        self.servo.start_shutting_down();
-    }
-}
-
 impl servo::WebViewDelegate for AppBrowserInner {
     fn notify_new_frame_ready(&self, _: WebView) {
         self.event_sender.send(UserEvent::FrameReady);
@@ -67,6 +60,11 @@ impl AppBrowser {
         Ok(Self {
             inner: Rc::new(AppBrowserInner::new(servo, event_sender)),
         })
+    }
+
+    pub fn shutdown(&self) {
+        self.inner.servo.start_shutting_down();
+        self.inner.servo.deinit();
     }
 
     pub fn open_tab(&mut self, url: &str) {
@@ -116,7 +114,7 @@ fn scroll(tab: &WebView, dx: f32, dy: f32, x: i32, y: i32) {
     tab.notify_scroll_event(scroll_location, point);
 }
 
-fn into_scroll_delta(wd: WheelDelta) -> (f32, f32) {
+fn into_scroll_delta(wd: servo::WheelDelta) -> (f32, f32) {
     let dx = wd.x as f32;
     let dy = wd.y as f32;
 

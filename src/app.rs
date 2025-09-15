@@ -54,7 +54,7 @@ impl App {
             }
         }
 
-        self.window.close();
+        self.browser.shutdown();
     }
 
     fn handle_cmd(&mut self, cmd: AppCmd) {

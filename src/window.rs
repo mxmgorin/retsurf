@@ -44,8 +44,6 @@ impl AppWindow {
         self.rendering_ctx.present();
     }
 
-    pub fn close(self) {}
-
     pub fn get_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
         self.rendering_ctx.clone()
     }

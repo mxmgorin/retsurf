@@ -17,13 +17,7 @@ fn main() {
         .write_style_or("RETSURF_LOG_STYLE", "always");
     env_logger::init_from_env(env);
     let mut sdl = sdl2::init().unwrap();
-    let app = match App::new(&mut sdl, config::AppConfig::default()) {
-        Ok(app) => app,
-        Err(err) => {
-            log::error!("Failed to create app: {err}");
-            return;
-        }
-    };
+    let app = App::new(&mut sdl, config::AppConfig::default()).unwrap();
 
     app.run();
 }
