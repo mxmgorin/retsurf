@@ -20,7 +20,7 @@ impl Default for InterfaceConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            home_url: "https://google.com".to_string(),
+            home_url: "https://servo.org/".to_string(),
             interface: InterfaceConfig::default(),
         }
     }

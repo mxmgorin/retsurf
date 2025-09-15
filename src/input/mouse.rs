@@ -1,5 +1,5 @@
-use crate::app::{AppCmd};
-use servo::{webrender_api::units::DevicePoint, InputEvent, MouseButtonEvent};
+use crate::app::AppCmd;
+use servo::{webrender_api::units::DevicePoint, InputEvent, MouseButtonEvent, WheelDelta, WheelEvent};
 
 pub fn handle_mouse_button(
     button: sdl2::mouse::MouseButton,
@@ -31,6 +31,20 @@ pub fn handle_mouse_move(x: i32, y: i32) -> Vec<AppCmd> {
     let point = into_device_point(x, y);
     let event = servo::MouseMoveEvent::new(point);
     let input = InputEvent::MouseMove(event);
+
+    vec![AppCmd::HandleInput(input)]
+}
+
+pub fn handle_mouse_wheel(dx: f32, dy: f32, mouse_x: i32, mouse_y: i32) -> Vec<AppCmd> {
+    let delta = WheelDelta {
+        x: dx as f64,
+        y: dy as f64,
+        z: 0.0,
+        mode: servo::WheelMode::DeltaLine,
+    };
+    let point = into_device_point(mouse_x, mouse_y);
+    let event = WheelEvent::new(delta, point);
+    let input = InputEvent::Wheel(event);
 
     vec![AppCmd::HandleInput(input)]
 }

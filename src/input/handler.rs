@@ -2,7 +2,7 @@ use super::{gamepad::handle_gamepad, keyboard::handle_keyboard};
 use crate::{
     app::AppCmd,
     input::{
-        mouse::{handle_mouse_button, handle_mouse_move},
+        mouse::{handle_mouse_button, handle_mouse_move, handle_mouse_wheel},
         user::handle_user,
     },
 };
@@ -54,6 +54,13 @@ impl AppInputHandler {
                 mouse_btn, x, y, ..
             } => return handle_mouse_button(mouse_btn, x, y, true),
             Event::MouseMotion { x, y, .. } => return handle_mouse_move(x, y),
+            Event::MouseWheel {
+                precise_x,
+                precise_y,
+                mouse_x,
+                mouse_y,
+                ..
+            } => return handle_mouse_wheel(precise_x, precise_y, mouse_x, mouse_y),
             Event::KeyDown {
                 keycode: Some(kc),
                 scancode: Some(sc),

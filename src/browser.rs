@@ -2,7 +2,7 @@ use crate::{
     input::user::{UserEvent, UserEventSender},
     window::AppWindow,
 };
-use servo::{EventLoopWaker, WebView};
+use servo::{EventLoopWaker, WebView, WheelDelta};
 use std::{cell::RefCell, rc::Rc};
 
 pub struct AppBrowser {
@@ -36,6 +36,7 @@ impl AppBrowserInner {
 impl Drop for AppBrowserInner {
     fn drop(&mut self) {
         self.servo.deinit();
+        self.servo.start_shutting_down();
     }
 }
 
@@ -89,9 +90,49 @@ impl AppBrowser {
         }
     }
 
-    pub fn handle_input(&self, input: servo::InputEvent) {
+    pub fn handle_input(&self, event: servo::InputEvent) {
         if let Some(tab) = self.inner.get_focused_tab() {
-            tab.notify_input_event(input);
+            let we = match event {
+                servo::InputEvent::Wheel(we) => Some(we),
+                _ => None,
+            };
+
+            tab.notify_input_event(event);
+
+            if let Some(we) = we {
+                let (dx, dy) = into_scroll_delta(we.delta);
+                let (x, y) = we.point.to_i32().to_tuple();
+                scroll(&tab, dx, dy, x, y);
+                self.inner.servo.spin_event_loop(); // doesn't scroll without this
+            }
         }
     }
+}
+
+fn scroll(tab: &WebView, dx: f32, dy: f32, x: i32, y: i32) {
+    let scroll_location =
+        servo::webrender_api::ScrollLocation::Delta(-servo::euclid::Vector2D::new(dx, dy));
+    let point = servo::webrender_api::units::DeviceIntPoint::new(x, y);
+    tab.notify_scroll_event(scroll_location, point);
+}
+
+fn into_scroll_delta(wd: WheelDelta) -> (f32, f32) {
+    let dx = wd.x as f32;
+    let dy = wd.y as f32;
+
+    let (dx, dy) = match wd.mode {
+        servo::WheelMode::DeltaPixel => (dx * 4.0, dy * 4.0),
+        servo::WheelMode::DeltaLine => (dx * 76.0, dy * 76.0),
+        servo::WheelMode::DeltaPage => unreachable!(),
+    };
+
+    // Scroll events snap to the major axis of movement, with vertical
+    // preferred over horizontal.
+    // if dy.abs() >= dx.abs() {
+    //     dx = 0.0;
+    // } else {
+    //     dy = 0.0;
+    // }
+
+    (dx, dy)
 }
