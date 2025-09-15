@@ -1,6 +1,5 @@
 use crate::browser::AppBrowser;
 use crate::input::handler::AppInputHandler;
-use crate::resources::AppResources;
 use crate::{config::AppConfig, window::AppWindow};
 use sdl2::Sdl;
 
@@ -23,12 +22,10 @@ pub struct App {
     window: AppWindow,
     state: AppState,
     browser: AppBrowser,
-    _resources: AppResources,
 }
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
-        let resources = AppResources::new();
         let window = AppWindow::new(sdl, &config.interface)?;
         let browser = AppBrowser::new(&window)?;
         let input_handler = AppInputHandler::new(sdl)?;
@@ -38,7 +35,6 @@ impl App {
             window,
             browser,
             input_handler,
-            _resources: resources,
             state: AppState::Running,
         })
     }

@@ -1,6 +1,5 @@
 use crate::{
-    input::user::{UserEvent, UserEventSender},
-    window::AppWindow,
+    input::user::{UserEvent, UserEventSender}, resources::ServoResources, window::AppWindow
 };
 use servo::{EventLoopWaker, WebView};
 use std::{cell::RefCell, rc::Rc};
@@ -53,6 +52,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
 impl AppBrowser {
     pub fn new(window: &AppWindow) -> Result<Self, String> {
         let event_sender = UserEventSender::new();
+        ServoResources::init();
         let builder = servo::ServoBuilder::new(window.get_rendering_ctx())
             .event_loop_waker(event_sender.clone_box());
         let servo = builder.build();

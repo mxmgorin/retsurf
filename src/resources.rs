@@ -2,22 +2,11 @@ use std::path::PathBuf;
 
 #[derive(rust_embed::Embed)]
 #[folder = "resources/servo"]
-struct ServoResources;
+pub struct ServoResources;
 
 impl ServoResources {
     pub fn init() {
         servo::resources::set(Box::new(ServoResources));
-    }
-}
-
-pub struct AppResources {}
-
-impl AppResources {
-    pub fn new() -> Self {
-        log::info!("new app resources");
-        ServoResources::init();
-
-        Self {}
     }
 }
 
