@@ -5070,7 +5070,6 @@ dependencies = [
 name = "retsurf"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "dpi",
  "env_logger",
  "keyboard-types",
@@ -5082,7 +5081,6 @@ dependencies = [
  "sdl2",
  "serde",
  "serde_json",
- "tokio",
  "url",
 ]
 

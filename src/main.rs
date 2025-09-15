@@ -8,8 +8,7 @@ mod resources;
 use input::handler::InputHandler;
 use crate::app::App;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     log::info!("Init main");
     rustls::crypto::ring::default_provider()
         .install_default()
