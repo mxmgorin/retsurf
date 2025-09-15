@@ -5,7 +5,6 @@ mod input;
 mod browser;
 mod resources;
 
-use input::handler::InputHandler;
 use crate::app::App;
 
 fn main() {
@@ -26,6 +25,5 @@ fn main() {
         }
     };
 
-    let mut input = InputHandler::new(&sdl).unwrap();
-    app.run(&mut input);
+    app.run();
 }

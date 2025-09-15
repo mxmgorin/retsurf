@@ -1,13 +1,12 @@
-use crate::app::App;
+use crate::app::{AppCmd};
 use servo::{webrender_api::units::DevicePoint, InputEvent, MouseButtonEvent};
 
 pub fn handle_mouse_button(
-    app: &mut App,
     button: sdl2::mouse::MouseButton,
     x: i32,
     y: i32,
     down: bool,
-) {
+) -> Vec<AppCmd> {
     let action = if down {
         servo::MouseButtonAction::Down
     } else {
@@ -24,14 +23,16 @@ pub fn handle_mouse_button(
     let point = into_device_point(x, y);
     let event = MouseButtonEvent::new(action, button, point);
     let input = InputEvent::MouseButton(event);
-    app.browser.handle_input(input);
+
+    vec![AppCmd::HandleInput(input)]
 }
 
-pub fn handle_mouse_move(app: &mut App, x: i32, y: i32) {
+pub fn handle_mouse_move(x: i32, y: i32) -> Vec<AppCmd> {
     let point = into_device_point(x, y);
     let event = servo::MouseMoveEvent::new(point);
     let input = InputEvent::MouseMove(event);
-    app.browser.handle_input(input);
+
+    vec![AppCmd::HandleInput(input)]
 }
 
 fn into_device_point(x: i32, y: i32) -> DevicePoint {

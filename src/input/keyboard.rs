@@ -1,8 +1,8 @@
-use crate::app::App;
+use crate::app::{AppCmd};
 use keyboard_types::{Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 use sdl2::keyboard::{Keycode, Mod, Scancode};
 
-pub fn handle_keyboard(app: &mut App, kc: Keycode, sc: Scancode, m: Mod, down: bool, repeat: bool) {
+pub fn handle_keyboard(kc: Keycode, sc: Scancode, m: Mod, down: bool, repeat: bool) -> Vec<AppCmd> {
     let state = if down { KeyState::Down } else { KeyState::Up };
     let kb_event = KeyboardEvent {
         state,
@@ -14,7 +14,8 @@ pub fn handle_keyboard(app: &mut App, kc: Keycode, sc: Scancode, m: Mod, down: b
         is_composing: false,
     };
     let event = servo::InputEvent::Keyboard(servo::KeyboardEvent::new(kb_event));
-    app.browser.handle_input(event);
+
+    vec![AppCmd::HandleInput(event)]
 }
 
 fn sdl_mod_to_modifiers(m: Mod) -> Modifiers {
@@ -36,7 +37,7 @@ fn sdl_mod_to_modifiers(m: Mod) -> Modifiers {
 }
 
 /// --- Scancode -> Code (physical key mapping) ---
-pub fn sdl_scancode_to_code(sc: Scancode) -> Code {
+fn sdl_scancode_to_code(sc: Scancode) -> Code {
     match sc {
         Scancode::A => Code::KeyA,
         Scancode::B => Code::KeyB,
@@ -156,8 +157,8 @@ pub fn sdl_scancode_to_code(sc: Scancode) -> Code {
     }
 }
 
-// --- Keycode -> Key (logical meaning) ---
-pub fn sdl_keycode_to_key(kc: Keycode) -> Key {
+/// --- Keycode -> Key (logical meaning) ---
+fn sdl_keycode_to_key(kc: Keycode) -> Key {
     match kc {
         Keycode::A => Key::Character("a".into()),
         Keycode::B => Key::Character("b".into()),
