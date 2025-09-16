@@ -30,7 +30,6 @@ impl AppWindow {
         rending_ctx
             .make_current()
             .map_err(|e| format!("failed rending_ctx.make_current {e:?}"))?;
-        log::debug!("new app window ended");
 
         Ok(Self {
             _video_subsystem: video_subsystem,
@@ -52,13 +51,11 @@ impl AppWindow {
 fn new_servo_context(
     sdl_window: &sdl2::video::Window,
 ) -> Result<servo::WindowRenderingContext, String> {
-    log::debug!("new_servo_context");
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-    let display_handle = sdl_window.display_handle().unwrap();
-    let window_handle = sdl_window.window_handle().unwrap();
+    let display_handle = sdl_window.display_handle().map_err(|e| format!("Failed sdl_window.display_handle: {e:?}"))?;
+    let window_handle = sdl_window.window_handle().map_err(|e| format!("Failed sdl_window.window_handle: {e:?}"))?;
     let (w, h) = sdl_window.size();
     let size = dpi::PhysicalSize::new(w, h);
-    log::debug!("WindowRenderingContext::new");
 
     servo::WindowRenderingContext::new(display_handle, window_handle, size)
         .map_err(|e| format!("Failed to create Servo WindowRenderingContext: {e:?}"))
