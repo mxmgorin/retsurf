@@ -1,12 +1,12 @@
-use crate::app::AppCmd;
+use crate::app::AppCommand;
 use sdl2::sys::{SDL_Event, SDL_PushEvent, SDL_UserEvent};
 
-pub fn handle_user(code: i32) -> Option<AppCmd> {
+pub fn handle_user(code: i32) -> Option<AppCommand> {
     let event = UserEvent::from_code(code);
 
     match event {
-        UserEvent::HasUpdate => Some(AppCmd::Update),
-        UserEvent::FrameReady => Some(AppCmd::Draw),
+        UserEvent::HasUpdate => Some(AppCommand::Update),
+        UserEvent::FrameReady => Some(AppCommand::Draw),
     }
 }
 

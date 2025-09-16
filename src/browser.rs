@@ -1,5 +1,5 @@
 use crate::{
-    input::user::{UserEvent, UserEventSender},
+    event::user::{UserEvent, UserEventSender},
     resources::ServoResources,
     window::AppWindow,
 };

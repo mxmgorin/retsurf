@@ -1,8 +1,7 @@
-use std::rc::Rc;
-
 use crate::config::InterfaceConfig;
 use sdl2::Sdl;
 use servo::RenderingContext;
+use std::rc::Rc;
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
@@ -12,7 +11,6 @@ pub struct AppWindow {
 
 impl AppWindow {
     pub fn new(sdl: &Sdl, config: &InterfaceConfig) -> Result<Self, String> {
-        log::info!("new app window");
         let video_subsystem = sdl.video().unwrap();
         let gl_attr = video_subsystem.gl_attr();
         gl_attr.set_context_profile(sdl2::video::GLProfile::GLES);
@@ -52,8 +50,13 @@ fn new_servo_context(
     sdl_window: &sdl2::video::Window,
 ) -> Result<servo::WindowRenderingContext, String> {
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-    let display_handle = sdl_window.display_handle().map_err(|e| format!("Failed sdl_window.display_handle: {e:?}"))?;
-    let window_handle = sdl_window.window_handle().map_err(|e| format!("Failed sdl_window.window_handle: {e:?}"))?;
+    // TODO: getting handles will fail without windlow manager
+    let display_handle = sdl_window
+        .display_handle()
+        .map_err(|e| format!("Failed sdl_window.display_handle: {e:?}"))?;
+    let window_handle = sdl_window
+        .window_handle()
+        .map_err(|e| format!("Failed sdl_window.window_handle: {e:?}"))?;
     let (w, h) = sdl_window.size();
     let size = dpi::PhysicalSize::new(w, h);
 

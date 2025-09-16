@@ -1,4 +1,4 @@
-use crate::app::AppCmd;
+use crate::app::AppCommand;
 use servo::{webrender_api::units::DevicePoint, InputEvent, MouseButtonEvent, WheelDelta, WheelEvent};
 
 pub fn handle_mouse_button(
@@ -6,7 +6,7 @@ pub fn handle_mouse_button(
     x: i32,
     y: i32,
     down: bool,
-) -> Vec<AppCmd> {
+) -> Vec<AppCommand> {
     let action = if down {
         servo::MouseButtonAction::Down
     } else {
@@ -24,18 +24,18 @@ pub fn handle_mouse_button(
     let event = MouseButtonEvent::new(action, button, point);
     let input = InputEvent::MouseButton(event);
 
-    vec![AppCmd::HandleInput(input)]
+    vec![AppCommand::HandleInput(input)]
 }
 
-pub fn handle_mouse_move(x: i32, y: i32) -> Vec<AppCmd> {
+pub fn handle_mouse_move(x: i32, y: i32) -> Vec<AppCommand> {
     let point = into_device_point(x, y);
     let event = servo::MouseMoveEvent::new(point);
     let input = InputEvent::MouseMove(event);
 
-    vec![AppCmd::HandleInput(input)]
+    vec![AppCommand::HandleInput(input)]
 }
 
-pub fn handle_mouse_wheel(dx: f32, dy: f32, mouse_x: i32, mouse_y: i32) -> Vec<AppCmd> {
+pub fn handle_mouse_wheel(dx: f32, dy: f32, mouse_x: i32, mouse_y: i32) -> Vec<AppCommand> {
     let delta = WheelDelta {
         x: dx as f64,
         y: dy as f64,
@@ -46,7 +46,7 @@ pub fn handle_mouse_wheel(dx: f32, dy: f32, mouse_x: i32, mouse_y: i32) -> Vec<A
     let event = WheelEvent::new(delta, point);
     let input = InputEvent::Wheel(event);
 
-    vec![AppCmd::HandleInput(input)]
+    vec![AppCommand::HandleInput(input)]
 }
 
 fn into_device_point(x: i32, y: i32) -> DevicePoint {

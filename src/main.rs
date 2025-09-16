@@ -1,7 +1,7 @@
 mod app;
 mod config;
 mod window;
-mod input;
+mod event;
 mod browser;
 mod resources;
 

@@ -1,8 +1,8 @@
-use crate::app::{AppCmd};
+use crate::app::{AppCommand};
 use keyboard_types::{Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 use sdl2::keyboard::{Keycode, Mod, Scancode};
 
-pub fn handle_keyboard(kc: Keycode, sc: Scancode, m: Mod, down: bool, repeat: bool) -> Vec<AppCmd> {
+pub fn handle_keyboard(kc: Keycode, sc: Scancode, m: Mod, down: bool, repeat: bool) -> Vec<AppCommand> {
     let state = if down { KeyState::Down } else { KeyState::Up };
     let kb_event = KeyboardEvent {
         state,
@@ -15,7 +15,7 @@ pub fn handle_keyboard(kc: Keycode, sc: Scancode, m: Mod, down: bool, repeat: bo
     };
     let event = servo::InputEvent::Keyboard(servo::KeyboardEvent::new(kb_event));
 
-    vec![AppCmd::HandleInput(event)]
+    vec![AppCommand::HandleInput(event)]
 }
 
 fn sdl_mod_to_modifiers(m: Mod) -> Modifiers {

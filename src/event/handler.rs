@@ -1,7 +1,7 @@
 use super::{gamepad::handle_gamepad, keyboard::handle_keyboard};
 use crate::{
-    app::AppCmd,
-    input::{
+    app::AppCommand,
+    event::{
         mouse::{handle_mouse_button, handle_mouse_move, handle_mouse_wheel},
         user::handle_user,
         window::handle_window,
@@ -9,13 +9,13 @@ use crate::{
 };
 use sdl2::event::Event;
 
-pub struct AppInputHandler {
+pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
 }
 
-impl AppInputHandler {
+impl AppEventHandler {
     pub fn new(sdl: &sdl2::Sdl) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
@@ -34,7 +34,7 @@ impl AppInputHandler {
         })
     }
 
-    pub fn wait_event(&mut self) -> Vec<AppCmd> {
+    pub fn wait(&mut self) -> Vec<AppCommand> {
         let event = self.event_pump.wait_event();
 
         match event {
@@ -86,7 +86,7 @@ impl AppInputHandler {
                     return vec![cmd];
                 }
             }
-            Event::Quit { .. } => return vec![AppCmd::Quit],
+            Event::Quit { .. } => return vec![AppCommand::Quit],
             Event::User { code, .. } => {
                 if let Some(cmd) = handle_user(code) {
                     return vec![cmd];
