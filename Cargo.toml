@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
 
+[features]
+default = []
+sdl2-bundled = ["sdl2/bundled"]
+
 [dependencies]
 rust-embed="8.7.2"
 rustls = {version = "0.23.31", features = ["ring"] }

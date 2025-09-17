@@ -1,0 +1,74 @@
+
+name: Build linux ARM release
+
+on:
+  push:
+    branches:
+      - "*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-arm:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            rust_target: aarch64-unknown-linux-gnu
+            gcc_pkg: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            cc_var: CC_aarch64_unknown_linux_gnu
+            cxx_var: CXX_aarch64_unknown_linux_gnu
+            ar_var: AR_aarch64_unknown_linux_gnu
+            cc_bin: aarch64-linux-gnu-gcc
+            cxx_bin: aarch64-linux-gnu-g++
+            ar_bin: aarch64-linux-gnu-ar
+            out_name: retsurf-linux-aarch64.zip
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.gcc_pkg }} zip
+          rustup target add ${{ matrix.rust_target }}
+
+      - name: Build
+        env:
+          ${{ matrix.cc_var }}: ${{ matrix.cc_bin }}
+          ${{ matrix.cxx_var }}: ${{ matrix.cxx_bin }}
+          ${{ matrix.ar_var }}: ${{ matrix.ar_bin }}
+          RUSTFLAGS: "-C linker=${{ matrix.cc_bin }}"
+          PKG_CONFIG_ALLOW_CROSS: "1"
+        run: |
+          cargo build --release --no-default-features --features "sdl2-bundled" \
+            --target=${{ matrix.rust_target }}
+
+      - name: Prepare release
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.rust_target }}/release/retsurf dist/
+
+      - name: Zip release
+        run: cd dist && zip -r ${{ matrix.out_name }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out_name }}
+          path: dist/${{ matrix.out_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.out_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
