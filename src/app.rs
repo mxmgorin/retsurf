@@ -42,7 +42,9 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.browser.open_tab(&self.config.home_url);
+        self.browser
+            .toggle_experimental_prefs(self.config.browser.experimental_prefs_enabled);
+        self.browser.open_tab(&self.config.browser.home_url);
         self.state = AppState::Running;
 
         while self.state == AppState::Running {

@@ -6,6 +6,25 @@ use crate::{
 use servo::{EventLoopWaker, WebView};
 use std::{cell::RefCell, rc::Rc};
 
+static EXPERIMENTAL_PREFS: &[&str] = &[
+    "dom_async_clipboard_enabled",
+    "dom_fontface_enabled",
+    "dom_intersection_observer_enabled",
+    "dom_mouse_event_which_enabled",
+    "dom_navigator_sendbeacon_enabled",
+    "dom_notification_enabled",
+    "dom_offscreen_canvas_enabled",
+    "dom_permissions_enabled",
+    "dom_resize_observer_enabled",
+    "dom_trusted_types_enabled",
+    "dom_webgl2_enabled",
+    "dom_webgpu_enabled",
+    "dom_xpath_enabled",
+    "layout_columns_enabled",
+    "layout_container_queries_enabled",
+    "layout_grid_enabled",
+];
+
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
 }
@@ -59,9 +78,17 @@ impl AppBrowser {
             .event_loop_waker(event_sender.clone_box());
         let servo = builder.build();
 
+
+
         Ok(Self {
             inner: Rc::new(AppBrowserInner::new(servo, event_sender)),
         })
+    }
+
+    pub fn toggle_experimental_prefs(&self, value: bool) {
+        for pref in EXPERIMENTAL_PREFS {
+            self.inner.servo.set_preference(pref, servo::PrefValue::Bool(value));
+        }
     }
 
     pub fn shutdown(&self) {

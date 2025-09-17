@@ -1,6 +1,20 @@
 pub struct AppConfig {
-    pub home_url: String,
+    pub browser: BrowserConfig,
     pub interface: InterfaceConfig,
+}
+
+pub struct BrowserConfig {
+    pub home_url: String,
+    pub experimental_prefs_enabled: bool,
+}
+
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        Self {
+            home_url: "https://duckduckgo.com".to_string(),
+            experimental_prefs_enabled: true,
+        }
+    }
 }
 
 pub struct InterfaceConfig {
@@ -20,7 +34,7 @@ impl Default for InterfaceConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            home_url: "https://servo.org/".to_string(),
+            browser: BrowserConfig::default(),
             interface: InterfaceConfig::default(),
         }
     }
