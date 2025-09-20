@@ -3,8 +3,9 @@ use crate::{
     resources::ServoResources,
     window::AppWindow,
 };
-use servo::{EventLoopWaker, WebView};
+use servo::{EventLoopWaker, RenderingContext, WebView};
 use std::{cell::RefCell, rc::Rc};
+use url::Url;
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
     "dom_async_clipboard_enabled",
@@ -27,6 +28,7 @@ static EXPERIMENTAL_PREFS: &[&str] = &[
 
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
+    rendering_ctx: Rc<dyn RenderingContext>,
 }
 
 struct AppBrowserInner {
@@ -74,21 +76,27 @@ impl AppBrowser {
     pub fn new(window: &AppWindow) -> Result<Self, String> {
         let event_sender = UserEventSender::new();
         ServoResources::init();
-        let builder = servo::ServoBuilder::new(window.get_rendering_ctx())
+        let rendering_ctx = window.get_rendering_ctx();
+        let builder = servo::ServoBuilder::new(rendering_ctx.clone())
             .event_loop_waker(event_sender.clone_box());
         let servo = builder.build();
 
-
-
         Ok(Self {
             inner: Rc::new(AppBrowserInner::new(servo, event_sender)),
+            rendering_ctx
         })
     }
 
     pub fn toggle_experimental_prefs(&self, value: bool) {
         for pref in EXPERIMENTAL_PREFS {
-            self.inner.servo.set_preference(pref, servo::PrefValue::Bool(value));
+            self.inner
+                .servo
+                .set_preference(pref, servo::PrefValue::Bool(value));
         }
+    }
+
+    pub fn get_url(&self) -> Option<Url> {
+        self.inner.get_focused_tab().map(|x| x.url())?
     }
 
     pub fn shutdown(&self) {
@@ -114,6 +122,7 @@ impl AppBrowser {
     pub fn draw(&self) {
         if let Some(tab) = self.inner.get_focused_tab() {
             tab.paint();
+            self.rendering_ctx.present();
         }
     }
 

@@ -1,5 +1,6 @@
 use crate::browser::AppBrowser;
 use crate::event::handler::AppEventHandler;
+use crate::ui::AppUi;
 use crate::{config::AppConfig, window::AppWindow};
 use sdl2::Sdl;
 
@@ -24,6 +25,7 @@ pub struct App {
     window: AppWindow,
     state: AppState,
     browser: AppBrowser,
+    ui: AppUi,
 }
 
 impl App {
@@ -31,12 +33,14 @@ impl App {
         let window = AppWindow::new(sdl, &config.interface)?;
         let browser = AppBrowser::new(&window)?;
         let event_handler = AppEventHandler::new(sdl)?;
+        let ui = AppUi::new(window.offscreen_rendering_ctx.clone());
 
         Ok(Self {
             config,
             window,
             browser,
             event_handler,
+            ui,
             state: AppState::Initialized,
         })
     }
@@ -56,20 +60,25 @@ impl App {
         }
 
         self.browser.shutdown();
+        self.ui.destroy();
     }
 
     fn execute_command(&mut self, command: AppCommand) {
         match command {
             AppCommand::Quit => self.state = AppState::Quitting,
             AppCommand::Draw => self.draw(),
-            AppCommand::Update => self.browser.update(),
+            AppCommand::Update => self.update(),
             AppCommand::HandleInput(input_event) => self.browser.handle_input(input_event),
             AppCommand::Resize(w, h) => self.browser.resize(w, h),
         }
     }
 
+    fn update(&mut self) {
+        self.browser.update();
+    }
+
     fn draw(&mut self) {
-        self.browser.draw();
-        self.window.show();
+        self.ui.update(&self.browser);
+        self.ui.draw(self.window.get_size().into());
     }
 }
