@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::{gamepad::handle_gamepad, keyboard::handle_keyboard};
 use crate::{
     app::AppCommand,
@@ -34,8 +36,10 @@ impl AppEventHandler {
         })
     }
 
-    pub fn wait(&mut self) -> Vec<AppCommand> {
-        let event = self.event_pump.wait_event();
+    pub fn wait(&mut self, timeout: Duration) -> Vec<AppCommand> {
+        let Some(event) = self.event_pump.wait_event_timeout(timeout.as_millis() as u32) else {
+            return vec![];
+        };
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {

@@ -1,3 +1,6 @@
+use std::cell::Cell;
+use std::time::Duration;
+
 use crate::browser::AppBrowser;
 use crate::event::handler::AppEventHandler;
 use crate::ui::AppUi;
@@ -26,6 +29,7 @@ pub struct App {
     state: AppState,
     browser: AppBrowser,
     ui: AppUi,
+    event_timeout: Cell<Duration>,
 }
 
 impl App {
@@ -33,7 +37,7 @@ impl App {
         let window = AppWindow::new(sdl, &config.interface)?;
         let browser = AppBrowser::new(&window)?;
         let event_handler = AppEventHandler::new(sdl)?;
-        let ui = AppUi::new(window.offscreen_rendering_ctx.clone());
+        let ui = AppUi::new(&window);
 
         Ok(Self {
             config,
@@ -42,6 +46,7 @@ impl App {
             event_handler,
             ui,
             state: AppState::Initialized,
+            event_timeout: Cell::new(Duration::from_secs(1)),
         })
     }
 
@@ -52,7 +57,8 @@ impl App {
         self.state = AppState::Running;
 
         while self.state == AppState::Running {
-            let commands = self.event_handler.wait();
+            let commands = self.event_handler.wait(self.event_timeout.get());
+            self.event_timeout.set(self.ui.update(&self.browser));
 
             for command in commands {
                 self.execute_command(command);
@@ -78,7 +84,9 @@ impl App {
     }
 
     fn draw(&mut self) {
-        self.ui.update(&self.browser);
-        self.ui.draw(self.window.get_size().into());
+        self.browser.paint();
+        self.window.prepare_for_rendering();
+        self.ui.paint(self.window.size());
+        self.window.present();
     }
 }

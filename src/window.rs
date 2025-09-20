@@ -1,12 +1,12 @@
 use crate::config::InterfaceConfig;
 use sdl2::Sdl;
 use servo::RenderingContext;
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
-    _rendering_ctx: Rc<dyn servo::RenderingContext>,
-    window: sdl2::video::Window,
+    _window: sdl2::video::Window,
+    rendering_ctx: Rc<dyn servo::RenderingContext>,
     pub offscreen_rendering_ctx: Rc<servo::OffscreenRenderingContext>,
 }
 
@@ -35,18 +35,30 @@ impl AppWindow {
 
         Ok(Self {
             _video_subsystem: video_subsystem,
-            window,
-            _rendering_ctx: rendering_ctx,
+            _window: window,
+            rendering_ctx,
             offscreen_rendering_ctx,
         })
     }
 
-    pub fn get_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
+    pub fn get_gl_ctx(&self) -> Arc<glow::Context> {
+        self.rendering_ctx.glow_gl_api()
+    }
+
+    pub fn size(&self) -> [u32; 2] {
+        self.rendering_ctx.size().into()
+    }
+
+    pub fn get_offscreen_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
         self.offscreen_rendering_ctx.clone()
     }
 
-    pub fn get_size(&self) -> dpi::PhysicalSize<u32> {
-        get_physizcal_size(&self.window)
+    pub fn prepare_for_rendering(&self) {
+        self.rendering_ctx.prepare_for_rendering();
+    }
+
+    pub fn present(&self) {
+        self.rendering_ctx.present();
     }
 }
 

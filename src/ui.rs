@@ -1,19 +1,31 @@
-use crate::{browser::AppBrowser, egui_glue::EguiGlue};
-use servo::{OffscreenRenderingContext, RenderingContext};
-use std::{rc::Rc, time::Duration};
+use crate::{browser::AppBrowser, egui_glue::EguiGlue, window::AppWindow};
+use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
     egui: EguiGlue,
-    rendering_ctx: Rc<OffscreenRenderingContext>,
+    callback_fn: Arc<egui_glow::CallbackFn>,
 }
 
 impl AppUi {
-    pub fn new(rendering_ctx: Rc<OffscreenRenderingContext>) -> Self {
-        let egui = EguiGlue::new(rendering_ctx.glow_gl_api(), None);
+    pub fn new(window: &AppWindow) -> Self {
+        let render_to_parent_fn = window
+            .offscreen_rendering_ctx
+            .render_to_parent_callback()
+            .unwrap();
+        let callback = egui_glow::CallbackFn::new(move |info, painter| {
+            let viewport = info.viewport_in_pixels();
+            let rect = servo::euclid::Rect::new(
+                servo::euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
+                servo::euclid::Size2D::new(viewport.width_px, viewport.height_px),
+            );
+            // Servo draws into egui's GL context here
+            render_to_parent_fn(painter.gl(), rect);
+        });
+        let egui = EguiGlue::new(window.get_gl_ctx(), None);
 
         Self {
             egui,
-            rendering_ctx,
+            callback_fn: Arc::new(callback),
         }
     }
 
@@ -23,9 +35,11 @@ impl AppUi {
                 let frame = egui::Frame::default()
                     .fill(ctx.style().visuals.window_fill)
                     .inner_margin(4.0);
-                egui::TopBottomPanel::top("browser_url").frame(frame).show(ctx, |ui| {
-                    ui.label(url.to_string());
-                });
+                egui::TopBottomPanel::top("browser_url")
+                    .frame(frame)
+                    .show(ctx, |ui| {
+                        ui.label(url.to_string());
+                    });
             }
 
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -34,32 +48,16 @@ impl AppUi {
                 let rect = egui::Rect::from_min_size(min, size);
                 ui.allocate_space(size);
 
-                browser.draw();
-
-                if let Some(render_to_parent) = self.rendering_ctx.render_to_parent_callback() {
-                    ui.painter().add(egui::PaintCallback {
-                        rect,
-                        callback: std::sync::Arc::new(egui_glow::CallbackFn::new(
-                            move |info, painter| {
-                                let clip = info.viewport_in_pixels();
-                                let rect_in_parent = servo::euclid::Rect::new(
-                                    servo::euclid::Point2D::new(clip.left_px, clip.from_bottom_px),
-                                    servo::euclid::Size2D::new(clip.width_px, clip.height_px),
-                                );
-                                // Servo draws into egui's GL context here
-                                render_to_parent(painter.gl(), rect_in_parent);
-                            },
-                        )),
-                    });
-                }
+                ui.painter().add(egui::PaintCallback {
+                    rect,
+                    callback: self.callback_fn.clone(),
+                });
             });
         })
     }
 
-    pub fn draw(&mut self, size: [u32; 2]) {
-        self.rendering_ctx.parent_context().prepare_for_rendering();
+    pub fn paint(&mut self, size: [u32; 2]) {
         self.egui.paint(size);
-        self.rendering_ctx.parent_context().present();
     }
 
     pub fn destroy(&mut self) {

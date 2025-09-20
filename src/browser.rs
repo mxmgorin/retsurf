@@ -3,7 +3,7 @@ use crate::{
     resources::ServoResources,
     window::AppWindow,
 };
-use servo::{EventLoopWaker, RenderingContext, WebView};
+use servo::{EventLoopWaker, WebView};
 use std::{cell::RefCell, rc::Rc};
 use url::Url;
 
@@ -28,7 +28,6 @@ static EXPERIMENTAL_PREFS: &[&str] = &[
 
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
-    rendering_ctx: Rc<dyn RenderingContext>,
 }
 
 struct AppBrowserInner {
@@ -76,14 +75,13 @@ impl AppBrowser {
     pub fn new(window: &AppWindow) -> Result<Self, String> {
         let event_sender = UserEventSender::new();
         ServoResources::init();
-        let rendering_ctx = window.get_rendering_ctx();
-        let builder = servo::ServoBuilder::new(rendering_ctx.clone())
-            .event_loop_waker(event_sender.clone_box());
+        let rendering_ctx = window.get_offscreen_rendering_ctx();
+        let builder =
+            servo::ServoBuilder::new(rendering_ctx).event_loop_waker(event_sender.clone_box());
         let servo = builder.build();
 
         Ok(Self {
             inner: Rc::new(AppBrowserInner::new(servo, event_sender)),
-            rendering_ctx
         })
     }
 
@@ -119,11 +117,12 @@ impl AppBrowser {
         self.inner.servo.spin_event_loop();
     }
 
-    pub fn draw(&self) {
+    pub fn paint(&self) -> bool {
         if let Some(tab) = self.inner.get_focused_tab() {
-            tab.paint();
-            self.rendering_ctx.present();
+            return tab.paint();
         }
+
+        false
     }
 
     pub fn handle_input(&self, event: servo::InputEvent) {
