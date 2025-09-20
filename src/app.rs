@@ -68,7 +68,7 @@ impl App {
         }
     }
 
-    fn draw(&self) {
+    fn draw(&mut self) {
         self.browser.draw();
         self.window.show();
     }
