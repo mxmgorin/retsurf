@@ -4,7 +4,10 @@ use crate::{
     window::AppWindow,
 };
 use servo::{EventLoopWaker, WebView};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use url::Url;
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
@@ -99,9 +102,12 @@ impl AppBrowser {
         self.inner.get_focused_tab().map(|x| x.url())?
     }
 
-    pub fn shutdown(&self) {
-        self.inner.servo.start_shutting_down();
+    pub fn deinit(&self) {
         self.inner.servo.deinit();
+    }
+
+    pub fn start_shutting_down(&self) {
+        self.inner.servo.start_shutting_down();
     }
 
     pub fn open_tab(&mut self, url: &str) {

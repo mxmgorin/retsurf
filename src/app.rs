@@ -9,11 +9,11 @@ use sdl2::Sdl;
 pub enum AppState {
     Initialized,
     Running,
-    Quitting,
+    ShuttingDown,
 }
 
 pub enum AppCommand {
-    Quit,
+    Shutdown,
     Draw,
     HandleInput(servo::InputEvent),
     Resize(u32, u32),
@@ -52,29 +52,30 @@ impl App {
         self.browser.open_tab(&self.config.browser.home_url);
         self.state = AppState::Running;
 
-        while self.state == AppState::Running {
+        while self.browser.pump_event_loop() {
             let commands = self.event_handler.wait(&mut self.ui);
-
-            if !self.browser.pump_event_loop() {
-                self.state = AppState::Quitting;
-            }
 
             for command in commands {
                 self.execute_command(command);
             }
         }
 
-        self.browser.shutdown();
+        self.browser.deinit();
         self.ui.destroy();
     }
 
     fn execute_command(&mut self, command: AppCommand) {
         match command {
-            AppCommand::Quit => self.state = AppState::Quitting,
+            AppCommand::Shutdown => self.shutdown(),
             AppCommand::Draw => self.draw(),
             AppCommand::HandleInput(input_event) => self.browser.handle_input(input_event),
             AppCommand::Resize(w, h) => self.browser.resize(w, h),
         }
+    }
+
+    fn shutdown(&mut self) {
+        self.state = AppState::ShuttingDown;
+        self.browser.start_shutting_down();
     }
 
     fn draw(&mut self) {

@@ -117,7 +117,7 @@ impl AppEventHandler {
                     commands_buffer.push(cmd);
                 }
             }
-            Event::Quit { .. } => commands_buffer.push(AppCommand::Quit),
+            Event::Quit { .. } => commands_buffer.push(AppCommand::Shutdown),
             Event::User { code, .. } => {
                 if let Some(cmd) = handle_user(code) {
                     commands_buffer.push(cmd);
