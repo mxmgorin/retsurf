@@ -360,9 +360,77 @@ pub fn into_egui_modifiers(m: Mod) -> Modifiers {
 
     mods
 }
-pub fn into_egui_physical_key(_scancode: Scancode) -> Option<Key> {
-    // todo: impl
-    None
+pub fn into_egui_physical_key(scancode: Scancode) -> Option<Key> {
+    match scancode {
+        // Letters
+        Scancode::A => Some(Key::A),
+        Scancode::B => Some(Key::B),
+        Scancode::C => Some(Key::C),
+        Scancode::D => Some(Key::D),
+        Scancode::E => Some(Key::E),
+        Scancode::F => Some(Key::F),
+        Scancode::G => Some(Key::G),
+        Scancode::H => Some(Key::H),
+        Scancode::I => Some(Key::I),
+        Scancode::J => Some(Key::J),
+        Scancode::K => Some(Key::K),
+        Scancode::L => Some(Key::L),
+        Scancode::M => Some(Key::M),
+        Scancode::N => Some(Key::N),
+        Scancode::O => Some(Key::O),
+        Scancode::P => Some(Key::P),
+        Scancode::Q => Some(Key::Q),
+        Scancode::R => Some(Key::R),
+        Scancode::S => Some(Key::S),
+        Scancode::T => Some(Key::T),
+        Scancode::U => Some(Key::U),
+        Scancode::V => Some(Key::V),
+        Scancode::W => Some(Key::W),
+        Scancode::X => Some(Key::X),
+        Scancode::Y => Some(Key::Y),
+        Scancode::Z => Some(Key::Z),
+
+        // Numbers
+        Scancode::Num0 => Some(Key::Num0),
+        Scancode::Num1 => Some(Key::Num1),
+        Scancode::Num2 => Some(Key::Num2),
+        Scancode::Num3 => Some(Key::Num3),
+        Scancode::Num4 => Some(Key::Num4),
+        Scancode::Num5 => Some(Key::Num5),
+        Scancode::Num6 => Some(Key::Num6),
+        Scancode::Num7 => Some(Key::Num7),
+        Scancode::Num8 => Some(Key::Num8),
+        Scancode::Num9 => Some(Key::Num9),
+
+        // Function keys
+        Scancode::F1 => Some(Key::F1),
+        Scancode::F2 => Some(Key::F2),
+        Scancode::F3 => Some(Key::F3),
+        Scancode::F4 => Some(Key::F4),
+        Scancode::F5 => Some(Key::F5),
+        Scancode::F6 => Some(Key::F6),
+        Scancode::F7 => Some(Key::F7),
+        Scancode::F8 => Some(Key::F8),
+        Scancode::F9 => Some(Key::F9),
+        Scancode::F10 => Some(Key::F10),
+        Scancode::F11 => Some(Key::F11),
+        Scancode::F12 => Some(Key::F12),
+
+        // Navigation
+        Scancode::Up => Some(Key::ArrowUp),
+        Scancode::Down => Some(Key::ArrowDown),
+        Scancode::Left => Some(Key::ArrowLeft),
+        Scancode::Right => Some(Key::ArrowRight),
+
+        // Special
+        Scancode::Return => Some(Key::Enter),
+        Scancode::Escape => Some(Key::Escape),
+        Scancode::Backspace => Some(Key::Backspace),
+        Scancode::Tab => Some(Key::Tab),
+        Scancode::Space => Some(Key::Space),
+
+        _ => None,
+    }
 }
 
 fn set_cursor_icon(fused: &mut FusedCursor, cursor_icon: egui::CursorIcon) {
@@ -435,17 +503,20 @@ pub fn into_egui_button(btn: MouseButton) -> Option<PointerButton> {
 
 pub fn into_egui_key(key: Keycode) -> Option<Key> {
     Some(match key {
+        // Arrows
         Keycode::Left => Key::ArrowLeft,
         Keycode::Up => Key::ArrowUp,
         Keycode::Right => Key::ArrowRight,
         Keycode::Down => Key::ArrowDown,
 
+        // Control keys
         Keycode::Escape => Key::Escape,
         Keycode::Tab => Key::Tab,
         Keycode::Backspace => Key::Backspace,
         Keycode::Space => Key::Space,
         Keycode::Return => Key::Enter,
 
+        // Navigation
         Keycode::Insert => Key::Insert,
         Keycode::Home => Key::Home,
         Keycode::Delete => Key::Delete,
@@ -453,6 +524,7 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::PageDown => Key::PageDown,
         Keycode::PageUp => Key::PageUp,
 
+        // Numbers (top row + numpad)
         Keycode::Kp0 | Keycode::Num0 => Key::Num0,
         Keycode::Kp1 | Keycode::Num1 => Key::Num1,
         Keycode::Kp2 | Keycode::Num2 => Key::Num2,
@@ -464,6 +536,7 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::Kp8 | Keycode::Num8 => Key::Num8,
         Keycode::Kp9 | Keycode::Num9 => Key::Num9,
 
+        // Letters
         Keycode::A => Key::A,
         Keycode::B => Key::B,
         Keycode::C => Key::C,
@@ -490,6 +563,29 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::X => Key::X,
         Keycode::Y => Key::Y,
         Keycode::Z => Key::Z,
+
+        // Function keys
+        Keycode::F1 => Key::F1,
+        Keycode::F2 => Key::F2,
+        Keycode::F3 => Key::F3,
+        Keycode::F4 => Key::F4,
+        Keycode::F5 => Key::F5,
+        Keycode::F6 => Key::F6,
+        Keycode::F7 => Key::F7,
+        Keycode::F8 => Key::F8,
+        Keycode::F9 => Key::F9,
+        Keycode::F10 => Key::F10,
+        Keycode::F11 => Key::F11,
+        Keycode::F12 => Key::F12,
+
+        // Symbols & punctuation (only those egui supports)
+        Keycode::Minus => Key::Minus,
+        Keycode::Equals => Key::Equals,
+        Keycode::Semicolon => Key::Semicolon,
+        Keycode::Comma => Key::Comma,
+        Keycode::Period => Key::Period,
+        Keycode::Slash => Key::Slash,
+        Keycode::Backslash => Key::Backslash,
 
         _ => {
             return None;

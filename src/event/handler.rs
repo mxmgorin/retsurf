@@ -76,17 +76,17 @@ impl AppEventHandler {
                 mouse_btn, x, y, ..
             } => {
                 let input =
-                    into_servo_mouse_button(mouse_btn, x, y, false, ui.get_top_bar_height());
+                    into_servo_mouse_button(mouse_btn, x, y, false, ui.get_toolbar_height());
                 commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
-                let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_top_bar_height());
+                let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_toolbar_height());
                 commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseMotion { x, y, .. } => {
-                let input = into_servo_mouse_move(x, y, ui.get_top_bar_height());
+                let input = into_servo_mouse_move(x, y, ui.get_toolbar_height());
                 commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseWheel {
@@ -101,7 +101,7 @@ impl AppEventHandler {
                     precise_y,
                     mouse_x,
                     mouse_y,
-                    ui.get_top_bar_height(),
+                    ui.get_toolbar_height(),
                 );
                 commands.push(AppCommand::HandleInput(input));
             }

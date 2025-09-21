@@ -1,5 +1,7 @@
+use egui::{TopBottomPanel, Vec2};
+
 use crate::{
-    browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow,
+    app::AppCommand, browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow
 };
 use std::{sync::Arc, time::Duration};
 
@@ -7,7 +9,8 @@ pub struct AppUi {
     egui: EguiGlue,
     callback_fn: Arc<egui_glow::CallbackFn>,
     repaint_delay: Option<Duration>,
-    top_bar_size: egui::Vec2,
+    toolbar_size: egui::Vec2,
+    location: String,
 }
 
 impl AppUi {
@@ -31,7 +34,8 @@ impl AppUi {
             egui,
             callback_fn: Arc::new(callback),
             repaint_delay: None,
-            top_bar_size: egui::Vec2::default(),
+            toolbar_size: egui::Vec2::default(),
+            location: "".to_string(),
         }
     }
 
@@ -39,8 +43,8 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
-    pub fn get_top_bar_height(&self) -> f32 {
-        self.top_bar_size.y
+    pub fn get_toolbar_height(&self) -> f32 {
+        self.toolbar_size.y
     }
 
     pub fn handle_event(
@@ -54,15 +58,47 @@ impl AppUi {
     pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) {
         let repaint_delay = self.egui.run(window.get_sdl2_window(), |ctx| {
             if let Some(url) = browser.get_url() {
+                if self.location.is_empty() {
+                    self.location = url.to_string();
+                }
+
                 let frame = egui::Frame::default()
                     .fill(ctx.style().visuals.window_fill)
                     .inner_margin(4.0);
-                egui::TopBottomPanel::top("browser_url")
-                    .frame(frame)
-                    .show(ctx, |ui| {
-                        ui.label(url.to_string());
-                        self.top_bar_size = ui.min_size();
-                    });
+                TopBottomPanel::top("toolbar").frame(frame).show(ctx, |ui| {
+                    ui.allocate_ui_with_layout(
+                        ui.available_size(),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            if ui.add(toolbar_button("⏴")).clicked() {}
+                            if ui.add(toolbar_button("⏵")).clicked() {}
+                            if ui.add(toolbar_button("↻")).clicked() {}
+
+                            ui.add_space(2.0);
+
+                            ui.allocate_ui_with_layout(
+                                ui.available_size(),
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let location_id = egui::Id::new("location_input");
+                                    let location_field = ui.add_sized(
+                                        ui.available_size(),
+                                        egui::TextEdit::singleline(&mut self.location)
+                                            .id(location_id),
+                                    );
+
+                                    // Navigate to address when enter is pressed in the address bar.
+                                    if location_field.lost_focus()
+                                        && ui.input(|i| i.clone().key_pressed(egui::Key::Enter))
+                                    {
+                                    }
+                                },
+                            );
+                        },
+                    );
+
+                    self.toolbar_size = ui.min_size();
+                });
             }
 
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -87,4 +123,11 @@ impl AppUi {
     pub fn destroy(&mut self) {
         self.egui.destroy();
     }
+}
+
+/// Create a frameless button with square sizing, as used in the toolbar.
+fn toolbar_button(text: &str) -> egui::Button<'_> {
+    egui::Button::new(text)
+        .frame(false)
+        .min_size(Vec2 { x: 20.0, y: 20.0 })
 }
