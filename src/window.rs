@@ -5,7 +5,7 @@ use std::{rc::Rc, sync::Arc};
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
-    _window: sdl2::video::Window,
+    window: sdl2::video::Window,
     rendering_ctx: Rc<dyn servo::RenderingContext>,
     pub offscreen_rendering_ctx: Rc<servo::OffscreenRenderingContext>,
 }
@@ -35,10 +35,14 @@ impl AppWindow {
 
         Ok(Self {
             _video_subsystem: video_subsystem,
-            _window: window,
+            window,
             rendering_ctx,
             offscreen_rendering_ctx,
         })
+    }
+
+    pub fn get_sdl2_window(&self) -> &sdl2::video::Window {
+        &self.window
     }
 
     pub fn get_gl_ctx(&self) -> Arc<glow::Context> {

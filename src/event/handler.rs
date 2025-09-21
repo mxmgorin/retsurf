@@ -7,6 +7,7 @@ use crate::{
         window::handle_window,
     },
     ui::AppUi,
+    window::AppWindow,
 };
 use sdl2::event::Event;
 
@@ -35,20 +36,30 @@ impl AppEventHandler {
         })
     }
 
-    pub fn wait(&mut self, ui: &mut AppUi) -> Vec<AppCommand> {
-        let mut commands_buffer = Vec::with_capacity(2);
+    pub fn wait(&mut self, window: &AppWindow, ui: &mut AppUi) -> Vec<AppCommand> {
+        let mut commands = Vec::with_capacity(2);
         let delay = ui.take_repain_delay();
         let event = if let Some(delay) = delay {
             if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
                 // todo: we will skip draw when there is event faster then delay
                 event
             } else {
-                commands_buffer.push(AppCommand::Draw);
-                return commands_buffer;
+                commands.push(AppCommand::Draw);
+                return commands;
             }
         } else {
             self.event_pump.wait_event()
         };
+
+        let resp = ui.handle_event(window, &event);
+
+        if resp.repaint {
+            commands.push(AppCommand::Draw);
+        }
+
+        if resp.consumed {
+            return commands;
+        }
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
@@ -66,17 +77,17 @@ impl AppEventHandler {
             } => {
                 let input =
                     into_servo_mouse_button(mouse_btn, x, y, false, ui.get_top_bar_height());
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
                 let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_top_bar_height());
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseMotion { x, y, .. } => {
                 let input = into_servo_mouse_move(x, y, ui.get_top_bar_height());
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::MouseWheel {
                 precise_x,
@@ -92,7 +103,7 @@ impl AppEventHandler {
                     mouse_y,
                     ui.get_top_bar_height(),
                 );
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::KeyDown {
                 keycode: Some(kc),
@@ -102,7 +113,7 @@ impl AppEventHandler {
                 ..
             } => {
                 let input = into_servo_keyboard(kc, sc, keymod, true, repeat);
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -112,32 +123,32 @@ impl AppEventHandler {
                 ..
             } => {
                 let input = into_servo_keyboard(kc, sc, keymod, false, repeat);
-                commands_buffer.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::HandleInput(input));
             }
             Event::ControllerButtonDown { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, true) {
-                    commands_buffer.push(cmd);
+                    commands.push(cmd);
                 }
             }
             Event::ControllerButtonUp { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, false) {
-                    commands_buffer.push(cmd);
+                    commands.push(cmd);
                 }
             }
-            Event::Quit { .. } => commands_buffer.push(AppCommand::Shutdown),
+            Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {
                 if let Some(cmd) = handle_user(code) {
-                    commands_buffer.push(cmd);
+                    commands.push(cmd);
                 }
             }
             Event::Window { win_event, .. } => {
                 if let Some(cmd) = handle_window(win_event) {
-                    commands_buffer.push(cmd);
+                    commands.push(cmd);
                 }
             }
             _ => {}
         }
 
-        commands_buffer
+        commands
     }
 }

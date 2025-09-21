@@ -53,7 +53,7 @@ impl App {
         self.state = AppState::Running;
 
         while self.browser.pump_event_loop() {
-            let commands = self.event_handler.wait(&mut self.ui);
+            let commands = self.event_handler.wait(&self.window, &mut self.ui);
 
             for command in commands {
                 self.execute_command(command);
@@ -79,7 +79,7 @@ impl App {
     }
 
     fn draw(&mut self) {
-        self.ui.update(&self.browser);
+        self.ui.update(&self.window, &self.browser);
         self.browser.paint();
         self.window.prepare_for_rendering();
         self.ui.paint(self.window.size());

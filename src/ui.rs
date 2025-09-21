@@ -1,4 +1,6 @@
-use crate::{browser::AppBrowser, egui_glue::EguiGlue, window::AppWindow};
+use crate::{
+    browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow,
+};
 use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
@@ -41,8 +43,16 @@ impl AppUi {
         self.top_bar_size.y
     }
 
-    pub fn update(&mut self, browser: &AppBrowser) {
-        let repaint_delay = self.egui.run(|ctx| {
+    pub fn handle_event(
+        &mut self,
+        window: &AppWindow,
+        event: &sdl2::event::Event,
+    ) -> EventResponse {
+        self.egui.on_event(window.get_sdl2_window(), event)
+    }
+
+    pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) {
+        let repaint_delay = self.egui.run(window.get_sdl2_window(), |ctx| {
             if let Some(url) = browser.get_url() {
                 let frame = egui::Frame::default()
                     .fill(ctx.style().visuals.window_fill)
