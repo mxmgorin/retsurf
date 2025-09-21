@@ -64,17 +64,18 @@ impl AppEventHandler {
             Event::MouseButtonUp {
                 mouse_btn, x, y, ..
             } => {
-                let input = into_servo_mouse_button(mouse_btn, x, y, false);
+                let input =
+                    into_servo_mouse_button(mouse_btn, x, y, false, ui.get_top_bar_height());
                 commands_buffer.push(AppCommand::HandleInput(input));
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
-                let input = into_servo_mouse_button(mouse_btn, x, y, true);
+                let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_top_bar_height());
                 commands_buffer.push(AppCommand::HandleInput(input));
             }
             Event::MouseMotion { x, y, .. } => {
-                let input = into_servo_mouse_move(x, y);
+                let input = into_servo_mouse_move(x, y, ui.get_top_bar_height());
                 commands_buffer.push(AppCommand::HandleInput(input));
             }
             Event::MouseWheel {
@@ -84,7 +85,13 @@ impl AppEventHandler {
                 mouse_y,
                 ..
             } => {
-                let input = into_servo_mouse_wheel(precise_x, precise_y, mouse_x, mouse_y);
+                let input = into_servo_mouse_wheel(
+                    precise_x,
+                    precise_y,
+                    mouse_x,
+                    mouse_y,
+                    ui.get_top_bar_height(),
+                );
                 commands_buffer.push(AppCommand::HandleInput(input));
             }
             Event::KeyDown {
