@@ -4,6 +4,7 @@ use std::{sync::Arc, time::Duration};
 pub struct AppUi {
     egui: EguiGlue,
     callback_fn: Arc<egui_glow::CallbackFn>,
+    repaint_delay: Option<Duration>,
 }
 
 impl AppUi {
@@ -26,11 +27,16 @@ impl AppUi {
         Self {
             egui,
             callback_fn: Arc::new(callback),
+            repaint_delay: None,
         }
     }
 
-    pub fn update(&mut self, browser: &AppBrowser) -> Duration {
-        self.egui.run(|ctx| {
+    pub fn take_repain_delay(&mut self) -> Option<Duration> {
+        self.repaint_delay.take()
+    }
+
+    pub fn update(&mut self, browser: &AppBrowser) {
+        let repaint_delay = self.egui.run(|ctx| {
             if let Some(url) = browser.get_url() {
                 let frame = egui::Frame::default()
                     .fill(ctx.style().visuals.window_fill)
@@ -53,7 +59,8 @@ impl AppUi {
                     callback: self.callback_fn.clone(),
                 });
             });
-        })
+        });
+        self.repaint_delay.replace(repaint_delay);
     }
 
     pub fn paint(&mut self, size: [u32; 2]) {

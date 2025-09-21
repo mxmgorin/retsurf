@@ -5,8 +5,8 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
     let event = UserEvent::from_code(code);
 
     match event {
-        UserEvent::HasUpdate => Some(AppCommand::Update),
-        UserEvent::FrameReady => Some(AppCommand::Draw),
+        UserEvent::HasUpdate => None,
+        UserEvent::BrowserFrameReady | UserEvent::UiRepaintRequested => Some(AppCommand::Draw),
     }
 }
 
@@ -14,11 +14,12 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
 #[derive(Copy, Clone)]
 pub enum UserEvent {
     HasUpdate = 0,
-    FrameReady = 1,
+    BrowserFrameReady = 1,
+    UiRepaintRequested = 2,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 2] = [UserEvent::HasUpdate, UserEvent::FrameReady];
+    pub const ALL: [UserEvent; 3] = [UserEvent::HasUpdate, UserEvent::BrowserFrameReady, UserEvent::UiRepaintRequested];
 
     pub fn from_code(code: i32) -> UserEvent {
         Self::ALL[code as usize]

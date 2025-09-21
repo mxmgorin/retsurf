@@ -1,8 +1,6 @@
-use std::cell::Cell;
-use std::time::Duration;
-
 use crate::browser::AppBrowser;
 use crate::event::handler::AppEventHandler;
+use crate::event::user::UserEventSender;
 use crate::ui::AppUi;
 use crate::{config::AppConfig, window::AppWindow};
 use sdl2::Sdl;
@@ -17,7 +15,6 @@ pub enum AppState {
 pub enum AppCommand {
     Quit,
     Draw,
-    Update,
     HandleInput(servo::InputEvent),
     Resize(u32, u32),
 }
@@ -29,13 +26,13 @@ pub struct App {
     state: AppState,
     browser: AppBrowser,
     ui: AppUi,
-    event_timeout: Cell<Duration>,
 }
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         let window = AppWindow::new(sdl, &config.interface)?;
-        let browser = AppBrowser::new(&window)?;
+        let event_sender = UserEventSender::new();
+        let browser = AppBrowser::new(&window, event_sender)?;
         let event_handler = AppEventHandler::new(sdl)?;
         let ui = AppUi::new(&window);
 
@@ -46,7 +43,6 @@ impl App {
             event_handler,
             ui,
             state: AppState::Initialized,
-            event_timeout: Cell::new(Duration::from_secs(1)),
         })
     }
 
@@ -57,8 +53,11 @@ impl App {
         self.state = AppState::Running;
 
         while self.state == AppState::Running {
-            let commands = self.event_handler.wait(self.event_timeout.get());
-            self.event_timeout.set(self.ui.update(&self.browser));
+            let commands = self.event_handler.wait(&mut self.ui);
+
+            if !self.browser.pump_event_loop() {
+                self.state = AppState::Quitting;
+            }
 
             for command in commands {
                 self.execute_command(command);
@@ -73,17 +72,13 @@ impl App {
         match command {
             AppCommand::Quit => self.state = AppState::Quitting,
             AppCommand::Draw => self.draw(),
-            AppCommand::Update => self.update(),
             AppCommand::HandleInput(input_event) => self.browser.handle_input(input_event),
             AppCommand::Resize(w, h) => self.browser.resize(w, h),
         }
     }
 
-    fn update(&mut self) {
-        self.browser.update();
-    }
-
     fn draw(&mut self) {
+        self.ui.update(&self.browser);
         self.browser.paint();
         self.window.prepare_for_rendering();
         self.ui.paint(self.window.size());

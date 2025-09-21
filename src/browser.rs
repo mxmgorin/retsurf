@@ -4,7 +4,7 @@ use crate::{
     window::AppWindow,
 };
 use servo::{EventLoopWaker, WebView};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 use url::Url;
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
@@ -34,6 +34,7 @@ struct AppBrowserInner {
     tabs: RefCell<Vec<WebView>>,
     event_sender: UserEventSender,
     servo: servo::Servo,
+    repaint_pending: Cell<bool>,
 }
 
 impl AppBrowserInner {
@@ -42,6 +43,7 @@ impl AppBrowserInner {
             tabs: RefCell::new(vec![]),
             event_sender,
             servo,
+            repaint_pending: Cell::new(false),
         }
     }
 
@@ -56,7 +58,8 @@ impl AppBrowserInner {
 
 impl servo::WebViewDelegate for AppBrowserInner {
     fn notify_new_frame_ready(&self, _: WebView) {
-        self.event_sender.send(UserEvent::FrameReady);
+        self.repaint_pending.set(true);
+        self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
     fn request_open_auxiliary_webview(&self, parent_webview: WebView) -> Option<WebView> {
@@ -72,8 +75,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
 }
 
 impl AppBrowser {
-    pub fn new(window: &AppWindow) -> Result<Self, String> {
-        let event_sender = UserEventSender::new();
+    pub fn new(window: &AppWindow, event_sender: UserEventSender) -> Result<Self, String> {
         ServoResources::init();
         let rendering_ctx = window.get_offscreen_rendering_ctx();
         let builder =
@@ -81,7 +83,7 @@ impl AppBrowser {
         let servo = builder.build();
 
         Ok(Self {
-            inner: Rc::new(AppBrowserInner::new(servo, event_sender)),
+            inner: Rc::new(AppBrowserInner::new(servo, event_sender.clone())),
         })
     }
 
@@ -113,12 +115,18 @@ impl AppBrowser {
         self.inner.add_tab(webview);
     }
 
-    pub fn update(&self) {
-        self.inner.servo.spin_event_loop();
+    /// False indicates that no need to pump any more
+    pub fn pump_event_loop(&self) -> bool {
+        self.inner.servo.spin_event_loop()
     }
 
     pub fn paint(&self) -> bool {
+        if !self.inner.repaint_pending.get() {
+            return false;
+        }
+
         if let Some(tab) = self.inner.get_focused_tab() {
+            self.inner.repaint_pending.set(false);
             return tab.paint();
         }
 

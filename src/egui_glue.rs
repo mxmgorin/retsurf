@@ -11,13 +11,15 @@ pub struct EguiGlue {
 
 impl EguiGlue {
     /// For automatic shader version detection set `shader_version` to `None`.
-    pub fn new(gl: std::sync::Arc<glow::Context>, shader_version: Option<ShaderVersion>) -> Self {
+    pub fn new(
+        gl: std::sync::Arc<glow::Context>,
+        shader_version: Option<ShaderVersion>,
+    ) -> Self {
         let painter = egui_glow::Painter::new(gl, "", shader_version, false)
             .map_err(|err| {
                 log::error!("error occurred in initializing painter:\n{err}");
             })
             .unwrap();
-
         let ctx = egui::Context::default();
 
         Self {
