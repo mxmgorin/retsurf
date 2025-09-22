@@ -6,20 +6,6 @@ use sdl2::keyboard::Scancode;
 use sdl2::mouse::{Cursor, MouseButton, SystemCursor};
 use sdl2::video::Window;
 
-pub struct FusedCursor {
-    cursor: sdl2::mouse::Cursor,
-    system_cursor: sdl2::mouse::SystemCursor,
-}
-
-impl Default for FusedCursor {
-    fn default() -> Self {
-        Self {
-            cursor: sdl2::mouse::Cursor::from_system(sdl2::mouse::SystemCursor::Arrow).unwrap(),
-            system_cursor: sdl2::mouse::SystemCursor::Arrow,
-        }
-    }
-}
-
 #[must_use]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EventResponse {
@@ -49,10 +35,10 @@ pub struct State {
     /// Shared clone.
     egui_ctx: egui::Context,
     egui_input: RawInput,
-    start_time: std::time::Instant, // todo: use web_time?
+    start_time: std::time::Instant,
     viewport_id: egui::ViewportId,
-    mouse_pointer_position: egui::Pos2,
-    fused_cursor: FusedCursor,
+    pointer_pos_in_points: Option<egui::Pos2>,
+    current_cursor_icon: Option<egui::CursorIcon>,
 }
 
 impl State {
@@ -62,8 +48,8 @@ impl State {
             viewport_id,
             start_time: std::time::Instant::now(),
             egui_input: RawInput::default(),
-            mouse_pointer_position: egui::Pos2::default(),
-            fused_cursor: FusedCursor::default(),
+            pointer_pos_in_points: None,
+            current_cursor_icon: None,
         }
     }
 
@@ -96,7 +82,7 @@ impl State {
             }
         }
 
-        set_cursor_icon(&mut self.fused_cursor, platform_output.cursor_icon);
+        self.set_cursor_icon(platform_output.cursor_icon);
     }
 
     /// Prepare for a new frame by extracting the accumulated input,
@@ -117,7 +103,7 @@ impl State {
             .viewports
             .entry(self.viewport_id)
             .or_default()
-            .native_pixels_per_point = Some(scale_factor(window) as f32);
+            .native_pixels_per_point = Some(native_pixels_per_point(window) as f32);
 
         self.egui_input.take()
     }
@@ -130,25 +116,50 @@ impl State {
         window: &sdl2::video::Window,
         event: &sdl2::event::Event,
     ) -> EventResponse {
-        if event.get_window_id() != Some(window.id()) {
-            return EventResponse::default();
-        }
-
         use sdl2::event::Event::*;
         match event {
             Window { win_event, .. } => self.on_window_event(*win_event, window),
-            MouseButtonDown { mouse_btn, .. } => self.on_mouse_event(*mouse_btn, false),
-            MouseButtonUp { mouse_btn, .. } => self.on_mouse_event(*mouse_btn, true),
+            MouseButtonDown {
+                mouse_btn, x, y, ..
+            } => self.on_mouse_button_event(window, *mouse_btn, false, *x, *y),
+            MouseButtonUp {
+                mouse_btn, x, y, ..
+            } => self.on_mouse_button_event(window, *mouse_btn, true, *x, *y),
             MouseMotion { x, y, .. } => {
-                let pixels_per_point = pixels_per_point(&self.egui_ctx, window);
-                self.mouse_pointer_position =
-                    egui::pos2(*x as f32 / pixels_per_point, *y as f32 / pixels_per_point);
-                self.egui_input
-                    .events
-                    .push(egui::Event::PointerMoved(self.mouse_pointer_position));
+                let pos = into_poiner_pos_in_points(&self.egui_ctx, window, *x, *y);
+                self.pointer_pos_in_points = Some(pos);
+                self.egui_input.events.push(egui::Event::PointerMoved(pos));
                 EventResponse {
                     repaint: true,
                     consumed: self.egui_ctx.is_using_pointer(),
+                }
+            }
+            MouseWheel { x, y, .. } => {
+                let dx = *x as f32;
+                let dy = *y as f32;
+
+                if self.egui_input.modifiers.command {
+                    // zoom
+                    let delta = (dy / 125.0).exp();
+                    self.egui_input.events.push(egui::Event::Zoom(delta));
+                } else if self.egui_input.modifiers.shift {
+                    // horizontal scroll
+                    self.egui_input.events.push(egui::Event::MouseWheel {
+                        unit: MouseWheelUnit::Line,
+                        delta: egui::vec2(dx + dy, 0.0),
+                        modifiers: self.egui_input.modifiers,
+                    });
+                } else {
+                    // regular scroll
+                    self.egui_input.events.push(egui::Event::MouseWheel {
+                        unit: MouseWheelUnit::Line,
+                        delta: egui::vec2(dx, dy),
+                        modifiers: self.egui_input.modifiers,
+                    });
+                }
+                EventResponse {
+                    repaint: true,
+                    consumed: self.egui_ctx.wants_pointer_input(),
                 }
             }
             KeyUp {
@@ -198,34 +209,7 @@ impl State {
 
                 EventResponse::new(false, true)
             }
-            MouseWheel { x, y, .. } => {
-                let pixels_per_point = pixels_per_point(&self.egui_ctx, window);
-                let delta = egui::vec2(*x as f32, *y as f32) * pixels_per_point;
 
-                if self.egui_input.modifiers.command {
-                    // zoom
-                    let delta = (delta.y / 125.0).exp();
-                    self.egui_input.events.push(egui::Event::Zoom(delta));
-                } else if self.egui_input.modifiers.shift {
-                    // horizontal scroll
-                    self.egui_input.events.push(egui::Event::MouseWheel {
-                        unit: MouseWheelUnit::Point,
-                        delta: egui::vec2(delta.x + delta.y, 0.0),
-                        modifiers: Default::default(),
-                    });
-                } else {
-                    // regular scroll
-                    self.egui_input.events.push(egui::Event::MouseWheel {
-                        unit: MouseWheelUnit::Point,
-                        delta: egui::vec2(delta.x, delta.y),
-                        modifiers: Default::default(),
-                    });
-                }
-                EventResponse {
-                    repaint: true,
-                    consumed: self.egui_ctx.wants_pointer_input(),
-                }
-            }
             _ => EventResponse::default(),
         }
     }
@@ -237,7 +221,6 @@ impl State {
             | WindowEvent::Resized(_, _)
             | WindowEvent::SizeChanged(_, _) => {
                 self.update_screen_rect(window);
-
                 EventResponse {
                     repaint: true,
                     consumed: false,
@@ -249,8 +232,15 @@ impl State {
             | WindowEvent::Moved(_, _)
             | WindowEvent::Restored
             | WindowEvent::Enter
-            | WindowEvent::Leave
             | WindowEvent::Close => EventResponse::new(false, true),
+            WindowEvent::Leave => {
+                self.pointer_pos_in_points = None;
+                self.egui_input.events.push(egui::Event::PointerGone);
+                EventResponse {
+                    repaint: true,
+                    consumed: false,
+                }
+            }
             WindowEvent::TakeFocus | WindowEvent::FocusGained => {
                 self.egui_input.focused = true;
                 self.egui_input
@@ -278,13 +268,23 @@ impl State {
         }
     }
 
-    fn on_mouse_event(&mut self, button: MouseButton, pressed: bool) -> EventResponse {
+    fn on_mouse_button_event(
+        &mut self,
+        window: &Window,
+        button: MouseButton,
+        pressed: bool,
+        x: i32,
+        y: i32,
+    ) -> EventResponse {
         let Some(button) = into_egui_button(button) else {
             return EventResponse::default();
         };
 
+        let pos = into_poiner_pos_in_points(&self.egui_ctx, window, x, y);
+        self.pointer_pos_in_points = Some(pos);
+
         self.egui_input.events.push(egui::Event::PointerButton {
-            pos: self.mouse_pointer_position,
+            pos,
             button,
             pressed,
             modifiers: self.egui_input.modifiers,
@@ -332,6 +332,32 @@ impl State {
             && screen_size_in_points.y > 0.0)
             .then(|| Rect::from_min_size(Pos2::ZERO, screen_size_in_points));
     }
+
+    fn set_cursor_icon(&mut self, cursor_icon: egui::CursorIcon) {
+        if self.current_cursor_icon == Some(cursor_icon) {
+            return;
+        }
+
+        if self.pointer_pos_in_points.is_some() {
+            self.current_cursor_icon = Some(cursor_icon);
+            let system_cursor = into_sdl2_cursor(cursor_icon);
+            let cursor = Cursor::from_system(system_cursor).unwrap();
+            cursor.set();
+        } else {
+            self.current_cursor_icon = None;
+        }
+    }
+}
+
+#[inline]
+pub fn into_poiner_pos_in_points(
+    egui_ctx: &egui::Context,
+    window: &Window,
+    x: i32,
+    y: i32,
+) -> egui::Pos2 {
+    let pixels_per_point = pixels_per_point(egui_ctx, window);
+    egui::pos2(x as f32, y as f32) / pixels_per_point
 }
 
 pub fn into_egui_modifiers(m: Mod) -> Modifiers {
@@ -357,81 +383,10 @@ pub fn into_egui_modifiers(m: Mod) -> Modifiers {
 
     mods
 }
-pub fn into_egui_physical_key(scancode: Scancode) -> Option<Key> {
-    match scancode {
-        // Letters
-        Scancode::A => Some(Key::A),
-        Scancode::B => Some(Key::B),
-        Scancode::C => Some(Key::C),
-        Scancode::D => Some(Key::D),
-        Scancode::E => Some(Key::E),
-        Scancode::F => Some(Key::F),
-        Scancode::G => Some(Key::G),
-        Scancode::H => Some(Key::H),
-        Scancode::I => Some(Key::I),
-        Scancode::J => Some(Key::J),
-        Scancode::K => Some(Key::K),
-        Scancode::L => Some(Key::L),
-        Scancode::M => Some(Key::M),
-        Scancode::N => Some(Key::N),
-        Scancode::O => Some(Key::O),
-        Scancode::P => Some(Key::P),
-        Scancode::Q => Some(Key::Q),
-        Scancode::R => Some(Key::R),
-        Scancode::S => Some(Key::S),
-        Scancode::T => Some(Key::T),
-        Scancode::U => Some(Key::U),
-        Scancode::V => Some(Key::V),
-        Scancode::W => Some(Key::W),
-        Scancode::X => Some(Key::X),
-        Scancode::Y => Some(Key::Y),
-        Scancode::Z => Some(Key::Z),
 
-        // Numbers
-        Scancode::Num0 => Some(Key::Num0),
-        Scancode::Num1 => Some(Key::Num1),
-        Scancode::Num2 => Some(Key::Num2),
-        Scancode::Num3 => Some(Key::Num3),
-        Scancode::Num4 => Some(Key::Num4),
-        Scancode::Num5 => Some(Key::Num5),
-        Scancode::Num6 => Some(Key::Num6),
-        Scancode::Num7 => Some(Key::Num7),
-        Scancode::Num8 => Some(Key::Num8),
-        Scancode::Num9 => Some(Key::Num9),
-
-        // Function keys
-        Scancode::F1 => Some(Key::F1),
-        Scancode::F2 => Some(Key::F2),
-        Scancode::F3 => Some(Key::F3),
-        Scancode::F4 => Some(Key::F4),
-        Scancode::F5 => Some(Key::F5),
-        Scancode::F6 => Some(Key::F6),
-        Scancode::F7 => Some(Key::F7),
-        Scancode::F8 => Some(Key::F8),
-        Scancode::F9 => Some(Key::F9),
-        Scancode::F10 => Some(Key::F10),
-        Scancode::F11 => Some(Key::F11),
-        Scancode::F12 => Some(Key::F12),
-
-        // Navigation
-        Scancode::Up => Some(Key::ArrowUp),
-        Scancode::Down => Some(Key::ArrowDown),
-        Scancode::Left => Some(Key::ArrowLeft),
-        Scancode::Right => Some(Key::ArrowRight),
-
-        // Special
-        Scancode::Return => Some(Key::Enter),
-        Scancode::Escape => Some(Key::Escape),
-        Scancode::Backspace => Some(Key::Backspace),
-        Scancode::Tab => Some(Key::Tab),
-        Scancode::Space => Some(Key::Space),
-
-        _ => None,
-    }
-}
-
-fn set_cursor_icon(fused: &mut FusedCursor, cursor_icon: egui::CursorIcon) {
-    let system_cursor = match cursor_icon {
+#[inline]
+fn into_sdl2_cursor(cursor_icon: egui::CursorIcon) -> SystemCursor {
+    match cursor_icon {
         egui::CursorIcon::Crosshair => SystemCursor::Crosshair,
         egui::CursorIcon::Default => SystemCursor::Arrow,
         egui::CursorIcon::Grab => SystemCursor::Hand,
@@ -447,36 +402,24 @@ fn set_cursor_icon(fused: &mut FusedCursor, cursor_icon: egui::CursorIcon) {
         egui::CursorIcon::Wait => SystemCursor::Wait,
         //There doesn't seem to be a suitable SDL equivalent...
         _ => SystemCursor::Arrow,
-    };
-
-    if system_cursor != fused.system_cursor {
-        fused.cursor = Cursor::from_system(system_cursor).unwrap();
-        fused.system_cursor = system_cursor;
-        fused.cursor.set();
     }
 }
 
+#[inline]
 pub fn screen_size_in_pixels(window: &Window) -> egui::Vec2 {
     let (width, height) = window.drawable_size();
     egui::vec2(width as f32, height as f32)
 }
 
+#[inline]
 pub fn pixels_per_point(egui_ctx: &egui::Context, window: &Window) -> f32 {
-    let (drawable_w, _drawable_h) = window.drawable_size();
-    let (win_w, win_h) = window.size();
-
-    // Avoid divide by zero
-    let native_pixels_per_point = if win_w > 0 && win_h > 0 {
-        drawable_w as f32 / win_w as f32
-    } else {
-        1.0
-    };
-
+    let native_pixels_per_point = native_pixels_per_point(window);
     let egui_zoom_factor = egui_ctx.zoom_factor();
     egui_zoom_factor * native_pixels_per_point
 }
 
-pub fn scale_factor(window: &Window) -> f32 {
+#[inline]
+pub fn native_pixels_per_point(window: &Window) -> f32 {
     let (win_w, win_h) = window.size();
     let (draw_w, _draw_h) = window.drawable_size();
 
@@ -506,14 +449,12 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::Right => Key::ArrowRight,
         Keycode::Down => Key::ArrowDown,
 
-        // Control keys
         Keycode::Escape => Key::Escape,
         Keycode::Tab => Key::Tab,
         Keycode::Backspace => Key::Backspace,
         Keycode::Space => Key::Space,
         Keycode::Return => Key::Enter,
 
-        // Navigation
         Keycode::Insert => Key::Insert,
         Keycode::Home => Key::Home,
         Keycode::Delete => Key::Delete,
@@ -521,7 +462,6 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::PageDown => Key::PageDown,
         Keycode::PageUp => Key::PageUp,
 
-        // Numbers (top row + numpad)
         Keycode::Kp0 | Keycode::Num0 => Key::Num0,
         Keycode::Kp1 | Keycode::Num1 => Key::Num1,
         Keycode::Kp2 | Keycode::Num2 => Key::Num2,
@@ -533,7 +473,6 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::Kp8 | Keycode::Num8 => Key::Num8,
         Keycode::Kp9 | Keycode::Num9 => Key::Num9,
 
-        // Letters
         Keycode::A => Key::A,
         Keycode::B => Key::B,
         Keycode::C => Key::C,
@@ -561,7 +500,6 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::Y => Key::Y,
         Keycode::Z => Key::Z,
 
-        // Function keys
         Keycode::F1 => Key::F1,
         Keycode::F2 => Key::F2,
         Keycode::F3 => Key::F3,
@@ -575,7 +513,6 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
         Keycode::F11 => Key::F11,
         Keycode::F12 => Key::F12,
 
-        // Symbols & punctuation (only those egui supports)
         Keycode::Minus => Key::Minus,
         Keycode::Equals => Key::Equals,
         Keycode::Semicolon => Key::Semicolon,
@@ -588,4 +525,72 @@ pub fn into_egui_key(key: Keycode) -> Option<Key> {
             return None;
         }
     })
+}
+
+pub fn into_egui_physical_key(scancode: Scancode) -> Option<Key> {
+    match scancode {
+        Scancode::A => Some(Key::A),
+        Scancode::B => Some(Key::B),
+        Scancode::C => Some(Key::C),
+        Scancode::D => Some(Key::D),
+        Scancode::E => Some(Key::E),
+        Scancode::F => Some(Key::F),
+        Scancode::G => Some(Key::G),
+        Scancode::H => Some(Key::H),
+        Scancode::I => Some(Key::I),
+        Scancode::J => Some(Key::J),
+        Scancode::K => Some(Key::K),
+        Scancode::L => Some(Key::L),
+        Scancode::M => Some(Key::M),
+        Scancode::N => Some(Key::N),
+        Scancode::O => Some(Key::O),
+        Scancode::P => Some(Key::P),
+        Scancode::Q => Some(Key::Q),
+        Scancode::R => Some(Key::R),
+        Scancode::S => Some(Key::S),
+        Scancode::T => Some(Key::T),
+        Scancode::U => Some(Key::U),
+        Scancode::V => Some(Key::V),
+        Scancode::W => Some(Key::W),
+        Scancode::X => Some(Key::X),
+        Scancode::Y => Some(Key::Y),
+        Scancode::Z => Some(Key::Z),
+
+        Scancode::Num0 => Some(Key::Num0),
+        Scancode::Num1 => Some(Key::Num1),
+        Scancode::Num2 => Some(Key::Num2),
+        Scancode::Num3 => Some(Key::Num3),
+        Scancode::Num4 => Some(Key::Num4),
+        Scancode::Num5 => Some(Key::Num5),
+        Scancode::Num6 => Some(Key::Num6),
+        Scancode::Num7 => Some(Key::Num7),
+        Scancode::Num8 => Some(Key::Num8),
+        Scancode::Num9 => Some(Key::Num9),
+
+        Scancode::F1 => Some(Key::F1),
+        Scancode::F2 => Some(Key::F2),
+        Scancode::F3 => Some(Key::F3),
+        Scancode::F4 => Some(Key::F4),
+        Scancode::F5 => Some(Key::F5),
+        Scancode::F6 => Some(Key::F6),
+        Scancode::F7 => Some(Key::F7),
+        Scancode::F8 => Some(Key::F8),
+        Scancode::F9 => Some(Key::F9),
+        Scancode::F10 => Some(Key::F10),
+        Scancode::F11 => Some(Key::F11),
+        Scancode::F12 => Some(Key::F12),
+
+        Scancode::Up => Some(Key::ArrowUp),
+        Scancode::Down => Some(Key::ArrowDown),
+        Scancode::Left => Some(Key::ArrowLeft),
+        Scancode::Right => Some(Key::ArrowRight),
+
+        Scancode::Return => Some(Key::Enter),
+        Scancode::Escape => Some(Key::Escape),
+        Scancode::Backspace => Some(Key::Backspace),
+        Scancode::Tab => Some(Key::Tab),
+        Scancode::Space => Some(Key::Space),
+
+        _ => None,
+    }
 }
