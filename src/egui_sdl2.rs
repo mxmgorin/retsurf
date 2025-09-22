@@ -49,7 +49,6 @@ pub struct State {
     /// Shared clone.
     egui_ctx: egui::Context,
     egui_input: RawInput,
-    modifiers: Modifiers,
     start_time: std::time::Instant, // todo: use web_time?
     viewport_id: egui::ViewportId,
     mouse_pointer_position: egui::Pos2,
@@ -63,7 +62,6 @@ impl State {
             viewport_id,
             start_time: std::time::Instant::now(),
             egui_input: RawInput::default(),
-            modifiers: Modifiers::default(),
             mouse_pointer_position: egui::Pos2::default(),
             fused_cursor: FusedCursor::default(),
         }
@@ -169,11 +167,11 @@ impl State {
             } => {
                 let resp = self.on_keyboard_event(*kc, *sc, *keymod, false, *repeat);
 
-                if self.modifiers.command && *kc == Keycode::C {
+                if self.egui_input.modifiers.command && *kc == Keycode::C {
                     self.egui_input.events.push(egui::Event::Copy);
-                } else if self.modifiers.command && *kc == Keycode::X {
+                } else if self.egui_input.modifiers.command && *kc == Keycode::X {
                     self.egui_input.events.push(egui::Event::Cut);
-                } else if self.modifiers.command && *kc == Keycode::V {
+                } else if self.egui_input.modifiers.command && *kc == Keycode::V {
                     if let Ok(contents) = window.subsystem().clipboard().clipboard_text() {
                         self.egui_input.events.push(egui::Event::Text(contents));
                     }
@@ -289,7 +287,7 @@ impl State {
             pos: self.mouse_pointer_position,
             button,
             pressed,
-            modifiers: self.modifiers,
+            modifiers: self.egui_input.modifiers,
         });
         EventResponse {
             repaint: true,
@@ -309,13 +307,12 @@ impl State {
             return EventResponse::default();
         };
 
-        self.modifiers = into_egui_modifiers(keymod);
         self.egui_input.events.push(egui::Event::Key {
             key,
             physical_key: into_egui_physical_key(scancode),
             pressed,
             repeat,
-            modifiers: self.modifiers,
+            modifiers: into_egui_modifiers(keymod),
         });
 
         // When pressing the Tab key, egui focuses the first focusable element, hence Tab always consumes.

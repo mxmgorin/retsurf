@@ -1,7 +1,7 @@
 use egui::{TopBottomPanel, Vec2};
 
 use crate::{
-    app::AppCommand, browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow
+    browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow
 };
 use std::{sync::Arc, time::Duration};
 
