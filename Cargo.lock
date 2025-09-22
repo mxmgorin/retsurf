@@ -93,7 +93,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
 dependencies = [
  "cfg-if",
- "getrandom 0.3.3",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -1605,19 +1604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "egui_sdl2_gl"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a8653b5bb973f9bf6cecc2a4976cbbe2c0dee5780e315f0414eb2fc9b50244"
-dependencies = [
- "ahash",
- "egui",
- "gl",
- "memoffset",
- "sdl2",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2325,15 +2311,6 @@ name = "gimli"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
-
-[[package]]
-name = "gl"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a94edab108827d67608095e269cf862e60d920f144a5026d3dbcfd8b877fb404"
-dependencies = [
- "gl_generator",
-]
 
 [[package]]
 name = "gl_generator"
@@ -5284,7 +5261,6 @@ dependencies = [
  "dpi",
  "egui",
  "egui_glow",
- "egui_sdl2_gl",
  "env_logger",
  "glow",
  "image",

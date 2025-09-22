@@ -1,3 +1,5 @@
+pub mod egui_sdl2;
+
 use std::path::PathBuf;
 
 pub fn get_base_dir() -> PathBuf {

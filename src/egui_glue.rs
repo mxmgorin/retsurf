@@ -1,34 +1,40 @@
-use crate::egui_sdl2::{EventResponse, State};
 use egui::{ViewportId, ViewportOutput};
 use egui_glow::ShaderVersion;
 use std::sync::Arc;
 
+/// Integration between [`egui`] and [`glow`] for app based on [`sdl2`].
 pub struct EguiGlue {
-    ctx: egui::Context,
-    painter: egui_glow::Painter,
-    state: State,
+    pub ctx: egui::Context,
+    pub painter: egui_glow::Painter,
+    pub state: retsurf::egui_sdl2::State,
 
+    // output from the last run:
     shapes: Vec<egui::epaint::ClippedShape>,
+    pixels_per_point: f32,
     textures_delta: egui::TexturesDelta,
 }
 
 impl EguiGlue {
     /// For automatic shader version detection set `shader_version` to `None`.
-    pub fn new(gl_ctx: Arc<glow::Context>, window: &sdl2::video::Window, shader_version: Option<ShaderVersion>) -> Self {
+    pub fn new(
+        gl_ctx: Arc<glow::Context>,
+        window: &sdl2::video::Window,
+        shader_version: Option<ShaderVersion>,
+    ) -> Self {
         let painter = egui_glow::Painter::new(gl_ctx, "", shader_version, false)
             .map_err(|err| {
                 log::error!("error occurred in initializing painter:\n{err}");
             })
             .unwrap();
         let ctx = egui::Context::default();
-        let mut state = State::new(window, ctx.clone(), ViewportId::ROOT);
-        state.set_theme(egui::Theme::Dark);
+        let state = retsurf::egui_sdl2::State::new(window, ctx.clone(), ViewportId::ROOT);
 
         Self {
             ctx,
             painter,
             state,
             shapes: Default::default(),
+            pixels_per_point: 1.0,
             textures_delta: Default::default(),
         }
     }
@@ -37,7 +43,7 @@ impl EguiGlue {
         &mut self,
         window: &sdl2::video::Window,
         event: &sdl2::event::Event,
-    ) -> EventResponse {
+    ) -> retsurf::egui_sdl2::EventResponse {
         self.state.on_event(window, event)
     }
 
@@ -55,13 +61,14 @@ impl EguiGlue {
             viewport_output,
             textures_delta,
             shapes,
-            pixels_per_point: _pixels_per_point,
+            pixels_per_point,
         } = self.ctx.run(raw_input, run_ui);
 
         self.state.handle_platform_output(window, platform_output);
 
         self.shapes = shapes;
         self.textures_delta.append(textures_delta);
+        self.pixels_per_point = pixels_per_point;
 
         match viewport_output.get(&ViewportId::ROOT) {
             Some(&ViewportOutput { repaint_delay, .. }) => repaint_delay,
@@ -77,7 +84,7 @@ impl EguiGlue {
             self.painter.set_texture(id, &image_delta);
         }
 
-        let pixels_per_point = self.ctx.pixels_per_point();
+        let pixels_per_point = self.pixels_per_point;
         let shapes = std::mem::take(&mut self.shapes);
         let clipped_primitives = self.ctx.tessellate(shapes, pixels_per_point);
         self.painter

@@ -1,7 +1,6 @@
 use egui::{TopBottomPanel, Vec2};
-
 use crate::{
-    browser::AppBrowser, egui_glue::EguiGlue, egui_sdl2::EventResponse, window::AppWindow
+    browser::AppBrowser, egui_glue::EguiGlue, window::AppWindow
 };
 use std::{sync::Arc, time::Duration};
 
@@ -51,7 +50,7 @@ impl AppUi {
         &mut self,
         window: &AppWindow,
         event: &sdl2::event::Event,
-    ) -> EventResponse {
+    ) -> retsurf::egui_sdl2::EventResponse {
         self.egui.on_event(window.get_sdl2_window(), event)
     }
 

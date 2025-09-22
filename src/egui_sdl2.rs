@@ -22,12 +22,6 @@ pub struct EventResponse {
     pub repaint: bool,
 }
 
-impl EventResponse {
-    pub fn new(consumed: bool, repaint: bool) -> Self {
-        Self { consumed, repaint }
-    }
-}
-
 /// Handles the integration between egui and a sdl2 Window.
 ///
 /// Instantiate one of these per viewport/window.
@@ -202,6 +196,10 @@ impl State {
                 resp
             }
             TextInput { text, .. } => {
+                let mut resp = EventResponse {
+                    consumed: true,
+                    repaint: false,
+                };
                 if !text.is_empty() {
                     // On some platforms we get here when the user presses Cmd-C (copy), ctrl-W, etc.
                     // We need to ignore these characters that are side-effects of commands.
@@ -213,10 +211,12 @@ impl State {
                         self.egui_input
                             .events
                             .push(egui::Event::Text(text.to_owned()));
+
+                        resp.repaint = true;
                     }
                 }
 
-                EventResponse::new(false, true)
+                resp
             }
             DropFile { filename, .. } => {
                 self.egui_input.dropped_files.push(egui::DroppedFile {
@@ -250,7 +250,10 @@ impl State {
             | WindowEvent::Moved(_, _)
             | WindowEvent::Restored
             | WindowEvent::Enter
-            | WindowEvent::Close => EventResponse::new(false, true),
+            | WindowEvent::Close => EventResponse {
+                consumed: false,
+                repaint: true,
+            },
             WindowEvent::Leave => {
                 self.pointer_pos_in_points = None;
                 self.egui_input.events.push(egui::Event::PointerGone);

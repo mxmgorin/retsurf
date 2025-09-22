@@ -21,7 +21,6 @@ libservo = { git = "https://github.com/mxmgorin/servo" }
 dpi = "0.1.2"
 url = "2.5.7"
 keyboard-types = "0.8.1"
-egui_sdl2_gl = { version="0.32.0", default-features = false }
 egui = "~0.32"
 image = "0.25.8"
 glow = "0.16.0"

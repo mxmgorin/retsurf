@@ -6,7 +6,6 @@ mod browser;
 mod resources;
 mod egui_glue;
 mod ui;
-mod egui_sdl2;
 
 use crate::app::App;
 
