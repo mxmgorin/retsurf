@@ -28,7 +28,7 @@ impl AppUi {
             // Servo draws into egui's GL context here
             render_to_parent_fn(painter.gl(), rect);
         });
-        let egui = EguiGlue::new(window.get_gl_ctx(), None);
+        let egui = EguiGlue::new(window.get_gl_ctx(), window.get_sdl2_window(), None);
 
         Self {
             egui,

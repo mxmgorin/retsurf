@@ -1,4 +1,4 @@
-use egui::{Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect};
+use egui::{Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, Rect};
 use sdl2::event::WindowEvent;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Mod;
@@ -34,23 +34,35 @@ impl EventResponse {
 pub struct State {
     /// Shared clone.
     egui_ctx: egui::Context,
-    egui_input: RawInput,
+    egui_input: egui::RawInput,
     start_time: std::time::Instant,
     viewport_id: egui::ViewportId,
     pointer_pos_in_points: Option<egui::Pos2>,
     current_cursor_icon: Option<egui::CursorIcon>,
+    clipboard: sdl2::clipboard::ClipboardUtil,
 }
 
 impl State {
-    pub fn new(egui_ctx: egui::Context, viewport_id: egui::ViewportId) -> Self {
+    pub fn new(window: &Window, egui_ctx: egui::Context, viewport_id: egui::ViewportId) -> Self {
+        let egui_input = egui::RawInput {
+            focused: false, // event will tell us when we have focus
+            ..Default::default()
+        };
+        let clipboard = window.subsystem().clipboard();
+
         State {
             egui_ctx,
             viewport_id,
+            clipboard,
             start_time: std::time::Instant::now(),
-            egui_input: RawInput::default(),
+            egui_input,
             pointer_pos_in_points: None,
             current_cursor_icon: None,
         }
+    }
+
+    pub fn set_theme(&mut self, theme: egui::Theme) {
+        self.egui_input.system_theme.replace(theme);
     }
 
     /// Call with the output given by `egui`.
@@ -59,17 +71,16 @@ impl State {
     /// * update the cursor
     /// * copy text to the clipboard
     /// * open any clicked urls
-    /// * update the IME
     /// *
     pub fn handle_platform_output(
         &mut self,
-        window: &Window,
+        _window: &Window,
         platform_output: egui::PlatformOutput,
     ) {
         for command in &platform_output.commands {
             match command {
                 egui::OutputCommand::CopyText(text) => {
-                    let result = window.subsystem().clipboard().set_clipboard_text(text);
+                    let result = self.clipboard.set_clipboard_text(text);
 
                     if result.is_err() {
                         log::warn!("Failed to set copied text to clipboard");
@@ -183,7 +194,7 @@ impl State {
                 } else if self.egui_input.modifiers.command && *kc == Keycode::X {
                     self.egui_input.events.push(egui::Event::Cut);
                 } else if self.egui_input.modifiers.command && *kc == Keycode::V {
-                    if let Ok(contents) = window.subsystem().clipboard().clipboard_text() {
+                    if let Ok(contents) = self.clipboard.clipboard_text() {
                         self.egui_input.events.push(egui::Event::Text(contents));
                     }
                 }
@@ -212,7 +223,10 @@ impl State {
                     path: Some(std::path::PathBuf::from(filename)),
                     ..Default::default()
                 });
-                EventResponse { repaint: true, consumed: false }
+                EventResponse {
+                    repaint: true,
+                    consumed: false,
+                }
             }
             _ => EventResponse::default(),
         }

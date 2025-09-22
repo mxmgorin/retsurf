@@ -14,14 +14,15 @@ pub struct EguiGlue {
 
 impl EguiGlue {
     /// For automatic shader version detection set `shader_version` to `None`.
-    pub fn new(gl_ctx: Arc<glow::Context>, shader_version: Option<ShaderVersion>) -> Self {
+    pub fn new(gl_ctx: Arc<glow::Context>, window: &sdl2::video::Window, shader_version: Option<ShaderVersion>) -> Self {
         let painter = egui_glow::Painter::new(gl_ctx, "", shader_version, false)
             .map_err(|err| {
                 log::error!("error occurred in initializing painter:\n{err}");
             })
             .unwrap();
         let ctx = egui::Context::default();
-        let state = State::new(ctx.clone(), ViewportId::ROOT);
+        let mut state = State::new(window, ctx.clone(), ViewportId::ROOT);
+        state.set_theme(egui::Theme::Dark);
 
         Self {
             ctx,
