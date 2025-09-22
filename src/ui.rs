@@ -49,7 +49,10 @@ impl AppUi {
         window: &AppWindow,
         event: &sdl2::event::Event,
     ) -> retsurf::egui_sdl2::EventResponse {
-        self.egui.on_event(window.get_sdl2_window(), event)
+        let mut resp = self.egui.on_event(window.get_sdl2_window(), event);
+        resp.consumed &= self.is_pointer_over_toolbar(); // don't consume when pointer over browser area
+
+        resp
     }
 
     pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) {
@@ -119,6 +122,14 @@ impl AppUi {
 
     pub fn destroy(&mut self) {
         self.egui.destroy();
+    }
+
+    fn is_pointer_over_toolbar(&self) -> bool {
+        let Some(pos) = self.egui.state.get_pointer_pos_in_points() else {
+            return false;
+        };
+
+        pos.y < self.toolbar_size.y
     }
 }
 

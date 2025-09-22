@@ -55,6 +55,10 @@ impl State {
         }
     }
 
+    pub fn get_pointer_pos_in_points(&self) -> Option<egui::Pos2> {
+        self.pointer_pos_in_points
+    }
+
     pub fn set_theme(&mut self, theme: egui::Theme) {
         self.egui_input.system_theme.replace(theme);
     }
