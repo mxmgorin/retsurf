@@ -1,9 +1,9 @@
-use egui::{ViewportId, ViewportOutput};
+use egui::{ViewportId};
 use egui_glow::ShaderVersion;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 /// Integration between [`egui`] and [`glow`] for app based on [`sdl2`].
-pub struct EguiGlue {
+pub struct EguiGlow {
     pub ctx: egui::Context,
     pub painter: egui_glow::Painter,
     pub state: retsurf::egui_sdl2::State,
@@ -14,14 +14,15 @@ pub struct EguiGlue {
     textures_delta: egui::TexturesDelta,
 }
 
-impl EguiGlue {
+impl EguiGlow {
     /// For automatic shader version detection set `shader_version` to `None`.
     pub fn new(
-        gl_ctx: Arc<glow::Context>,
         window: &sdl2::video::Window,
+        glow_ctx: Arc<glow::Context>,
         shader_version: Option<ShaderVersion>,
+        dithering: bool,
     ) -> Self {
-        let painter = egui_glow::Painter::new(gl_ctx, "", shader_version, false)
+        let painter = egui_glow::Painter::new(glow_ctx, "", shader_version, dithering)
             .map_err(|err| {
                 log::error!("error occurred in initializing painter:\n{err}");
             })
@@ -54,7 +55,7 @@ impl EguiGlue {
         &mut self,
         window: &sdl2::video::Window,
         run_ui: impl FnMut(&egui::Context),
-    ) -> std::time::Duration {
+    ) -> Duration {
         let raw_input = self.state.take_egui_input(window);
         let egui::FullOutput {
             platform_output,
@@ -63,21 +64,20 @@ impl EguiGlue {
             shapes,
             pixels_per_point,
         } = self.ctx.run(raw_input, run_ui);
-
         self.state.handle_platform_output(window, platform_output);
 
         self.shapes = shapes;
         self.textures_delta.append(textures_delta);
         self.pixels_per_point = pixels_per_point;
 
-        match viewport_output.get(&ViewportId::ROOT) {
-            Some(&ViewportOutput { repaint_delay, .. }) => repaint_delay,
-            None => std::time::Duration::ZERO,
-        }
+        viewport_output
+            .get(&ViewportId::ROOT)
+            .map(|x| x.repaint_delay)
+            .unwrap_or_else(|| Duration::ZERO)
     }
 
     /// Paint the results of the last call to [`Self::run`].
-    pub fn paint(&mut self, screen_size: [u32; 2]) {
+    pub fn paint(&mut self, window: &sdl2::video::Window) {
         let mut textures_delta = std::mem::take(&mut self.textures_delta);
 
         for (id, image_delta) in textures_delta.set {
@@ -87,8 +87,9 @@ impl EguiGlue {
         let pixels_per_point = self.pixels_per_point;
         let shapes = std::mem::take(&mut self.shapes);
         let clipped_primitives = self.ctx.tessellate(shapes, pixels_per_point);
+        let size = window.size().into();
         self.painter
-            .paint_primitives(screen_size, pixels_per_point, &clipped_primitives);
+            .paint_primitives(size, pixels_per_point, &clipped_primitives);
 
         for id in textures_delta.free.drain(..) {
             self.painter.free_texture(id);

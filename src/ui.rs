@@ -1,11 +1,9 @@
+use crate::{browser::AppBrowser, egui_glow_sdl2::EguiGlow, window::AppWindow};
 use egui::{TopBottomPanel, Vec2};
-use crate::{
-    browser::AppBrowser, egui_glue::EguiGlue, window::AppWindow
-};
 use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
-    egui: EguiGlue,
+    egui: EguiGlow,
     callback_fn: Arc<egui_glow::CallbackFn>,
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
@@ -27,7 +25,7 @@ impl AppUi {
             // Servo draws into egui's GL context here
             render_to_parent_fn(painter.gl(), rect);
         });
-        let egui = EguiGlue::new(window.get_gl_ctx(), window.get_sdl2_window(), None);
+        let egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
 
         Self {
             egui,
@@ -115,8 +113,8 @@ impl AppUi {
         self.repaint_delay.replace(repaint_delay);
     }
 
-    pub fn paint(&mut self, size: [u32; 2]) {
-        self.egui.paint(size);
+    pub fn paint(&mut self, window: &AppWindow) {
+        self.egui.paint(window.get_sdl2_window());
     }
 
     pub fn destroy(&mut self) {

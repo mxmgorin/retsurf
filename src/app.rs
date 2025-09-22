@@ -82,7 +82,7 @@ impl App {
         self.ui.update(&self.window, &self.browser);
         self.browser.paint();
         self.window.prepare_for_rendering();
-        self.ui.paint(self.window.size());
+        self.ui.paint(&self.window);
         self.window.present();
     }
 }

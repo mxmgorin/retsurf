@@ -4,7 +4,7 @@ mod window;
 mod event;
 mod browser;
 mod resources;
-mod egui_glue;
+mod egui_glow_sdl2;
 mod ui;
 
 use crate::app::App;

@@ -45,12 +45,8 @@ impl AppWindow {
         &self.window
     }
 
-    pub fn get_gl_ctx(&self) -> Arc<glow::Context> {
+    pub fn get_glow_ctx(&self) -> Arc<glow::Context> {
         self.rendering_ctx.glow_gl_api()
-    }
-
-    pub fn size(&self) -> [u32; 2] {
-        self.rendering_ctx.size().into()
     }
 
     pub fn get_offscreen_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
