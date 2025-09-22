@@ -176,7 +176,7 @@ impl State {
                 repeat,
                 ..
             } => {
-                let resp = self.on_keyboard_event(*kc, *sc, *keymod, false, *repeat);
+                let resp = self.on_keyboard_event(*kc, *sc, *keymod, true, *repeat);
 
                 if self.egui_input.modifiers.command && *kc == Keycode::C {
                     self.egui_input.events.push(egui::Event::Copy);
@@ -194,8 +194,6 @@ impl State {
                 if !text.is_empty() {
                     // On some platforms we get here when the user presses Cmd-C (copy), ctrl-W, etc.
                     // We need to ignore these characters that are side-effects of commands.
-                    // Also make sure the key is pressed (not released). On Linux, text might
-                    // contain some data even when the key is released.
                     let is_cmd = self.egui_input.modifiers.ctrl
                         || self.egui_input.modifiers.command
                         || self.egui_input.modifiers.mac_cmd;
@@ -209,7 +207,13 @@ impl State {
 
                 EventResponse::new(false, true)
             }
-
+            DropFile { filename, .. } => {
+                self.egui_input.dropped_files.push(egui::DroppedFile {
+                    path: Some(std::path::PathBuf::from(filename)),
+                    ..Default::default()
+                });
+                EventResponse { repaint: true, consumed: false }
+            }
             _ => EventResponse::default(),
         }
     }
