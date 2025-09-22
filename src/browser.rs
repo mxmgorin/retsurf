@@ -15,6 +15,7 @@ pub enum BrowserCommand {
     Back,
     Foward,
     Reload,
+    Go(String),
 }
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
@@ -182,6 +183,15 @@ impl AppBrowser {
             BrowserCommand::Foward => _ = self.inner.get_focused_tab().map(|x| x.go_forward(1)),
             BrowserCommand::HandleInput(input_event) => self.handle_input(input_event),
             BrowserCommand::Reload => _ = self.inner.get_focused_tab().map(|x| x.reload()),
+            BrowserCommand::Go(location) => {
+                let Some(url) = try_into_url(&location.clone(), "https://duckduckgo.com/?q=%s") else {
+                    log::warn!("failed to parse location");
+                    return;
+                };
+
+                log::info!("load: {}", url.to_string());
+                self.inner.get_focused_tab().map(|x| x.load(url));
+            }
         }
     }
 
@@ -221,4 +231,48 @@ fn into_scroll_delta(wd: servo::WheelDelta) -> (f32, f32) {
     // }
 
     (dx, dy)
+}
+
+/// Interpret an input URL.
+///
+/// If this is not a valid URL, try to "fix" it by adding a scheme or if all else fails,
+/// interpret the string as a search term.
+pub fn try_into_url(request: &str, searchpage: &str) -> Option<Url> {
+    let request = request.trim();
+
+    Url::parse(request)
+        .ok()
+        .or_else(|| try_as_file(request))
+        .or_else(|| try_as_domain(request))
+        .or_else(|| try_as_search_page(request, searchpage))
+}
+
+fn try_as_file(request: &str) -> Option<Url> {
+    if request.starts_with('/') {
+        return Url::parse(&format!("file://{}", request)).ok();
+    }
+    None
+}
+
+fn try_as_domain(request: &str) -> Option<Url> {
+    fn is_domain_like(s: &str) -> bool {
+        !s.starts_with('/') && s.contains('/')
+            || (!s.contains(' ') && !s.starts_with('.') && s.split('.').count() > 1)
+    }
+
+    if !request.contains(' ') && servo::net_traits::pub_domains::is_reg_domain(request)
+        || is_domain_like(request)
+    {
+        return Url::parse(&format!("https://{}", request)).ok();
+    }
+
+    None
+}
+
+fn try_as_search_page(request: &str, searchpage: &str) -> Option<Url> {
+    if request.is_empty() {
+        return None;
+    }
+
+    Url::parse(&searchpage.replace("%s", request)).ok()
 }

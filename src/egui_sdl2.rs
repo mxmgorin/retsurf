@@ -301,7 +301,6 @@ impl State {
         x: i32,
         y: i32,
     ) -> EventResponse {
-        log::info!("mouse button");
         let Some(button) = into_egui_button(button) else {
             return EventResponse::default();
         };

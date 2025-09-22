@@ -4,7 +4,7 @@ use crate::{
     egui_glow_sdl2::EguiGlow,
     window::AppWindow,
 };
-use egui::{TopBottomPanel, Vec2};
+use egui::{TextBuffer, TopBottomPanel, Vec2};
 use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
@@ -13,6 +13,7 @@ pub struct AppUi {
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
     location: String,
+    src_location: String,
 }
 
 impl AppUi {
@@ -38,6 +39,7 @@ impl AppUi {
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
             location: "".to_string(),
+            src_location: "".to_string(),
         }
     }
 
@@ -65,8 +67,11 @@ impl AppUi {
 
         let repaint_delay = self.egui.run(window.get_sdl2_window(), |ctx| {
             if let Some(url) = browser.get_url() {
-                if self.location.is_empty() {
-                    self.location = url.to_string();
+                let url = url.to_string();
+
+                if self.src_location != url {
+                    self.location = url.clone();
+                    self.src_location = url;
                 }
 
                 let frame = egui::Frame::default()
@@ -95,16 +100,18 @@ impl AppUi {
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     let location_id = egui::Id::new("location_input");
-                                    let location_field = ui.add_sized(
+                                    let location = ui.add_sized(
                                         ui.available_size(),
                                         egui::TextEdit::singleline(&mut self.location)
                                             .id(location_id),
                                     );
 
-                                    // Navigate to address when enter is pressed in the address bar.
-                                    if location_field.lost_focus()
-                                        && ui.input(|i| i.clone().key_pressed(egui::Key::Enter))
+                                    if location.lost_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
                                     {
+                                        commands.push(AppCommand::Browser(BrowserCommand::Go(
+                                            self.location.take(),
+                                        )));
                                     }
                                 },
                             );
