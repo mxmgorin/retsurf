@@ -1,13 +1,10 @@
 use super::{gamepad::handle_gamepad, keyboard::into_servo_keyboard};
 use crate::{
-    app::AppCommand,
-    event::{
+    app::AppCommand, browser::BrowserCommand, event::{
         mouse::{into_servo_mouse_button, into_servo_mouse_move, into_servo_mouse_wheel},
         user::handle_user,
         window::handle_window,
-    },
-    ui::AppUi,
-    window::AppWindow,
+    }, ui::AppUi, window::AppWindow
 };
 use sdl2::event::Event;
 
@@ -77,17 +74,17 @@ impl AppEventHandler {
             } => {
                 let input =
                     into_servo_mouse_button(mouse_btn, x, y, false, ui.get_toolbar_height());
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
                 let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_toolbar_height());
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::MouseMotion { x, y, .. } => {
                 let input = into_servo_mouse_move(x, y, ui.get_toolbar_height());
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::MouseWheel {
                 precise_x,
@@ -103,7 +100,7 @@ impl AppEventHandler {
                     mouse_y,
                     ui.get_toolbar_height(),
                 );
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::KeyDown {
                 keycode: Some(kc),
@@ -113,7 +110,7 @@ impl AppEventHandler {
                 ..
             } => {
                 let input = into_servo_keyboard(kc, sc, keymod, true, repeat);
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -123,7 +120,7 @@ impl AppEventHandler {
                 ..
             } => {
                 let input = into_servo_keyboard(kc, sc, keymod, false, repeat);
-                commands.push(AppCommand::HandleInput(input));
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
             }
             Event::ControllerButtonDown { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, true) {

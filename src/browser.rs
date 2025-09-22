@@ -10,6 +10,13 @@ use std::{
 };
 use url::Url;
 
+pub enum BrowserCommand {
+    HandleInput(servo::InputEvent),
+    Back,
+    Foward,
+    Reload,
+}
+
 static EXPERIMENTAL_PREFS: &[&str] = &[
     "dom_async_clipboard_enabled",
     "dom_fontface_enabled",
@@ -139,31 +146,42 @@ impl AppBrowser {
         false
     }
 
-    pub fn handle_input(&self, event: servo::InputEvent) {
-        if let Some(tab) = self.inner.get_focused_tab() {
-            tab.notify_input_event(event.clone());
+    fn handle_input(&self, event: servo::InputEvent) {
+        let Some(tab) = self.inner.get_focused_tab() else {
+            return;
+        };
 
-            match event {
-                servo::InputEvent::Wheel(we) => {
-                    let (dx, dy) = into_scroll_delta(we.delta);
-                    let (x, y) = we.point.to_i32().to_tuple();
-                    scroll(&tab, dx, dy, x, y);
-                    self.inner.servo.spin_event_loop(); // doesn't scroll without this
-                }
-                servo::InputEvent::MouseButton(be) => {
-                    if be.action == servo::MouseButtonAction::Down {
-                        match be.button {
-                            servo::MouseButton::Left
-                            | servo::MouseButton::Middle
-                            | servo::MouseButton::Right
-                            | servo::MouseButton::Other(_) => {}
-                            servo::MouseButton::Back => _ = tab.go_back(1),
-                            servo::MouseButton::Forward => _ = tab.go_forward(1),
-                        }
+        tab.notify_input_event(event.clone());
+
+        match event {
+            servo::InputEvent::Wheel(we) => {
+                let (dx, dy) = into_scroll_delta(we.delta);
+                let (x, y) = we.point.to_i32().to_tuple();
+                scroll(&tab, dx, dy, x, y);
+                self.inner.servo.spin_event_loop(); // doesn't scroll without this
+            }
+            servo::InputEvent::MouseButton(be) => {
+                if be.action == servo::MouseButtonAction::Down {
+                    match be.button {
+                        servo::MouseButton::Left
+                        | servo::MouseButton::Middle
+                        | servo::MouseButton::Right
+                        | servo::MouseButton::Other(_) => {}
+                        servo::MouseButton::Back => _ = tab.go_back(1),
+                        servo::MouseButton::Forward => _ = tab.go_forward(1),
                     }
                 }
-                _ => {}
             }
+            _ => {}
+        }
+    }
+
+    pub fn execute_command(&mut self, command: BrowserCommand) {
+        match command {
+            BrowserCommand::Back => _ = self.inner.get_focused_tab().map(|x| x.go_back(1)),
+            BrowserCommand::Foward => _ = self.inner.get_focused_tab().map(|x| x.go_forward(1)),
+            BrowserCommand::HandleInput(input_event) => self.handle_input(input_event),
+            BrowserCommand::Reload => _ = self.inner.get_focused_tab().map(|x| x.reload()),
         }
     }
 

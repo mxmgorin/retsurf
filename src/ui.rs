@@ -1,4 +1,9 @@
-use crate::{browser::AppBrowser, egui_glow_sdl2::EguiGlow, window::AppWindow};
+use crate::{
+    app::AppCommand,
+    browser::{AppBrowser, BrowserCommand},
+    egui_glow_sdl2::EguiGlow,
+    window::AppWindow,
+};
 use egui::{TopBottomPanel, Vec2};
 use std::{sync::Arc, time::Duration};
 
@@ -55,7 +60,9 @@ impl AppUi {
         resp
     }
 
-    pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) {
+    pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) -> Vec<AppCommand> {
+        let mut commands = Vec::with_capacity(2);
+
         let repaint_delay = self.egui.run(window.get_sdl2_window(), |ctx| {
             if let Some(url) = browser.get_url() {
                 if self.location.is_empty() {
@@ -65,14 +72,21 @@ impl AppUi {
                 let frame = egui::Frame::default()
                     .fill(ctx.style().visuals.window_fill)
                     .inner_margin(4.0);
+
                 TopBottomPanel::top("toolbar").frame(frame).show(ctx, |ui| {
                     ui.allocate_ui_with_layout(
                         ui.available_size(),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
-                            if ui.add(toolbar_button("⏴")).clicked() {}
-                            if ui.add(toolbar_button("⏵")).clicked() {}
-                            if ui.add(toolbar_button("↻")).clicked() {}
+                            if ui.add(toolbar_button("⏴")).clicked() {
+                                commands.push(AppCommand::Browser(BrowserCommand::Back));
+                            }
+                            if ui.add(toolbar_button("⏵")).clicked() {
+                                commands.push(AppCommand::Browser(BrowserCommand::Foward));
+                            }
+                            if ui.add(toolbar_button("↻")).clicked() {
+                                commands.push(AppCommand::Browser(BrowserCommand::Reload));
+                            }
 
                             ui.add_space(2.0);
 
@@ -114,10 +128,15 @@ impl AppUi {
             });
         });
         self.repaint_delay.replace(repaint_delay);
+
+        commands
     }
 
-    pub fn paint(&mut self, window: &AppWindow) {
+    /// Paints ui and presents to the window
+    pub fn draw(&mut self, window: &AppWindow) {
+        window.prepare_for_rendering();
         self.egui.paint(window.get_sdl2_window());
+        window.present();
     }
 
     pub fn destroy(&mut self) {

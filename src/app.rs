@@ -1,4 +1,4 @@
-use crate::browser::AppBrowser;
+use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::ui::AppUi;
@@ -15,8 +15,8 @@ pub enum AppState {
 pub enum AppCommand {
     Shutdown,
     Draw,
-    HandleInput(servo::InputEvent),
     Resize(u32, u32),
+    Browser(BrowserCommand),
 }
 
 pub struct App {
@@ -53,9 +53,11 @@ impl App {
         self.state = AppState::Running;
 
         while self.browser.pump_event_loop() {
-            let commands = self.event_handler.wait(&self.window, &mut self.ui);
+            for command in self.ui.update(&self.window, &self.browser) {
+                self.execute_command(command);
+            }
 
-            for command in commands {
+            for command in self.event_handler.wait(&self.window, &mut self.ui) {
                 self.execute_command(command);
             }
         }
@@ -68,9 +70,9 @@ impl App {
         match command {
             AppCommand::Shutdown => self.shutdown(),
             AppCommand::Draw => self.draw(),
-            AppCommand::HandleInput(input_event) => self.browser.handle_input(input_event),
             AppCommand::Resize(w, h) => self.browser.resize(w, h),
-        }
+            AppCommand::Browser(command) => self.browser.execute_command(command),
+        };
     }
 
     fn shutdown(&mut self) {
@@ -79,10 +81,7 @@ impl App {
     }
 
     fn draw(&mut self) {
-        self.ui.update(&self.window, &self.browser);
         self.browser.paint();
-        self.window.prepare_for_rendering();
-        self.ui.paint(&self.window);
-        self.window.present();
+        self.ui.draw(&self.window);
     }
 }
