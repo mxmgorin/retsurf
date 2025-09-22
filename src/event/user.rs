@@ -5,21 +5,20 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
     let event = UserEvent::from_code(code);
 
     match event {
-        UserEvent::HasUpdate => None,
-        UserEvent::BrowserFrameReady | UserEvent::UiRepaintRequested => Some(AppCommand::Draw),
+        UserEvent::BrowserWakeup => None,
+        UserEvent::BrowserFrameReady => Some(AppCommand::Draw),
     }
 }
 
 #[repr(i32)]
 #[derive(Copy, Clone)]
 pub enum UserEvent {
-    HasUpdate = 0,
+    BrowserWakeup = 0,
     BrowserFrameReady = 1,
-    UiRepaintRequested = 2,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 3] = [UserEvent::HasUpdate, UserEvent::BrowserFrameReady, UserEvent::UiRepaintRequested];
+    pub const ALL: [UserEvent; 2] = [UserEvent::BrowserWakeup, UserEvent::BrowserFrameReady];
 
     pub fn from_code(code: i32) -> UserEvent {
         Self::ALL[code as usize]
@@ -57,7 +56,7 @@ impl UserEventSender {
 
 impl servo::EventLoopWaker for UserEventSender {
     fn wake(&self) {
-        self.send(UserEvent::HasUpdate);
+        self.send(UserEvent::BrowserWakeup);
     }
 
     fn clone_box(&self) -> Box<dyn servo::EventLoopWaker> {

@@ -1,10 +1,10 @@
-use super::{gamepad::handle_gamepad, keyboard::into_servo_keyboard};
+use super::gamepad::handle_gamepad;
 use crate::{
-    app::AppCommand, browser::BrowserCommand, event::{
-        mouse::{into_servo_mouse_button, into_servo_mouse_move, into_servo_mouse_wheel},
-        user::handle_user,
-        window::handle_window,
-    }, ui::AppUi, window::AppWindow
+    app::AppCommand,
+    browser::BrowserCommand,
+    event::{user::handle_user, window::handle_window},
+    ui::AppUi,
+    window::AppWindow,
 };
 use sdl2::event::Event;
 
@@ -72,35 +72,36 @@ impl AppEventHandler {
             Event::MouseButtonUp {
                 mouse_btn, x, y, ..
             } => {
-                let input =
-                    into_servo_mouse_button(mouse_btn, x, y, false, ui.get_toolbar_height());
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, false);
+                let event = servo::InputEvent::MouseButton(event);
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
-                let input = into_servo_mouse_button(mouse_btn, x, y, true, ui.get_toolbar_height());
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, true);
+                let event = servo::InputEvent::MouseButton(event);
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
             }
             Event::MouseMotion { x, y, .. } => {
-                let input = into_servo_mouse_move(x, y, ui.get_toolbar_height());
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let event = super::sdl2_servo::into_mouse_move_event(x, y);
+                let event = servo::InputEvent::MouseMove(event);
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
             }
             Event::MouseWheel {
-                precise_x,
-                precise_y,
+                x,
+                y,
                 mouse_x,
                 mouse_y,
                 ..
             } => {
-                let input = into_servo_mouse_wheel(
-                    precise_x,
-                    precise_y,
-                    mouse_x,
-                    mouse_y,
-                    ui.get_toolbar_height(),
-                );
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let (mx, my) = ui.into_browser_rel_pos(mouse_x as f32, mouse_y as f32);
+                let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
+                let event = servo::InputEvent::Wheel(event);
+                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
             }
             Event::KeyDown {
                 keycode: Some(kc),
@@ -109,8 +110,10 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                let input = into_servo_keyboard(kc, sc, keymod, true, repeat);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, true, repeat);
+                let event = servo::InputEvent::Keyboard(event);
+                let command = AppCommand::Browser(BrowserCommand::HandleInput(event));
+                commands.push(command);
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -119,8 +122,10 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                let input = into_servo_keyboard(kc, sc, keymod, false, repeat);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(input)));
+                let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, false, repeat);
+                let event = servo::InputEvent::Keyboard(event);
+                let command = AppCommand::Browser(BrowserCommand::HandleInput(event));
+                commands.push(command);
             }
             Event::ControllerButtonDown { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, true) {

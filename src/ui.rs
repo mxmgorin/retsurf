@@ -45,8 +45,8 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
-    pub fn get_toolbar_height(&self) -> f32 {
-        self.toolbar_size.y
+    pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
+        (x, y - self.toolbar_size.y)
     }
 
     pub fn handle_event(

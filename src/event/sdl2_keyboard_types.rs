@@ -1,28 +1,8 @@
-use keyboard_types::{Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 use sdl2::keyboard::{Keycode, Mod, Scancode};
 
-pub fn into_servo_keyboard(
-    kc: Keycode,
-    sc: Scancode,
-    m: Mod,
-    down: bool,
-    repeat: bool,
-) -> servo::InputEvent {
-    let state = if down { KeyState::Down } else { KeyState::Up };
-    let kb_event = KeyboardEvent {
-        state,
-        key: sdl_keycode_to_key(kc),
-        code: sdl_scancode_to_code(sc),
-        location: Location::Standard,
-        modifiers: sdl_mod_to_modifiers(m),
-        repeat,
-        is_composing: false,
-    };
-
-    servo::InputEvent::Keyboard(servo::KeyboardEvent::new(kb_event))
-}
-
-fn sdl_mod_to_modifiers(m: Mod) -> Modifiers {
+/// Maps Sdl2 scancode to keyboard types Code (physical key mapping)
+pub fn into_modifiers(m: Mod) -> keyboard_types::Modifiers {
+    use keyboard_types::Modifiers;
     let mut mods = Modifiers::empty();
     if m.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) {
         mods |= Modifiers::CONTROL;
@@ -40,8 +20,9 @@ fn sdl_mod_to_modifiers(m: Mod) -> Modifiers {
     mods
 }
 
-/// --- Scancode -> Code (physical key mapping) ---
-fn sdl_scancode_to_code(sc: Scancode) -> Code {
+/// Maps Sdl2 scancode to keyboard types Code (physical key mapping)
+pub fn into_code(sc: Scancode) -> keyboard_types::Code {
+    use keyboard_types::Code;
     match sc {
         Scancode::A => Code::KeyA,
         Scancode::B => Code::KeyB,
@@ -161,8 +142,10 @@ fn sdl_scancode_to_code(sc: Scancode) -> Code {
     }
 }
 
-/// --- Keycode -> Key (logical meaning) ---
-fn sdl_keycode_to_key(kc: Keycode) -> Key {
+/// Sdl2 Keycode to keyboard_types Key (logical meaning)
+pub fn into_key(kc: Keycode) -> keyboard_types::Key {
+    use keyboard_types::Key;
+    use keyboard_types::NamedKey;
     match kc {
         Keycode::A => Key::Character("a".into()),
         Keycode::B => Key::Character("b".into()),
