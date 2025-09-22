@@ -12,8 +12,7 @@ pub struct AppUi {
     callback_fn: Arc<egui_glow::CallbackFn>,
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
-    location: String,
-    src_location: String,
+    location: TextField,
 }
 
 impl AppUi {
@@ -38,8 +37,7 @@ impl AppUi {
             callback_fn: Arc::new(callback),
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
-            location: "".to_string(),
-            src_location: "".to_string(),
+            location: TextField::default(),
         }
     }
 
@@ -69,9 +67,8 @@ impl AppUi {
             if let Some(url) = browser.get_url() {
                 let url = url.to_string();
 
-                if self.src_location != url {
-                    self.location = url.clone();
-                    self.src_location = url;
+                if self.location.get_src() != url {
+                    self.location = TextField::new(url);
                 }
 
                 let frame = egui::Frame::default()
@@ -102,7 +99,7 @@ impl AppUi {
                                     let location_id = egui::Id::new("location_input");
                                     let location = ui.add_sized(
                                         ui.available_size(),
-                                        egui::TextEdit::singleline(&mut self.location)
+                                        egui::TextEdit::singleline(self.location.edit())
                                             .id(location_id),
                                     );
 
@@ -164,4 +161,34 @@ fn toolbar_button(text: &str) -> egui::Button<'_> {
     egui::Button::new(text)
         .frame(false)
         .min_size(Vec2 { x: 20.0, y: 20.0 })
+}
+
+#[derive(Default)]
+struct TextField {
+    src: String,
+    tmp: String,
+}
+
+impl TextField {
+    pub fn new(src: impl Into<String>) -> Self {
+        let src = src.into();
+
+        Self {
+            tmp: src.clone(),
+            src,
+        }
+    }
+
+    pub fn edit(&mut self) -> &mut String {
+        &mut self.tmp
+    }
+
+    pub fn take(&mut self) -> String {
+        self.src.clear();
+        self.tmp.take()
+    }
+
+    pub fn get_src(&self) -> &str {
+        &self.src
+    }
 }
