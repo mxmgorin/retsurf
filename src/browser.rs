@@ -203,6 +203,15 @@ impl AppBrowser {
             tab.resize(dpi::PhysicalSize::new(w, h));
         }
     }
+
+    pub fn is_loading(&self) -> bool {
+        let status = self.inner
+            .get_focused_tab()
+            .map(|webview| webview.load_status())
+            .unwrap_or(servo::LoadStatus::Complete);
+
+        status != servo::LoadStatus::Complete
+    }
 }
 
 fn scroll(tab: &WebView, dx: f32, dy: f32, x: i32, y: i32) {

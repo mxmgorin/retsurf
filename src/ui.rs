@@ -4,7 +4,7 @@ use crate::{
     egui_glow_sdl2::EguiGlow,
     window::AppWindow,
 };
-use egui::{TextBuffer, TopBottomPanel, Vec2};
+use egui::{TopBottomPanel, Vec2};
 use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
@@ -86,8 +86,13 @@ impl AppUi {
                             if ui.add(toolbar_button("⏵")).clicked() {
                                 commands.push(AppCommand::Browser(BrowserCommand::Foward));
                             }
-                            if ui.add(toolbar_button("↻")).clicked() {
-                                commands.push(AppCommand::Browser(BrowserCommand::Reload));
+
+                            if browser.is_loading() {
+                                ui.add(toolbar_button("X"));
+                            } else {
+                                if ui.add(toolbar_button("↻")).clicked() {
+                                    commands.push(AppCommand::Browser(BrowserCommand::Reload));
+                                }
                             }
 
                             ui.add_space(2.0);
@@ -96,18 +101,14 @@ impl AppUi {
                                 ui.available_size(),
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    let location_id = egui::Id::new("location_input");
                                     let location = ui.add_sized(
                                         ui.available_size(),
-                                        egui::TextEdit::singleline(self.location.edit())
-                                            .id(location_id),
+                                        self.location.into_egui_edit("location"),
                                     );
 
-                                    if location.lost_focus()
-                                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                                    {
+                                    if key_pressed(ui, location, egui::Key::Enter) {
                                         commands.push(AppCommand::Browser(BrowserCommand::Go(
-                                            self.location.take(),
+                                            self.location.clone(),
                                         )));
                                     }
                                 },
@@ -179,16 +180,23 @@ impl TextField {
         }
     }
 
-    pub fn edit(&mut self) -> &mut String {
-        &mut self.tmp
+    #[inline]
+    pub fn clone(&mut self) -> String {
+        self.tmp.clone()
     }
 
-    pub fn take(&mut self) -> String {
-        self.src.clear();
-        self.tmp.take()
-    }
-
+    #[inline]
     pub fn get_src(&self) -> &str {
         &self.src
     }
+
+    #[inline]
+    pub fn into_egui_edit<'a>(&'a mut self, id: &str) -> egui::TextEdit<'a> {
+        egui::TextEdit::singleline(&mut self.tmp).id(egui::Id::new(id))
+    }
+}
+
+#[inline]
+fn key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
+    response.lost_focus() && ui.input(|i| i.key_pressed(key))
 }
