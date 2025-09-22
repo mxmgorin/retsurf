@@ -121,10 +121,10 @@ impl State {
             Window { win_event, .. } => self.on_window_event(*win_event, window),
             MouseButtonDown {
                 mouse_btn, x, y, ..
-            } => self.on_mouse_button_event(window, *mouse_btn, false, *x, *y),
+            } => self.on_mouse_button_event(window, *mouse_btn, true, *x, *y),
             MouseButtonUp {
                 mouse_btn, x, y, ..
-            } => self.on_mouse_button_event(window, *mouse_btn, true, *x, *y),
+            } => self.on_mouse_button_event(window, *mouse_btn, false, *x, *y),
             MouseMotion { x, y, .. } => {
                 let pos = into_poiner_pos_in_points(&self.egui_ctx, window, *x, *y);
                 self.pointer_pos_in_points = Some(pos);
