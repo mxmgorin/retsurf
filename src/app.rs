@@ -53,7 +53,7 @@ impl App {
         self.state = AppState::Running;
 
         while self.browser.pump_event_loop() {
-            for command in self.ui.update(&self.window, &self.browser) {
+            for command in self.ui.update(&self.browser) {
                 self.execute_command(command);
             }
 

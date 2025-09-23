@@ -34,14 +34,20 @@ pub struct State {
     pointer_pos_in_points: Option<egui::Pos2>,
     current_cursor_icon: Option<egui::CursorIcon>,
     clipboard: sdl2::clipboard::ClipboardUtil,
+    window_size: (u32, u32), // cache value and update on events
 }
 
 impl State {
     pub fn new(window: &Window, egui_ctx: egui::Context, viewport_id: egui::ViewportId) -> Self {
-        let egui_input = egui::RawInput {
+        let mut egui_input = egui::RawInput {
             focused: false, // event will tell us when we have focus
             ..Default::default()
         };
+        egui_input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(native_pixels_per_point(window));
         let clipboard = window.subsystem().clipboard();
 
         State {
@@ -52,7 +58,12 @@ impl State {
             egui_input,
             pointer_pos_in_points: None,
             current_cursor_icon: None,
+            window_size: window.size(),
         }
+    }
+
+    pub fn get_window_size(&self) -> (u32, u32) {
+        self.window_size
     }
 
     pub fn get_pointer_pos_in_points(&self) -> Option<egui::Pos2> {
@@ -72,7 +83,6 @@ impl State {
     /// *
     pub fn handle_platform_output(
         &mut self,
-        _window: &Window,
         platform_output: egui::PlatformOutput,
     ) {
         for command in &platform_output.commands {
@@ -96,23 +106,15 @@ impl State {
 
     /// Prepare for a new frame by extracting the accumulated input,
     ///
-    /// as well as setting [the time](egui::RawInput::time) and [screen rectangle](egui::RawInput::screen_rect).
+    /// as well as setting [the time](egui::RawInput::time)
     ///
     /// You need to set [`egui::RawInput::viewports`] yourself though.
     /// Use [`update_viewport_info`] to update the info for each
     /// viewport.
-    pub fn take_egui_input(&mut self, window: &Window) -> egui::RawInput {
+    pub fn take_egui_input(&mut self) -> egui::RawInput {
         self.egui_input.time = Some(self.start_time.elapsed().as_secs_f64());
-        self.update_screen_rect(window); // todo: do we need to it here?
-
         // Tell egui which viewport is now active:
         self.egui_input.viewport_id = self.viewport_id;
-
-        self.egui_input
-            .viewports
-            .entry(self.viewport_id)
-            .or_default()
-            .native_pixels_per_point = Some(native_pixels_per_point(window) as f32);
 
         self.egui_input.take()
     }
@@ -242,7 +244,7 @@ impl State {
             | WindowEvent::Maximized
             | WindowEvent::Resized(_, _)
             | WindowEvent::SizeChanged(_, _) => {
-                self.update_screen_rect(window);
+                self.on_size_chage(window);
                 EventResponse {
                     repaint: true,
                     consumed: false,
@@ -346,6 +348,21 @@ impl State {
             repaint: true,
             consumed,
         }
+    }
+
+    fn on_size_chage(&mut self, window: &Window) {
+        self.window_size = window.size();
+        self.update_native_pixels_per_point(window);
+        self.update_screen_rect(window);
+    }
+
+    fn update_native_pixels_per_point(&mut self, window: &Window) {
+        let native_pixels_per_point = native_pixels_per_point(window);
+        self.egui_input
+            .viewports
+            .entry(self.viewport_id)
+            .or_default()
+            .native_pixels_per_point = Some(native_pixels_per_point);
     }
 
     fn update_screen_rect(&mut self, window: &Window) {

@@ -1,4 +1,4 @@
-use egui::{ViewportId};
+use egui::ViewportId;
 use egui_glow::ShaderVersion;
 use std::{sync::Arc, time::Duration};
 
@@ -40,23 +40,11 @@ impl EguiGlow {
         }
     }
 
-    pub fn on_event(
-        &mut self,
-        window: &sdl2::video::Window,
-        event: &sdl2::event::Event,
-    ) -> retsurf::egui_sdl2::EventResponse {
-        self.state.on_event(window, event)
-    }
-
     /// Returns the `Duration` of the timeout after which egui should be repainted even if there's no new events.
     ///
     /// Call [`Self::paint`] later to paint.
-    pub fn run(
-        &mut self,
-        window: &sdl2::video::Window,
-        run_ui: impl FnMut(&egui::Context),
-    ) -> Duration {
-        let raw_input = self.state.take_egui_input(window);
+    pub fn run(&mut self, run_ui: impl FnMut(&egui::Context)) -> Duration {
+        let raw_input = self.state.take_egui_input();
         let egui::FullOutput {
             platform_output,
             viewport_output,
@@ -64,7 +52,7 @@ impl EguiGlow {
             shapes,
             pixels_per_point,
         } = self.ctx.run(raw_input, run_ui);
-        self.state.handle_platform_output(window, platform_output);
+        self.state.handle_platform_output(platform_output);
 
         self.shapes = shapes;
         self.textures_delta.append(textures_delta);
@@ -77,7 +65,7 @@ impl EguiGlow {
     }
 
     /// Paint the results of the last call to [`Self::run`].
-    pub fn paint(&mut self, window: &sdl2::video::Window) {
+    pub fn paint(&mut self) {
         let mut textures_delta = std::mem::take(&mut self.textures_delta);
 
         for (id, image_delta) in textures_delta.set {
@@ -87,9 +75,9 @@ impl EguiGlow {
         let pixels_per_point = self.pixels_per_point;
         let shapes = std::mem::take(&mut self.shapes);
         let clipped_primitives = self.ctx.tessellate(shapes, pixels_per_point);
-        let size = window.size().into();
+        let size = self.state.get_window_size();
         self.painter
-            .paint_primitives(size, pixels_per_point, &clipped_primitives);
+            .paint_primitives(size.into(), pixels_per_point, &clipped_primitives);
 
         for id in textures_delta.free.drain(..) {
             self.painter.free_texture(id);

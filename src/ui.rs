@@ -54,17 +54,17 @@ impl AppUi {
         window: &AppWindow,
         event: &sdl2::event::Event,
     ) -> retsurf::egui_sdl2::EventResponse {
-        let mut resp = self.egui.on_event(window.get_sdl2_window(), event);
+        let mut resp = self.egui.state.on_event(window.get_sdl2_window(), event);
         resp.consumed &= self.is_pointer_over_toolbar(); // don't consume when pointer over browser area
 
         resp
     }
 
-    pub fn update(&mut self, window: &AppWindow, browser: &AppBrowser) -> Vec<AppCommand> {
+    pub fn update(&mut self, browser: &AppBrowser) -> Vec<AppCommand> {
         let mut commands = Vec::with_capacity(2);
 
-        let repaint_delay = self.egui.run(window.get_sdl2_window(), |ctx| {
-            if let Some(url) = browser.get_url() {
+        let repaint_delay = self.egui.run(|ctx| {
+            if let Some(url) = browser.get_url() { // todo: cache value and reuse
                 let url = url.to_string();
 
                 if self.location.get_src() != url {
@@ -140,7 +140,7 @@ impl AppUi {
     /// Paints ui and presents to the window
     pub fn draw(&mut self, window: &AppWindow) {
         window.prepare_for_rendering();
-        self.egui.paint(window.get_sdl2_window());
+        self.egui.paint();
         window.present();
     }
 
