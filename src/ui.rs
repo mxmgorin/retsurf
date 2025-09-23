@@ -12,7 +12,6 @@ pub struct AppUi {
     callback_fn: Arc<egui_glow::CallbackFn>,
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
-    location: TextField,
     repaint_pending: bool,
 }
 
@@ -38,15 +37,16 @@ impl AppUi {
             callback_fn: Arc::new(callback),
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
-            location: TextField::default(),
             repaint_pending: false,
         }
     }
 
+    #[inline]
     pub fn take_repain_delay(&mut self) -> Option<Duration> {
         self.repaint_delay.take()
     }
 
+    #[inline]
     pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y - self.toolbar_size.y)
     }
@@ -60,64 +60,59 @@ impl AppUi {
         consumed
     }
 
-    pub fn update(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+    pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
+        let mut state = browser.get_state_mut();
+
         let repaint_delay = self.egui.run(|ctx| {
-            if let Some(url) = browser.get_url() {
-                // todo: cache value and reuse
-                let url = url.to_string();
+            let frame = egui::Frame::default()
+                .fill(ctx.style().visuals.window_fill)
+                .inner_margin(4.0);
 
-                if self.location.get_src() != url {
-                    self.location = TextField::new(url);
-                }
+            TopBottomPanel::top("toolbar").frame(frame).show(ctx, |ui| {
+                ui.allocate_ui_with_layout(
+                    ui.available_size(),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        if ui.add(toolbar_button("⏴")).clicked() {
+                            commands.push(AppCommand::Browser(BrowserCommand::Back));
+                        }
+                        if ui.add(toolbar_button("⏵")).clicked() {
+                            commands.push(AppCommand::Browser(BrowserCommand::Foward));
+                        }
 
-                let frame = egui::Frame::default()
-                    .fill(ctx.style().visuals.window_fill)
-                    .inner_margin(4.0);
-
-                TopBottomPanel::top("toolbar").frame(frame).show(ctx, |ui| {
-                    ui.allocate_ui_with_layout(
-                        ui.available_size(),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            if ui.add(toolbar_button("⏴")).clicked() {
-                                commands.push(AppCommand::Browser(BrowserCommand::Back));
+                        if state.is_loading() {
+                            ui.add(toolbar_button("X"));
+                        } else {
+                            if ui.add(toolbar_button("↻")).clicked() {
+                                commands.push(AppCommand::Browser(BrowserCommand::Reload));
                             }
-                            if ui.add(toolbar_button("⏵")).clicked() {
-                                commands.push(AppCommand::Browser(BrowserCommand::Foward));
-                            }
+                        }
 
-                            if browser.is_loading() {
-                                ui.add(toolbar_button("X"));
-                            } else {
-                                if ui.add(toolbar_button("↻")).clicked() {
-                                    commands.push(AppCommand::Browser(BrowserCommand::Reload));
+                        ui.add_space(2.0);
+
+                        let location_text = state.get_location_mut();
+
+                        ui.allocate_ui_with_layout(
+                            ui.available_size(),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                let location = ui.add_sized(
+                                    ui.available_size(),
+                                    text_edit(location_text, "location"),
+                                );
+
+                                if key_pressed(ui, location, egui::Key::Enter) {
+                                    commands.push(AppCommand::Browser(BrowserCommand::Go(
+                                        location_text.to_owned(),
+                                    )));
                                 }
-                            }
+                            },
+                        );
+                    },
+                );
 
-                            ui.add_space(2.0);
-
-                            ui.allocate_ui_with_layout(
-                                ui.available_size(),
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    let location = ui.add_sized(
-                                        ui.available_size(),
-                                        self.location.into_egui_edit("location"),
-                                    );
-
-                                    if key_pressed(ui, location, egui::Key::Enter) {
-                                        commands.push(AppCommand::Browser(BrowserCommand::Go(
-                                            self.location.clone(),
-                                        )));
-                                    }
-                                },
-                            );
-                        },
-                    );
-
-                    self.toolbar_size = ui.min_size();
-                });
-            }
+                self.toolbar_size = ui.min_size();
+            });
 
             egui::CentralPanel::default().show(ctx, |ui| {
                 let min = ui.cursor().min;
@@ -158,42 +153,16 @@ impl AppUi {
 }
 
 /// Create a frameless button with square sizing, as used in the toolbar.
+#[inline]
 fn toolbar_button(text: &str) -> egui::Button<'_> {
     egui::Button::new(text)
         .frame(false)
         .min_size(Vec2 { x: 20.0, y: 20.0 })
 }
 
-#[derive(Default)]
-struct TextField {
-    src: String,
-    tmp: String,
-}
-
-impl TextField {
-    pub fn new(src: impl Into<String>) -> Self {
-        let src = src.into();
-
-        Self {
-            tmp: src.clone(),
-            src,
-        }
-    }
-
-    #[inline]
-    pub fn clone(&mut self) -> String {
-        self.tmp.clone()
-    }
-
-    #[inline]
-    pub fn get_src(&self) -> &str {
-        &self.src
-    }
-
-    #[inline]
-    pub fn into_egui_edit<'a>(&'a mut self, id: &str) -> egui::TextEdit<'a> {
-        egui::TextEdit::singleline(&mut self.tmp).id(egui::Id::new(id))
-    }
+#[inline]
+pub fn text_edit<'a>(text: &'a mut String, id: &str) -> egui::TextEdit<'a> {
+    egui::TextEdit::singleline(text).id(egui::Id::new(id))
 }
 
 #[inline]

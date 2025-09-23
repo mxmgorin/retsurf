@@ -42,29 +42,63 @@ pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
 }
 
+pub struct BrowserState {
+    location: String,
+    load_status: servo::LoadStatus,
+}
+
+impl BrowserState {
+    pub fn is_loading(&self) -> bool {
+        self.load_status != servo::LoadStatus::Complete
+    }
+
+    pub fn get_location_mut(&mut self) -> &mut String {
+        &mut self.location
+    }
+}
+
+impl Default for BrowserState {
+    fn default() -> Self {
+        Self {
+            location: "".into(),
+            load_status: servo::LoadStatus::Complete,
+        }
+    }
+}
+
 struct AppBrowserInner {
-    tabs: RefCell<Vec<WebView>>,
+    webviews: RefCell<Vec<WebView>>,
     event_sender: UserEventSender,
     servo: servo::Servo,
     repaint_pending: Cell<bool>,
+    state: RefCell<BrowserState>,
 }
 
 impl AppBrowserInner {
     pub fn new(servo: servo::Servo, event_sender: UserEventSender) -> Self {
         Self {
-            tabs: RefCell::new(vec![]),
+            webviews: RefCell::new(vec![]),
             event_sender,
             servo,
             repaint_pending: Cell::new(false),
+            state: RefCell::new(BrowserState::default()),
         }
     }
 
-    pub fn add_tab(&self, tab: WebView) {
-        self.tabs.borrow_mut().push(tab);
+    pub fn add_webview(&self, tab: WebView) {
+        self.webviews.borrow_mut().push(tab);
     }
 
-    pub fn get_focused_tab(&self) -> Option<WebView> {
-        self.tabs.borrow().last().cloned()
+    pub fn get_focused_webview(&self) -> Option<WebView> {
+        self.webviews.borrow().last().cloned()
+    }
+
+    fn is_focused_webview(&self, id: servo::WebViewId) -> bool {
+        if let Some(focused) = self.get_focused_webview() {
+            return focused.id() == id;
+        }
+
+        false
     }
 }
 
@@ -74,13 +108,25 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
+    fn notify_url_changed(&self, webview: WebView, url: Url) {
+        if self.is_focused_webview(webview.id()) {
+            self.state.borrow_mut().location = url.to_string();
+        }
+    }
+
+    fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
+        if self.is_focused_webview(webview.id()) {
+            self.state.borrow_mut().load_status = status;
+        }
+    }
+
     fn request_open_auxiliary_webview(&self, parent_webview: WebView) -> Option<WebView> {
         let webview = servo::WebViewBuilder::new_auxiliary(&self.servo)
             .hidpi_scale_factor(servo::euclid::Scale::new(1.0))
             .delegate(parent_webview.delegate())
             .build();
         webview.focus_and_raise_to_top(true);
-        self.add_tab(webview.clone());
+        self.add_webview(webview.clone());
 
         Some(webview)
     }
@@ -105,12 +151,12 @@ impl AppBrowser {
         })
     }
 
-    pub fn get_url(&self) -> Option<Url> {
-        self.inner.get_focused_tab().map(|x| x.url())?
-    }
-
     pub fn deinit(&self) {
         self.inner.servo.deinit();
+    }
+
+    pub fn get_state_mut(&mut self) -> std::cell::RefMut<'_, BrowserState> {
+        self.inner.state.borrow_mut()
     }
 
     pub fn start_shutting_down(&self) {
@@ -125,7 +171,7 @@ impl AppBrowser {
             .build();
 
         webview.focus_and_raise_to_top(true);
-        self.inner.add_tab(webview);
+        self.inner.add_webview(webview);
     }
 
     /// False indicates that no need to pump any more
@@ -138,7 +184,7 @@ impl AppBrowser {
             return false;
         }
 
-        if let Some(tab) = self.inner.get_focused_tab() {
+        if let Some(tab) = self.inner.get_focused_webview() {
             self.inner.repaint_pending.set(false);
             return tab.paint();
         }
@@ -147,7 +193,7 @@ impl AppBrowser {
     }
 
     pub fn handle_input(&self, event: servo::InputEvent) {
-        let Some(tab) = self.inner.get_focused_tab() else {
+        let Some(tab) = self.inner.get_focused_webview() else {
             return;
         };
 
@@ -178,37 +224,27 @@ impl AppBrowser {
 
     pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
         match command {
-            BrowserCommand::Back => _ = self.inner.get_focused_tab().map(|x| x.go_back(1)),
-            BrowserCommand::Foward => _ = self.inner.get_focused_tab().map(|x| x.go_forward(1)),
-            BrowserCommand::Reload => _ = self.inner.get_focused_tab().map(|x| x.reload()),
+            BrowserCommand::Back => _ = self.inner.get_focused_webview().map(|x| x.go_back(1)),
+            BrowserCommand::Foward => _ = self.inner.get_focused_webview().map(|x| x.go_forward(1)),
+            BrowserCommand::Reload => _ = self.inner.get_focused_webview().map(|x| x.reload()),
             BrowserCommand::Go(location) => {
                 let Some(url) = try_into_url(location, &config.search_page) else {
                     log::warn!("failed to parse location");
                     return;
                 };
 
-                self.inner.get_focused_tab().map(|x| x.load(url));
+                self.inner.get_focused_webview().map(|x| x.load(url));
             }
         }
     }
 
     pub fn resize(&self, w: u32, h: u32) {
-        if let Some(tab) = self.inner.get_focused_tab() {
+        if let Some(tab) = self.inner.get_focused_webview() {
             let mut rect = tab.rect();
             rect.set_size(servo::euclid::Size2D::new(w as f32, h as f32));
             tab.move_resize(rect);
             tab.resize(dpi::PhysicalSize::new(w, h));
         }
-    }
-
-    pub fn is_loading(&self) -> bool {
-        let status = self
-            .inner
-            .get_focused_tab()
-            .map(|webview| webview.load_status())
-            .unwrap_or(servo::LoadStatus::Complete);
-
-        status != servo::LoadStatus::Complete
     }
 }
 

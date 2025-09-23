@@ -54,7 +54,7 @@ impl App {
         while self.browser.pump_event_loop() {
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
-            self.ui.update(&self.browser, &mut commands);
+            self.ui.update(&mut self.browser, &mut commands);
 
             for command in commands.iter() {
                 self.execute_command(command);
