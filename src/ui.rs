@@ -13,6 +13,7 @@ pub struct AppUi {
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
     location: TextField,
+    repaint_pending: bool,
 }
 
 impl AppUi {
@@ -38,6 +39,7 @@ impl AppUi {
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
             location: TextField::default(),
+            repaint_pending: false,
         }
     }
 
@@ -49,22 +51,21 @@ impl AppUi {
         (x, y - self.toolbar_size.y)
     }
 
-    pub fn handle_event(
-        &mut self,
-        window: &AppWindow,
-        event: &sdl2::event::Event,
-    ) -> retsurf::egui_sdl2::EventResponse {
-        let mut resp = self.egui.state.on_event(window.get_sdl2_window(), event);
-        resp.consumed &= self.is_pointer_over_toolbar(); // don't consume when pointer over browser area
+    /// Handles the event and returns whether it is consumed
+    pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
+        let resp = self.egui.state.on_event(window.get_sdl2_window(), event);
+        self.repaint_pending = resp.repaint;
+        let consumed = resp.consumed & self.is_pointer_over_toolbar(); // don't consume when pointer over browser area
 
-        resp
+        consumed
     }
 
     pub fn update(&mut self, browser: &AppBrowser) -> Vec<AppCommand> {
         let mut commands = Vec::with_capacity(2);
 
         let repaint_delay = self.egui.run(|ctx| {
-            if let Some(url) = browser.get_url() { // todo: cache value and reuse
+            if let Some(url) = browser.get_url() {
+                // todo: cache value and reuse
                 let url = url.to_string();
 
                 if self.location.get_src() != url {
@@ -138,10 +139,13 @@ impl AppUi {
     }
 
     /// Paints ui and presents to the window
-    pub fn draw(&mut self, window: &AppWindow) {
-        window.prepare_for_rendering();
-        self.egui.paint();
-        window.present();
+    pub fn draw(&mut self, window: &AppWindow, force: bool) {
+        if self.repaint_pending || force {
+            window.prepare_for_rendering();
+            self.egui.paint();
+            window.present();
+            self.repaint_pending = false;
+        }
     }
 
     pub fn destroy(&mut self) {

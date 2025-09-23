@@ -14,7 +14,6 @@ pub enum AppState {
 
 pub enum AppCommand {
     Shutdown,
-    Draw,
     Resize(u32, u32),
     Browser(BrowserCommand),
 }
@@ -60,6 +59,8 @@ impl App {
             for command in self.event_handler.wait(&self.window, &mut self.ui) {
                 self.execute_command(command);
             }
+
+            self.draw();
         }
 
         self.browser.deinit();
@@ -69,7 +70,6 @@ impl App {
     fn execute_command(&mut self, command: AppCommand) {
         match command {
             AppCommand::Shutdown => self.shutdown(),
-            AppCommand::Draw => self.draw(),
             AppCommand::Resize(w, h) => self.browser.resize(w, h),
             AppCommand::Browser(command) => self.browser.execute_command(command),
         };
@@ -81,7 +81,7 @@ impl App {
     }
 
     fn draw(&mut self) {
-        self.browser.paint();
-        self.ui.draw(&self.window);
+        let painted = self.browser.paint();
+        self.ui.draw(&self.window, painted);
     }
 }

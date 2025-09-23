@@ -38,23 +38,17 @@ impl AppEventHandler {
         let delay = ui.take_repain_delay();
         let event = if let Some(delay) = delay {
             if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
-                // todo: we will skip draw when there is event faster then delay
                 event
             } else {
-                commands.push(AppCommand::Draw);
                 return commands;
             }
         } else {
             self.event_pump.wait_event()
         };
 
-        let resp = ui.handle_event(window, &event);
+        let consumed = ui.handle_event(window, &event);
 
-        if resp.repaint {
-            commands.push(AppCommand::Draw);
-        }
-
-        if resp.consumed {
+        if consumed {
             return commands;
         }
 

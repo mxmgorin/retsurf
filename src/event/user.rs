@@ -6,7 +6,7 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
 
     match event {
         UserEvent::BrowserWakeup => None,
-        UserEvent::BrowserFrameReady => Some(AppCommand::Draw),
+        UserEvent::BrowserFrameReady => None,
     }
 }
 
