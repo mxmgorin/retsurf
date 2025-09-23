@@ -60,9 +60,7 @@ impl AppUi {
         consumed
     }
 
-    pub fn update(&mut self, browser: &AppBrowser) -> Vec<AppCommand> {
-        let mut commands = Vec::with_capacity(2);
-
+    pub fn update(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let repaint_delay = self.egui.run(|ctx| {
             if let Some(url) = browser.get_url() {
                 // todo: cache value and reuse
@@ -134,8 +132,6 @@ impl AppUi {
             });
         });
         self.repaint_delay.replace(repaint_delay);
-
-        commands
     }
 
     /// Paints ui and presents to the window

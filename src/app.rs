@@ -12,6 +12,7 @@ pub enum AppState {
     ShuttingDown,
 }
 
+#[derive(Clone)]
 pub enum AppCommand {
     Shutdown,
     Resize(u32, u32),
@@ -31,7 +32,7 @@ impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         let window = AppWindow::new(sdl, &config.interface)?;
         let event_sender = UserEventSender::new();
-        let browser = AppBrowser::new(&window, event_sender)?;
+        let browser = AppBrowser::new(&window, event_sender, &config.browser)?;
         let event_handler = AppEventHandler::new(sdl)?;
         let ui = AppUi::new(&window);
 
@@ -46,20 +47,20 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.browser
-            .toggle_experimental_prefs(self.config.browser.experimental_prefs_enabled);
-        self.browser.open_tab(&self.config.browser.home_url);
+        self.browser.open_tab(&self.config.browser.home_page);
         self.state = AppState::Running;
+        let mut commands = Vec::with_capacity(4);
 
         while self.browser.pump_event_loop() {
-            for command in self.ui.update(&self.browser) {
+            self.event_handler
+                .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
+            self.ui.update(&self.browser, &mut commands);
+
+            for command in commands.iter() {
                 self.execute_command(command);
             }
 
-            for command in self.event_handler.wait(&self.window, &mut self.ui) {
-                self.execute_command(command);
-            }
-
+            commands.clear();
             self.draw();
         }
 
@@ -67,11 +68,13 @@ impl App {
         self.ui.destroy();
     }
 
-    fn execute_command(&mut self, command: AppCommand) {
+    fn execute_command(&mut self, command: &AppCommand) {
         match command {
             AppCommand::Shutdown => self.shutdown(),
-            AppCommand::Resize(w, h) => self.browser.resize(w, h),
-            AppCommand::Browser(command) => self.browser.execute_command(command),
+            AppCommand::Resize(w, h) => self.browser.resize(*w, *h),
+            AppCommand::Browser(command) => {
+                self.browser.execute_command(command, &self.config.browser)
+            }
         };
     }
 

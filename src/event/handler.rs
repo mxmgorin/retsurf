@@ -1,7 +1,7 @@
 use super::gamepad::handle_gamepad;
 use crate::{
     app::AppCommand,
-    browser::BrowserCommand,
+    browser::AppBrowser,
     event::{user::handle_user, window::handle_window},
     ui::AppUi,
     window::AppWindow,
@@ -33,14 +33,19 @@ impl AppEventHandler {
         })
     }
 
-    pub fn wait(&mut self, window: &AppWindow, ui: &mut AppUi) -> Vec<AppCommand> {
-        let mut commands = Vec::with_capacity(2);
+    pub fn wait(
+        &mut self,
+        window: &AppWindow,
+        ui: &mut AppUi,
+        browser: &mut AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
         let delay = ui.take_repain_delay();
         let event = if let Some(delay) = delay {
             if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
                 event
             } else {
-                return commands;
+                return;
             }
         } else {
             self.event_pump.wait_event()
@@ -49,7 +54,7 @@ impl AppEventHandler {
         let consumed = ui.handle_event(window, &event);
 
         if consumed {
-            return commands;
+            return;
         }
 
         match event {
@@ -69,7 +74,7 @@ impl AppEventHandler {
                 let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, false);
                 let event = servo::InputEvent::MouseButton(event);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
+                browser.handle_input(event);
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
@@ -77,13 +82,14 @@ impl AppEventHandler {
                 let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, true);
                 let event = servo::InputEvent::MouseButton(event);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
+
+                browser.handle_input(event);
             }
             Event::MouseMotion { x, y, .. } => {
                 let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_move_event(x, y);
                 let event = servo::InputEvent::MouseMove(event);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
+                browser.handle_input(event);
             }
             Event::MouseWheel {
                 x,
@@ -95,7 +101,7 @@ impl AppEventHandler {
                 let (mx, my) = ui.into_browser_rel_pos(mouse_x as f32, mouse_y as f32);
                 let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
                 let event = servo::InputEvent::Wheel(event);
-                commands.push(AppCommand::Browser(BrowserCommand::HandleInput(event)));
+                browser.handle_input(event);
             }
             Event::KeyDown {
                 keycode: Some(kc),
@@ -106,8 +112,7 @@ impl AppEventHandler {
             } => {
                 let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, true, repeat);
                 let event = servo::InputEvent::Keyboard(event);
-                let command = AppCommand::Browser(BrowserCommand::HandleInput(event));
-                commands.push(command);
+                browser.handle_input(event);
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -118,8 +123,7 @@ impl AppEventHandler {
             } => {
                 let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, false, repeat);
                 let event = servo::InputEvent::Keyboard(event);
-                let command = AppCommand::Browser(BrowserCommand::HandleInput(event));
-                commands.push(command);
+                browser.handle_input(event);
             }
             Event::ControllerButtonDown { button, .. } => {
                 if let Some(cmd) = handle_gamepad(button, true) {
@@ -144,7 +148,5 @@ impl AppEventHandler {
             }
             _ => {}
         }
-
-        commands
     }
 }

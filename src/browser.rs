@@ -1,4 +1,5 @@
 use crate::{
+    config::BrowserConfig,
     event::user::{UserEvent, UserEventSender},
     resources::ServoResources,
     window::AppWindow,
@@ -10,8 +11,8 @@ use std::{
 };
 use url::Url;
 
+#[derive(Clone)]
 pub enum BrowserCommand {
-    HandleInput(servo::InputEvent),
     Back,
     Foward,
     Reload,
@@ -86,24 +87,22 @@ impl servo::WebViewDelegate for AppBrowserInner {
 }
 
 impl AppBrowser {
-    pub fn new(window: &AppWindow, event_sender: UserEventSender) -> Result<Self, String> {
+    pub fn new(
+        window: &AppWindow,
+        event_sender: UserEventSender,
+        config: &BrowserConfig,
+    ) -> Result<Self, String> {
         ServoResources::init();
         let rendering_ctx = window.get_offscreen_rendering_ctx();
         let builder =
             servo::ServoBuilder::new(rendering_ctx).event_loop_waker(event_sender.clone_box());
         let servo = builder.build();
+        set_experimental_prefs(&servo, config.experimental_prefs_enabled);
+        let inner = AppBrowserInner::new(servo, event_sender.clone());
 
         Ok(Self {
-            inner: Rc::new(AppBrowserInner::new(servo, event_sender.clone())),
+            inner: Rc::new(inner),
         })
-    }
-
-    pub fn toggle_experimental_prefs(&self, value: bool) {
-        for pref in EXPERIMENTAL_PREFS {
-            self.inner
-                .servo
-                .set_preference(pref, servo::PrefValue::Bool(value));
-        }
     }
 
     pub fn get_url(&self) -> Option<Url> {
@@ -147,7 +146,7 @@ impl AppBrowser {
         false
     }
 
-    fn handle_input(&self, event: servo::InputEvent) {
+    pub fn handle_input(&self, event: servo::InputEvent) {
         let Some(tab) = self.inner.get_focused_tab() else {
             return;
         };
@@ -177,19 +176,17 @@ impl AppBrowser {
         }
     }
 
-    pub fn execute_command(&mut self, command: BrowserCommand) {
+    pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
         match command {
             BrowserCommand::Back => _ = self.inner.get_focused_tab().map(|x| x.go_back(1)),
             BrowserCommand::Foward => _ = self.inner.get_focused_tab().map(|x| x.go_forward(1)),
-            BrowserCommand::HandleInput(input_event) => self.handle_input(input_event),
             BrowserCommand::Reload => _ = self.inner.get_focused_tab().map(|x| x.reload()),
             BrowserCommand::Go(location) => {
-                let Some(url) = try_into_url(&location.clone(), "https://duckduckgo.com/?q=%s") else {
+                let Some(url) = try_into_url(location, &config.search_page) else {
                     log::warn!("failed to parse location");
                     return;
                 };
 
-                log::info!("load: {}", url.to_string());
                 self.inner.get_focused_tab().map(|x| x.load(url));
             }
         }
@@ -205,7 +202,8 @@ impl AppBrowser {
     }
 
     pub fn is_loading(&self) -> bool {
-        let status = self.inner
+        let status = self
+            .inner
             .get_focused_tab()
             .map(|webview| webview.load_status())
             .unwrap_or(servo::LoadStatus::Complete);
@@ -284,4 +282,12 @@ fn try_as_search_page(request: &str, searchpage: &str) -> Option<Url> {
     }
 
     Url::parse(&searchpage.replace("%s", request)).ok()
+}
+
+fn set_experimental_prefs(servo: &servo::Servo, value: bool) {
+    let value = servo::PrefValue::Bool(value);
+
+    for pref in EXPERIMENTAL_PREFS {
+        servo.set_preference(pref, value.clone());
+    }
 }

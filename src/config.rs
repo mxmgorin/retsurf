@@ -4,15 +4,17 @@ pub struct AppConfig {
 }
 
 pub struct BrowserConfig {
-    pub home_url: String,
+    pub home_page: String,
     pub experimental_prefs_enabled: bool,
+    pub search_page: String,
 }
 
 impl Default for BrowserConfig {
     fn default() -> Self {
         Self {
-            home_url: "https://duckduckgo.com".to_string(),
+            home_page: "https://duckduckgo.com".to_string(),
             experimental_prefs_enabled: true,
+            search_page: "https://duckduckgo.com/?q=%s".to_string(),
         }
     }
 }
