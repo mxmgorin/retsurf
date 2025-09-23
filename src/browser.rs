@@ -16,7 +16,7 @@ pub enum BrowserCommand {
     Back,
     Foward,
     Reload,
-    Go(String),
+    Load,
 }
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
@@ -227,7 +227,8 @@ impl AppBrowser {
             BrowserCommand::Back => _ = self.inner.get_focused_webview().map(|x| x.go_back(1)),
             BrowserCommand::Foward => _ = self.inner.get_focused_webview().map(|x| x.go_forward(1)),
             BrowserCommand::Reload => _ = self.inner.get_focused_webview().map(|x| x.reload()),
-            BrowserCommand::Go(location) => {
+            BrowserCommand::Load => {
+                let location = &self.inner.state.borrow().location;
                 let Some(url) = try_into_url(location, &config.search_page) else {
                     log::warn!("failed to parse location");
                     return;
@@ -280,8 +281,8 @@ fn into_scroll_delta(wd: servo::WheelDelta) -> (f32, f32) {
 ///
 /// If this is not a valid URL, try to "fix" it by adding a scheme or if all else fails,
 /// interpret the string as a search term.
-pub fn try_into_url(request: &str, searchpage: &str) -> Option<Url> {
-    let request = request.trim();
+pub fn try_into_url<S: AsRef<str>>(request: S, searchpage: &str) -> Option<Url> {
+    let request = request.as_ref().trim();
 
     Url::parse(request)
         .ok()

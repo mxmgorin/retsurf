@@ -62,14 +62,17 @@ impl State {
         }
     }
 
+    #[inline]
     pub fn get_window_size(&self) -> (u32, u32) {
         self.window_size
     }
 
+    #[inline]
     pub fn get_pointer_pos_in_points(&self) -> Option<egui::Pos2> {
         self.pointer_pos_in_points
     }
 
+    #[inline]
     pub fn set_theme(&mut self, theme: egui::Theme) {
         self.egui_input.system_theme.replace(theme);
     }
@@ -81,6 +84,7 @@ impl State {
     /// * copy text to the clipboard
     /// * open any clicked urls
     /// *
+    #[inline]
     pub fn handle_platform_output(
         &mut self,
         platform_output: egui::PlatformOutput,
@@ -111,6 +115,7 @@ impl State {
     /// You need to set [`egui::RawInput::viewports`] yourself though.
     /// Use [`update_viewport_info`] to update the info for each
     /// viewport.
+    #[inline]
     pub fn take_egui_input(&mut self) -> egui::RawInput {
         self.egui_input.time = Some(self.start_time.elapsed().as_secs_f64());
         // Tell egui which viewport is now active:
