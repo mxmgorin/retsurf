@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::gamepad::handle_gamepad;
 use crate::{
     app::AppCommand,
@@ -40,7 +42,12 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        let delay = ui.take_repain_delay();
+        let delay = if browser.animating() {
+            // pump event loop 60 fps
+            Some(Duration::from_nanos(1_000_000_000 / 60))
+        } else {
+            ui.take_repain_delay()
+        };
         let event = if let Some(delay) = delay {
             if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
                 event

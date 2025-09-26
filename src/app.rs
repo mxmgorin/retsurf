@@ -71,7 +71,10 @@ impl App {
     fn execute_command(&mut self, command: &AppCommand) {
         match command {
             AppCommand::Shutdown => self.shutdown(),
-            AppCommand::Resize(w, h) => self.browser.resize(*w, *h),
+            AppCommand::Resize(w, h) => {
+                self.window.resize(*w, *h);
+                self.browser.resize(*w, *h);
+            },
             AppCommand::Browser(command) => {
                 self.browser.execute_command(command, &self.config.browser)
             }

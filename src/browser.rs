@@ -151,6 +151,10 @@ impl AppBrowser {
         })
     }
 
+    pub fn animating(&self) -> bool {
+        self.inner.servo.animating()
+    }
+
     pub fn deinit(&self) {
         self.inner.servo.deinit();
     }

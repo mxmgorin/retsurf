@@ -60,6 +60,12 @@ impl AppWindow {
     pub fn present(&self) {
         self.rendering_ctx.present();
     }
+
+    pub fn resize(&mut self, w: u32, h: u32) {
+        if let Err(err) = self.window.set_size(w, h) {
+            log::error!("Failed to resize: {:?}", err);
+        }
+    }
 }
 
 fn get_physizcal_size(window: &sdl2::video::Window) -> dpi::PhysicalSize<u32> {
