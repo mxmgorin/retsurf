@@ -5263,7 +5263,6 @@ dependencies = [
  "egui_glow",
  "env_logger",
  "glow",
- "image",
  "keyboard-types",
  "libservo",
  "log",
@@ -5271,8 +5270,6 @@ dependencies = [
  "rust-embed",
  "rustls",
  "sdl2",
- "serde",
- "serde_json",
  "url",
 ]
 
