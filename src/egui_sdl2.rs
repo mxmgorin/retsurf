@@ -39,8 +39,10 @@ pub struct State {
 
 impl State {
     pub fn new(window: &Window, egui_ctx: egui::Context, viewport_id: egui::ViewportId) -> Self {
+        let screen_rect = new_screen_rect(&egui_ctx, window);
         let mut egui_input = egui::RawInput {
             focused: false, // event will tell us when we have focus
+            screen_rect,
             ..Default::default()
         };
         egui_input
@@ -49,6 +51,7 @@ impl State {
             .or_default()
             .native_pixels_per_point = Some(native_pixels_per_point(window));
         let clipboard = window.subsystem().clipboard();
+        let window_size = window.size();
 
         State {
             egui_ctx,
@@ -58,7 +61,7 @@ impl State {
             egui_input,
             pointer_pos_in_points: None,
             current_cursor_icon: None,
-            window_size: window.size(),
+            window_size,
         }
     }
 
@@ -85,10 +88,7 @@ impl State {
     /// * open any clicked urls
     /// *
     #[inline]
-    pub fn handle_platform_output(
-        &mut self,
-        platform_output: egui::PlatformOutput,
-    ) {
+    pub fn handle_platform_output(&mut self, platform_output: egui::PlatformOutput) {
         for command in &platform_output.commands {
             match command {
                 egui::OutputCommand::CopyText(text) => {
@@ -358,7 +358,7 @@ impl State {
     fn on_size_chage(&mut self, window: &Window) {
         self.window_size = window.size();
         self.update_native_pixels_per_point(window);
-        self.update_screen_rect(window);
+        self.egui_input.screen_rect = new_screen_rect(&self.egui_ctx, window);
     }
 
     fn update_native_pixels_per_point(&mut self, window: &Window) {
@@ -368,16 +368,6 @@ impl State {
             .entry(self.viewport_id)
             .or_default()
             .native_pixels_per_point = Some(native_pixels_per_point);
-    }
-
-    fn update_screen_rect(&mut self, window: &Window) {
-        let screen_size_in_pixels = screen_size_in_pixels(window);
-        let screen_size_in_points =
-            screen_size_in_pixels / pixels_per_point(&self.egui_ctx, window);
-
-        self.egui_input.screen_rect = (screen_size_in_points.x > 0.0
-            && screen_size_in_points.y > 0.0)
-            .then(|| Rect::from_min_size(Pos2::ZERO, screen_size_in_points));
     }
 
     fn set_cursor_icon(&mut self, cursor_icon: egui::CursorIcon) {
@@ -463,6 +453,15 @@ pub fn pixels_per_point(egui_ctx: &egui::Context, window: &Window) -> f32 {
     let native_pixels_per_point = native_pixels_per_point(window);
     let egui_zoom_factor = egui_ctx.zoom_factor();
     egui_zoom_factor * native_pixels_per_point
+}
+
+#[inline]
+fn new_screen_rect(egui_ctx: &egui::Context, window: &Window) -> Option<Rect> {
+    let screen_size_in_pixels = screen_size_in_pixels(window);
+    let screen_size_in_points = screen_size_in_pixels / pixels_per_point(egui_ctx, window);
+
+    (screen_size_in_points.x > 0.0 && screen_size_in_points.y > 0.0)
+        .then(|| Rect::from_min_size(Pos2::ZERO, screen_size_in_points))
 }
 
 #[inline]
