@@ -74,7 +74,8 @@ impl App {
             AppCommand::Resize(w, h) => {
                 self.window.resize(*w, *h);
                 self.browser.resize(*w, *h);
-            },
+                self.ui.on_resize(&self.window);
+            }
             AppCommand::Browser(command) => {
                 self.browser.execute_command(command, &self.config.browser)
             }

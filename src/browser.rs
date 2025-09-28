@@ -139,7 +139,7 @@ impl AppBrowser {
         config: &BrowserConfig,
     ) -> Result<Self, String> {
         ServoResources::init();
-        let rendering_ctx = window.get_offscreen_rendering_ctx();
+        let rendering_ctx = window.get_rendering_ctx();
         let builder =
             servo::ServoBuilder::new(rendering_ctx).event_loop_waker(event_sender.clone_box());
         let servo = builder.build();
@@ -151,7 +151,8 @@ impl AppBrowser {
         })
     }
 
-    pub fn animating(&self) -> bool {
+    #[inline]
+    pub fn is_animating(&self) -> bool {
         self.inner.servo.animating()
     }
 
@@ -159,10 +160,12 @@ impl AppBrowser {
         self.inner.servo.deinit();
     }
 
+    #[inline]
     pub fn get_state_mut(&mut self) -> std::cell::RefMut<'_, BrowserState> {
         self.inner.state.borrow_mut()
     }
 
+    #[inline]
     pub fn start_shutting_down(&self) {
         self.inner.servo.start_shutting_down();
     }
@@ -179,10 +182,12 @@ impl AppBrowser {
     }
 
     /// False indicates that no need to pump any more
+    #[inline]
     pub fn pump_event_loop(&self) -> bool {
         self.inner.servo.spin_event_loop()
     }
 
+    /// Paint the contents of this WebView into its RenderingContext. Returns true if a paint was actually performed
     pub fn paint(&self) -> bool {
         if !self.inner.repaint_pending.get() {
             return false;

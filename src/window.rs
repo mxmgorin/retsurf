@@ -3,11 +3,14 @@ use sdl2::Sdl;
 use servo::RenderingContext;
 use std::{rc::Rc, sync::Arc};
 
+pub type RenderingCallback =
+    Box<dyn Fn(&glow::Context, servo::euclid::Rect<i32, servo::euclid::UnknownUnit>) + Send + Sync>;
+
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
     window: sdl2::video::Window,
     rendering_ctx: Rc<dyn servo::RenderingContext>,
-    pub offscreen_rendering_ctx: Rc<servo::OffscreenRenderingContext>,
+    offscreen_rendering_ctx: Rc<servo::OffscreenRenderingContext>,
 }
 
 impl AppWindow {
@@ -49,14 +52,20 @@ impl AppWindow {
         self.rendering_ctx.glow_gl_api()
     }
 
-    pub fn get_offscreen_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
+    pub fn get_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
         self.offscreen_rendering_ctx.clone()
     }
 
+    pub fn get_rendering_callback(&self) -> Option<RenderingCallback> {
+        self.offscreen_rendering_ctx.render_to_parent_callback()
+    }
+
+    #[inline]
     pub fn prepare_for_rendering(&self) {
         self.rendering_ctx.prepare_for_rendering();
     }
 
+    #[inline]
     pub fn present(&self) {
         self.rendering_ctx.present();
     }
@@ -65,6 +74,10 @@ impl AppWindow {
         if let Err(err) = self.window.set_size(w, h) {
             log::error!("Failed to resize: {:?}", err);
         }
+
+        let size = get_physizcal_size(&self.window);
+        self.rendering_ctx.resize(size);
+        self.offscreen_rendering_ctx.resize(size);
     }
 }
 

@@ -42,7 +42,7 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        let delay = if browser.animating() {
+        let delay = if browser.is_animating() {
             // pump event loop 60 fps
             Some(Duration::from_nanos(1_000_000_000 / 60))
         } else {

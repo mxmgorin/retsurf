@@ -17,19 +17,8 @@ pub struct AppUi {
 
 impl AppUi {
     pub fn new(window: &AppWindow) -> Self {
-        let render_to_parent_fn = window
-            .offscreen_rendering_ctx
-            .render_to_parent_callback()
-            .unwrap();
-        let render_browser_fn = egui_glow::CallbackFn::new(move |info, painter| {
-            let viewport = info.viewport_in_pixels();
-            let rect = servo::euclid::Rect::new(
-                servo::euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
-                servo::euclid::Size2D::new(viewport.width_px, viewport.height_px),
-            );
-            // Servo draws into egui's GL context here
-            render_to_parent_fn(painter.gl(), rect);
-        });
+        let render_to_parent_fn = window.get_rendering_callback().unwrap();
+        let render_browser_fn = new_egui_callback(render_to_parent_fn);
         let egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
 
         Self {
@@ -39,6 +28,11 @@ impl AppUi {
             toolbar_size: egui::Vec2::default(),
             repaint_pending: false,
         }
+    }
+
+    pub fn on_resize(&mut self, window: &AppWindow) {
+        let callback = window.get_rendering_callback().unwrap();
+        self.render_browser_fn = Arc::new(new_egui_callback(callback));
     }
 
     #[inline]
@@ -175,4 +169,17 @@ fn add_location_text(ui: &mut egui::Ui, text: &mut String, commands: &mut Vec<Ap
             }
         },
     );
+}
+
+#[inline]
+fn new_egui_callback(callback: crate::window::RenderingCallback) -> egui_glow::CallbackFn {
+    egui_glow::CallbackFn::new(move |info, painter| {
+        let viewport = info.viewport_in_pixels();
+        let rect = servo::euclid::Rect::new(
+            servo::euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
+            servo::euclid::Size2D::new(viewport.width_px, viewport.height_px),
+        );
+        // Servo draws into egui's GL context here
+        callback(painter.gl(), rect);
+    })
 }
