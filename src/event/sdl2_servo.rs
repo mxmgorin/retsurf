@@ -12,10 +12,10 @@ pub fn into_keyboard_event(
     };
     let event = keyboard_types::KeyboardEvent {
         state,
-        key: super::sdl2_keyboard_types::into_key(kc),
-        code: super::sdl2_keyboard_types::into_code(sc),
+        key: sdl2_keyboard_types::into_key(kc),
+        code: sdl2_keyboard_types::into_code(sc),
         location: keyboard_types::Location::Standard,
-        modifiers: super::sdl2_keyboard_types::into_modifiers(m),
+        modifiers: sdl2_keyboard_types::into_modifiers(m),
         repeat,
         is_composing: false,
     };
