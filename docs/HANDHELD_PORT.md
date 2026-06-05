@@ -42,29 +42,54 @@ Agreed approach: **Path A first (software render), then Path B (GPU-accelerated)
             │   └───────────────┘                                              │
             └──────────────────────────────────────────────────────────────────┘
 
-Path A (now):  Servo render target = SoftwareRenderingContext (offscreen, llvmpipe).
-               Each frame: read_to_image() → upload as egui texture → composite.
+Path A (done):    Servo render target = SoftwareRenderingContext (offscreen, llvmpipe).
+                  Each frame: read_to_image() → upload as egui texture → composite.
 
-Path B (next): Servo render target = surfman context that ADOPTS SDL2's hardware
-               GLES context (create_context_from_native_context). Zero readback,
-               GPU-accelerated.
+Path B (current): Servo render target = an FBO in SDL2's own GL context, via a custom
+                  `RenderingContext` impl (src/render.rs). egui draws that FBO's color
+                  texture directly. Zero CPU readback, GPU-accelerated, single GL
+                  context, no surfman software adapter / llvmpipe.
 ```
 
-## Done — Path A (software render) ✅
+> **Path B turned out simpler than the original "adopt SDL's context via surfman"
+> plan.** Since SDL2 owns the only GL context, we implement `servo::RenderingContext`
+> ourselves over that context + a self-managed FBO. WebRender renders into whatever
+> framebuffer is bound after `prepare_for_rendering`, so we just bind our FBO. No
+> surfman context adoption needed.
 
-Implemented and verified on desktop running on **OpenGL ES 3.2** (Mesa), 0 GL errors,
-page renders correctly and composites with the toolbar.
+## Done ✅
+
+Both rendering paths implemented and verified on desktop at **OpenGL ES 3.2** (Mesa),
+0 GL errors, page renders correctly (right-side-up) and composites with the toolbar.
+**Path B is the current/default implementation**; Path A was the stepping-stone.
+
+### Path B — GPU, shared context (current)
+
+Servo renders into an FBO in SDL2's own GLES context; egui draws that FBO's texture.
+No surfman software adapter, no CPU readback, single GL context.
 
 | File | Change |
 |------|--------|
-| `src/window.rs`  | SDL2 owns the GL/GLES context; egui `glow` context built from SDL2's proc loader; `make_current` clears SDL's stale cache before rebinding; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
-| `src/browser.rs` | Servo renders into `SoftwareRenderingContext`; added `read_image()` and a `resize()` that resizes both the context and the webview. |
-| `src/ui.rs`      | egui uploads Servo's frame as a `TextureHandle` and draws it in the central panel; drives browser viewport size from the central rect. |
-| `src/app.rs`     | New loop: render → read → composite → present. Resizes handled reactively. Clean `process::exit(0)` on shutdown. |
+| `src/render.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
+| `src/window.rs`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
+| `src/browser.rs` | Takes the shared `Rc<dyn RenderingContext>`; `resize()` resizes the context + webview. |
+| `src/ui.rs`      | Registers the FBO color texture once (`register_native_texture`) and draws it (V-flipped) in the central panel; drives browser viewport size from the central rect. |
+| `src/app.rs`     | Loop: `browser.paint()` (Servo → FBO) → `ui.update` → `ui.draw` (egui composites + present). Resizes reactive. `process::exit(0)` on shutdown. |
 | `src/config.rs`  | `InterfaceConfig.use_gles` toggle. |
-| `src/main.rs`    | `RETSURF_GLES=0/1` override; auto-sets `SURFMAN_FORCE_GLES=1` when GLES is on; aligns SDL to the Wayland driver on a Wayland desktop (see pitfall 4). |
+| `src/main.rs`    | `mod render`; `RETSURF_GLES=0/1` override; auto-sets `SURFMAN_FORCE_GLES=1` when GLES is on; aligns SDL to the Wayland driver on a Wayland desktop (see pitfall 4). |
+| `Cargo.toml`     | Added `gleam`, `glow`, `surfman` direct deps. |
 
-### Bugs fixed along the way (two-GL-context pitfalls)
+### Path A — software render (prior milestone)
+
+`SoftwareRenderingContext` (offscreen llvmpipe) + per-frame `read_to_image()` → egui
+texture upload. Kept in git history as `c2c5059`; superseded by Path B because it needs
+llvmpipe on the device and does a CPU copy every frame.
+
+### Pitfalls hit during Path A (two-GL-context era)
+
+These came up while Path A ran SDL's context *and* surfman's context in one thread.
+Path B uses a single context, so #2 no longer applies and #1/#3 are precautionary;
+**#4 still applies** because `connection()` still calls `surfman::Connection::new()`.
 
 1. **eglBindAPI clash** — SDL's GLES context vs surfman's desktop-GL software context
    caused a startup panic. Fixed by forcing `SURFMAN_FORCE_GLES=1` so both stacks are GLES.
@@ -95,28 +120,42 @@ RETSURF_GLES=0 cargo run
 SDL_VIDEODRIVER=wayland cargo run
 ```
 
-### Path A caveat for the device
-
-`SoftwareRenderingContext` needs a Mesa **software adapter (llvmpipe)** present and is
-**CPU-rendered (slow)**. OK on Knulli (Batocera ships Mesa); **may be stripped on some
-muOS/ROCKNIX images**. This is the motivation for Path B.
-
 ## Remaining
 
-### 1. Path B — GPU-accelerated (real target)
-- [ ] SDL2 creates the GLES context on the device (kmsdrm/EGL). ✅ already the case.
-- [ ] Grab the current EGL context/surface/display (`eglGetCurrent*`).
-- [ ] Feed them to surfman via `create_context_from_native_context` (confirmed to exist).
-- [ ] Implement Servo's `RenderingContext` trait over that adopted context (custom impl
-      in retsurf, since the public `WindowRenderingContext` won't take a pre-made context).
-- [ ] Remove the per-frame readback/texture-upload; render Servo straight into the shared FB.
+### 1. Path B — GPU-accelerated (real target) ✅ done on desktop
+- [x] Custom `RenderingContext` over SDL2's GL context + FBO (`src/render.rs`).
+- [x] Servo renders into the FBO; egui composites the texture; no CPU readback.
+- [x] Verified on desktop at GLES 3.2, 0 GL errors.
+- [ ] **Verify on device** — can't be tested on x86; needs the aarch64 build (below).
+- [ ] WebGL/WebGPU pages: `connection()` returns `surfman::Connection::new()`; on-device
+      this must resolve to the GLES/surfaceless backend. Untested; non-WebGL pages are fine.
 
-### 2. Cross-compile for aarch64
-- [ ] Target `aarch64-unknown-linux-gnu` against an **old glibc** (the CFWs ship ~2.3x),
-      mirroring the existing x86 `Dockerfile` but for ARM (sysroot or container).
-- [ ] Vendor/link the device's `libGLESv2`/`libEGL` (Mali blob) — link against stubs,
-      resolve at runtime on device.
-- [ ] Confirm SDL2 is built with the **kmsdrm** video driver on each target.
+### 2. Build for aarch64 — via the official PortMaster Docker builder (qemu)
+
+Decision: build inside PortMaster's prebuilt **aarch64 builder image** under qemu
+emulation (no hand-rolled sysroot; the image ships the recommended toolchain/libs/SDL2
+with broad-compatibility glibc). Ref: <https://portmaster.games/docker.html>
+
+```bash
+# one-time: register qemu binfmt so arm64 containers run on x86
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+docker pull --platform=linux/arm64 \
+  ghcr.io/monkeyx-net/portmaster-build-templates/portmaster-builder:aarch64-latest
+
+docker run -it --name builder_aarch64 -v "$(pwd)":/workspace --platform=linux/arm64 \
+  ghcr.io/monkeyx-net/portmaster-build-templates/portmaster-builder:aarch64-latest
+```
+
+- [ ] Inside the container: install Rust (rustup) + Servo's native build deps
+      (clang, cmake, python3, gperf, libssl/dbus/freetype/harfbuzz/glib/udev dev, etc.)
+      — likely a small setup script layered on top of the PM image, since Servo needs
+      far more than a typical C/SDL port (esp. `mozjs_sys` / `mozangle`).
+- [ ] `cargo build --release` runs as a **native arm64 build under qemu** → slow
+      (SpiderMonkey/ANGLE are the long poles); expect a long first build.
+- [ ] Confirm the PM image's SDL2 has the **kmsdrm** video driver (it targets handhelds,
+      so it should).
+- [ ] `libGLESv2`/`libEGL` (Mali blob) resolve at runtime on device — don't bundle them.
 
 ### 3. PortMaster packaging
 - [ ] Port directory + launcher `.sh` (sets `SDL_VIDEODRIVER=kmsdrm`, `RETSURF_GLES=1`,

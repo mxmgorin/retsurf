@@ -4824,6 +4824,8 @@ dependencies = [
  "egui-sdl2",
  "env_logger",
  "euclid",
+ "gleam",
+ "glow",
  "keyboard-types",
  "log",
  "raw-window-handle",
@@ -4832,6 +4834,7 @@ dependencies = [
  "sdl2",
  "sdl2-keyboard-types",
  "servo",
+ "surfman",
  "url",
 ]
 

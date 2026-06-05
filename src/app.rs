@@ -32,14 +32,9 @@ impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         let window = AppWindow::new(sdl, &config.interface)?;
         let event_sender = UserEventSender::new();
-        let (w, h) = window.size();
         let browser =
-            AppBrowser::new(dpi::PhysicalSize::new(w, h), event_sender, &config.browser)?;
+            AppBrowser::new(window.get_rendering_ctx(), event_sender, &config.browser)?;
         let event_handler = AppEventHandler::new(sdl)?;
-        // Creating the SoftwareRenderingContext above left surfman's GL context
-        // current. egui builds its GL program in `new`, so restore SDL2's context
-        // first or those objects land in the wrong context.
-        window.make_current();
         let ui = AppUi::new(&window);
 
         Ok(Self {
@@ -62,12 +57,8 @@ impl App {
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
 
-            // Render Servo offscreen, then upload the new frame for compositing.
-            if self.browser.paint() {
-                if let Some(image) = self.browser.read_image() {
-                    self.ui.set_browser_image(&image);
-                }
-            }
+            // Render Servo into its FBO; egui composites that FBO's texture.
+            self.browser.paint();
 
             self.ui.update(&mut self.browser, &mut commands);
 

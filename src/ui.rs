@@ -12,22 +12,28 @@ pub struct AppUi {
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
     repaint_pending: bool,
-    /// GPU texture holding Servo's latest software-rendered frame.
-    browser_texture: Option<egui::TextureHandle>,
+    /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
+    browser_tex_id: egui::TextureId,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
 }
 
 impl AppUi {
     pub fn new(window: &AppWindow) -> Self {
-        let egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
+        let mut egui =
+            EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
+        // Register the FBO color texture once; its GL name is stable across
+        // resizes, so this TextureId stays valid for the program's lifetime.
+        let browser_tex_id = egui
+            .painter
+            .register_native_texture(window.rendering_color_texture());
 
         Self {
             egui,
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
             repaint_pending: false,
-            browser_texture: None,
+            browser_tex_id,
             browser_viewport: (0, 0),
         }
     }
@@ -40,24 +46,6 @@ impl AppUi {
     #[inline]
     pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y - self.toolbar_size.y)
-    }
-
-    /// Upload Servo's latest frame into the browser texture.
-    pub fn set_browser_image(&mut self, image: &servo::RgbaImage) {
-        let (w, h) = image.dimensions();
-        if w == 0 || h == 0 {
-            return;
-        }
-        let color =
-            egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], image.as_raw());
-
-        match &mut self.browser_texture {
-            Some(tex) => tex.set(color, egui::TextureOptions::LINEAR),
-            None => {
-                self.browser_texture =
-                    Some(self.egui.ctx.load_texture("browser", color, egui::TextureOptions::LINEAR));
-            }
-        }
     }
 
     /// Handles the event and returns whether it is consumed
@@ -96,13 +84,13 @@ impl AppUi {
                             (rect.height() * ppp).round().max(1.0) as u32,
                         ));
 
-                        if let Some(tex) = &self.browser_texture {
-                            let uv = egui::Rect::from_min_max(
-                                egui::pos2(0.0, 0.0),
-                                egui::pos2(1.0, 1.0),
-                            );
-                            ui.painter().image(tex.id(), rect, uv, egui::Color32::WHITE);
-                        }
+                        // WebRender renders bottom-up into the FBO, so flip V.
+                        let uv = egui::Rect::from_min_max(
+                            egui::pos2(0.0, 1.0),
+                            egui::pos2(1.0, 0.0),
+                        );
+                        ui.painter()
+                            .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
             });
         }
