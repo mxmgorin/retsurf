@@ -1,47 +1,66 @@
 use crate::config::InterfaceConfig;
 use egui_sdl2::egui_glow;
+use sdl2::video::{GLContext, GLProfile};
 use sdl2::Sdl;
-use servo::RenderingContext;
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
-pub type RenderingCallback =
-    Box<dyn Fn(&egui_glow::glow::Context, euclid::Rect<i32, euclid::UnknownUnit>) + Send + Sync>;
-
+/// The window plus the GL/GLES context that SDL2 itself owns.
+///
+/// On bare-kmsdrm targets (muOS/Knulli/ROCKNIX without a compositor) the `sdl2`
+/// crate cannot hand surfman a usable raw-window-handle, so we let SDL2 create
+/// the context (it does so via EGL/GBM, exactly like other SDL2 ports) and
+/// share it with egui through `glow`. Servo renders separately into a
+/// `SoftwareRenderingContext` and is composited as a texture (Path A).
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
     window: sdl2::video::Window,
-    rendering_ctx: Rc<dyn servo::RenderingContext>,
-    offscreen_rendering_ctx: Rc<servo::OffscreenRenderingContext>,
+    // Kept alive for the lifetime of the window; dropping it destroys the context.
+    gl_context: GLContext,
+    glow_ctx: Arc<egui_glow::glow::Context>,
 }
 
 impl AppWindow {
     pub fn new(sdl: &Sdl, config: &InterfaceConfig) -> Result<Self, String> {
-        let video_subsystem = sdl.video().unwrap();
-        // let gl_attr = video_subsystem.gl_attr();
-        // gl_attr.set_context_profile(sdl2::video::GLProfile::GLES);
-        // gl_attr.set_context_version(3, 0);
-        // gl_attr.set_double_buffer(true);
-        // gl_attr.set_multisample_samples(4);
+        let video_subsystem = sdl.video()?;
+
+        {
+            let gl_attr = video_subsystem.gl_attr();
+            if config.use_gles {
+                // Mali blobs on RK3326/RK3566 expose GLES 3.2; WebRender needs >= 3.0.
+                gl_attr.set_context_profile(GLProfile::GLES);
+                gl_attr.set_context_version(3, 0);
+            } else {
+                gl_attr.set_context_profile(GLProfile::Core);
+                gl_attr.set_context_version(3, 2);
+            }
+            gl_attr.set_double_buffer(true);
+        }
+
         let window = video_subsystem
-            .window("Refsurf", config.width, config.height)
+            .window("retsurf", config.width, config.height)
             .opengl()
             .resizable()
             .build()
-            .unwrap();
+            .map_err(|e| format!("failed to build window: {e}"))?;
 
-        let rendering_ctx = new_servo_window_context(&window)?;
-        rendering_ctx
-            .make_current()
-            .map_err(|e| format!("failed rending_ctx.make_current {e:?}"))?;
-        let rendering_ctx = Rc::new(rendering_ctx);
-        let offscreen_rendering_ctx =
-            Rc::new(rendering_ctx.offscreen_context(get_physizcal_size(&window)));
+        let gl_context = window
+            .gl_create_context()
+            .map_err(|e| format!("failed to create GL context: {e}"))?;
+        window
+            .gl_make_current(&gl_context)
+            .map_err(|e| format!("failed to make GL context current: {e}"))?;
+
+        let glow_ctx = unsafe {
+            egui_glow::glow::Context::from_loader_function(|name| {
+                video_subsystem.gl_get_proc_address(name) as *const _
+            })
+        };
 
         Ok(Self {
             _video_subsystem: video_subsystem,
             window,
-            rendering_ctx,
-            offscreen_rendering_ctx,
+            gl_context,
+            glow_ctx: Arc::new(glow_ctx),
         })
     }
 
@@ -50,57 +69,45 @@ impl AppWindow {
     }
 
     pub fn get_glow_ctx(&self) -> Arc<egui_glow::glow::Context> {
-        self.rendering_ctx.glow_gl_api()
+        self.glow_ctx.clone()
     }
 
-    pub fn get_rendering_ctx(&self) -> Rc<dyn servo::RenderingContext> {
-        self.offscreen_rendering_ctx.clone()
+    /// Make SDL2's GL context current on this thread. Must be called before egui
+    /// paints, because Servo's software context makes *its* context current while
+    /// rendering.
+    pub fn make_current(&self) {
+        // Servo's surfman context changed the thread's current EGL context/surface
+        // directly, behind SDL's back. SDL caches which context it last made current
+        // and short-circuits `gl_make_current` when it matches, so it would skip the
+        // real `eglMakeCurrent` and leave us on surfman's surfaceless context (whose
+        // default framebuffer is UNDEFINED). Clear SDL's cache with a NULL bind first
+        // to force an actual rebind of our window surface.
+        unsafe {
+            sdl2::sys::SDL_GL_MakeCurrent(self.window.raw(), std::ptr::null_mut());
+        }
+        if let Err(err) = self.window.gl_make_current(&self.gl_context) {
+            log::error!("Failed to make GL context current: {err}");
+        }
     }
 
-    pub fn get_rendering_callback(&self) -> Option<RenderingCallback> {
-        self.offscreen_rendering_ctx.render_to_parent_callback()
-    }
-
-    #[inline]
-    pub fn prepare_for_rendering(&self) {
-        self.rendering_ctx.prepare_for_rendering();
+    /// Bind the window's default framebuffer (0) as the draw target. egui_glow
+    /// renders into whatever framebuffer is currently bound and does not bind one
+    /// itself, so we must point it at the window before painting.
+    pub fn bind_default_framebuffer(&self) {
+        use egui_glow::glow::HasContext;
+        unsafe {
+            self.glow_ctx
+                .bind_framebuffer(egui_glow::glow::FRAMEBUFFER, None);
+        }
     }
 
     #[inline]
     pub fn present(&self) {
-        self.rendering_ctx.present();
+        self.window.gl_swap_window();
     }
 
-    pub fn resize(&mut self, w: u32, h: u32) {
-        if let Err(err) = self.window.set_size(w, h) {
-            log::error!("Failed to resize: {:?}", err);
-        }
-
-        let size = get_physizcal_size(&self.window);
-        self.rendering_ctx.resize(size);
-        self.offscreen_rendering_ctx.resize(size);
+    /// Physical size of the window in pixels.
+    pub fn size(&self) -> (u32, u32) {
+        self.window.drawable_size()
     }
-}
-
-fn get_physizcal_size(window: &sdl2::video::Window) -> dpi::PhysicalSize<u32> {
-    let (w, h) = window.size();
-
-    dpi::PhysicalSize::new(w, h)
-}
-
-fn new_servo_window_context(
-    window: &sdl2::video::Window,
-) -> Result<servo::WindowRenderingContext, String> {
-    use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-    // TODO: getting handles will fail without windlow manager
-    let display_handle = window
-        .display_handle()
-        .map_err(|e| format!("Failed sdl_window.display_handle: {e:?}"))?;
-    let window_handle = window
-        .window_handle()
-        .map_err(|e| format!("Failed sdl_window.window_handle: {e:?}"))?;
-    let size = get_physizcal_size(window);
-
-    servo::WindowRenderingContext::new(display_handle, window_handle, size)
-        .map_err(|e| format!("Failed to create Servo WindowRenderingContext: {e:?}"))
 }
