@@ -1,17 +1,10 @@
 [toolchain]
-# Be sure to update the 'rust-overlay' module's url in shell.nix to point to a
-# commit which supports the required rustc version and also update the version
-# in support/crown/rust-toolchain.toml when bumping this!
-channel = "1.89.0"
+# egui 0.34 requires rustc >= 1.92; servo 0.2 requires >= 1.86.
+channel = "1.95.0"
 
 components = [
     "clippy",
-    # For support/crown
-    "llvm-tools",
-    # For support/crown
-    "rustc-dev",
     "rustfmt",
-    "rustc-dev",
     # For rust-analyzer
     "rust-src",
 ]
