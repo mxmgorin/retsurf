@@ -16,11 +16,13 @@ sdl2 = { version = "0.38.0", default-features = false, features = ["raw-window-h
 raw-window-handle = "0.6.2"
 log = "0.4.28"
 env_logger = "0.11.8"
-libservo = { git = "https://github.com/mxmgorin/servo" }
+servo = "0.2"
+euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
 keyboard-types = "0.8.1"
-egui = "0.32.3"
+egui = "0.33"
 glow = "0.16.0"
-egui_glow = "0.32.3"
+egui_glow = "0.33"
+egui-sdl2 = { git = "https://github.com/mxmgorin/egui-sdl2", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = { git = "https://github.com/mxmgorin/sdl2-keyboard-types", tag = "0.1.0" }

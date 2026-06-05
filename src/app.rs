@@ -51,7 +51,8 @@ impl App {
         self.state = AppState::Running;
         let mut commands = Vec::with_capacity(4);
 
-        while self.browser.pump_event_loop() {
+        while self.state == AppState::Running {
+            self.browser.pump_event_loop();
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
             self.ui.update(&mut self.browser, &mut commands);
@@ -64,7 +65,6 @@ impl App {
             self.draw();
         }
 
-        self.browser.deinit();
         self.ui.destroy();
     }
 
@@ -84,7 +84,6 @@ impl App {
 
     fn shutdown(&mut self) {
         self.state = AppState::ShuttingDown;
-        self.browser.start_shutting_down();
     }
 
     fn draw(&mut self) {

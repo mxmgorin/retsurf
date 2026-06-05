@@ -1,9 +1,9 @@
 use crate::{
     app::AppCommand,
     browser::{AppBrowser, BrowserCommand, BrowserState},
-    egui_glow_sdl2::EguiGlow,
     window::AppWindow,
 };
+use egui_sdl2::EguiGlow;
 use egui::{TopBottomPanel, Vec2};
 use std::{sync::Arc, time::Duration};
 
@@ -175,9 +175,9 @@ fn add_location_text(ui: &mut egui::Ui, text: &mut String, commands: &mut Vec<Ap
 fn new_egui_callback(callback: crate::window::RenderingCallback) -> egui_glow::CallbackFn {
     egui_glow::CallbackFn::new(move |info, painter| {
         let viewport = info.viewport_in_pixels();
-        let rect = servo::euclid::Rect::new(
-            servo::euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
-            servo::euclid::Size2D::new(viewport.width_px, viewport.height_px),
+        let rect = euclid::Rect::new(
+            euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
+            euclid::Size2D::new(viewport.width_px, viewport.height_px),
         );
         // Servo draws into egui's GL context here
         callback(painter.gl(), rect);

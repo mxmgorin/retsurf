@@ -63,6 +63,6 @@ pub fn into_wheel_event(dx: i32, dy: i32, mouse_x: f32, mouse_y: f32) -> servo::
 }
 
 #[inline]
-fn into_device_point(x: f32, y: f32) -> servo::webrender_api::units::DevicePoint {
-    servo::webrender_api::units::DevicePoint::new(x, y)
+fn into_device_point(x: f32, y: f32) -> servo::WebViewPoint {
+    servo::DevicePoint::new(x, y).into()
 }
