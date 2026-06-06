@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use super::gamepad::Gamepad;
 use crate::{
     app::AppCommand,
@@ -43,22 +41,41 @@ impl AppEventHandler {
         gamepad: &mut Gamepad,
         commands: &mut Vec<AppCommand>,
     ) {
-        let delay = if browser.is_animating() || gamepad.is_active() {
-            // pump event loop 60 fps (also drives gamepad cursor/scroll motion)
-            Some(Duration::from_nanos(1_000_000_000 / 60))
-        } else {
-            ui.take_repain_delay()
-        };
-        let event = if let Some(delay) = delay {
-            if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
-                event
-            } else {
-                return;
+        // Block for the next event only when idle. When the gamepad is active or
+        // the page is animating, return promptly so the main loop keeps ticking
+        // (vsync caps the rate); blocking here would stall cursor/scroll motion.
+        if !browser.is_animating() && !gamepad.is_active() {
+            match ui.take_repain_delay() {
+                Some(delay) => {
+                    if let Some(event) =
+                        self.event_pump.wait_event_timeout(delay.as_millis() as u32)
+                    {
+                        self.handle_event(event, window, ui, browser, gamepad, commands);
+                    }
+                }
+                None => {
+                    let event = self.event_pump.wait_event();
+                    self.handle_event(event, window, ui, browser, gamepad, commands);
+                }
             }
-        } else {
-            self.event_pump.wait_event()
-        };
+        }
 
+        // Drain everything else queued this frame (notably the flood of analog
+        // stick axis events) so we always act on the latest input — no backlog lag.
+        while let Some(event) = self.event_pump.poll_event() {
+            self.handle_event(event, window, ui, browser, gamepad, commands);
+        }
+    }
+
+    fn handle_event(
+        &mut self,
+        event: Event,
+        window: &AppWindow,
+        ui: &mut AppUi,
+        browser: &mut AppBrowser,
+        gamepad: &mut Gamepad,
+        commands: &mut Vec<AppCommand>,
+    ) {
         let consumed = ui.handle_event(window, &event);
 
         if consumed {

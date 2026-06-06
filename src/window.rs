@@ -53,6 +53,10 @@ impl AppWindow {
             .gl_make_current(&gl_context)
             .map_err(|e| format!("failed to make GL context current: {e}"))?;
 
+        // Cap the main loop to the display refresh; without this the loop would
+        // busy-spin while the gamepad drives continuous cursor/scroll updates.
+        let _ = video_subsystem.gl_set_swap_interval(sdl2::video::SwapInterval::VSync);
+
         let glow_ctx = Arc::new(unsafe {
             glow::Context::from_loader_function(|name| {
                 video_subsystem.gl_get_proc_address(name) as *const _
