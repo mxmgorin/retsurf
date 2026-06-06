@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# Newer pushes to the same ref cancel an in-progress build.
+concurrency:
+  group: build-arm-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-arm:
     # Native arm64 runner (free for public repos) — no cross-compile, no qemu.
@@ -53,21 +58,28 @@ jobs:
           cargo build --release
           df -h /
 
-      - name: Package
+      - name: Stage binary
         run: |
           set -eux
           mkdir -p dist
           cp target/release/retsurf dist/
-          cd dist && zip -r retsurf-linux-aarch64.zip .
+          strip dist/retsurf || true
+          ls -la dist/
 
+      # Upload the raw binary; upload-artifact archives it into a single zip.
+      # (Pre-zipping here would produce a zip-inside-a-zip on download.)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: retsurf-linux-aarch64
-          path: dist/retsurf-linux-aarch64.zip
+          path: dist/retsurf
+
+      - name: Zip for release
+        if: github.event_name == 'release'
+        run: cd dist && zip -r ../retsurf-linux-aarch64.zip .
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/retsurf-linux-aarch64.zip
+          files: retsurf-linux-aarch64.zip
