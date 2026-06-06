@@ -4,7 +4,7 @@ use crate::{
     resources::ServoResources,
     window::AppWindow,
 };
-use servo::{EventLoopWaker, WebView};
+use servo::{EventLoopWaker, RenderingContext, WebView};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -70,16 +70,22 @@ struct AppBrowserInner {
     webviews: RefCell<Vec<WebView>>,
     event_sender: UserEventSender,
     servo: servo::Servo,
+    rendering_ctx: Rc<dyn RenderingContext>,
     repaint_pending: Cell<bool>,
     state: RefCell<BrowserState>,
 }
 
 impl AppBrowserInner {
-    pub fn new(servo: servo::Servo, event_sender: UserEventSender) -> Self {
+    pub fn new(
+        servo: servo::Servo,
+        rendering_ctx: Rc<dyn RenderingContext>,
+        event_sender: UserEventSender,
+    ) -> Self {
         Self {
             webviews: RefCell::new(vec![]),
             event_sender,
             servo,
+            rendering_ctx,
             repaint_pending: Cell::new(false),
             state: RefCell::new(BrowserState::default()),
         }
@@ -119,17 +125,6 @@ impl servo::WebViewDelegate for AppBrowserInner {
             self.state.borrow_mut().load_status = status;
         }
     }
-
-    fn request_open_auxiliary_webview(&self, parent_webview: WebView) -> Option<WebView> {
-        let webview = servo::WebViewBuilder::new_auxiliary(&self.servo)
-            .hidpi_scale_factor(servo::euclid::Scale::new(1.0))
-            .delegate(parent_webview.delegate())
-            .build();
-        webview.focus_and_raise_to_top(true);
-        self.add_webview(webview.clone());
-
-        Some(webview)
-    }
 }
 
 impl AppBrowser {
@@ -140,11 +135,11 @@ impl AppBrowser {
     ) -> Result<Self, String> {
         ServoResources::init();
         let rendering_ctx = window.get_rendering_ctx();
-        let builder =
-            servo::ServoBuilder::new(rendering_ctx).event_loop_waker(event_sender.clone_box());
-        let servo = builder.build();
+        let servo = servo::ServoBuilder::default()
+            .event_loop_waker(event_sender.clone_box())
+            .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
-        let inner = AppBrowserInner::new(servo, event_sender.clone());
+        let inner = AppBrowserInner::new(servo, rendering_ctx, event_sender.clone());
 
         Ok(Self {
             inner: Rc::new(inner),
@@ -153,11 +148,10 @@ impl AppBrowser {
 
     #[inline]
     pub fn is_animating(&self) -> bool {
-        self.inner.servo.animating()
-    }
-
-    pub fn deinit(&self) {
-        self.inner.servo.deinit();
+        self.inner
+            .get_focused_webview()
+            .map(|tab| tab.animating())
+            .unwrap_or(false)
     }
 
     #[inline]
@@ -165,29 +159,26 @@ impl AppBrowser {
         self.inner.state.borrow_mut()
     }
 
-    #[inline]
-    pub fn start_shutting_down(&self) {
-        self.inner.servo.start_shutting_down();
-    }
-
     pub fn open_tab(&mut self, url: &str) {
         let url = url::Url::parse(url).unwrap();
-        let webview = servo::WebViewBuilder::new(&self.inner.servo)
-            .url(url)
-            .delegate(self.inner.clone())
-            .build();
+        let webview =
+            servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
+                .url(url)
+                .hidpi_scale_factor(euclid::Scale::new(1.0))
+                .delegate(self.inner.clone())
+                .build();
 
-        webview.focus_and_raise_to_top(true);
+        webview.focus();
         self.inner.add_webview(webview);
     }
 
-    /// False indicates that no need to pump any more
+    /// Spin the Servo event loop once, running delegate callbacks and updating paint output.
     #[inline]
-    pub fn pump_event_loop(&self) -> bool {
-        self.inner.servo.spin_event_loop()
+    pub fn pump_event_loop(&self) {
+        self.inner.servo.spin_event_loop();
     }
 
-    /// Paint the contents of this WebView into its RenderingContext. Returns true if a paint was actually performed
+    /// Paint the contents of the focused WebView into its RenderingContext. Returns true if a paint was performed.
     pub fn paint(&self) -> bool {
         if !self.inner.repaint_pending.get() {
             return false;
@@ -195,7 +186,8 @@ impl AppBrowser {
 
         if let Some(tab) = self.inner.get_focused_webview() {
             self.inner.repaint_pending.set(false);
-            return tab.paint();
+            tab.paint();
+            return true;
         }
 
         false
@@ -208,26 +200,14 @@ impl AppBrowser {
 
         tab.notify_input_event(event.clone());
 
-        match event {
-            servo::InputEvent::Wheel(we) => {
-                let (dx, dy) = into_scroll_delta(we.delta);
-                let (x, y) = we.point.to_i32().to_tuple();
-                scroll(&tab, dx, dy, x, y);
-                self.inner.servo.spin_event_loop(); // doesn't scroll without this
-            }
-            servo::InputEvent::MouseButton(be) => {
-                if be.action == servo::MouseButtonAction::Down {
-                    match be.button {
-                        servo::MouseButton::Left
-                        | servo::MouseButton::Middle
-                        | servo::MouseButton::Right
-                        | servo::MouseButton::Other(_) => {}
-                        servo::MouseButton::Back => _ = tab.go_back(1),
-                        servo::MouseButton::Forward => _ = tab.go_forward(1),
-                    }
+        if let servo::InputEvent::MouseButton(be) = event {
+            if be.action == servo::MouseButtonAction::Down {
+                match be.button {
+                    servo::MouseButton::Back => _ = tab.go_back(1),
+                    servo::MouseButton::Forward => _ = tab.go_forward(1),
+                    _ => {}
                 }
             }
-            _ => {}
         }
     }
 
@@ -250,40 +230,9 @@ impl AppBrowser {
 
     pub fn resize(&self, w: u32, h: u32) {
         if let Some(tab) = self.inner.get_focused_webview() {
-            let mut rect = tab.rect();
-            rect.set_size(servo::euclid::Size2D::new(w as f32, h as f32));
-            tab.move_resize(rect);
             tab.resize(dpi::PhysicalSize::new(w, h));
         }
     }
-}
-
-fn scroll(tab: &WebView, dx: f32, dy: f32, x: i32, y: i32) {
-    let location =
-        servo::webrender_api::ScrollLocation::Delta(-servo::euclid::Vector2D::new(dx, dy));
-    let point = servo::webrender_api::units::DeviceIntPoint::new(x, y);
-    tab.notify_scroll_event(location, point);
-}
-
-fn into_scroll_delta(wd: servo::WheelDelta) -> (f32, f32) {
-    let dx = wd.x as f32;
-    let dy = wd.y as f32;
-
-    let (dx, dy) = match wd.mode {
-        servo::WheelMode::DeltaPixel => (dx * 4.0, dy * 4.0),
-        servo::WheelMode::DeltaLine => (dx * 76.0, dy * 76.0),
-        servo::WheelMode::DeltaPage => unreachable!(),
-    };
-
-    // Scroll events snap to the major axis of movement, with vertical
-    // preferred over horizontal.
-    // if dy.abs() >= dx.abs() {
-    //     dx = 0.0;
-    // } else {
-    //     dy = 0.0;
-    // }
-
-    (dx, dy)
 }
 
 /// Interpret an input URL.
@@ -313,9 +262,7 @@ fn try_as_domain(request: &str) -> Option<Url> {
             || (!s.contains(' ') && !s.starts_with('.') && s.split('.').count() > 1)
     }
 
-    if !request.contains(' ') && servo::net_traits::pub_domains::is_reg_domain(request)
-        || is_domain_like(request)
-    {
+    if !request.contains(' ') && servo::is_reg_domain(request) || is_domain_like(request) {
         return Url::parse(&format!("https://{}", request)).ok();
     }
 

@@ -4,7 +4,7 @@ use servo::RenderingContext;
 use std::{rc::Rc, sync::Arc};
 
 pub type RenderingCallback =
-    Box<dyn Fn(&glow::Context, servo::euclid::Rect<i32, servo::euclid::UnknownUnit>) + Send + Sync>;
+    Box<dyn Fn(&glow::Context, euclid::Rect<i32, euclid::UnknownUnit>) + Send + Sync>;
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
