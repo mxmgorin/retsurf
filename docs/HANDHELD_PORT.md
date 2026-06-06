@@ -126,9 +126,29 @@ SDL_VIDEODRIVER=wayland cargo run
 - [x] Custom `RenderingContext` over SDL2's GL context + FBO (`src/render.rs`).
 - [x] Servo renders into the FBO; egui composites the texture; no CPU readback.
 - [x] Verified on desktop at GLES 3.2, 0 GL errors.
-- [ ] **Verify on device** — can't be tested on x86; needs the aarch64 build (below).
-- [ ] WebGL/WebGPU pages: `connection()` returns `surfman::Connection::new()`; on-device
-      this must resolve to the GLES/surfaceless backend. Untested; non-WebGL pages are fine.
+- [ ] **Verify on device** — needs the aarch64 build (below); first device run surfaced
+      the EGL 1.4 issue (now fixed).
+
+### EGL 1.4 vs surfman — the device blocker (fixed)
+
+First on-device run (Knulli, Mali) panicked: `surfman .../egl_bindings.rs: egl function
+was not loaded`. Root cause: **surfman 0.12 requires `eglGetPlatformDisplay` (EGL 1.5)**,
+loaded via `dlsym`, on *every* Linux backend (wayland/x11/surfaceless). The device's Mali
+blob is **EGL 1.4** (`libEGL.so.1.4.0`, a ~6 KB dispatch stub), so that symbol is absent.
+Servo's `register_rendering_context` hard-`expect()`s a surfman `Connection`, but that
+connection is only ever used for **WebGL/WebGPU** external images.
+
+Fix (two parts):
+- `src/render.rs`: `connection()` is now optional — `surfman::Connection::new()` is wrapped
+  in `catch_unwind` (surfman *panics* rather than returning `Err` on missing EGL symbols).
+  Capable platforms (desktop, EGL 1.5) keep a real connection **and WebGL**; EGL 1.4 devices
+  get `None`.
+- `vendor/servo-paint/paint.rs` (vendored + `[patch.crates-io]`): `register_rendering_context`
+  treats the connection as optional instead of `.expect()`-ing it. **WebGL is disabled when
+  the connection is absent; all other rendering is unaffected.**
+
+Revisit later for WebGL on EGL 1.4: a surfman patch to fall back to `eglGetDisplay`
+(EGL 1.0) / wrap SDL's current EGL display.
 
 ### 2. Build for aarch64 — via the official PortMaster Docker builder (qemu)
 
@@ -157,14 +177,20 @@ docker run -it --name builder_aarch64 -v "$(pwd)":/workspace --platform=linux/ar
       so it should).
 - [ ] `libGLESv2`/`libEGL` (Mali blob) resolve at runtime on device — don't bundle them.
 
-### 3. PortMaster packaging
+### 3. Input — gamepad ✅ in-app (needs on-device tuning)
+Implemented in `src/event/gamepad.rs` (SDL GameController), no gptokeyb needed:
+- Left stick / D-pad → cursor · **A** → click · right stick → scroll
+- **B** / **L** → back · **R** → forward · **Start** → reload
+- [ ] Tune deadzone / cursor speed / scroll speed on real hardware.
+- [ ] Text entry (URL bar) still needs an on-screen keyboard or gptokeyb keymap.
+
+### 4. PortMaster packaging
 - [ ] Port directory + launcher `.sh` (sets `SDL_VIDEODRIVER=kmsdrm`, `RETSURF_GLES=1`,
       library paths, runs the binary).
-- [ ] Controls via `gptokeyb` (map handheld buttons → mouse/keys/scroll).
 - [ ] Pick runtime: bare kmsdrm vs a PortMaster runtime (e.g. WestonPack) per device.
 - [ ] Test matrix: Knulli, muOS, ROCKNIX on RK3326 and RK3566.
 
-### 4. Nice-to-have / cleanup
+### 5. Nice-to-have / cleanup
 - [ ] Fix the first-frame black strip at the bottom (viewport settles after one resize).
 - [ ] Silence harmless DuckDuckGo CSS-parse warnings in logs (or lower log level).
 - [ ] Quiet the ClientStorage sqlite warning (point storage at a writable dir).
