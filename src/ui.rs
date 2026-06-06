@@ -3,8 +3,8 @@ use crate::{
     browser::{AppBrowser, BrowserCommand, BrowserState},
     window::AppWindow,
 };
-use egui_sdl2::EguiGlow;
-use egui::{TopBottomPanel, Vec2};
+use egui_sdl2::egui::{self, Vec2};
+use egui_sdl2::{egui_glow, EguiGlow};
 use std::{sync::Arc, time::Duration};
 
 pub struct AppUi {
@@ -57,10 +57,17 @@ impl AppUi {
     pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
         let mut state = browser.get_state_mut();
 
-        let repaint_delay = self.egui.run(|ctx| {
-            add_toolbar(ctx, &mut state, commands, &mut self.toolbar_size);
+        self.egui.run(|ctx| {
+            let mut root = egui::Ui::new(
+                ctx.clone(),
+                egui::Id::new("root_ui"),
+                egui::UiBuilder::new().max_rect(ctx.content_rect()),
+            );
+            root.set_clip_rect(ctx.content_rect());
 
-            egui::CentralPanel::default().show(ctx, |ui| {
+            add_toolbar(&mut root, &mut state, commands, &mut self.toolbar_size);
+
+            egui::CentralPanel::default().show_inside(&mut root, |ui| {
                 let min = ui.cursor().min;
                 let size = ui.available_size();
                 let rect = egui::Rect::from_min_size(min, size);
@@ -72,7 +79,7 @@ impl AppUi {
                 });
             });
         });
-        self.repaint_delay.replace(repaint_delay);
+        // self.repaint_delay.replace(repaint_delay);
     }
 
     /// Paints ui and presents to the window
@@ -119,15 +126,15 @@ fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -
 
 #[inline]
 fn add_toolbar(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     size: &mut egui::Vec2,
 ) {
     let frame = egui::Frame::default()
-        .fill(ctx.style().visuals.window_fill)
+        .fill(ui.style().visuals.window_fill)
         .inner_margin(4.0);
-    TopBottomPanel::top("toolbar").frame(frame).show(ctx, |ui| {
+    egui::Panel::top("toolbar").frame(frame).show_inside(ui, |ui| {
         ui.allocate_ui_with_layout(
             ui.available_size(),
             egui::Layout::left_to_right(egui::Align::Center),

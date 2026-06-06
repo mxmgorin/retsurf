@@ -1,10 +1,11 @@
 use crate::config::InterfaceConfig;
+use egui_sdl2::egui_glow;
 use sdl2::Sdl;
 use servo::RenderingContext;
 use std::{rc::Rc, sync::Arc};
 
 pub type RenderingCallback =
-    Box<dyn Fn(&glow::Context, euclid::Rect<i32, euclid::UnknownUnit>) + Send + Sync>;
+    Box<dyn Fn(&egui_glow::glow::Context, euclid::Rect<i32, euclid::UnknownUnit>) + Send + Sync>;
 
 pub struct AppWindow {
     _video_subsystem: sdl2::VideoSubsystem,
@@ -48,7 +49,7 @@ impl AppWindow {
         &self.window
     }
 
-    pub fn get_glow_ctx(&self) -> Arc<glow::Context> {
+    pub fn get_glow_ctx(&self) -> Arc<egui_glow::glow::Context> {
         self.rendering_ctx.glow_gl_api()
     }
 

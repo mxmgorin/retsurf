@@ -1,7 +1,6 @@
 use crate::{
     config::BrowserConfig,
     event::user::{UserEvent, UserEventSender},
-    resources::ServoResources,
     window::AppWindow,
 };
 use servo::{EventLoopWaker, RenderingContext, WebView};
@@ -133,7 +132,6 @@ impl AppBrowser {
         event_sender: UserEventSender,
         config: &BrowserConfig,
     ) -> Result<Self, String> {
-        ServoResources::init();
         let rendering_ctx = window.get_rendering_ctx();
         let servo = servo::ServoBuilder::default()
             .event_loop_waker(event_sender.clone_box())
