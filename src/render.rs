@@ -6,6 +6,33 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// Create a surfman connection, or `None` if surfman can't initialize here.
+///
+/// Servo uses this connection only for WebGL/WebGPU external images. surfman 0.12
+/// requires `eglGetPlatformDisplay` (EGL 1.5) and *panics* — rather than returning
+/// `Err` — when it's missing, as on EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX). So we
+/// guard the call with `catch_unwind`: capable platforms (desktop, EGL 1.5) keep a
+/// working connection and WebGL; older devices fall back to `None` (WebGL disabled,
+/// normal rendering unaffected). Must run before other threads start — it briefly
+/// swaps the global panic hook to silence the expected panic.
+fn create_surfman_connection() -> Option<surfman::Connection> {
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(surfman::Connection::new);
+    std::panic::set_hook(prev_hook);
+    match result {
+        Ok(Ok(connection)) => Some(connection),
+        Ok(Err(e)) => {
+            log::warn!("surfman connection unavailable ({e:?}); WebGL disabled");
+            None
+        }
+        Err(_) => {
+            log::warn!("surfman connection unsupported on this device; WebGL disabled");
+            None
+        }
+    }
+}
+
 /// A [`servo::RenderingContext`] backed by SDL2's single GL/GLES context plus a
 /// self-managed framebuffer object.
 ///
@@ -19,7 +46,9 @@ use std::sync::Arc;
 pub struct SdlRenderingContext {
     gl: Rc<dyn Gl>,
     glow: Arc<glow::Context>,
-    // surfman connection Servo needs for WebGL/external-image surface sharing.
+    // surfman connection Servo uses for WebGL/WebGPU external images. `None` on
+    // devices where surfman can't initialize (e.g. EGL 1.4 Mali blobs); WebGL is
+    // then disabled but normal rendering is unaffected.
     connection: Option<surfman::Connection>,
     fbo: Cell<gl::GLuint>,
     color_tex: Cell<gl::GLuint>,
@@ -32,13 +61,7 @@ impl SdlRenderingContext {
         let fbo = gl.gen_framebuffers(1)[0];
         let color_tex = gl.gen_textures(1)[0];
         let depth_rbo = gl.gen_renderbuffers(1)[0];
-        let connection = match surfman::Connection::new() {
-            Ok(c) => Some(c),
-            Err(e) => {
-                log::warn!("surfman Connection::new failed: {e:?} (WebGL may not work)");
-                None
-            }
-        };
+        let connection = create_surfman_connection();
         let ctx = Rc::new(Self {
             gl,
             glow,

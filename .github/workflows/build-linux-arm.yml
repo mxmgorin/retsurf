@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - "main"
       - "ci-arm"
   release:
     types: [published]
