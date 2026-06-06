@@ -124,4 +124,9 @@ impl AppWindow {
     pub fn present(&self) {
         self.window.gl_swap_window();
     }
+
+    /// Logical window size (matches SDL mouse-event coordinates).
+    pub fn size(&self) -> (u32, u32) {
+        self.window.size()
+    }
 }

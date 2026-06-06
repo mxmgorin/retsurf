@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::gamepad::handle_gamepad;
+use super::gamepad::Gamepad;
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
@@ -40,10 +40,11 @@ impl AppEventHandler {
         window: &AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
+        gamepad: &mut Gamepad,
         commands: &mut Vec<AppCommand>,
     ) {
-        let delay = if browser.is_animating() {
-            // pump event loop 60 fps
+        let delay = if browser.is_animating() || gamepad.is_active() {
+            // pump event loop 60 fps (also drives gamepad cursor/scroll motion)
             Some(Duration::from_nanos(1_000_000_000 / 60))
         } else {
             ui.take_repain_delay()
@@ -132,15 +133,14 @@ impl AppEventHandler {
                 let event = servo::InputEvent::Keyboard(event);
                 browser.handle_input(event);
             }
+            Event::ControllerAxisMotion { axis, value, .. } => {
+                gamepad.on_axis(axis, value);
+            }
             Event::ControllerButtonDown { button, .. } => {
-                if let Some(cmd) = handle_gamepad(button, true) {
-                    commands.push(cmd);
-                }
+                gamepad.on_button(button, true, ui, browser, commands);
             }
             Event::ControllerButtonUp { button, .. } => {
-                if let Some(cmd) = handle_gamepad(button, false) {
-                    commands.push(cmd);
-                }
+                gamepad.on_button(button, false, ui, browser, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {

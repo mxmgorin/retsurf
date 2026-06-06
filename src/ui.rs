@@ -16,6 +16,8 @@ pub struct AppUi {
     browser_tex_id: egui::TextureId,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
+    /// Gamepad cursor position (logical px), drawn as an overlay.
+    cursor: (f32, f32),
 }
 
 impl AppUi {
@@ -35,12 +37,18 @@ impl AppUi {
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
+            cursor: (0.0, 0.0),
         }
     }
 
     #[inline]
     pub fn take_repain_delay(&mut self) -> Option<Duration> {
         self.repaint_delay.take()
+    }
+
+    #[inline]
+    pub fn set_cursor(&mut self, pos: (f32, f32)) {
+        self.cursor = pos;
     }
 
     #[inline]
@@ -92,6 +100,16 @@ impl AppUi {
                         ui.painter()
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
+
+                // Gamepad cursor overlay, always on top. `cursor` is in logical
+                // px which equals egui points at the handheld's 1.0 scale factor.
+                let painter = ctx.layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("gamepad_cursor"),
+                ));
+                let pos = egui::pos2(self.cursor.0, self.cursor.1);
+                painter.circle_filled(pos, 5.0, egui::Color32::from_white_alpha(235));
+                painter.circle_stroke(pos, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
             });
         }
 

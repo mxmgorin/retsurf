@@ -1,4 +1,5 @@
 use crate::browser::{AppBrowser, BrowserCommand};
+use crate::event::gamepad::Gamepad;
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::ui::AppUi;
@@ -26,6 +27,7 @@ pub struct App {
     state: AppState,
     browser: AppBrowser,
     ui: AppUi,
+    gamepad: Gamepad,
 }
 
 impl App {
@@ -43,6 +45,7 @@ impl App {
             browser,
             event_handler,
             ui,
+            gamepad: Gamepad::new(),
             state: AppState::Initialized,
         })
     }
@@ -54,8 +57,17 @@ impl App {
 
         while self.state == AppState::Running {
             self.browser.pump_event_loop();
-            self.event_handler
-                .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
+            self.event_handler.wait(
+                &self.window,
+                &mut self.ui,
+                &mut self.browser,
+                &mut self.gamepad,
+                &mut commands,
+            );
+
+            // Advance the gamepad cursor/scroll and feed input to the page.
+            self.gamepad.tick(&self.window, &self.ui, &self.browser);
+            self.ui.set_cursor(self.gamepad.cursor());
 
             // Render Servo into its FBO; egui composites that FBO's texture.
             self.browser.paint();
