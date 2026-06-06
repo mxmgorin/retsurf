@@ -107,9 +107,13 @@ impl AppEventHandler {
                 ..
             } => {
                 let (mx, my) = ui.into_browser_rel_pos(mouse_x as f32, mouse_y as f32);
+                // Fire the DOM `wheel` event (for pages with JS handlers)...
                 let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
-                let event = servo::InputEvent::Wheel(event);
-                browser.handle_input(event);
+                browser.handle_input(servo::InputEvent::Wheel(event));
+                // ...then perform the actual native scroll. SDL `y` is positive
+                // when scrolling up; Servo's positive `dy` reveals lower content.
+                const WHEEL_PX: f32 = 60.0;
+                browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
             }
             Event::KeyDown {
                 keycode: Some(kc),

@@ -1,4 +1,4 @@
-use super::sdl2_servo::{into_mouse_button_event, into_mouse_move_event, into_wheel_event};
+use super::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::app::AppCommand;
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::ui::AppUi;
@@ -11,8 +11,8 @@ const AXIS_MAX: f32 = 32767.0;
 const DEADZONE: f32 = 0.25;
 /// Cursor speed at full stick deflection, logical px per second.
 const CURSOR_SPEED: f32 = 750.0;
-/// Scroll speed at full stick deflection, wheel lines per second.
-const SCROLL_SPEED: f32 = 22.0;
+/// Scroll speed at full stick deflection, device px per second.
+const SCROLL_SPEED: f32 = 1600.0;
 
 /// In-app gamepad handling: the left stick / D-pad drive a virtual cursor, the
 /// right stick scrolls, and face/shoulder buttons map to clicks and navigation.
@@ -24,8 +24,6 @@ pub struct Gamepad {
     left: (f32, f32),
     /// Right stick vector, normalized and dead-zoned (-1..=1).
     right: (f32, f32),
-    /// Accumulated fractional scroll lines (emitted as whole lines).
-    scroll_acc: f32,
     last_tick: Instant,
     initialized: bool,
 }
@@ -36,7 +34,6 @@ impl Gamepad {
             cursor: (0.0, 0.0),
             left: (0.0, 0.0),
             right: (0.0, 0.0),
-            scroll_acc: 0.0,
             last_tick: Instant::now(),
             initialized: false,
         }
@@ -118,19 +115,10 @@ impl Gamepad {
         }
 
         if self.right.1 != 0.0 {
-            // Up on the stick scrolls the page up (positive wheel y).
-            self.scroll_acc += -self.right.1 * SCROLL_SPEED * dt;
-            let lines = self.scroll_acc.trunc();
-            if lines != 0.0 {
-                self.scroll_acc -= lines;
-                let (x, y) = ui.into_browser_rel_pos(self.cursor.0, self.cursor.1);
-                browser.handle_input(servo::InputEvent::Wheel(into_wheel_event(
-                    0,
-                    lines as i32,
-                    x,
-                    y,
-                )));
-            }
+            // Stick down (+1) reveals lower content (positive Servo dy).
+            let dy = self.right.1 * SCROLL_SPEED * dt;
+            let (x, y) = ui.into_browser_rel_pos(self.cursor.0, self.cursor.1);
+            browser.scroll(0.0, dy, x, y);
         }
     }
 }

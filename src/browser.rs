@@ -206,6 +206,18 @@ impl AppBrowser {
         }
     }
 
+    /// Scroll the focused page by a device-pixel delta at `(x, y)`. Positive `dy`
+    /// reveals content lower on the page. This is the native compositor scroll
+    /// (`InputEvent::Wheel` only fires the DOM `wheel` event, it does not scroll).
+    pub fn scroll(&self, dx: f32, dy: f32, x: f32, y: f32) {
+        let Some(tab) = self.inner.get_focused_webview() else {
+            return;
+        };
+        let delta = servo::Scroll::Delta(servo::DeviceVector2D::new(dx, dy).into());
+        let point = servo::DevicePoint::new(x, y).into();
+        tab.notify_scroll_event(delta, point);
+    }
+
     pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
         match command {
             BrowserCommand::Back => _ = self.inner.get_focused_webview().map(|x| x.go_back(1)),
