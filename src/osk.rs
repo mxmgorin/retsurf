@@ -1,6 +1,12 @@
 //! On-screen keyboard for gamepad text entry, styled after the Steam Deck's.
 //! Opened with the **X** button; keys are typed into the address bar (which also
-//! doubles as search). Driven by the gamepad; rendered by [`crate::ui`].
+//! doubles as search). Owned and rendered by [`crate::ui`], which drives it from
+//! gamepad input.
+
+use crate::app::AppCommand;
+use crate::browser::{AppBrowser, BrowserCommand};
+use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
+use keyboard_types::{Code, NamedKey};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Key {
@@ -110,4 +116,59 @@ impl Osk {
         let cols = LAYOUT[self.row].len() as i32;
         self.col = (self.col as i32 + dx).clamp(0, cols - 1) as usize;
     }
+
+    /// Apply the selected key. Input is routed to the focused text field: the egui
+    /// address bar when `to_address_bar`, otherwise the web page's focused element
+    /// (via Servo keyboard events).
+    pub fn activate(
+        &mut self,
+        to_address_bar: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        match self.current() {
+            Shift => self.shift = !self.shift,
+            Char(c) => {
+                let c = if self.shift { shift_char(c) } else { c };
+                input_char(to_address_bar, c, self.shift, browser);
+            }
+            Space => input_char(to_address_bar, ' ', self.shift, browser),
+            Backspace => {
+                if to_address_bar {
+                    browser.get_state_mut().get_location_mut().pop();
+                } else {
+                    send_named(browser, NamedKey::Backspace, Code::Backspace);
+                }
+            }
+            // Arrow keys are sent to the focused page element only; the address
+            // bar is append-only here, so they do nothing there.
+            Left if !to_address_bar => send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft),
+            Right if !to_address_bar => send_named(browser, NamedKey::ArrowRight, Code::ArrowRight),
+            Up if !to_address_bar => send_named(browser, NamedKey::ArrowUp, Code::ArrowUp),
+            Down if !to_address_bar => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
+            Left | Right | Up | Down => {}
+            Go => {
+                if to_address_bar {
+                    commands.push(AppCommand::Browser(BrowserCommand::Load));
+                } else {
+                    send_named(browser, NamedKey::Enter, Code::Enter);
+                }
+                self.hide();
+            }
+        }
+    }
+}
+
+fn input_char(to_address_bar: bool, c: char, shift: bool, browser: &AppBrowser) {
+    if to_address_bar {
+        browser.get_state_mut().get_location_mut().push(c);
+    } else {
+        browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, true)));
+        browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, false)));
+    }
+}
+
+fn send_named(browser: &AppBrowser, key: NamedKey, code: Code) {
+    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, true)));
+    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, false)));
 }

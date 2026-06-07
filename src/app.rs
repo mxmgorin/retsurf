@@ -72,8 +72,6 @@ impl App {
             // Advance the gamepad cursor/scroll and feed input to the page.
             self.gamepad.tick(&self.window, &self.ui, &self.browser);
             self.ui.set_cursor(self.gamepad.cursor());
-            let osk = self.gamepad.osk();
-            self.ui.set_osk(osk.visible, osk.selected(), osk.shift);
 
             // Render Servo into its FBO; egui composites that FBO's texture.
             self.browser.paint();

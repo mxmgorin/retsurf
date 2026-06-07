@@ -1,6 +1,7 @@
 use crate::{
     app::AppCommand,
     browser::{AppBrowser, BrowserCommand, BrowserState},
+    osk::Osk,
     window::AppWindow,
 };
 use egui_sdl2::egui::{self, Vec2};
@@ -18,10 +19,8 @@ pub struct AppUi {
     browser_viewport: (u32, u32),
     /// Gamepad cursor position (logical px), drawn as an overlay.
     cursor: (f32, f32),
-    /// On-screen keyboard view: visible flag, selected (row, col), shift state.
-    osk_visible: bool,
-    osk_sel: (usize, usize),
-    osk_shift: bool,
+    /// On-screen keyboard: state, rendering, and input routing all live here.
+    osk: Osk,
 }
 
 impl AppUi {
@@ -42,9 +41,7 @@ impl AppUi {
             browser_tex_id,
             browser_viewport: (0, 0),
             cursor: (0.0, 0.0),
-            osk_visible: false,
-            osk_sel: (0, 0),
-            osk_shift: false,
+            osk: Osk::new(),
         }
     }
 
@@ -58,15 +55,39 @@ impl AppUi {
         self.cursor = pos;
     }
 
+    /// Whether the on-screen keyboard is currently shown.
     #[inline]
-    pub fn set_osk(&mut self, visible: bool, selected: (usize, usize), shift: bool) {
-        self.osk_visible = visible;
-        self.osk_sel = selected;
-        self.osk_shift = shift;
+    pub fn osk_visible(&self) -> bool {
+        self.osk.visible
+    }
+
+    /// Show/hide the on-screen keyboard (the **X** button).
+    #[inline]
+    pub fn toggle_osk(&mut self) {
+        self.osk.toggle();
+    }
+
+    /// Hide the on-screen keyboard.
+    #[inline]
+    pub fn osk_hide(&mut self) {
+        self.osk.hide();
+    }
+
+    /// Move the on-screen keyboard selection by one cell.
+    #[inline]
+    pub fn osk_move(&mut self, dx: i32, dy: i32) {
+        self.osk.move_sel(dx, dy);
+    }
+
+    /// Apply the selected on-screen-keyboard key, routing input to the address bar
+    /// if it holds focus, otherwise to the focused page element.
+    pub fn osk_activate(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        let to_address_bar = self.address_bar_focused();
+        self.osk.activate(to_address_bar, browser, commands);
     }
 
     /// Whether the address-bar text field currently holds keyboard focus.
-    pub fn address_bar_focused(&self) -> bool {
+    fn address_bar_focused(&self) -> bool {
         self.egui
             .ctx
             .memory(|m| m.has_focus(egui::Id::new("location")))
@@ -122,8 +143,8 @@ impl AppUi {
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
 
-                if self.osk_visible {
-                    add_osk(ctx, self.osk_sel, self.osk_shift);
+                if self.osk.visible {
+                    add_osk(ctx, self.osk.selected(), self.osk.shift);
                 } else {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.
