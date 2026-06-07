@@ -70,8 +70,7 @@ impl App {
             );
 
             // Advance the gamepad cursor/scroll and feed input to the page.
-            self.gamepad.tick(&self.window, &self.ui, &self.browser);
-            self.ui.set_cursor(self.gamepad.cursor());
+            self.gamepad.tick(&self.window, &mut self.ui, &self.browser);
 
             // Render Servo into its FBO; egui composites that FBO's texture.
             self.browser.paint();

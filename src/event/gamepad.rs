@@ -18,29 +18,20 @@ const SCROLL_SPEED: f32 = 1600.0;
 /// right stick scrolls, and face/shoulder buttons map to clicks and navigation.
 /// On a handheld the pad is the only input device, so this is the primary UI.
 pub struct Gamepad {
-    /// Virtual cursor in logical window coordinates (matches SDL mouse events).
-    cursor: (f32, f32),
     /// Left stick / D-pad vector, normalized and dead-zoned (-1..=1).
     left: (f32, f32),
     /// Right stick vector, normalized and dead-zoned (-1..=1).
     right: (f32, f32),
     last_tick: Instant,
-    initialized: bool,
 }
 
 impl Gamepad {
     pub fn new() -> Self {
         Self {
-            cursor: (0.0, 0.0),
             left: (0.0, 0.0),
             right: (0.0, 0.0),
             last_tick: Instant::now(),
-            initialized: false,
         }
-    }
-
-    pub fn cursor(&self) -> (f32, f32) {
-        self.cursor
     }
 
     /// Whether the loop should keep ticking at ~60fps to animate the cursor/scroll.
@@ -97,7 +88,7 @@ impl Gamepad {
             // A = left click at the cursor. Send a move first so Servo hit-tests
             // the right spot, then the button press/release.
             Button::A => {
-                let (x, y) = ui.into_browser_rel_pos(self.cursor.0, self.cursor.1);
+                let (x, y) = ui.cursor_browser_rel();
                 browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
                 let event = into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
                 browser.handle_input(servo::InputEvent::MouseButton(event));
@@ -118,7 +109,7 @@ impl Gamepad {
     }
 
     /// Advance the cursor and scroll by elapsed time, dispatching input to the page.
-    pub fn tick(&mut self, window: &AppWindow, ui: &AppUi, browser: &AppBrowser) {
+    pub fn tick(&mut self, window: &AppWindow, ui: &mut AppUi, browser: &AppBrowser) {
         let now = Instant::now();
         let dt = (now - self.last_tick).as_secs_f32().min(0.1);
         self.last_tick = now;
@@ -128,24 +119,20 @@ impl Gamepad {
             return;
         }
 
-        let (w, h) = window.size();
-        let (w, h) = (w as f32, h as f32);
-        if !self.initialized {
-            self.cursor = (w / 2.0, h / 2.0);
-            self.initialized = true;
-        }
-
         if self.left != (0.0, 0.0) {
-            self.cursor.0 = (self.cursor.0 + self.left.0 * CURSOR_SPEED * dt).clamp(0.0, w);
-            self.cursor.1 = (self.cursor.1 + self.left.1 * CURSOR_SPEED * dt).clamp(0.0, h);
-            let (x, y) = ui.into_browser_rel_pos(self.cursor.0, self.cursor.1);
+            ui.move_cursor(
+                self.left.0 * CURSOR_SPEED * dt,
+                self.left.1 * CURSOR_SPEED * dt,
+                window,
+            );
+            let (x, y) = ui.cursor_browser_rel();
             browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
         }
 
         if self.right.1 != 0.0 {
             // Stick down (+1) reveals lower content (positive Servo dy).
             let dy = self.right.1 * SCROLL_SPEED * dt;
-            let (x, y) = ui.into_browser_rel_pos(self.cursor.0, self.cursor.1);
+            let (x, y) = ui.cursor_browser_rel();
             browser.scroll(0.0, dy, x, y);
         }
     }

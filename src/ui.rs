@@ -17,7 +17,8 @@ pub struct AppUi {
     browser_tex_id: egui::TextureId,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
-    /// Gamepad cursor position (logical px), drawn as an overlay.
+    /// Gamepad cursor position (logical px). The UI owns it — it draws the
+    /// overlay — and the gamepad moves it via [`AppUi::move_cursor`].
     cursor: (f32, f32),
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
@@ -40,7 +41,10 @@ impl AppUi {
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
-            cursor: (0.0, 0.0),
+            cursor: {
+                let (w, h) = window.size();
+                (w as f32 / 2.0, h as f32 / 2.0)
+            },
             osk: Osk::new(),
         }
     }
@@ -50,9 +54,19 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
+    /// Move the gamepad cursor by a logical-px delta, clamped to the window.
     #[inline]
-    pub fn set_cursor(&mut self, pos: (f32, f32)) {
-        self.cursor = pos;
+    pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) {
+        let (w, h) = window.size();
+        self.cursor.0 = (self.cursor.0 + dx).clamp(0.0, w as f32);
+        self.cursor.1 = (self.cursor.1 + dy).clamp(0.0, h as f32);
+    }
+
+    /// The gamepad cursor in browser-relative coordinates (below the toolbar),
+    /// ready to feed to Servo as a mouse position.
+    #[inline]
+    pub fn cursor_browser_rel(&self) -> (f32, f32) {
+        self.into_browser_rel_pos(self.cursor.0, self.cursor.1)
     }
 
     /// Whether the on-screen keyboard is currently shown.
