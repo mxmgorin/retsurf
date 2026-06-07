@@ -126,8 +126,8 @@ SDL_VIDEODRIVER=wayland cargo run
 - [x] Custom `RenderingContext` over SDL2's GL context + FBO (`src/render.rs`).
 - [x] Servo renders into the FBO; egui composites the texture; no CPU readback.
 - [x] Verified on desktop at GLES 3.2, 0 GL errors.
-- [ ] **Verify on device** — needs the aarch64 build (below); first device run surfaced
-      the EGL 1.4 issue (now fixed).
+- [x] **Verified on device** — runs on Knulli (Mali, EGL 1.4) after the surfman-optional
+      fix; native arm64 GHA build produces a working binary.
 
 ### EGL 1.4 vs surfman — the device blocker (fixed)
 
@@ -181,8 +181,13 @@ docker run -it --name builder_aarch64 -v "$(pwd)":/workspace --platform=linux/ar
 Implemented in `src/event/gamepad.rs` (SDL GameController), no gptokeyb needed:
 - Left stick / D-pad → cursor · **A** → click · right stick → scroll
 - **B** / **L** → back · **R** → forward · **Start** → reload
+- **Y** → on-screen keyboard (`src/osk.rs`); D-pad selects, **A** types into the
+  address bar (also searches), **Go** loads, **B** closes.
+- [x] Per-frame event draining + vsync so the cursor isn't laggy on device.
+- [x] Text entry via on-screen keyboard.
 - [ ] Tune deadzone / cursor speed / scroll speed on real hardware.
-- [ ] Text entry (URL bar) still needs an on-screen keyboard or gptokeyb keymap.
+- [ ] Route on-screen-keyboard input to focused *page* fields (today it targets the
+      address bar only).
 
 ### 4. PortMaster packaging
 - [ ] Port directory + launcher `.sh` (sets `SDL_VIDEODRIVER=kmsdrm`, `RETSURF_GLES=1`,

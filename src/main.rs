@@ -3,6 +3,7 @@ mod config;
 mod window;
 mod event;
 mod browser;
+mod osk;
 mod render;
 mod resources;
 mod ui;

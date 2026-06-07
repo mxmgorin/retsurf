@@ -1,8 +1,12 @@
-use super::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
+use super::sdl2_servo::{
+    char_keyboard_event, into_mouse_button_event, into_mouse_move_event, named_keyboard_event,
+};
 use crate::app::AppCommand;
 use crate::browser::{AppBrowser, BrowserCommand};
+use crate::osk::{Key, Osk};
 use crate::ui::AppUi;
 use crate::window::AppWindow;
+use keyboard_types::{Code, NamedKey};
 use sdl2::controller::{Axis, Button};
 use std::time::Instant;
 
@@ -24,6 +28,8 @@ pub struct Gamepad {
     left: (f32, f32),
     /// Right stick vector, normalized and dead-zoned (-1..=1).
     right: (f32, f32),
+    /// On-screen keyboard. When visible, the D-pad/A drive it instead of the cursor.
+    osk: Osk,
     last_tick: Instant,
     initialized: bool,
 }
@@ -34,6 +40,7 @@ impl Gamepad {
             cursor: (0.0, 0.0),
             left: (0.0, 0.0),
             right: (0.0, 0.0),
+            osk: Osk::new(),
             last_tick: Instant::now(),
             initialized: false,
         }
@@ -41,6 +48,10 @@ impl Gamepad {
 
     pub fn cursor(&self) -> (f32, f32) {
         self.cursor
+    }
+
+    pub fn osk(&self) -> &Osk {
+        &self.osk
     }
 
     /// Whether the loop should keep ticking at ~60fps to animate the cursor/scroll.
@@ -70,6 +81,29 @@ impl Gamepad {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // X toggles the on-screen keyboard regardless of mode.
+        if button == Button::X && pressed {
+            self.osk.toggle();
+            return;
+        }
+
+        // While the keyboard is open, the D-pad/A/B drive it, not the cursor.
+        if self.osk.visible {
+            if !pressed {
+                return;
+            }
+            match button {
+                Button::DPadLeft => self.osk.move_sel(-1, 0),
+                Button::DPadRight => self.osk.move_sel(1, 0),
+                Button::DPadUp => self.osk.move_sel(0, -1),
+                Button::DPadDown => self.osk.move_sel(0, 1),
+                Button::A => self.press_osk_key(ui, browser, commands),
+                Button::B => self.osk.hide(),
+                _ => {}
+            }
+            return;
+        }
+
         match button {
             // A = left click at the cursor. Send a move first so Servo hit-tests
             // the right spot, then the button press/release.
@@ -94,11 +128,69 @@ impl Gamepad {
         }
     }
 
+    /// Apply the selected on-screen-keyboard key. Input is routed to the focused
+    /// text field: the egui address bar if it has focus, otherwise the web page's
+    /// focused element (via Servo keyboard events).
+    fn press_osk_key(&mut self, ui: &AppUi, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        let to_address_bar = ui.address_bar_focused();
+        match self.osk.current() {
+            Key::Shift => self.osk.shift = !self.osk.shift,
+            Key::Char(c) => {
+                let c = if self.osk.shift && c.is_ascii_alphabetic() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c
+                };
+                self.input_char(to_address_bar, c, browser);
+            }
+            Key::Space => self.input_char(to_address_bar, ' ', browser),
+            Key::Backspace => {
+                if to_address_bar {
+                    browser.get_state_mut().get_location_mut().pop();
+                } else {
+                    self.send_named(browser, NamedKey::Backspace, Code::Backspace);
+                }
+            }
+            Key::Go => {
+                if to_address_bar {
+                    commands.push(AppCommand::Browser(BrowserCommand::Load));
+                } else {
+                    self.send_named(browser, NamedKey::Enter, Code::Enter);
+                }
+                self.osk.hide();
+            }
+        }
+    }
+
+    fn input_char(&self, to_address_bar: bool, c: char, browser: &AppBrowser) {
+        if to_address_bar {
+            browser.get_state_mut().get_location_mut().push(c);
+        } else {
+            browser
+                .handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, self.osk.shift, true)));
+            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
+                c,
+                self.osk.shift,
+                false,
+            )));
+        }
+    }
+
+    fn send_named(&self, browser: &AppBrowser, key: NamedKey, code: Code) {
+        browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, true)));
+        browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, false)));
+    }
+
     /// Advance the cursor and scroll by elapsed time, dispatching input to the page.
     pub fn tick(&mut self, window: &AppWindow, ui: &AppUi, browser: &AppBrowser) {
         let now = Instant::now();
         let dt = (now - self.last_tick).as_secs_f32().min(0.1);
         self.last_tick = now;
+
+        // While the keyboard is open, freeze cursor/scroll motion.
+        if self.osk.visible {
+            return;
+        }
 
         let (w, h) = window.size();
         let (w, h) = (w as f32, h as f32);

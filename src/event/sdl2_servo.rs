@@ -66,3 +66,50 @@ pub fn into_wheel_event(dx: i32, dy: i32, mouse_x: f32, mouse_y: f32) -> servo::
 fn into_device_point(x: f32, y: f32) -> servo::WebViewPoint {
     servo::DevicePoint::new(x, y).into()
 }
+
+/// A keyboard event for a printable character, for on-screen-keyboard input.
+pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardEvent {
+    let state = if down {
+        keyboard_types::KeyState::Down
+    } else {
+        keyboard_types::KeyState::Up
+    };
+    let modifiers = if shift {
+        keyboard_types::Modifiers::SHIFT
+    } else {
+        keyboard_types::Modifiers::empty()
+    };
+    let event = keyboard_types::KeyboardEvent {
+        state,
+        key: keyboard_types::Key::Character(c.to_string()),
+        code: keyboard_types::Code::Unidentified,
+        location: keyboard_types::Location::Standard,
+        modifiers,
+        repeat: false,
+        is_composing: false,
+    };
+    servo::KeyboardEvent::new(event)
+}
+
+/// A keyboard event for a named key (Enter, Backspace, …).
+pub fn named_keyboard_event(
+    key: keyboard_types::NamedKey,
+    code: keyboard_types::Code,
+    down: bool,
+) -> servo::KeyboardEvent {
+    let state = if down {
+        keyboard_types::KeyState::Down
+    } else {
+        keyboard_types::KeyState::Up
+    };
+    let event = keyboard_types::KeyboardEvent {
+        state,
+        key: keyboard_types::Key::Named(key),
+        code,
+        location: keyboard_types::Location::Standard,
+        modifiers: keyboard_types::Modifiers::empty(),
+        repeat: false,
+        is_composing: false,
+    };
+    servo::KeyboardEvent::new(event)
+}

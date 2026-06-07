@@ -18,6 +18,10 @@ pub struct AppUi {
     browser_viewport: (u32, u32),
     /// Gamepad cursor position (logical px), drawn as an overlay.
     cursor: (f32, f32),
+    /// On-screen keyboard view: visible flag, selected (row, col), shift state.
+    osk_visible: bool,
+    osk_sel: (usize, usize),
+    osk_shift: bool,
 }
 
 impl AppUi {
@@ -38,6 +42,9 @@ impl AppUi {
             browser_tex_id,
             browser_viewport: (0, 0),
             cursor: (0.0, 0.0),
+            osk_visible: false,
+            osk_sel: (0, 0),
+            osk_shift: false,
         }
     }
 
@@ -49,6 +56,20 @@ impl AppUi {
     #[inline]
     pub fn set_cursor(&mut self, pos: (f32, f32)) {
         self.cursor = pos;
+    }
+
+    #[inline]
+    pub fn set_osk(&mut self, visible: bool, selected: (usize, usize), shift: bool) {
+        self.osk_visible = visible;
+        self.osk_sel = selected;
+        self.osk_shift = shift;
+    }
+
+    /// Whether the address-bar text field currently holds keyboard focus.
+    pub fn address_bar_focused(&self) -> bool {
+        self.egui
+            .ctx
+            .memory(|m| m.has_focus(egui::Id::new("location")))
     }
 
     #[inline]
@@ -101,15 +122,19 @@ impl AppUi {
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
 
-                // Gamepad cursor overlay, always on top. `cursor` is in logical
-                // px which equals egui points at the handheld's 1.0 scale factor.
-                let painter = ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Foreground,
-                    egui::Id::new("gamepad_cursor"),
-                ));
-                let pos = egui::pos2(self.cursor.0, self.cursor.1);
-                painter.circle_filled(pos, 5.0, egui::Color32::from_white_alpha(235));
-                painter.circle_stroke(pos, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
+                if self.osk_visible {
+                    add_osk(ctx, self.osk_sel, self.osk_shift);
+                } else {
+                    // Gamepad cursor overlay, always on top. `cursor` is in logical
+                    // px which equals egui points at the handheld's 1.0 scale factor.
+                    let painter = ctx.layer_painter(egui::LayerId::new(
+                        egui::Order::Foreground,
+                        egui::Id::new("gamepad_cursor"),
+                    ));
+                    let pos = egui::pos2(self.cursor.0, self.cursor.1);
+                    painter.circle_filled(pos, 5.0, egui::Color32::from_white_alpha(235));
+                    painter.circle_stroke(pos, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
+                }
             });
         }
 
@@ -201,6 +226,48 @@ fn add_toolbar(
 
         *size = ui.min_size();
     });
+}
+
+/// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
+/// to the bottom, with the selected key (and active Shift) highlighted.
+fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool) {
+    use crate::osk::{key_label, Key, LAYOUT};
+
+    let key_size = egui::vec2(40.0, 38.0);
+    let wide = egui::vec2(150.0, 38.0); // Space
+    let highlight = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
+    let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
+
+    egui::Area::new(egui::Id::new("osk"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+        .show(ctx, |ui| {
+            egui::Frame::default()
+                .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
+                .corner_radius(12.0)
+                .inner_margin(12.0)
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(5.0, 5.0);
+                    for (r, row) in LAYOUT.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            for (c, key) in row.iter().enumerate() {
+                                let is_sel = (r, c) == selected;
+                                let active = is_sel || (*key == Key::Shift && shift);
+                                let size = if *key == Key::Space { wide } else { key_size };
+                                let fill = if active { highlight } else { key_fill };
+                                let button = egui::Button::new(
+                                    egui::RichText::new(key_label(*key, shift))
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .fill(fill)
+                                .corner_radius(6.0)
+                                .min_size(size);
+                                ui.add(button);
+                            }
+                        });
+                    }
+                });
+        });
 }
 
 #[inline]

@@ -150,7 +150,7 @@ impl AppBrowser {
     }
 
     #[inline]
-    pub fn get_state_mut(&mut self) -> std::cell::RefMut<'_, BrowserState> {
+    pub fn get_state_mut(&self) -> std::cell::RefMut<'_, BrowserState> {
         self.inner.state.borrow_mut()
     }
 
