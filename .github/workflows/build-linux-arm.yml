@@ -5,17 +5,11 @@ on:
   push:
     branches:
       - "main"
-      - "ci-arm"
   release:
     types: [published]
 
 permissions:
   contents: write
-
-# Newer pushes to the same ref cancel an in-progress build.
-concurrency:
-  group: build-arm-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build-arm:
