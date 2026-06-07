@@ -4,35 +4,32 @@ use crate::{
     window::AppWindow,
 };
 use egui_sdl2::egui::{self, Vec2};
-use egui_sdl2::{egui_glow, EguiGlow};
-use std::{sync::Arc, time::Duration};
+use egui_sdl2::EguiGlow;
+use std::time::Duration;
 
 pub struct AppUi {
     egui: EguiGlow,
-    render_browser_fn: Arc<egui_glow::CallbackFn>,
     repaint_delay: Option<Duration>,
     toolbar_size: egui::Vec2,
     repaint_pending: bool,
+    /// GPU texture holding Servo's latest software-rendered frame.
+    browser_texture: Option<egui::TextureHandle>,
+    /// Last browser viewport size (physical px) we requested, to avoid churn.
+    browser_viewport: (u32, u32),
 }
 
 impl AppUi {
     pub fn new(window: &AppWindow) -> Self {
-        let render_to_parent_fn = window.get_rendering_callback().unwrap();
-        let render_browser_fn = new_egui_callback(render_to_parent_fn);
         let egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
 
         Self {
             egui,
-            render_browser_fn: Arc::new(render_browser_fn),
             repaint_delay: None,
             toolbar_size: egui::Vec2::default(),
             repaint_pending: false,
+            browser_texture: None,
+            browser_viewport: (0, 0),
         }
-    }
-
-    pub fn on_resize(&mut self, window: &AppWindow) {
-        let callback = window.get_rendering_callback().unwrap();
-        self.render_browser_fn = Arc::new(new_egui_callback(callback));
     }
 
     #[inline]
@@ -45,51 +42,88 @@ impl AppUi {
         (x, y - self.toolbar_size.y)
     }
 
+    /// Upload Servo's latest frame into the browser texture.
+    pub fn set_browser_image(&mut self, image: &servo::RgbaImage) {
+        let (w, h) = image.dimensions();
+        if w == 0 || h == 0 {
+            return;
+        }
+        let color =
+            egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], image.as_raw());
+
+        match &mut self.browser_texture {
+            Some(tex) => tex.set(color, egui::TextureOptions::LINEAR),
+            None => {
+                self.browser_texture =
+                    Some(self.egui.ctx.load_texture("browser", color, egui::TextureOptions::LINEAR));
+            }
+        }
+    }
+
     /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = self.egui.state.on_event(window.get_sdl2_window(), event);
         self.repaint_pending = resp.repaint;
-        let consumed = resp.consumed & self.is_pointer_over_toolbar(); // don't consume when pointer over browser area
-
-        consumed
+        // don't consume when pointer over browser area
+        resp.consumed & self.is_pointer_over_toolbar()
     }
 
     pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
-        let mut state = browser.get_state_mut();
+        let mut desired_px: Option<(u32, u32)> = None;
 
-        self.egui.run(|ctx| {
-            let mut root = egui::Ui::new(
-                ctx.clone(),
-                egui::Id::new("root_ui"),
-                egui::UiBuilder::new().max_rect(ctx.content_rect()),
-            );
-            root.set_clip_rect(ctx.content_rect());
+        {
+            let mut state = browser.get_state_mut();
+            self.egui.run(|ctx| {
+                let ppp = ctx.pixels_per_point();
+                let mut root = egui::Ui::new(
+                    ctx.clone(),
+                    egui::Id::new("root_ui"),
+                    egui::UiBuilder::new().max_rect(ctx.content_rect()),
+                );
+                root.set_clip_rect(ctx.content_rect());
 
-            add_toolbar(&mut root, &mut state, commands, &mut self.toolbar_size);
+                add_toolbar(&mut root, &mut state, commands, &mut self.toolbar_size);
 
-            egui::CentralPanel::default().show_inside(&mut root, |ui| {
-                let min = ui.cursor().min;
-                let size = ui.available_size();
-                let rect = egui::Rect::from_min_size(min, size);
-                ui.allocate_space(size);
+                let frame = egui::Frame::default().inner_margin(0.0);
+                egui::CentralPanel::default()
+                    .frame(frame)
+                    .show_inside(&mut root, |ui| {
+                        let rect = ui.max_rect();
+                        ui.allocate_rect(rect, egui::Sense::hover());
 
-                ui.painter().add(egui::PaintCallback {
-                    rect,
-                    callback: self.render_browser_fn.clone(),
-                });
+                        desired_px = Some((
+                            (rect.width() * ppp).round().max(1.0) as u32,
+                            (rect.height() * ppp).round().max(1.0) as u32,
+                        ));
+
+                        if let Some(tex) = &self.browser_texture {
+                            let uv = egui::Rect::from_min_max(
+                                egui::pos2(0.0, 0.0),
+                                egui::pos2(1.0, 1.0),
+                            );
+                            ui.painter().image(tex.id(), rect, uv, egui::Color32::WHITE);
+                        }
+                    });
             });
-        });
-        // self.repaint_delay.replace(repaint_delay);
+        }
+
+        if let Some(size) = desired_px {
+            if size != self.browser_viewport {
+                self.browser_viewport = size;
+                browser.resize(size.0, size.1);
+            }
+        }
     }
 
-    /// Paints ui and presents to the window
-    pub fn draw(&mut self, window: &AppWindow, force: bool) {
-        if self.repaint_pending || force {
-            window.prepare_for_rendering();
-            self.egui.paint();
-            window.present();
-            self.repaint_pending = false;
-        }
+    /// Paints the UI (toolbar + browser texture) and presents to the window.
+    pub fn draw(&mut self, window: &AppWindow) {
+        // Servo's software context made its own GL context current while rendering;
+        // restore SDL2's context before egui issues any GL calls.
+        window.make_current();
+        window.bind_default_framebuffer();
+        self.egui.paint();
+        window.present();
+        self.repaint_pending = false;
     }
 
     pub fn destroy(&mut self) {
@@ -176,17 +210,4 @@ fn add_location_text(ui: &mut egui::Ui, text: &mut String, commands: &mut Vec<Ap
             }
         },
     );
-}
-
-#[inline]
-fn new_egui_callback(callback: crate::window::RenderingCallback) -> egui_glow::CallbackFn {
-    egui_glow::CallbackFn::new(move |info, painter| {
-        let viewport = info.viewport_in_pixels();
-        let rect = euclid::Rect::new(
-            euclid::Point2D::new(viewport.left_px, viewport.from_bottom_px),
-            euclid::Size2D::new(viewport.width_px, viewport.height_px),
-        );
-        // Servo draws into egui's GL context here
-        callback(painter.gl(), rect);
-    })
 }

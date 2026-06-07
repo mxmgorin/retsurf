@@ -32,8 +32,14 @@ impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         let window = AppWindow::new(sdl, &config.interface)?;
         let event_sender = UserEventSender::new();
-        let browser = AppBrowser::new(&window, event_sender, &config.browser)?;
+        let (w, h) = window.size();
+        let browser =
+            AppBrowser::new(dpi::PhysicalSize::new(w, h), event_sender, &config.browser)?;
         let event_handler = AppEventHandler::new(sdl)?;
+        // Creating the SoftwareRenderingContext above left surfman's GL context
+        // current. egui builds its GL program in `new`, so restore SDL2's context
+        // first or those objects land in the wrong context.
+        window.make_current();
         let ui = AppUi::new(&window);
 
         Ok(Self {
@@ -55,6 +61,14 @@ impl App {
             self.browser.pump_event_loop();
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
+
+            // Render Servo offscreen, then upload the new frame for compositing.
+            if self.browser.paint() {
+                if let Some(image) = self.browser.read_image() {
+                    self.ui.set_browser_image(&image);
+                }
+            }
+
             self.ui.update(&mut self.browser, &mut commands);
 
             for command in commands.iter() {
@@ -66,16 +80,19 @@ impl App {
         }
 
         self.ui.destroy();
+
+        // Servo's SoftwareRenderingContext does not destroy its surfman context on
+        // drop, which trips surfman's "destroy explicitly" guard and panics during
+        // unwinding. Exit before running destructors; the OS reclaims everything.
+        std::process::exit(0);
     }
 
     fn execute_command(&mut self, command: &AppCommand) {
         match command {
             AppCommand::Shutdown => self.shutdown(),
-            AppCommand::Resize(w, h) => {
-                self.window.resize(*w, *h);
-                self.browser.resize(*w, *h);
-                self.ui.on_resize(&self.window);
-            }
+            // Resizes are handled reactively: egui tracks the window size and
+            // `AppUi::update` resizes the browser viewport to the central area.
+            AppCommand::Resize(..) => {}
             AppCommand::Browser(command) => {
                 self.browser.execute_command(command, &self.config.browser)
             }
@@ -87,7 +104,6 @@ impl App {
     }
 
     fn draw(&mut self) {
-        let painted = self.browser.paint();
-        self.ui.draw(&self.window, painted);
+        self.ui.draw(&self.window);
     }
 }

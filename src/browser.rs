@@ -1,9 +1,11 @@
 use crate::{
     config::BrowserConfig,
     event::user::{UserEvent, UserEventSender},
-    window::AppWindow,
 };
-use servo::{EventLoopWaker, RenderingContext, WebView};
+use servo::{
+    DeviceIntRect, DeviceIntSize, EventLoopWaker, RenderingContext, RgbaImage,
+    SoftwareRenderingContext, WebView,
+};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -124,11 +126,16 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
 impl AppBrowser {
     pub fn new(
-        window: &AppWindow,
+        size: dpi::PhysicalSize<u32>,
         event_sender: UserEventSender,
         config: &BrowserConfig,
     ) -> Result<Self, String> {
-        let rendering_ctx = window.get_rendering_ctx();
+        // Path A: Servo renders into an offscreen software (llvmpipe) context.
+        // We read the pixels back each frame and composite them as a texture,
+        // so this never touches SDL2's GL context or needs a window handle.
+        let rendering_ctx = SoftwareRenderingContext::new(size)
+            .map_err(|e| format!("failed to create SoftwareRenderingContext: {e:?}"))?;
+        let rendering_ctx: Rc<dyn RenderingContext> = Rc::new(rendering_ctx);
         let servo = servo::ServoBuilder::default()
             .event_loop_waker(event_sender.clone_box())
             .build();
@@ -139,6 +146,17 @@ impl AppBrowser {
             inner: Rc::new(inner),
         })
     }
+
+    /// Read the latest rendered frame back into a CPU image for compositing.
+    pub fn read_image(&self) -> Option<RgbaImage> {
+        let size = self.inner.rendering_ctx.size();
+        let rect = DeviceIntRect::from_size(DeviceIntSize::new(
+            size.width as i32,
+            size.height as i32,
+        ));
+        self.inner.rendering_ctx.read_to_image(rect)
+    }
+
 
     #[inline]
     pub fn is_animating(&self) -> bool {
@@ -223,8 +241,13 @@ impl AppBrowser {
     }
 
     pub fn resize(&self, w: u32, h: u32) {
+        if w == 0 || h == 0 {
+            return;
+        }
+        let size = dpi::PhysicalSize::new(w, h);
+        self.inner.rendering_ctx.resize(size);
         if let Some(tab) = self.inner.get_focused_webview() {
-            tab.resize(dpi::PhysicalSize::new(w, h));
+            tab.resize(size);
         }
     }
 }
