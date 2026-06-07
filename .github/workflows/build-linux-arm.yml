@@ -1,10 +1,10 @@
-
 name: Build linux ARM release
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - "*"
+      - "ci-arm"
   release:
     types: [published]
 
@@ -13,62 +13,60 @@ permissions:
 
 jobs:
   build-arm:
-    if: github.event_name == 'release'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - arch: aarch64
-            rust_target: aarch64-unknown-linux-gnu
-            gcc_pkg: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            cc_var: CC_aarch64_unknown_linux_gnu
-            cxx_var: CXX_aarch64_unknown_linux_gnu
-            ar_var: AR_aarch64_unknown_linux_gnu
-            cc_bin: aarch64-linux-gnu-gcc
-            cxx_bin: aarch64-linux-gnu-g++
-            ar_bin: aarch64-linux-gnu-ar
-            out_name: retsurf-linux-aarch64.zip
-
+    # Native arm64 runner (free for public repos) — no cross-compile, no qemu.
+    runs-on: ubuntu-22.04-arm
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Install cross toolchain
+      - name: Diagnostics
         run: |
+          set -eux
+          uname -m
+          ldd --version | head -1
+          nproc
+          free -h || true
+          df -h /
+
+      - name: Install Servo build dependencies
+        run: |
+          set -eux
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.gcc_pkg }} zip
-          rustup target add ${{ matrix.rust_target }}
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake curl git gperf pkg-config \
+            python3 python3-pip ca-certificates \
+            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
+            libsdl2-dev zip
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          # rust-toolchain.toml pins the channel; rustup (preinstalled) honors it.
+          rustup show
+          rustc --version
 
       - name: Build
-        env:
-          ${{ matrix.cc_var }}: ${{ matrix.cc_bin }}
-          ${{ matrix.cxx_var }}: ${{ matrix.cxx_bin }}
-          ${{ matrix.ar_var }}: ${{ matrix.ar_bin }}
-          RUSTFLAGS: "-C linker=${{ matrix.cc_bin }}"
-          PKG_CONFIG_ALLOW_CROSS: "1"
         run: |
-          cargo build --release --no-default-features --features "sdl2-bundled" \
-            --target=${{ matrix.rust_target }}
+          set -eux
+          cargo build --release
+          df -h /
 
-      - name: Prepare release
+      - name: Package
         run: |
+          set -eux
           mkdir -p dist
-          cp target/${{ matrix.rust_target }}/release/retsurf dist/
-
-      - name: Zip release
-        run: cd dist && zip -r ${{ matrix.out_name }} .
+          cp target/release/retsurf dist/
+          cd dist && zip -r retsurf-linux-aarch64.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.out_name }}
-          path: dist/${{ matrix.out_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          name: retsurf-linux-aarch64
+          path: dist/retsurf-linux-aarch64.zip
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.out_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          files: dist/retsurf-linux-aarch64.zip
