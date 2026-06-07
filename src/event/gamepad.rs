@@ -3,7 +3,7 @@ use super::sdl2_servo::{
 };
 use crate::app::AppCommand;
 use crate::browser::{AppBrowser, BrowserCommand};
-use crate::osk::{Key, Osk};
+use crate::osk::{shift_char, Key, Osk};
 use crate::ui::AppUi;
 use crate::window::AppWindow;
 use keyboard_types::{Code, NamedKey};
@@ -136,11 +136,7 @@ impl Gamepad {
         match self.osk.current() {
             Key::Shift => self.osk.shift = !self.osk.shift,
             Key::Char(c) => {
-                let c = if self.osk.shift && c.is_ascii_alphabetic() {
-                    c.to_ascii_uppercase()
-                } else {
-                    c
-                };
+                let c = if self.osk.shift { shift_char(c) } else { c };
                 self.input_char(to_address_bar, c, browser);
             }
             Key::Space => self.input_char(to_address_bar, ' ', browser),
@@ -151,6 +147,21 @@ impl Gamepad {
                     self.send_named(browser, NamedKey::Backspace, Code::Backspace);
                 }
             }
+            // Arrow keys are sent to the focused page element only; the address
+            // bar is append-only here, so they do nothing there.
+            Key::Left if !to_address_bar => {
+                self.send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft)
+            }
+            Key::Right if !to_address_bar => {
+                self.send_named(browser, NamedKey::ArrowRight, Code::ArrowRight)
+            }
+            Key::Up if !to_address_bar => {
+                self.send_named(browser, NamedKey::ArrowUp, Code::ArrowUp)
+            }
+            Key::Down if !to_address_bar => {
+                self.send_named(browser, NamedKey::ArrowDown, Code::ArrowDown)
+            }
+            Key::Left | Key::Right | Key::Up | Key::Down => {}
             Key::Go => {
                 if to_address_bar {
                     commands.push(AppCommand::Browser(BrowserCommand::Load));

@@ -233,10 +233,13 @@ fn add_toolbar(
 fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool) {
     use crate::osk::{key_label, Key, LAYOUT};
 
-    let key_size = egui::vec2(40.0, 38.0);
-    let wide = egui::vec2(150.0, 38.0); // Space
     let highlight = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
     let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
+    let key_width = |key: &Key| match key {
+        Key::Space => 150.0,
+        Key::Shift | Key::Backspace | Key::Go => 62.0,
+        _ => 40.0,
+    };
 
     egui::Area::new(egui::Id::new("osk"))
         .order(egui::Order::Foreground)
@@ -253,7 +256,7 @@ fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool) {
                             for (c, key) in row.iter().enumerate() {
                                 let is_sel = (r, c) == selected;
                                 let active = is_sel || (*key == Key::Shift && shift);
-                                let size = if *key == Key::Space { wide } else { key_size };
+                                let size = egui::vec2(key_width(key), 38.0);
                                 let fill = if active { highlight } else { key_fill };
                                 let button = egui::Button::new(
                                     egui::RichText::new(key_label(*key, shift))

@@ -8,16 +8,23 @@ pub enum Key {
     Space,
     Backspace,
     Shift,
+    Left,
+    Up,
+    Down,
+    Right,
     Go,
 }
 
 use Key::*;
 
-/// Keyboard layout, row by row. Rows may have different lengths.
+/// Keyboard layout, row by row, arranged like a real keyboard: Backspace top
+/// right, Enter (Go) at the home-row right, Shift at the bottom-letter-row left,
+/// Space along the bottom with the arrow cluster after it. Rows may differ in
+/// length.
 pub static LAYOUT: &[&[Key]] = &[
     &[
         Char('1'), Char('2'), Char('3'), Char('4'), Char('5'),
-        Char('6'), Char('7'), Char('8'), Char('9'), Char('0'),
+        Char('6'), Char('7'), Char('8'), Char('9'), Char('0'), Backspace,
     ],
     &[
         Char('q'), Char('w'), Char('e'), Char('r'), Char('t'),
@@ -25,23 +32,38 @@ pub static LAYOUT: &[&[Key]] = &[
     ],
     &[
         Char('a'), Char('s'), Char('d'), Char('f'), Char('g'),
-        Char('h'), Char('j'), Char('k'), Char('l'), Char(':'),
+        Char('h'), Char('j'), Char('k'), Char('l'), Go,
     ],
     &[
         Shift, Char('z'), Char('x'), Char('c'), Char('v'),
-        Char('b'), Char('n'), Char('m'), Char('.'), Backspace,
+        Char('b'), Char('n'), Char('m'), Char(','), Char('.'), Char('/'),
     ],
-    &[Char('/'), Char('-'), Char('_'), Space, Go],
+    &[Char(':'), Char('-'), Space, Left, Up, Down, Right],
 ];
+
+/// The character produced by a key when Shift is held, mirroring a US keyboard
+/// (number row → symbols, letters → uppercase).
+pub fn shift_char(c: char) -> char {
+    match c {
+        '1' => '!', '2' => '@', '3' => '#', '4' => '$', '5' => '%',
+        '6' => '^', '7' => '&', '8' => '*', '9' => '(', '0' => ')',
+        '-' => '_', '/' => '?', '.' => '>', ',' => '<', ':' => ':',
+        c => c.to_ascii_uppercase(),
+    }
+}
 
 /// Label to show on a key, honoring the current shift state.
 pub fn key_label(key: Key, shift: bool) -> String {
     match key {
-        Char(c) if shift && c.is_ascii_alphabetic() => c.to_ascii_uppercase().to_string(),
+        Char(c) if shift => shift_char(c).to_string(),
         Char(c) => c.to_string(),
         Space => "Space".to_string(),
         Backspace => "Bksp".to_string(),
         Shift => "Shift".to_string(),
+        Left => "<".to_string(),
+        Up => "^".to_string(),
+        Down => "v".to_string(),
+        Right => ">".to_string(),
         Go => "Go".to_string(),
     }
 }
