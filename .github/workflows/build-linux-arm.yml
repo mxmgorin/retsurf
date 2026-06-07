@@ -49,7 +49,9 @@ jobs:
       - name: Build
         run: |
           set -eux
-          cargo build --release
+          # --no-default-features drops `webgl`: surfman can't init on EGL 1.4 Mali
+          # blobs and the connection is unused there, so the probe is skipped entirely.
+          cargo build --release --no-default-features
           df -h /
 
       - name: Stage binary

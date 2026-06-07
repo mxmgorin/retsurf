@@ -14,21 +14,39 @@ use std::sync::Arc;
 /// guard the call with `catch_unwind`: capable platforms (desktop, EGL 1.5) keep a
 /// working connection and WebGL; older devices fall back to `None` (WebGL disabled,
 /// normal rendering unaffected). Must run before other threads start — it briefly
-/// swaps the global panic hook to silence the expected panic.
+/// swaps the global panic hook (logging, not silencing, so an *unexpected* panic
+/// here is still recorded).
+///
+/// The whole probe is behind the `webgl` feature; the handheld build disables it
+/// (`--no-default-features`) so surfman is never touched there.
 fn create_surfman_connection() -> Option<surfman::Connection> {
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(surfman::Connection::new);
-    std::panic::set_hook(prev_hook);
-    match result {
-        Ok(Ok(connection)) => Some(connection),
-        Ok(Err(e)) => {
-            log::warn!("surfman connection unavailable ({e:?}); WebGL disabled");
-            None
-        }
-        Err(_) => {
-            log::warn!("surfman connection unsupported on this device; WebGL disabled");
-            None
+    #[cfg(not(feature = "webgl"))]
+    {
+        log::info!("WebGL disabled at build time (`webgl` feature off); skipping surfman");
+        return None;
+    }
+
+    #[cfg(feature = "webgl")]
+    {
+        log::debug!("probing surfman connection (WebGL)");
+        let prev_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|info| {
+            // Log rather than swallow: the expected EGL 1.4 panic is just noise at
+            // debug level, but if anything else panics in this window we still see it.
+            log::debug!("surfman connection probe panicked: {info}");
+        }));
+        let result = std::panic::catch_unwind(surfman::Connection::new);
+        std::panic::set_hook(prev_hook);
+        match result {
+            Ok(Ok(connection)) => Some(connection),
+            Ok(Err(e)) => {
+                log::warn!("surfman connection unavailable ({e:?}); WebGL disabled");
+                None
+            }
+            Err(_) => {
+                log::warn!("surfman connection unsupported on this device; WebGL disabled");
+                None
+            }
         }
     }
 }

@@ -78,8 +78,10 @@ impl AppWindow {
         };
 
         let (w, h) = window.drawable_size();
+        log::info!("window: GL context current ({w}x{h}); creating rendering context");
         let rendering_ctx =
             SdlRenderingContext::new(gl, glow_ctx.clone(), dpi::PhysicalSize::new(w, h));
+        log::info!("window: rendering context created");
 
         Ok(Self {
             _video_subsystem: video_subsystem,

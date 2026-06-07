@@ -32,12 +32,16 @@ pub struct App {
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
+        log::info!("init: creating window");
         let window = AppWindow::new(sdl, &config.interface)?;
+        log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser =
             AppBrowser::new(window.get_rendering_ctx(), event_sender, &config.browser)?;
+        log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;
         let ui = AppUi::new(&window);
+        log::info!("init: app constructed");
 
         Ok(Self {
             config,

@@ -5,7 +5,12 @@ edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
 
 [features]
-default = []
+default = ["webgl"]
+# WebGL/WebGPU via a surfman connection. Disabled (`--no-default-features`) for the
+# handheld build: surfman can't initialize on EGL 1.4 Mali blobs (Knulli/muOS/
+# ROCKNIX) and the connection is unused there anyway, so skipping it avoids the
+# probe entirely. See `src/render.rs::create_surfman_connection`.
+webgl = []
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
