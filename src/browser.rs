@@ -2,10 +2,7 @@ use crate::{
     config::BrowserConfig,
     event::user::{UserEvent, UserEventSender},
 };
-use servo::{
-    DeviceIntRect, DeviceIntSize, EventLoopWaker, RenderingContext, RgbaImage,
-    SoftwareRenderingContext, WebView,
-};
+use servo::{EventLoopWaker, RenderingContext, WebView};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -126,16 +123,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
 impl AppBrowser {
     pub fn new(
-        size: dpi::PhysicalSize<u32>,
+        rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         config: &BrowserConfig,
     ) -> Result<Self, String> {
-        // Path A: Servo renders into an offscreen software (llvmpipe) context.
-        // We read the pixels back each frame and composite them as a texture,
-        // so this never touches SDL2's GL context or needs a window handle.
-        let rendering_ctx = SoftwareRenderingContext::new(size)
-            .map_err(|e| format!("failed to create SoftwareRenderingContext: {e:?}"))?;
-        let rendering_ctx: Rc<dyn RenderingContext> = Rc::new(rendering_ctx);
+        // Path B: Servo renders into an FBO in SDL2's shared GL context
+        // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
             .event_loop_waker(event_sender.clone_box())
             .build();
@@ -145,16 +138,6 @@ impl AppBrowser {
         Ok(Self {
             inner: Rc::new(inner),
         })
-    }
-
-    /// Read the latest rendered frame back into a CPU image for compositing.
-    pub fn read_image(&self) -> Option<RgbaImage> {
-        let size = self.inner.rendering_ctx.size();
-        let rect = DeviceIntRect::from_size(DeviceIntSize::new(
-            size.width as i32,
-            size.height as i32,
-        ));
-        self.inner.rendering_ctx.read_to_image(rect)
     }
 
 
