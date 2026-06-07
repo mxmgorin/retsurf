@@ -3,19 +3,15 @@
 
 # 🌊 retsurf
 
-A lightweight, experimental web browser written in **Rust**, using
-[**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for
-windowing and input, and **egui** for the toolbar UI.
+A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
-retsurf is designed to run **without X11 or Wayland** — rendering through **OpenGL ES**
-on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux
-handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Linux desktops.
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Linux desktops.
 
 > 🛠️ **Work in progress.** Early development stage with limited features.
 
 ## Features
 
-- Real web rendering via the **Servo** engine (WebRender)
+- Web rendering via the **Servo** engine (WebRender)
 - Runs on **OpenGL ES 3.x**; no X11/Wayland required (works on bare KMS/DRM)
 - Minimal **egui** toolbar: address bar, back / forward / reload
 - Keyboard, mouse, and **gamepad** input
@@ -23,14 +19,9 @@ handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Lin
 
 ## How it works
 
-SDL2 owns the window and the single GL/GLES context. Servo renders each page into an
-offscreen framebuffer (FBO) in that context; egui then composites the page texture
-together with the toolbar and presents the frame via SDL2. Keeping everything on one
-GLES context — with no compositor and no CPU readback — is what lets it run on bare
-handheld hardware.
+SDL2 owns the window and the single GL/GLES context. Servo renders each page into an offscreen framebuffer (FBO) in that context; egui then composites the page texture together with the toolbar and presents the frame via SDL2. Keeping everything on one GLES context — with no compositor and no CPU readback — is what lets it run on bare handheld hardware.
 
-The full porting story (GLES vs desktop GL, the EGL/surfman constraints on older Mali
-blobs, and PortMaster packaging) lives in
+The full specs (GLES vs desktop GL, the EGL/surfman constraints on older Mali blobs) lives in
 [`docs/HANDHELD_PORT.md`](docs/HANDHELD_PORT.md).
 
 ## Building & running
@@ -62,19 +53,9 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `SDL_VIDEODRIVER` | auto | Override SDL's video backend (`wayland`, `x11`, `kmsdrm`) |
 
-### Handheld / aarch64
-
-aarch64 binaries are built by GitHub Actions on a native arm64 runner — grab them from
-the **Build linux ARM** workflow's artifacts, or from a published release. On-device the
-binary uses SDL2's `kmsdrm` driver and the system's Mali EGL/GLES libraries.
-
-Porting status and the PortMaster packaging plan: [`docs/HANDHELD_PORT.md`](docs/HANDHELD_PORT.md).
-
 ## Status
 
-Experimental. Basic page rendering and navigation work. WebGL is disabled on devices
-whose EGL stack is too old for surfman (e.g. EGL 1.4 Mali blobs); everything else renders
-normally. Many browser features are not yet implemented.
+Experimental. Basic page rendering and navigation work. WebGL is disabled on devices whose EGL stack is too old for surfman (e.g. EGL 1.4 Mali blobs); everything else renders normally. Many browser features are not yet implemented.
 
 ## References
 
