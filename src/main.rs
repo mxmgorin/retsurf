@@ -35,7 +35,7 @@ fn main() {
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Error initializing crypto provider");
-    let mut app_config = config::AppConfig::default();
+    let mut app_config = config::AppConfig::load();
     if let Ok(v) = std::env::var("RETSURF_GLES") {
         app_config.interface.use_gles = v != "0";
     }

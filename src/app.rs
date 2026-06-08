@@ -41,6 +41,7 @@ impl App {
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;
         let ui = AppUi::new(&window);
+        let gamepad = Gamepad::new(config.gamepad);
         log::info!("init: app constructed");
 
         Ok(Self {
@@ -49,7 +50,7 @@ impl App {
             browser,
             event_handler,
             ui,
-            gamepad: Gamepad::new(),
+            gamepad,
             state: AppState::Initialized,
         })
     }
