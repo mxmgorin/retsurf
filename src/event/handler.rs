@@ -155,13 +155,13 @@ impl AppEventHandler {
                 browser.handle_input(event);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {
-                gamepad.on_axis(axis, value, ui, browser, commands);
+                gamepad.on_axis(axis, value, commands);
             }
             Event::ControllerButtonDown { button, .. } => {
-                gamepad.on_button(button, true, window, ui, browser, commands);
+                gamepad.on_button(button, true, commands);
             }
             Event::ControllerButtonUp { button, .. } => {
-                gamepad.on_button(button, false, window, ui, browser, commands);
+                gamepad.on_button(button, false, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {

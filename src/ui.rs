@@ -2,7 +2,7 @@ use crate::{
     app::AppCommand,
     browser::{AppBrowser, BrowserCommand, BrowserState},
     config::InterfaceConfig,
-    osk::Osk,
+    osk::{Osk, OskCommand},
     window::AppWindow,
 };
 use egui_sdl2::egui::{self, Vec2};
@@ -144,53 +144,11 @@ impl AppUi {
         self.osk.visible
     }
 
-    /// Hide the on-screen keyboard.
-    #[inline]
-    pub fn osk_hide(&mut self) {
-        self.osk.hide();
-    }
-
-    /// Move the on-screen keyboard selection by one cell.
-    #[inline]
-    pub fn osk_move(&mut self, dx: i32, dy: i32) {
-        self.osk.move_sel(dx, dy);
-    }
-
-    /// Apply the selected on-screen-keyboard key, routing input to the address bar
-    /// if it holds focus, otherwise to the focused page element.
-    pub fn osk_activate(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+    /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input to
+    /// the address bar when it holds focus, otherwise to the focused page element.
+    pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let to_address_bar = self.address_bar_focused();
-        self.osk.activate(to_address_bar, browser, commands);
-    }
-
-    /// Backspace from the on-screen keyboard (the **X** button while open).
-    pub fn osk_backspace(&mut self, browser: &AppBrowser) {
-        let to_address_bar = self.address_bar_focused();
-        self.osk.backspace(to_address_bar, browser);
-    }
-
-    /// Type a space from the on-screen keyboard (the **Y** button).
-    pub fn osk_space(&mut self, browser: &AppBrowser) {
-        let to_address_bar = self.address_bar_focused();
-        self.osk.type_space(to_address_bar, browser);
-    }
-
-    /// Toggle Shift on the on-screen keyboard (the **L2** trigger).
-    #[inline]
-    pub fn osk_shift(&mut self) {
-        self.osk.toggle_shift();
-    }
-
-    /// Submit from the on-screen keyboard (the **R2** trigger).
-    pub fn osk_enter(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
-        let to_address_bar = self.address_bar_focused();
-        self.osk.enter(to_address_bar, browser, commands);
-    }
-
-    /// Show the on-screen keyboard (the **X** button while closed).
-    #[inline]
-    pub fn osk_show(&mut self) {
-        self.osk.visible = true;
+        self.osk.handle(cmd, to_address_bar, browser, commands);
     }
 
     /// Whether the address-bar text field currently holds keyboard focus.

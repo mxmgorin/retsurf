@@ -1,33 +1,28 @@
-use super::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
-use crate::app::AppCommand;
-use crate::browser::{AppBrowser, BrowserCommand};
+use crate::app::{AppCommand, InputCommand};
+use crate::browser::BrowserCommand;
 use crate::config::GamepadConfig;
-use crate::ui::AppUi;
-use crate::window::AppWindow;
+use crate::osk::OskCommand;
 use sdl2::controller::{Axis, Button};
-use std::time::{Duration, Instant};
 
 /// `i16::MAX`, the full-scale value SDL reports for a stick/trigger axis.
 const AXIS_MAX: f32 = 32767.0;
 
-/// In-app gamepad handling: the left stick / D-pad drive a virtual cursor, the
-/// right stick scrolls, and face/shoulder buttons map to clicks and navigation.
-/// **X** opens the on-screen keyboard, after which the buttons drive it instead
-/// (see [`Gamepad::on_button`]). On a handheld the pad is the only input device,
-/// so this is the primary UI.
+/// Translates raw controller input into [`InputCommand`]s — and nothing more. It
+/// holds device state (stick/D-pad/trigger positions) and maps physical controls
+/// to intents with a flat lookup; *what* each intent does, and where it goes, is
+/// decided by the central router (`App::route_input`). On a handheld the pad is
+/// the only input device, so this is the primary UI.
 pub struct Gamepad {
-    /// Left stick / D-pad vector, normalized and dead-zoned (-1..=1).
+    /// Left stick vector, normalized and dead-zoned (-1..=1).
     left: (f32, f32),
+    /// D-pad vector (digital -1/0/1), combined with the stick into the aim vector.
+    dpad: (f32, f32),
     /// Right stick vector, normalized and dead-zoned (-1..=1).
     right: (f32, f32),
     /// Latched L2/R2 trigger states, for press-edge detection.
     l2_down: bool,
     r2_down: bool,
-    /// Stick-driven OSK navigation: latched direction and next auto-repeat time.
-    osk_nav_dir: (i32, i32),
-    osk_nav_next: Instant,
-    last_tick: Instant,
-    /// Tunables (speeds, dead zones, repeat timing) loaded from the config file.
+    /// Tunables (dead zones, trigger threshold) loaded from the config file.
     cfg: GamepadConfig,
 }
 
@@ -35,31 +30,30 @@ impl Gamepad {
     pub fn new(cfg: GamepadConfig) -> Self {
         Self {
             left: (0.0, 0.0),
+            dpad: (0.0, 0.0),
             right: (0.0, 0.0),
             l2_down: false,
             r2_down: false,
-            osk_nav_dir: (0, 0),
-            osk_nav_next: Instant::now(),
-            last_tick: Instant::now(),
             cfg,
         }
     }
 
-    /// Whether the loop should keep ticking at ~60fps to animate the cursor/scroll.
-    pub fn is_active(&self) -> bool {
-        self.left != (0.0, 0.0) || self.right.1 != 0.0
+    /// Combined aim vector (left stick + D-pad), clamped to -1..=1.
+    fn aim(&self) -> (f32, f32) {
+        (
+            (self.left.0 + self.dpad.0).clamp(-1.0, 1.0),
+            (self.left.1 + self.dpad.1).clamp(-1.0, 1.0),
+        )
     }
 
-    pub fn on_axis(
-        &mut self,
-        axis: Axis,
-        value: i16,
-        ui: &mut AppUi,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        // L2/R2 are throttle-style axes: drive the open keyboard's Shift/Enter on
-        // the press edge so a single pull fires once.
+    /// Whether the loop should keep ticking at ~60fps to animate cursor/scroll.
+    pub fn is_active(&self) -> bool {
+        self.aim() != (0.0, 0.0) || self.right.1 != 0.0
+    }
+
+    pub fn on_axis(&mut self, axis: Axis, value: i16, commands: &mut Vec<AppCommand>) {
+        // L2/R2 are throttle-style axes: emit Shift/Enter on the press edge so a
+        // single pull fires once. The router applies them only when the OSK is open.
         if matches!(axis, Axis::TriggerLeft | Axis::TriggerRight) {
             let pressed = value as f32 / AXIS_MAX > self.cfg.trigger_threshold;
             let was = match axis {
@@ -68,11 +62,12 @@ impl Gamepad {
             };
             let rising = pressed && !*was;
             *was = pressed;
-            if rising && ui.osk_visible() {
-                match axis {
-                    Axis::TriggerLeft => ui.osk_shift(),
-                    _ => ui.osk_enter(browser, commands),
-                }
+            if rising {
+                let cmd = match axis {
+                    Axis::TriggerLeft => OskCommand::Shift,
+                    _ => OskCommand::Enter,
+                };
+                commands.push(AppCommand::Input(InputCommand::Osk(cmd)));
             }
             return;
         }
@@ -88,128 +83,35 @@ impl Gamepad {
         }
     }
 
-    /// Handle a controller button. Clicks/scrolls go straight to the page; nav
-    /// actions are queued as [`AppCommand`]s.
-    pub fn on_button(
-        &mut self,
-        button: Button,
-        pressed: bool,
-        window: &AppWindow,
-        ui: &mut AppUi,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        // While the keyboard is open, the buttons drive it, not the cursor:
-        // D-pad moves the selection, A types it, X deletes, Y spaces, B closes
-        // (L2/R2 shift/enter are handled in `on_axis`).
-        if ui.osk_visible() {
-            if !pressed {
-                return;
-            }
-            match button {
-                Button::DPadLeft => ui.osk_move(-1, 0),
-                Button::DPadRight => ui.osk_move(1, 0),
-                Button::DPadUp => ui.osk_move(0, -1),
-                Button::DPadDown => ui.osk_move(0, 1),
-                Button::A => ui.osk_activate(browser, commands),
-                Button::B => ui.osk_hide(),
-                Button::X => ui.osk_backspace(browser),
-                Button::Y => ui.osk_space(browser),
-                _ => {}
-            }
-            return;
-        }
-
-        // X opens the keyboard when it's closed.
-        if button == Button::X && pressed {
-            ui.osk_show();
-            return;
-        }
-
-        match button {
-            // A = left click at the cursor. Over the page, hit-test in Servo (move
-            // first, then press/release); over the toolbar, click the egui element.
-            Button::A => {
-                if ui.cursor_over_browser() {
-                    let (x, y) = ui.cursor_browser_rel();
-                    browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
-                    let event =
-                        into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
-                    browser.handle_input(servo::InputEvent::MouseButton(event));
-                } else {
-                    ui.click_ui(pressed, window);
-                }
-            }
-            // D-pad mirrors the left stick so it also drives the cursor.
-            Button::DPadLeft => self.left.0 = if pressed { -1.0 } else { 0.0 },
-            Button::DPadRight => self.left.0 = if pressed { 1.0 } else { 0.0 },
-            Button::DPadUp => self.left.1 = if pressed { -1.0 } else { 0.0 },
-            Button::DPadDown => self.left.1 = if pressed { 1.0 } else { 0.0 },
-            _ if !pressed => {} // remaining actions fire on press only
-            Button::B | Button::LeftShoulder => {
-                commands.push(AppCommand::Browser(BrowserCommand::Back))
-            }
-            Button::RightShoulder => commands.push(AppCommand::Browser(BrowserCommand::Foward)),
-            Button::Start => commands.push(AppCommand::Browser(BrowserCommand::Reload)),
-            _ => {}
-        }
+    /// Map a controller button to a command — a flat translation with no state
+    /// branches. The D-pad just feeds the aim vector (see [`Gamepad::tick`]); the
+    /// contextual A/B/X become intents the router resolves.
+    pub fn on_button(&mut self, button: Button, pressed: bool, commands: &mut Vec<AppCommand>) {
+        let cmd = match button {
+            // The D-pad contributes to the aim vector on both edges.
+            Button::DPadLeft => return self.dpad.0 = if pressed { -1.0 } else { 0.0 },
+            Button::DPadRight => return self.dpad.0 = if pressed { 1.0 } else { 0.0 },
+            Button::DPadUp => return self.dpad.1 = if pressed { -1.0 } else { 0.0 },
+            Button::DPadDown => return self.dpad.1 = if pressed { 1.0 } else { 0.0 },
+            // A clicks, so it needs both edges; everything else fires on press.
+            Button::A => AppCommand::Input(InputCommand::Primary(pressed)),
+            _ if !pressed => return,
+            Button::B => AppCommand::Input(InputCommand::Cancel),
+            Button::X => AppCommand::Input(InputCommand::Keyboard),
+            Button::Y => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
+            Button::LeftShoulder => AppCommand::Browser(BrowserCommand::Back),
+            Button::RightShoulder => AppCommand::Browser(BrowserCommand::Foward),
+            Button::Start => AppCommand::Browser(BrowserCommand::Reload),
+            _ => return,
+        };
+        commands.push(cmd);
     }
 
-    /// Advance the cursor and scroll by elapsed time, dispatching input to the page.
-    pub fn tick(&mut self, window: &AppWindow, ui: &mut AppUi, browser: &AppBrowser) {
-        let now = Instant::now();
-        let dt = (now - self.last_tick).as_secs_f32().min(0.1);
-        self.last_tick = now;
-
-        // While the keyboard is open, the left stick navigates its grid (with
-        // key-style auto-repeat) instead of moving the cursor; scroll is frozen.
-        if ui.osk_visible() {
-            let dir = osk_nav_dir(self.left, self.cfg.osk_nav_threshold);
-            if dir != self.osk_nav_dir {
-                self.osk_nav_dir = dir;
-                if dir != (0, 0) {
-                    ui.osk_move(dir.0, dir.1);
-                    self.osk_nav_next =
-                        now + Duration::from_millis(self.cfg.osk_nav_initial_delay_ms);
-                }
-            } else if dir != (0, 0) && now >= self.osk_nav_next {
-                ui.osk_move(dir.0, dir.1);
-                self.osk_nav_next = now + Duration::from_millis(self.cfg.osk_nav_repeat_ms);
-            }
-            return;
-        }
-
-        if self.left != (0.0, 0.0) {
-            ui.move_cursor(
-                self.left.0 * self.cfg.cursor_speed * dt,
-                self.left.1 * self.cfg.cursor_speed * dt,
-                window,
-            );
-            // Only hover the page while the cursor is actually over it; over the
-            // toolbar there's nothing in Servo to point at.
-            if ui.cursor_over_browser() {
-                let (x, y) = ui.cursor_browser_rel();
-                browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
-            }
-        }
-
-        if self.right.1 != 0.0 && ui.cursor_over_browser() {
-            // Stick down (+1) reveals lower content (positive Servo dy).
-            let dy = self.right.1 * self.cfg.scroll_speed * dt;
-            let (x, y) = ui.cursor_browser_rel();
-            browser.scroll(0.0, dy, x, y);
-        }
-    }
-}
-
-/// Reduce a stick vector to a single discrete grid step along its dominant axis,
-/// or `(0, 0)` when the stick is within the navigation dead zone (`threshold`).
-fn osk_nav_dir(v: (f32, f32), threshold: f32) -> (i32, i32) {
-    if v.0.abs().max(v.1.abs()) < threshold {
-        (0, 0)
-    } else if v.0.abs() >= v.1.abs() {
-        (v.0.signum() as i32, 0)
-    } else {
-        (0, v.1.signum() as i32)
+    /// Emit this frame's analog state for the router to apply.
+    pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
+        commands.push(AppCommand::Input(InputCommand::Analog {
+            aim: self.aim(),
+            scroll: self.right.1,
+        }));
     }
 }

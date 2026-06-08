@@ -9,6 +9,30 @@ use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
 
+/// An operation on the on-screen keyboard. The router produces these from
+/// contextual buttons (A→Activate, X→Show/Backspace, B→Hide), the stick (→Move)
+/// and the dedicated keys (Space/Shift/Enter), then dispatches them via
+/// [`Osk::handle`].
+#[derive(Clone, Copy)]
+pub enum OskCommand {
+    /// Show the keyboard.
+    Show,
+    /// Hide the keyboard.
+    Hide,
+    /// Apply the selected key.
+    Activate,
+    /// Delete the character before the caret.
+    Backspace,
+    /// Type a space.
+    Space,
+    /// Toggle the sticky shift.
+    Shift,
+    /// Submit (load the address bar or send Enter), then hide.
+    Enter,
+    /// Move the selection by one cell (`dx`, `dy` ∈ -1..=1).
+    Move(i32, i32),
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Key {
     Char(char),
@@ -93,21 +117,38 @@ impl Osk {
         }
     }
 
-    pub fn hide(&mut self) {
-        self.visible = false;
+    /// Dispatch an [`OskCommand`]. `to_address_bar` selects where typed input
+    /// goes: the egui address bar, or the web page's focused element.
+    pub fn handle(
+        &mut self,
+        cmd: OskCommand,
+        to_address_bar: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        match cmd {
+            OskCommand::Show => self.visible = true,
+            OskCommand::Hide => self.visible = false,
+            OskCommand::Activate => self.activate(to_address_bar, browser, commands),
+            OskCommand::Backspace => self.backspace(to_address_bar, browser),
+            OskCommand::Space => self.type_space(to_address_bar, browser),
+            OskCommand::Shift => self.toggle_shift(),
+            OskCommand::Enter => self.enter(to_address_bar, browser, commands),
+            OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
+        }
     }
 
     pub fn selected(&self) -> (usize, usize) {
         (self.row, self.col)
     }
 
-    pub fn current(&self) -> Key {
+    fn current(&self) -> Key {
         LAYOUT[self.row][self.col]
     }
 
     /// Move the selection by one cell; `dx`/`dy` are -1, 0 or 1. The column is
     /// clamped to the (possibly shorter) destination row.
-    pub fn move_sel(&mut self, dx: i32, dy: i32) {
+    fn move_sel(&mut self, dx: i32, dy: i32) {
         let rows = LAYOUT.len() as i32;
         self.row = (self.row as i32 + dy).clamp(0, rows - 1) as usize;
         let cols = LAYOUT[self.row].len() as i32;
@@ -117,7 +158,7 @@ impl Osk {
     /// Apply the selected key. Input is routed to the focused text field: the egui
     /// address bar when `to_address_bar`, otherwise the web page's focused element
     /// (via Servo keyboard events).
-    pub fn activate(
+    fn activate(
         &mut self,
         to_address_bar: bool,
         browser: &AppBrowser,
@@ -143,17 +184,17 @@ impl Osk {
     }
 
     /// Toggle the sticky Shift state (the **Shift** key or **L2**).
-    pub fn toggle_shift(&mut self) {
+    fn toggle_shift(&mut self) {
         self.shift = !self.shift;
     }
 
     /// Type a space (the **Space** key or **Y**).
-    pub fn type_space(&self, to_address_bar: bool, browser: &AppBrowser) {
+    fn type_space(&self, to_address_bar: bool, browser: &AppBrowser) {
         input_char(to_address_bar, ' ', self.shift, browser);
     }
 
     /// Delete the character before the caret (the **Backspace** key or **X**).
-    pub fn backspace(&self, to_address_bar: bool, browser: &AppBrowser) {
+    fn backspace(&self, to_address_bar: bool, browser: &AppBrowser) {
         if to_address_bar {
             browser.get_state_mut().get_location_mut().pop();
         } else {
@@ -163,7 +204,7 @@ impl Osk {
 
     /// Submit: load the address bar or send Enter to the page, then hide (the
     /// **Go** key or **R2**).
-    pub fn enter(
+    fn enter(
         &mut self,
         to_address_bar: bool,
         browser: &AppBrowser,
@@ -174,7 +215,7 @@ impl Osk {
         } else {
             send_named(browser, NamedKey::Enter, Code::Enter);
         }
-        self.hide();
+        self.visible = false;
     }
 }
 
