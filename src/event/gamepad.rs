@@ -4,13 +4,19 @@ use crate::browser::{AppBrowser, BrowserCommand};
 use crate::ui::AppUi;
 use crate::window::AppWindow;
 use sdl2::controller::{Axis, Button};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const AXIS_MAX: f32 = 32767.0;
 /// Stick deflection below this (normalized) is treated as centered.
 const DEADZONE: f32 = 0.25;
 /// Trigger pull (normalized) above which L2/R2 count as pressed.
 const TRIGGER_THRESHOLD: f32 = 0.5;
+/// Stick deflection above which it counts as a directional press for OSK nav.
+const OSK_NAV_THRESHOLD: f32 = 0.5;
+/// Auto-repeat for stick-driven OSK navigation: delay before the first repeat,
+/// then the interval between repeats while the stick is held.
+const OSK_NAV_INITIAL_DELAY: Duration = Duration::from_millis(350);
+const OSK_NAV_REPEAT: Duration = Duration::from_millis(140);
 /// Cursor speed at full stick deflection, logical px per second.
 const CURSOR_SPEED: f32 = 750.0;
 /// Scroll speed at full stick deflection, device px per second.
@@ -29,6 +35,9 @@ pub struct Gamepad {
     /// Latched L2/R2 trigger states, for press-edge detection.
     l2_down: bool,
     r2_down: bool,
+    /// Stick-driven OSK navigation: latched direction and next auto-repeat time.
+    osk_nav_dir: (i32, i32),
+    osk_nav_next: Instant,
     last_tick: Instant,
 }
 
@@ -39,6 +48,8 @@ impl Gamepad {
             right: (0.0, 0.0),
             l2_down: false,
             r2_down: false,
+            osk_nav_dir: (0, 0),
+            osk_nav_next: Instant::now(),
             last_tick: Instant::now(),
         }
     }
@@ -153,8 +164,20 @@ impl Gamepad {
         let dt = (now - self.last_tick).as_secs_f32().min(0.1);
         self.last_tick = now;
 
-        // While the keyboard is open, freeze cursor/scroll motion.
+        // While the keyboard is open, the left stick navigates its grid (with
+        // key-style auto-repeat) instead of moving the cursor; scroll is frozen.
         if ui.osk_visible() {
+            let dir = osk_nav_dir(self.left);
+            if dir != self.osk_nav_dir {
+                self.osk_nav_dir = dir;
+                if dir != (0, 0) {
+                    ui.osk_move(dir.0, dir.1);
+                    self.osk_nav_next = now + OSK_NAV_INITIAL_DELAY;
+                }
+            } else if dir != (0, 0) && now >= self.osk_nav_next {
+                ui.osk_move(dir.0, dir.1);
+                self.osk_nav_next = now + OSK_NAV_REPEAT;
+            }
             return;
         }
 
@@ -174,5 +197,17 @@ impl Gamepad {
             let (x, y) = ui.cursor_browser_rel();
             browser.scroll(0.0, dy, x, y);
         }
+    }
+}
+
+/// Reduce a stick vector to a single discrete grid step along its dominant axis,
+/// or `(0, 0)` when the stick is within the navigation dead zone.
+fn osk_nav_dir(v: (f32, f32)) -> (i32, i32) {
+    if v.0.abs().max(v.1.abs()) < OSK_NAV_THRESHOLD {
+        (0, 0)
+    } else if v.0.abs() >= v.1.abs() {
+        (v.0.signum() as i32, 0)
+    } else {
+        (0, v.1.signum() as i32)
     }
 }
