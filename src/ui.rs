@@ -73,17 +73,54 @@ impl AppUi {
     }
 
     /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
-    /// to the web view: X spans the window, Y stays below the toolbar (its buttons
-    /// aren't clickable with the cursor anyway, so there's no reason to go there).
+    /// to the window (inset by the cursor's painted extent so the whole circle
+    /// stays on screen); it may roam over the toolbar so its buttons are clickable.
     #[inline]
     pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) {
         let (w, h) = window.size();
-        // Keep the whole circle inside the web view: inset every edge by the
-        // cursor's painted extent, and the top by the toolbar height too.
         self.cursor.0 = (self.cursor.0 + dx).clamp(CURSOR_EXTENT, w as f32 - CURSOR_EXTENT);
-        self.cursor.1 = (self.cursor.1 + dy)
-            .clamp(self.webview_top + CURSOR_EXTENT, h as f32 - CURSOR_EXTENT);
+        self.cursor.1 = (self.cursor.1 + dy).clamp(CURSOR_EXTENT, h as f32 - CURSOR_EXTENT);
         self.cursor_last_move = Some(Instant::now());
+    }
+
+    /// Whether the cursor is over the web view (below the toolbar). Clicks there
+    /// go to the page; clicks above go to the egui toolbar via [`AppUi::click_ui`].
+    #[inline]
+    pub fn cursor_over_browser(&self) -> bool {
+        self.cursor.1 >= self.webview_top
+    }
+
+    /// Click the egui UI element under the cursor by feeding the backend a
+    /// synthetic mouse button event (egui never sees the gamepad otherwise).
+    /// `pressed` mirrors the A button's press/release so egui registers a click.
+    pub fn click_ui(&mut self, pressed: bool, window: &AppWindow) {
+        let ppp = self.egui.ctx.pixels_per_point();
+        let (x, y) = ((self.cursor.0 * ppp) as i32, (self.cursor.1 * ppp) as i32);
+        let win = window.get_sdl2_window();
+        let window_id = win.id();
+        let event = if pressed {
+            sdl2::event::Event::MouseButtonDown {
+                timestamp: 0,
+                window_id,
+                which: 0,
+                mouse_btn: sdl2::mouse::MouseButton::Left,
+                clicks: 1,
+                x,
+                y,
+            }
+        } else {
+            sdl2::event::Event::MouseButtonUp {
+                timestamp: 0,
+                window_id,
+                which: 0,
+                mouse_btn: sdl2::mouse::MouseButton::Left,
+                clicks: 1,
+                x,
+                y,
+            }
+        };
+        let _ = self.egui.state.on_event(win, &event);
+        self.repaint_pending = true;
     }
 
     /// Time left before the cursor auto-hides, or `None` if it's already hidden

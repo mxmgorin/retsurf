@@ -94,6 +94,7 @@ impl Gamepad {
         &mut self,
         button: Button,
         pressed: bool,
+        window: &AppWindow,
         ui: &mut AppUi,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
@@ -126,13 +127,18 @@ impl Gamepad {
         }
 
         match button {
-            // A = left click at the cursor. Send a move first so Servo hit-tests
-            // the right spot, then the button press/release.
+            // A = left click at the cursor. Over the page, hit-test in Servo (move
+            // first, then press/release); over the toolbar, click the egui element.
             Button::A => {
-                let (x, y) = ui.cursor_browser_rel();
-                browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
-                let event = into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
-                browser.handle_input(servo::InputEvent::MouseButton(event));
+                if ui.cursor_over_browser() {
+                    let (x, y) = ui.cursor_browser_rel();
+                    browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+                    let event =
+                        into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
+                    browser.handle_input(servo::InputEvent::MouseButton(event));
+                } else {
+                    ui.click_ui(pressed, window);
+                }
             }
             // D-pad mirrors the left stick so it also drives the cursor.
             Button::DPadLeft => self.left.0 = if pressed { -1.0 } else { 0.0 },
@@ -179,11 +185,15 @@ impl Gamepad {
                 self.left.1 * self.cfg.cursor_speed * dt,
                 window,
             );
-            let (x, y) = ui.cursor_browser_rel();
-            browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+            // Only hover the page while the cursor is actually over it; over the
+            // toolbar there's nothing in Servo to point at.
+            if ui.cursor_over_browser() {
+                let (x, y) = ui.cursor_browser_rel();
+                browser.handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+            }
         }
 
-        if self.right.1 != 0.0 {
+        if self.right.1 != 0.0 && ui.cursor_over_browser() {
             // Stick down (+1) reveals lower content (positive Servo dy).
             let dy = self.right.1 * self.cfg.scroll_speed * dt;
             let (x, y) = ui.cursor_browser_rel();
