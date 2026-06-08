@@ -9,6 +9,8 @@ use std::time::Instant;
 const AXIS_MAX: f32 = 32767.0;
 /// Stick deflection below this (normalized) is treated as centered.
 const DEADZONE: f32 = 0.25;
+/// Trigger pull (normalized) above which L2/R2 count as pressed.
+const TRIGGER_THRESHOLD: f32 = 0.5;
 /// Cursor speed at full stick deflection, logical px per second.
 const CURSOR_SPEED: f32 = 750.0;
 /// Scroll speed at full stick deflection, device px per second.
@@ -16,12 +18,17 @@ const SCROLL_SPEED: f32 = 1600.0;
 
 /// In-app gamepad handling: the left stick / D-pad drive a virtual cursor, the
 /// right stick scrolls, and face/shoulder buttons map to clicks and navigation.
-/// On a handheld the pad is the only input device, so this is the primary UI.
+/// **X** opens the on-screen keyboard, after which the buttons drive it instead
+/// (see [`Gamepad::on_button`]). On a handheld the pad is the only input device,
+/// so this is the primary UI.
 pub struct Gamepad {
     /// Left stick / D-pad vector, normalized and dead-zoned (-1..=1).
     left: (f32, f32),
     /// Right stick vector, normalized and dead-zoned (-1..=1).
     right: (f32, f32),
+    /// Latched L2/R2 trigger states, for press-edge detection.
+    l2_down: bool,
+    r2_down: bool,
     last_tick: Instant,
 }
 
@@ -30,6 +37,8 @@ impl Gamepad {
         Self {
             left: (0.0, 0.0),
             right: (0.0, 0.0),
+            l2_down: false,
+            r2_down: false,
             last_tick: Instant::now(),
         }
     }
@@ -39,7 +48,33 @@ impl Gamepad {
         self.left != (0.0, 0.0) || self.right.1 != 0.0
     }
 
-    pub fn on_axis(&mut self, axis: Axis, value: i16) {
+    pub fn on_axis(
+        &mut self,
+        axis: Axis,
+        value: i16,
+        ui: &mut AppUi,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        // L2/R2 are throttle-style axes: drive the open keyboard's Shift/Enter on
+        // the press edge so a single pull fires once.
+        if matches!(axis, Axis::TriggerLeft | Axis::TriggerRight) {
+            let pressed = value as f32 / AXIS_MAX > TRIGGER_THRESHOLD;
+            let was = match axis {
+                Axis::TriggerLeft => &mut self.l2_down,
+                _ => &mut self.r2_down,
+            };
+            let rising = pressed && !*was;
+            *was = pressed;
+            if rising && ui.osk_visible() {
+                match axis {
+                    Axis::TriggerLeft => ui.osk_shift(),
+                    _ => ui.osk_enter(browser, commands),
+                }
+            }
+            return;
+        }
+
         let v = value as f32 / AXIS_MAX;
         let v = if v.abs() < DEADZONE { 0.0 } else { v };
         match axis {
@@ -47,7 +82,7 @@ impl Gamepad {
             Axis::LeftY => self.left.1 = v,
             Axis::RightX => self.right.0 = v,
             Axis::RightY => self.right.1 = v,
-            _ => {} // triggers unused for now
+            _ => {}
         }
     }
 
@@ -61,13 +96,9 @@ impl Gamepad {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        // X toggles the on-screen keyboard regardless of mode.
-        if button == Button::X && pressed {
-            ui.toggle_osk();
-            return;
-        }
-
-        // While the keyboard is open, the D-pad/A/B drive it, not the cursor.
+        // While the keyboard is open, the buttons drive it, not the cursor:
+        // D-pad moves the selection, A types it, X deletes, Y spaces, B closes
+        // (L2/R2 shift/enter are handled in `on_axis`).
         if ui.osk_visible() {
             if !pressed {
                 return;
@@ -79,8 +110,16 @@ impl Gamepad {
                 Button::DPadDown => ui.osk_move(0, 1),
                 Button::A => ui.osk_activate(browser, commands),
                 Button::B => ui.osk_hide(),
+                Button::X => ui.osk_backspace(browser),
+                Button::Y => ui.osk_space(browser),
                 _ => {}
             }
+            return;
+        }
+
+        // X opens the keyboard when it's closed.
+        if button == Button::X && pressed {
+            ui.osk_show();
             return;
         }
 

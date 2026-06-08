@@ -155,7 +155,7 @@ impl AppEventHandler {
                 browser.handle_input(event);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {
-                gamepad.on_axis(axis, value);
+                gamepad.on_axis(axis, value, ui, browser, commands);
             }
             Event::ControllerButtonDown { button, .. } => {
                 gamepad.on_button(button, true, ui, browser, commands);

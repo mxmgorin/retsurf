@@ -1,7 +1,8 @@
 //! On-screen keyboard for gamepad text entry, styled after the Steam Deck's.
 //! Opened with the **X** button; keys are typed into the address bar (which also
 //! doubles as search). Owned and rendered by [`crate::ui`], which drives it from
-//! gamepad input.
+//! gamepad input. Beyond grid navigation (D-pad + **A**), the common keys have
+//! direct shortcuts: **X** backspace, **Y** space, **L2** shift, **R2** enter.
 
 use crate::app::AppCommand;
 use crate::browser::{AppBrowser, BrowserCommand};
@@ -92,10 +93,6 @@ impl Osk {
         }
     }
 
-    pub fn toggle(&mut self) {
-        self.visible = !self.visible;
-    }
-
     pub fn hide(&mut self) {
         self.visible = false;
     }
@@ -127,19 +124,13 @@ impl Osk {
         commands: &mut Vec<AppCommand>,
     ) {
         match self.current() {
-            Shift => self.shift = !self.shift,
+            Shift => self.toggle_shift(),
             Char(c) => {
                 let c = if self.shift { shift_char(c) } else { c };
                 input_char(to_address_bar, c, self.shift, browser);
             }
-            Space => input_char(to_address_bar, ' ', self.shift, browser),
-            Backspace => {
-                if to_address_bar {
-                    browser.get_state_mut().get_location_mut().pop();
-                } else {
-                    send_named(browser, NamedKey::Backspace, Code::Backspace);
-                }
-            }
+            Space => self.type_space(to_address_bar, browser),
+            Backspace => self.backspace(to_address_bar, browser),
             // Arrow keys are sent to the focused page element only; the address
             // bar is append-only here, so they do nothing there.
             Left if !to_address_bar => send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft),
@@ -147,15 +138,43 @@ impl Osk {
             Up if !to_address_bar => send_named(browser, NamedKey::ArrowUp, Code::ArrowUp),
             Down if !to_address_bar => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
             Left | Right | Up | Down => {}
-            Go => {
-                if to_address_bar {
-                    commands.push(AppCommand::Browser(BrowserCommand::Load));
-                } else {
-                    send_named(browser, NamedKey::Enter, Code::Enter);
-                }
-                self.hide();
-            }
+            Go => self.enter(to_address_bar, browser, commands),
         }
+    }
+
+    /// Toggle the sticky Shift state (the **Shift** key or **L2**).
+    pub fn toggle_shift(&mut self) {
+        self.shift = !self.shift;
+    }
+
+    /// Type a space (the **Space** key or **Y**).
+    pub fn type_space(&self, to_address_bar: bool, browser: &AppBrowser) {
+        input_char(to_address_bar, ' ', self.shift, browser);
+    }
+
+    /// Delete the character before the caret (the **Backspace** key or **X**).
+    pub fn backspace(&self, to_address_bar: bool, browser: &AppBrowser) {
+        if to_address_bar {
+            browser.get_state_mut().get_location_mut().pop();
+        } else {
+            send_named(browser, NamedKey::Backspace, Code::Backspace);
+        }
+    }
+
+    /// Submit: load the address bar or send Enter to the page, then hide (the
+    /// **Go** key or **R2**).
+    pub fn enter(
+        &mut self,
+        to_address_bar: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        if to_address_bar {
+            commands.push(AppCommand::Browser(BrowserCommand::Load));
+        } else {
+            send_named(browser, NamedKey::Enter, Code::Enter);
+        }
+        self.hide();
     }
 }
 
