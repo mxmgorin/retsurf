@@ -100,6 +100,10 @@ pub struct InterfaceConfig {
     /// Request an OpenGL ES context (required on Mali handhelds) instead of
     /// desktop GL. Can be overridden at startup via `RETSURF_GLES=0`.
     pub use_gles: bool,
+    /// How long the gamepad cursor stays visible after the last movement, in ms.
+    /// It hides when idle (nothing to hover) but lingers so you can see where it
+    /// landed before clicking.
+    pub cursor_linger_ms: u64,
 }
 
 impl Default for InterfaceConfig {
@@ -108,6 +112,7 @@ impl Default for InterfaceConfig {
             width: 640,
             height: 480,
             use_gles: true,
+            cursor_linger_ms: 1500,
         }
     }
 }

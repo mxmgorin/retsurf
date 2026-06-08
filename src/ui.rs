@@ -1,17 +1,28 @@
 use crate::{
     app::AppCommand,
     browser::{AppBrowser, BrowserCommand, BrowserState},
+    config::InterfaceConfig,
     osk::Osk,
     window::AppWindow,
 };
 use egui_sdl2::egui::{self, Vec2};
 use egui_sdl2::EguiGlow;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Gamepad cursor overlay: circle radius and outline width (logical px).
+const CURSOR_RADIUS: f32 = 5.0;
+const CURSOR_STROKE: f32 = 1.5;
+/// The cursor's full painted half-extent — how far it reaches from its center,
+/// used to keep the whole glyph (not just the center) inside the web view.
+const CURSOR_EXTENT: f32 = CURSOR_RADIUS + CURSOR_STROKE / 2.0;
 
 pub struct AppUi {
     egui: EguiGlow,
     repaint_delay: Option<Duration>,
-    toolbar_size: egui::Vec2,
+    /// Y of the web view's top edge (logical px) = the real toolbar bottom,
+    /// measured from the central panel each frame. Used to map cursor↔browser
+    /// coordinates and to keep the cursor out of the toolbar.
+    webview_top: f32,
     repaint_pending: bool,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     browser_tex_id: egui::TextureId,
@@ -20,12 +31,17 @@ pub struct AppUi {
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via [`AppUi::move_cursor`].
     cursor: (f32, f32),
+    /// When the cursor last moved, or `None` if it has never moved. Drives the
+    /// auto-hide: the overlay shows only within `cursor_linger` of this.
+    cursor_last_move: Option<Instant>,
+    /// How long the cursor stays visible after a move (from the interface config).
+    cursor_linger: Duration,
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
 }
 
 impl AppUi {
-    pub fn new(window: &AppWindow) -> Self {
+    pub fn new(window: &AppWindow, interface: &InterfaceConfig) -> Self {
         let mut egui =
             EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
         // Register the FBO color texture once; its GL name is stable across
@@ -37,7 +53,7 @@ impl AppUi {
         Self {
             egui,
             repaint_delay: None,
-            toolbar_size: egui::Vec2::default(),
+            webview_top: 0.0,
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
@@ -45,6 +61,8 @@ impl AppUi {
                 let (w, h) = window.size();
                 (w as f32 / 2.0, h as f32 / 2.0)
             },
+            cursor_last_move: None,
+            cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(),
         }
     }
@@ -54,12 +72,26 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
-    /// Move the gamepad cursor by a logical-px delta, clamped to the window.
+    /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
+    /// to the web view: X spans the window, Y stays below the toolbar (its buttons
+    /// aren't clickable with the cursor anyway, so there's no reason to go there).
     #[inline]
     pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) {
         let (w, h) = window.size();
-        self.cursor.0 = (self.cursor.0 + dx).clamp(0.0, w as f32);
-        self.cursor.1 = (self.cursor.1 + dy).clamp(0.0, h as f32);
+        // Keep the whole circle inside the web view: inset every edge by the
+        // cursor's painted extent, and the top by the toolbar height too.
+        self.cursor.0 = (self.cursor.0 + dx).clamp(CURSOR_EXTENT, w as f32 - CURSOR_EXTENT);
+        self.cursor.1 = (self.cursor.1 + dy)
+            .clamp(self.webview_top + CURSOR_EXTENT, h as f32 - CURSOR_EXTENT);
+        self.cursor_last_move = Some(Instant::now());
+    }
+
+    /// Time left before the cursor auto-hides, or `None` if it's already hidden
+    /// (never moved or idle past `cursor_linger`).
+    #[inline]
+    fn cursor_visible_for(&self) -> Option<Duration> {
+        self.cursor_last_move
+            .and_then(|t| self.cursor_linger.checked_sub(t.elapsed()))
     }
 
     /// The gamepad cursor in browser-relative coordinates (below the toolbar),
@@ -133,7 +165,7 @@ impl AppUi {
 
     #[inline]
     pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
-        (x, y - self.toolbar_size.y)
+        (x, y - self.webview_top)
     }
 
     /// Handles the event and returns whether it is consumed
@@ -147,6 +179,16 @@ impl AppUi {
     pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
         let mut desired_px: Option<(u32, u32)> = None;
 
+        // The cursor draws only while it lingers after a move. When it does, ask
+        // the loop to wake when the linger ends so it gets erased even if no other
+        // event arrives; otherwise leave the idle wait untouched.
+        let cursor_visible = if self.osk.visible {
+            None
+        } else {
+            self.cursor_visible_for()
+        };
+        self.repaint_delay = cursor_visible;
+
         {
             let mut state = browser.get_state_mut();
             self.egui.run(|ctx| {
@@ -158,13 +200,16 @@ impl AppUi {
                 );
                 root.set_clip_rect(ctx.content_rect());
 
-                add_toolbar(&mut root, &mut state, commands, &mut self.toolbar_size);
+                add_toolbar(&mut root, &mut state, commands);
 
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
                     .frame(frame)
                     .show_inside(&mut root, |ui| {
                         let rect = ui.max_rect();
+                        // The panel's top edge is the real toolbar bottom (incl.
+                        // frame margins), so map cursor/clicks against it.
+                        self.webview_top = rect.min.y;
                         ui.allocate_rect(rect, egui::Sense::hover());
 
                         desired_px = Some((
@@ -183,7 +228,7 @@ impl AppUi {
 
                 if self.osk.visible {
                     add_osk(ctx, self.osk.selected(), self.osk.shift);
-                } else {
+                } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.
                     let painter = ctx.layer_painter(egui::LayerId::new(
@@ -191,8 +236,12 @@ impl AppUi {
                         egui::Id::new("gamepad_cursor"),
                     ));
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
-                    painter.circle_filled(pos, 5.0, egui::Color32::from_white_alpha(235));
-                    painter.circle_stroke(pos, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
+                    painter.circle_filled(pos, CURSOR_RADIUS, egui::Color32::from_white_alpha(235));
+                    painter.circle_stroke(
+                        pos,
+                        CURSOR_RADIUS,
+                        egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK),
+                    );
                 }
             });
         }
@@ -226,7 +275,7 @@ impl AppUi {
             return false;
         };
 
-        pos.y < self.toolbar_size.y
+        pos.y < self.webview_top
     }
 }
 
@@ -253,7 +302,6 @@ fn add_toolbar(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
-    size: &mut egui::Vec2,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -282,8 +330,6 @@ fn add_toolbar(
                 add_location_text(ui, state.get_location_mut(), commands);
             },
         );
-
-        *size = ui.min_size();
     });
 }
 
