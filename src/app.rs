@@ -198,8 +198,13 @@ impl App {
     /// while the keyboard is open, otherwise cursor movement and page scroll.
     fn route_analog(&mut self, aim: (f32, f32), scroll: f32, out: &mut Vec<AppCommand>) {
         let now = Instant::now();
-        let dt = (now - self.last_tick).as_secs_f32().min(0.1);
+        let dt = (now - self.last_tick).as_secs_f32();
         self.last_tick = now;
+        // The loop blocks on input while idle, so the first frame after a press
+        // sees the whole idle gap as `dt`. Integrating that teleports the cursor
+        // (a D-pad tap jumps ~`cursor_speed * dt`), so treat any over-long frame
+        // as a fresh start: no motion this frame, normal motion from the next.
+        let dt = if dt > 0.1 { 0.0 } else { dt };
         let cfg = self.config.gamepad;
 
         if self.ui.osk_visible() {
