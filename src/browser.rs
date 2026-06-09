@@ -49,6 +49,10 @@ impl BrowserState {
     pub fn get_location_mut(&mut self) -> &mut String {
         &mut self.location
     }
+
+    pub fn get_location(&self) -> &str {
+        &self.location
+    }
 }
 
 impl Default for BrowserState {

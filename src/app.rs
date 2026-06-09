@@ -5,7 +5,10 @@ use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::event::user::UserEventSender;
 use crate::osk::OskCommand;
 use crate::ui::AppUi;
-use crate::{config::AppConfig, window::AppWindow};
+use crate::{
+    config::{AppConfig, GamepadConfig},
+    window::AppWindow,
+};
 use sdl2::Sdl;
 use std::time::{Duration, Instant};
 
@@ -22,6 +25,29 @@ pub enum AppCommand {
     Resize(u32, u32),
     Browser(BrowserCommand),
     Input(InputCommand),
+    Bookmark(BookmarkAction),
+}
+
+/// Toolbar-driven bookmark actions (the in-overlay navigation is routed from
+/// [`InputCommand`] instead, see [`App::route_input`]).
+#[derive(Clone)]
+pub enum BookmarkAction {
+    /// Add the current page to bookmarks, or remove it if already saved (★).
+    ToggleCurrent,
+    /// Open the full-screen bookmarks overlay (☰).
+    Open,
+    /// Close the overlay (clicking its Close button).
+    Close,
+    /// Load a specific bookmark and close the overlay (clicking a list row).
+    OpenUrl(String),
+    /// Remove the bookmark at `index` (clicking its ✖ button).
+    Remove(usize),
+    /// Open the highlighted bookmark (keyboard Enter).
+    OpenSelected,
+    /// Remove the highlighted bookmark (keyboard Delete).
+    RemoveSelected,
+    /// Move the overlay selection by `dy` rows (keyboard arrows).
+    Move(i32),
 }
 
 /// A *contextual* input intent from a control device — one whose effect depends
@@ -140,7 +166,52 @@ impl App {
                 self.browser.execute_command(command, &self.config.browser)
             }
             AppCommand::Input(command) => self.route_input(command, out),
+            AppCommand::Bookmark(action) => self.bookmark_action(action),
         };
+    }
+
+    /// Toolbar bookmark buttons: toggle the current page, or open the overlay.
+    fn bookmark_action(&mut self, action: &BookmarkAction) {
+        match action {
+            BookmarkAction::ToggleCurrent => {
+                let url = self.browser.get_state_mut().get_location().to_string();
+                if !url.is_empty() {
+                    self.ui.bookmark_toggle(&url);
+                }
+            }
+            // Select toggles the overlay (the ☰ button only ever opens it, since
+            // it's hidden behind the overlay once shown).
+            BookmarkAction::Open => {
+                if self.ui.bookmarks_visible() {
+                    self.ui.bookmarks_hide();
+                } else {
+                    self.ui.bookmarks_open();
+                }
+            }
+            BookmarkAction::Close => self.ui.bookmarks_hide(),
+            BookmarkAction::OpenUrl(url) => self.open_bookmark(url.clone()),
+            BookmarkAction::Remove(index) => self.ui.bookmarks_remove_at(*index),
+            BookmarkAction::OpenSelected => self.open_selected_bookmark(),
+            BookmarkAction::RemoveSelected => self.ui.bookmarks_remove_selected(),
+            BookmarkAction::Move(dy) => self.ui.bookmarks_move(*dy),
+        }
+    }
+
+    /// Open the highlighted bookmark (the **A** button) and close the overlay.
+    fn open_selected_bookmark(&mut self) {
+        if let Some(url) = self.ui.bookmarks_selected_url() {
+            self.open_bookmark(url);
+        } else {
+            self.ui.bookmarks_hide();
+        }
+    }
+
+    /// Load `url` in the focused tab and close the overlay.
+    fn open_bookmark(&mut self, url: String) {
+        *self.browser.get_state_mut().get_location_mut() = url;
+        self.browser
+            .execute_command(&BrowserCommand::Load, &self.config.browser);
+        self.ui.bookmarks_hide();
     }
 
     /// Central input router: decide what a contextual [`InputCommand`] does given
@@ -148,9 +219,19 @@ impl App {
     /// or toolbar?" branches live — the gamepad itself stays state-agnostic.
     fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         match command {
-            InputCommand::Primary(pressed) => self.primary_action(*pressed, out),
+            InputCommand::Primary(pressed) => {
+                if self.ui.bookmarks_visible() {
+                    if *pressed {
+                        self.open_selected_bookmark();
+                    }
+                } else {
+                    self.primary_action(*pressed, out);
+                }
+            }
             InputCommand::Cancel => {
-                if self.ui.osk_visible() {
+                if self.ui.bookmarks_visible() {
+                    self.ui.bookmarks_hide();
+                } else if self.ui.osk_visible() {
                     self.ui.osk(OskCommand::Hide, &self.browser, out);
                 } else {
                     self.browser
@@ -158,17 +239,26 @@ impl App {
                 }
             }
             InputCommand::Keyboard => {
-                let cmd = if self.ui.osk_visible() {
-                    OskCommand::Backspace
+                if self.ui.bookmarks_visible() {
+                    // X deletes the highlighted bookmark.
+                    self.ui.bookmarks_remove_selected();
                 } else {
-                    OskCommand::Show
-                };
-                self.ui.osk(cmd, &self.browser, out);
+                    let cmd = if self.ui.osk_visible() {
+                        OskCommand::Backspace
+                    } else {
+                        OskCommand::Show
+                    };
+                    self.ui.osk(cmd, &self.browser, out);
+                }
             }
-            // Dedicated keyboard keys act only while the keyboard is open.
+            // Dedicated keyboard keys act only while the keyboard is open. The one
+            // exception is Y (Space): outside the keyboard it reloads the page.
             InputCommand::Osk(cmd) => {
                 if self.ui.osk_visible() {
                     self.ui.osk(*cmd, &self.browser, out);
+                } else if matches!(cmd, OskCommand::Space) {
+                    self.browser
+                        .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }
             }
             InputCommand::Analog { aim, scroll } => self.route_analog(*aim, *scroll, out),
@@ -207,17 +297,20 @@ impl App {
         let dt = if dt > 0.1 { 0.0 } else { dt };
         let cfg = self.config.gamepad;
 
+        // The bookmarks overlay: the stick scrolls the highlighted row (vertical).
+        if self.ui.bookmarks_visible() {
+            let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
+            if self.nav_repeat((0, dir.1), now, &cfg) {
+                self.ui.bookmarks_move(dir.1);
+            }
+            return;
+        }
+
+        // The keyboard: the stick navigates the key grid.
         if self.ui.osk_visible() {
             let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
-            if dir != self.osk_nav_dir {
-                self.osk_nav_dir = dir;
-                if dir != (0, 0) {
-                    self.ui.osk(OskCommand::Move(dir.0, dir.1), &self.browser, out);
-                    self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_initial_delay_ms);
-                }
-            } else if dir != (0, 0) && now >= self.osk_nav_next {
+            if self.nav_repeat(dir, now, &cfg) {
                 self.ui.osk(OskCommand::Move(dir.0, dir.1), &self.browser, out);
-                self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_repeat_ms);
             }
             return;
         }
@@ -243,6 +336,24 @@ impl App {
             let (x, y) = self.ui.cursor_browser_rel();
             self.browser.scroll(0.0, dy, x, y);
         }
+    }
+
+    /// Auto-repeat gate for held-stick overlay navigation: latches the direction
+    /// and paces repeats, returning `true` on the frames a step should fire.
+    fn nav_repeat(&mut self, dir: (i32, i32), now: Instant, cfg: &GamepadConfig) -> bool {
+        if dir != self.osk_nav_dir {
+            self.osk_nav_dir = dir;
+            if dir != (0, 0) {
+                self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_initial_delay_ms);
+                return true;
+            }
+            return false;
+        }
+        if dir != (0, 0) && now >= self.osk_nav_next {
+            self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_repeat_ms);
+            return true;
+        }
+        false
     }
 
     fn shutdown(&mut self) {

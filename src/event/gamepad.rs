@@ -1,4 +1,4 @@
-use crate::app::{AppCommand, InputCommand};
+use crate::app::{AppCommand, BookmarkAction, InputCommand};
 use crate::browser::BrowserCommand;
 use crate::config::GamepadConfig;
 use crate::osk::OskCommand;
@@ -100,10 +100,13 @@ impl Gamepad {
             _ if !pressed => return,
             Button::B => AppCommand::Input(InputCommand::Cancel),
             Button::X => AppCommand::Input(InputCommand::Keyboard),
+            // Y is "space" on the open keyboard; the router reloads the page with
+            // it otherwise.
             Button::Y => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
             Button::LeftShoulder => AppCommand::Browser(BrowserCommand::Back),
             Button::RightShoulder => AppCommand::Browser(BrowserCommand::Foward),
-            Button::Start => AppCommand::Browser(BrowserCommand::Reload),
+            Button::Start => AppCommand::Bookmark(BookmarkAction::ToggleCurrent),
+            Button::Back => AppCommand::Bookmark(BookmarkAction::Open),
             _ => return,
         };
         commands.push(cmd);

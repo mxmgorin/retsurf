@@ -1,5 +1,6 @@
 use crate::{
-    app::AppCommand,
+    app::{AppCommand, BookmarkAction},
+    bookmarks::Bookmarks,
     browser::{AppBrowser, BrowserCommand, BrowserState},
     config::InterfaceConfig,
     osk::{Osk, OskCommand},
@@ -38,6 +39,8 @@ pub struct AppUi {
     cursor_linger: Duration,
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
+    /// Saved bookmarks and the full-screen bookmarks overlay state.
+    bookmarks: Bookmarks,
 }
 
 impl AppUi {
@@ -64,6 +67,7 @@ impl AppUi {
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(),
+            bookmarks: Bookmarks::load(),
         }
     }
 
@@ -151,6 +155,53 @@ impl AppUi {
         self.osk.handle(cmd, to_address_bar, browser, commands);
     }
 
+    /// Whether the full-screen bookmarks overlay is shown.
+    #[inline]
+    pub fn bookmarks_visible(&self) -> bool {
+        self.bookmarks.visible
+    }
+
+    /// Open the bookmarks overlay.
+    #[inline]
+    pub fn bookmarks_open(&mut self) {
+        self.bookmarks.show();
+    }
+
+    #[inline]
+    pub fn bookmarks_hide(&mut self) {
+        self.bookmarks.hide();
+    }
+
+    /// Move the bookmarks selection by `dy` rows.
+    #[inline]
+    pub fn bookmarks_move(&mut self, dy: i32) {
+        self.bookmarks.move_sel(dy);
+    }
+
+    /// The highlighted bookmark's URL, if any.
+    #[inline]
+    pub fn bookmarks_selected_url(&self) -> Option<String> {
+        self.bookmarks.selected_url()
+    }
+
+    /// Remove the highlighted bookmark.
+    #[inline]
+    pub fn bookmarks_remove_selected(&mut self) {
+        self.bookmarks.remove_selected();
+    }
+
+    /// Remove the bookmark at `index` (clicking its ✕ button).
+    #[inline]
+    pub fn bookmarks_remove_at(&mut self, index: usize) {
+        self.bookmarks.remove(index);
+    }
+
+    /// Add or remove `url` from the saved bookmarks.
+    #[inline]
+    pub fn bookmark_toggle(&mut self, url: &str) {
+        self.bookmarks.toggle(url);
+    }
+
     /// Whether the address-bar text field currently holds keyboard focus.
     fn address_bar_focused(&self) -> bool {
         self.egui
@@ -177,7 +228,7 @@ impl AppUi {
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
         // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible = if self.osk.visible {
+        let cursor_visible = if self.osk.visible || self.bookmarks.visible {
             None
         } else {
             self.cursor_visible_for()
@@ -195,7 +246,8 @@ impl AppUi {
                 );
                 root.set_clip_rect(ctx.content_rect());
 
-                add_toolbar(&mut root, &mut state, commands);
+                let bookmarked = self.bookmarks.contains(state.get_location());
+                add_toolbar(&mut root, &mut state, commands, bookmarked);
 
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
@@ -221,7 +273,9 @@ impl AppUi {
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
 
-                if self.osk.visible {
+                if self.bookmarks.visible {
+                    add_bookmarks(ctx, &self.bookmarks, commands);
+                } else if self.osk.visible {
                     add_osk(ctx, self.osk.selected(), self.osk.shift(), self.osk.caps);
                 } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
@@ -297,6 +351,7 @@ fn add_toolbar(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
+    bookmarked: bool,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -322,7 +377,29 @@ fn add_toolbar(
                 }
 
                 ui.add_space(2.0);
-                add_location_text(ui, state.get_location_mut(), commands);
+                // The bookmark icons sit at the right edge; the address bar fills
+                // the gap between them and the navigation buttons. ★ toggles the
+                // current page (filled when saved); ☰ opens the bookmarks list.
+                ui.allocate_ui_with_layout(
+                    ui.available_size(),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        if ui.add(new_toolbar_button("☰")).clicked() {
+                            commands.push(AppCommand::Bookmark(BookmarkAction::Open));
+                        }
+                        if ui
+                            .add(new_toolbar_button(if bookmarked { "★" } else { "☆" }))
+                            .clicked()
+                        {
+                            commands.push(AppCommand::Bookmark(BookmarkAction::ToggleCurrent));
+                        }
+                        let location =
+                            ui.add_sized(ui.available_size(), new_text_edit(state.get_location_mut(), "location"));
+                        if is_key_pressed(ui, location, egui::Key::Enter) {
+                            commands.push(AppCommand::Browser(BrowserCommand::Load));
+                        }
+                    },
+                );
             },
         );
     });
@@ -380,17 +457,80 @@ fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool, caps: boo
         });
 }
 
-#[inline]
-fn add_location_text(ui: &mut egui::Ui, text: &mut String, commands: &mut Vec<AppCommand>) {
-    ui.allocate_ui_with_layout(
-        ui.available_size(),
-        egui::Layout::right_to_left(egui::Align::Center),
-        |ui| {
-            let location = ui.add_sized(ui.available_size(), new_text_edit(text, "location"));
+/// Draw the full-screen bookmarks overlay: a dark panel listing saved URLs with
+/// the highlighted row selected, plus a one-line control hint. Navigated by the
+/// gamepad (the router maps the stick/buttons to selection/open/delete/close).
+fn add_bookmarks(
+    ctx: &egui::Context,
+    bookmarks: &Bookmarks,
+    commands: &mut Vec<AppCommand>,
+) {
+    let screen = ctx.content_rect();
+    let dim = egui::Color32::from_gray(0x99);
+    // Fixed widths derived from the screen (not `ui.available_width()`, which is
+    // unreliable inside a scroll area and made the list jump horizontally).
+    let content_w = screen.width() - 32.0; // frame inner_margin (16) on each side
+    let del_w = 26.0;
+    let row_w = content_w - del_w - 6.0; // delete button + spacing
+    egui::Area::new(egui::Id::new("bookmarks"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(screen.min)
+        .show(ctx, |ui| {
+            egui::Frame::default()
+                .fill(egui::Color32::from_rgb(0x18, 0x18, 0x1c))
+                .inner_margin(16.0)
+                .show(ui, |ui| {
+                    ui.set_min_size(screen.size());
+                    // Header: title and a mouse-clickable Close.
+                    ui.horizontal(|ui| {
+                        ui.heading(egui::RichText::new("Bookmarks").color(egui::Color32::WHITE));
+                        if ui
+                            .button(egui::RichText::new("✖ Close").color(egui::Color32::WHITE))
+                            .clicked()
+                        {
+                            commands.push(AppCommand::Bookmark(BookmarkAction::Close));
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new("A / click: open   X / ✖: delete   B / Close")
+                            .color(dim),
+                    );
+                    ui.add_space(8.0);
 
-            if is_key_pressed(ui, location, egui::Key::Enter) {
-                commands.push(AppCommand::Browser(BrowserCommand::Load));
-            }
-        },
-    );
+                    if bookmarks.urls().is_empty() {
+                        ui.label(
+                            egui::RichText::new("No bookmarks yet — press ★ to add this page.")
+                                .color(dim),
+                        );
+                        return;
+                    }
+
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        for (i, url) in bookmarks.urls().iter().enumerate() {
+                            let selected = i == bookmarks.selected();
+                            // ✕ deletes, the row opens (mouse); the gamepad uses
+                            // the stick + A/X instead.
+                            ui.horizontal(|ui| {
+                                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                                    commands.push(AppCommand::Bookmark(BookmarkAction::Remove(i)));
+                                }
+                                let row = ui.add_sized(
+                                    [row_w, 26.0],
+                                    egui::Button::selectable(
+                                        selected,
+                                        egui::RichText::new(url).color(egui::Color32::WHITE),
+                                    )
+                                    .truncate(),
+                                );
+                                if row.clicked() {
+                                    commands.push(AppCommand::Bookmark(BookmarkAction::OpenUrl(
+                                        url.clone(),
+                                    )));
+                                }
+                            });
+                        }
+                    });
+                });
+        });
 }
+

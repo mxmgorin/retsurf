@@ -1,12 +1,13 @@
 use super::gamepad::Gamepad;
 use crate::{
-    app::AppCommand,
+    app::{AppCommand, BookmarkAction},
     browser::AppBrowser,
     event::{user::handle_user, window::handle_window},
     ui::AppUi,
     window::AppWindow,
 };
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
@@ -132,6 +133,22 @@ impl AppEventHandler {
                 const WHEEL_PX: f32 = 60.0;
                 browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
             }
+            // While the bookmarks overlay is open it captures the keyboard: Esc
+            // closes, Enter opens, Delete removes, arrows move the selection.
+            Event::KeyDown { keycode: Some(kc), .. } if ui.bookmarks_visible() => {
+                match kc {
+                    Keycode::Escape => commands.push(AppCommand::Bookmark(BookmarkAction::Close)),
+                    Keycode::Return | Keycode::KpEnter => {
+                        commands.push(AppCommand::Bookmark(BookmarkAction::OpenSelected))
+                    }
+                    Keycode::Delete | Keycode::Backspace => {
+                        commands.push(AppCommand::Bookmark(BookmarkAction::RemoveSelected))
+                    }
+                    Keycode::Up => commands.push(AppCommand::Bookmark(BookmarkAction::Move(-1))),
+                    Keycode::Down => commands.push(AppCommand::Bookmark(BookmarkAction::Move(1))),
+                    _ => {}
+                }
+            }
             Event::KeyDown {
                 keycode: Some(kc),
                 scancode: Some(sc),
@@ -143,6 +160,8 @@ impl AppEventHandler {
                 let event = servo::InputEvent::Keyboard(event);
                 browser.handle_input(event);
             }
+            // Swallow key releases too while the overlay owns the keyboard.
+            Event::KeyUp { .. } if ui.bookmarks_visible() => {}
             Event::KeyUp {
                 keycode: Some(kc),
                 scancode: Some(sc),
