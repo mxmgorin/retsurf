@@ -57,6 +57,12 @@ pub enum MenuAction {
     OpenUrl(String),
     /// Remove the entry at `index` in the active section (clicking its ✖).
     RemoveAt(usize),
+    /// Switch to the tab at `index` and close the menu (clicking a tab row).
+    OpenTab(usize),
+    /// Close the tab at `index` (clicking a tab's ✖).
+    CloseTab(usize),
+    /// Open a new tab and close the menu (clicking "+ New tab").
+    NewTab,
 }
 
 /// A *contextual* input intent from a control device — one whose effect depends
@@ -76,7 +82,10 @@ pub enum InputCommand {
     /// Shoulder (L1/R1) by direction (-1 left, +1 right): switch the menu's section
     /// while it's open, otherwise navigate the page back / forward.
     Shoulder(i32),
-    /// A dedicated keyboard key (Y/L2/R2). Applied only while the keyboard is open.
+    /// Trigger (L2 = left, R2 = right) with its press state. Drives the on-screen
+    /// keyboard (L2 Shift, R2 Enter) when it's open, otherwise cycles tabs.
+    Trigger { right: bool, pressed: bool },
+    /// A dedicated keyboard key (Y). Applied only while the keyboard is open.
     Osk(OskCommand),
     /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
     /// stick Y), each normalized to -1..=1. Drives the cursor, keyboard grid
@@ -178,9 +187,9 @@ impl App {
     fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
         match command {
             AppCommand::Shutdown => self.shutdown(),
-            // Resizes are handled reactively: egui tracks the window size and
-            // `AppUi::update` resizes the browser viewport to the central area.
-            AppCommand::Resize(..) => {}
+            // On a window resize, size the browser to the new central area straight
+            // away from the actual window (egui's reactive sizing can lag a frame).
+            AppCommand::Resize(..) => self.ui.resize_browser(&self.window, &self.browser),
             AppCommand::Browser(command) => {
                 self.browser.execute_command(command, &self.config.browser)
             }
@@ -221,11 +230,27 @@ impl App {
             MenuAction::SetSection(section) => self.ui.menu_set_section(*section),
             MenuAction::Move(dy) => self.ui.menu_move(*dy),
             MenuAction::OpenSelected => self.menu_open_selected(),
-            MenuAction::RemoveSelected => self.ui.menu_remove_selected(),
+            MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu_clear(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
             MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
+            MenuAction::OpenTab(index) => {
+                self.browser.switch_to(*index);
+                self.ui.menu_close();
+            }
+            MenuAction::CloseTab(index) => {
+                self.browser.close_tab(*index);
+                self.ui.menu_set_tab_count(self.browser.tab_count());
+            }
+            MenuAction::NewTab => self.new_tab(),
         }
+    }
+
+    /// Open a new tab at the home page and close the menu.
+    fn new_tab(&mut self) {
+        let home = self.config.browser.home_page.clone();
+        self.browser.open_tab(&home);
+        self.ui.menu_close();
     }
 
     /// Toggle the current page in saved bookmarks (the ★ button / Start).
@@ -236,13 +261,36 @@ impl App {
         }
     }
 
-    /// Open the highlighted menu entry (the **A** button / Enter) and close the
-    /// menu; if nothing is selectable (e.g. the Tabs placeholder), just close it.
+    /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
+    /// switches to the tab (or opens a new one on the "+ New tab" row); in the URL
+    /// lists it loads the entry. Closes the menu either way.
     fn menu_open_selected(&mut self) {
-        if let Some(url) = self.ui.menu_selected_url() {
+        if self.ui.menu_section() == Section::Tabs {
+            let sel = self.ui.menu_tab_selected();
+            if sel < self.browser.tab_count() {
+                self.browser.switch_to(sel);
+                self.ui.menu_close();
+            } else {
+                self.new_tab(); // the "+ New tab" row
+            }
+        } else if let Some(url) = self.ui.menu_selected_url() {
             self.open_url(url);
         } else {
             self.ui.menu_close();
+        }
+    }
+
+    /// Delete the highlighted menu entry (the **X** button / Delete). In Tabs this
+    /// closes the tab; in the URL lists it removes the bookmark / history entry.
+    fn delete_menu_selection(&mut self) {
+        if self.ui.menu_section() == Section::Tabs {
+            let sel = self.ui.menu_tab_selected();
+            if sel < self.browser.tab_count() {
+                self.browser.close_tab(sel);
+                self.ui.menu_set_tab_count(self.browser.tab_count());
+            }
+        } else {
+            self.ui.menu_remove_selected();
         }
     }
 
@@ -280,8 +328,8 @@ impl App {
             }
             InputCommand::Keyboard => {
                 if self.ui.menu_visible() {
-                    // X deletes the highlighted entry.
-                    self.ui.menu_remove_selected();
+                    // X deletes the highlighted entry (closes a tab in the Tabs section).
+                    self.delete_menu_selection();
                 } else {
                     let cmd = if self.ui.osk_visible() {
                         OskCommand::Backspace
@@ -303,6 +351,21 @@ impl App {
                         BrowserCommand::Foward
                     };
                     self.browser.execute_command(&cmd, &self.config.browser);
+                }
+            }
+            InputCommand::Trigger { right, pressed } => {
+                if self.ui.osk_visible() {
+                    // Keyboard: L2 is a held Shift, R2 is Enter on the press edge.
+                    if *right {
+                        if *pressed {
+                            self.ui.osk(OskCommand::Enter, &self.browser, out);
+                        }
+                    } else {
+                        self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
+                    }
+                } else if *pressed {
+                    // Quick tab switch: L2 previous, R2 next (wraps).
+                    self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
             }
             InputCommand::Osk(cmd) => {

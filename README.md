@@ -3,9 +3,9 @@
 
 # 🌊 retsurf
 
-**Modern web browsing on retro handhelds.** Rendering via
-[**Servo**](https://github.com/servo/servo), driven entirely by your **gamepad**,
-running on bare **KMS/DRM** with no desktop underneath. Targets PortMaster-compatible Linux handhelds — **Knulli · muOS · ROCKNIX** — on Mali-class GPUs, and runs on regular Linux desktops too.
+A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
+
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Linux desktops.
 
 > 🛠️ **Work in progress.** Early development, but it already renders real pages and
 > navigates entirely from a controller on actual hardware (verified on Knulli / Mali).
@@ -26,8 +26,8 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
-- Full-screen **menu** (Select) with **Bookmarks** and **History** sections — open, delete, or clear entries; Tabs section is a placeholder for upcoming multi-tab support
-- Right-stick scroll · A = click/select · B = back / close · L = back, R = forward · Start = bookmark page · Y = reload
+- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, and **History** sections — switch / open / close tabs, and open, delete, or clear saved entries
+- Right-stick scroll · A = click/select · B = back / close · L1/R1 = back / forward · L2/R2 = switch tabs · Start = bookmark page · Y = reload
 
 **Platform**
 - Minimal **egui** toolbar: address bar, back / forward / reload
@@ -64,8 +64,15 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
+| `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
-| `SDL_VIDEODRIVER` | auto | Override SDL's video backend (`wayland`, `x11`, `kmsdrm`) |
+| `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
+| `RETSURF_LOG_FILE` | — | Mirror logs to this file (handheld launchers often discard stderr) |
+| `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
+| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`/`kmsdrm`); auto-set to `wayland` on a Wayland desktop |
+
+retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
+and Servo's GL stacks agree) — you don't normally set it yourself.
 
 ## Configuration (`config.toml`)
 

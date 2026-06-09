@@ -51,23 +51,26 @@ impl Gamepad {
     }
 
     pub fn on_axis(&mut self, axis: Axis, value: i16, commands: &mut Vec<AppCommand>) {
-        // L2/R2 are throttle-style axes. The router applies these only when the
-        // OSK is open. L2 is a held Shift modifier — reported on both edges so
-        // Shift follows the trigger; R2 is Enter, firing once on the press edge.
+        // L2/R2 are throttle-style axes, emitted on both edges as a contextual
+        // trigger intent: the router uses them for the on-screen keyboard (L2 Shift,
+        // R2 Enter) when it's open, otherwise to cycle tabs (L2 previous, R2 next).
         if matches!(axis, Axis::TriggerLeft | Axis::TriggerRight) {
             let pressed = value as f32 / AXIS_MAX > self.cfg.trigger_threshold;
             match axis {
                 Axis::TriggerLeft if pressed != self.l2_down => {
                     self.l2_down = pressed;
-                    commands.push(AppCommand::Input(InputCommand::Osk(OskCommand::Shift(
+                    commands.push(AppCommand::Input(InputCommand::Trigger {
+                        right: false,
                         pressed,
-                    ))));
+                    }));
                 }
-                Axis::TriggerRight if pressed && !self.r2_down => {
+                Axis::TriggerRight if pressed != self.r2_down => {
                     self.r2_down = pressed;
-                    commands.push(AppCommand::Input(InputCommand::Osk(OskCommand::Enter)));
+                    commands.push(AppCommand::Input(InputCommand::Trigger {
+                        right: true,
+                        pressed,
+                    }));
                 }
-                Axis::TriggerRight => self.r2_down = pressed,
                 _ => {}
             }
             return;

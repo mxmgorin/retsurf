@@ -135,4 +135,10 @@ impl AppWindow {
     pub fn size(&self) -> (u32, u32) {
         self.window.size()
     }
+
+    /// Physical (drawable) window size in pixels — what the GL framebuffer and the
+    /// browser's rendering context are sized in.
+    pub fn drawable_size(&self) -> (u32, u32) {
+        self.window.drawable_size()
+    }
 }

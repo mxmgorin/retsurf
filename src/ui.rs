@@ -1,6 +1,6 @@
 use crate::{
     app::{AppCommand, MenuAction},
-    browser::{AppBrowser, BrowserCommand, BrowserState},
+    browser::{AppBrowser, BrowserCommand, BrowserState, TabInfo},
     config::{HistoryConfig, InterfaceConfig},
     history,
     menu::{Menu, Section},
@@ -199,6 +199,24 @@ impl AppUi {
         self.menu.set_section(section);
     }
 
+    /// The active menu section.
+    #[inline]
+    pub fn menu_section(&self) -> Section {
+        self.menu.section()
+    }
+
+    /// Highlighted row in the Tabs section (== tab count means the "+ New tab" row).
+    #[inline]
+    pub fn menu_tab_selected(&self) -> usize {
+        self.menu.tab_selected()
+    }
+
+    /// Refresh the Tabs section's known tab count (keeps its selection in range).
+    #[inline]
+    pub fn menu_set_tab_count(&mut self, count: usize) {
+        self.menu.set_tab_count(count);
+    }
+
     /// Move the active section's selection by `dy` rows.
     #[inline]
     pub fn menu_move(&mut self, dy: i32) {
@@ -253,6 +271,24 @@ impl AppUi {
         (x, y - self.webview_top)
     }
 
+    /// Resize the browser to the central web-view area (the window minus the
+    /// toolbar) for the current window size. Driven by SDL window-resize events:
+    /// egui's reactive sizing reads the central rect a frame later, so it can lag
+    /// behind the actual window. Uses the toolbar height measured during `update`,
+    /// and shares `browser_viewport` with that path so the two never double-resize.
+    pub fn resize_browser(&mut self, window: &AppWindow, browser: &AppBrowser) {
+        let (dw, dh) = window.drawable_size();
+        if dw == 0 || dh == 0 {
+            return;
+        }
+        let toolbar_px = (self.webview_top * self.egui.ctx.pixels_per_point()).round() as u32;
+        let size = (dw, dh.saturating_sub(toolbar_px).max(1));
+        if size != self.browser_viewport {
+            self.browser_viewport = size;
+            browser.resize(size.0, size.1);
+        }
+    }
+
     /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = self.egui.state.on_event(window.get_sdl2_window(), event);
@@ -274,6 +310,17 @@ impl AppUi {
         };
         self.repaint_delay = cursor_visible;
 
+        // Read tab info *before* borrowing the active tab's state below — both read
+        // the browser's tab list, so they can't overlap. `tab_pos` is the 1-based
+        // active index and count, shown in the toolbar; `tab_infos` feeds the menu.
+        let tab_pos = (browser.active_tab() + 1, browser.tab_count());
+        let tab_infos = if self.menu.visible {
+            self.menu.set_tab_count(browser.tab_count());
+            browser.tabs()
+        } else {
+            Vec::new()
+        };
+
         {
             let mut state = browser.get_state_mut();
             self.egui.run(|ctx| {
@@ -286,7 +333,7 @@ impl AppUi {
                 root.set_clip_rect(ctx.content_rect());
 
                 let bookmarked = self.menu.is_bookmarked(state.get_location());
-                add_toolbar(&mut root, &mut state, commands, bookmarked);
+                add_toolbar(&mut root, &mut state, commands, bookmarked, tab_pos);
 
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
@@ -313,7 +360,7 @@ impl AppUi {
                     });
 
                 if self.menu.visible {
-                    add_menu(ctx, &self.menu, state.get_location(), commands);
+                    add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.osk.visible {
                     add_osk(ctx, self.osk.selected(), self.osk.shift(), self.osk.caps);
                 } else if cursor_visible.is_some() {
@@ -391,6 +438,8 @@ fn add_toolbar(
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     bookmarked: bool,
+    // 1-based active tab index and total tab count, e.g. `(2, 3)` → "2/3".
+    tab_pos: (usize, usize),
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -425,6 +474,12 @@ fn add_toolbar(
                     |ui| {
                         if ui.add(new_toolbar_button("☰")).clicked() {
                             commands.push(AppCommand::Menu(MenuAction::Open));
+                        }
+                        // Active tab position, bracketed (e.g. "[2/3]") beside the
+                        // menu button — a full border would read as a selection.
+                        // Shown only with multiple tabs.
+                        if tab_pos.1 > 1 {
+                            ui.label(format!("[{}/{}]", tab_pos.0, tab_pos.1));
                         }
                         if ui
                             .add(new_toolbar_button(if bookmarked { "★" } else { "☆" }))
@@ -503,7 +558,7 @@ fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool, caps: boo
 fn add_menu(
     ctx: &egui::Context,
     menu: &Menu,
-    current_url: &str,
+    tabs: &[TabInfo],
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -544,7 +599,9 @@ fn add_menu(
                     ui.add_space(8.0);
 
                     match menu.section() {
-                        Section::Tabs => add_tabs_section(ui, current_url, dim),
+                        Section::Tabs => {
+                            add_tabs_section(ui, screen, tabs, menu.tab_selected(), commands)
+                        }
                         Section::Bookmarks => add_bookmarks_section(ui, screen, menu, dim, commands),
                         Section::History => add_history_section(ui, screen, menu, dim, commands),
                     }
@@ -552,17 +609,54 @@ fn add_menu(
         });
 }
 
-/// Placeholder Tabs section: shows the current tab until real multi-tab support
-/// lands (open / switch / close).
-fn add_tabs_section(ui: &mut egui::Ui, current_url: &str, dim: egui::Color32) {
-    let label = if current_url.is_empty() {
-        "(current tab)"
-    } else {
-        current_url
-    };
-    ui.label(egui::RichText::new(format!("• {label}")).color(egui::Color32::WHITE));
-    ui.add_space(4.0);
-    ui.label(egui::RichText::new("Multiple tabs coming soon.").color(dim));
+/// Tabs section: the open tabs (active one marked) plus a trailing "+ New tab"
+/// row. A row opens/switches, its ✖ closes, "+ New tab" opens a fresh tab.
+fn add_tabs_section(
+    ui: &mut egui::Ui,
+    screen: egui::Rect,
+    tabs: &[TabInfo],
+    selected: usize,
+    commands: &mut Vec<AppCommand>,
+) {
+    let del_w = 26.0;
+    let row_w = screen.width() - 32.0 - del_w - 6.0; // frame margins + delete + spacing
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        for (i, tab) in tabs.iter().enumerate() {
+            ui.horizontal(|ui| {
+                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
+                }
+                // The active (shown) tab stands out in the accent color and bold;
+                // the cursor's row uses the selectable highlight, so the two are
+                // distinguishable even on the same row.
+                let text = if tab.active {
+                    egui::RichText::new(&tab.title)
+                        .color(egui::Color32::from_rgb(0x2f, 0x81, 0xf7))
+                        .strong()
+                } else {
+                    egui::RichText::new(&tab.title).color(egui::Color32::WHITE)
+                };
+                let row = ui.add_sized(
+                    [row_w, 26.0],
+                    egui::Button::selectable(i == selected, text).truncate(),
+                );
+                if row.clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
+                }
+            });
+        }
+        // The "+ New tab" row sits at index `tabs.len()`.
+        let row = ui.add_sized(
+            [screen.width() - 32.0, 26.0],
+            egui::Button::selectable(
+                selected == tabs.len(),
+                egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
+            ),
+        );
+        if row.clicked() {
+            commands.push(AppCommand::Menu(MenuAction::NewTab));
+        }
+    });
 }
 
 /// Bookmarks section: the saved URLs, highlighted row selected.

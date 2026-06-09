@@ -38,25 +38,31 @@ pub struct Menu {
     section: Section,
     bookmarks: Bookmarks,
     history: History,
+    /// Highlighted row in the Tabs section. The tab list lives in the browser, so
+    /// this index is clamped against `tab_count`, refreshed each frame the menu is
+    /// shown. The row at index `tab_count` is the "+ New tab" entry.
+    tab_selected: usize,
+    tab_count: usize,
 }
 
 impl Menu {
     pub fn new(history_cfg: &HistoryConfig) -> Self {
         Self {
             visible: false,
-            // Open on Bookmarks: it's the most useful section and Tabs is still a
-            // placeholder.
-            section: Section::Bookmarks,
+            section: Section::Tabs,
             bookmarks: Bookmarks::load(),
             history: History::load(history_cfg),
+            tab_selected: 0,
+            tab_count: 0,
         }
     }
 
-    /// Show the menu, resetting both lists' highlights to the top.
+    /// Show the menu, resetting every section's highlight to the top.
     pub fn open(&mut self) {
         self.visible = true;
         self.bookmarks.reset();
         self.history.reset();
+        self.tab_selected = 0;
     }
 
     pub fn close(&mut self) {
@@ -87,12 +93,30 @@ impl Menu {
         self.section = section;
     }
 
-    /// Move the active section's selection by `dy` rows (Tabs has none yet).
+    /// Move the active section's selection by `dy` rows.
     pub fn move_sel(&mut self, dy: i32) {
         match self.section {
             Section::Bookmarks => self.bookmarks.move_sel(dy),
             Section::History => self.history.move_sel(dy),
-            Section::Tabs => {}
+            // Rows are the tabs plus a trailing "+ New tab" entry at `tab_count`.
+            Section::Tabs => {
+                let last = self.tab_count as i32;
+                self.tab_selected = (self.tab_selected as i32 + dy).clamp(0, last) as usize;
+            }
+        }
+    }
+
+    /// Highlighted row in the Tabs section (`tab_count` == the "+ New tab" row).
+    pub fn tab_selected(&self) -> usize {
+        self.tab_selected
+    }
+
+    /// Refresh the known tab count (the tab list lives in the browser), keeping the
+    /// Tabs selection in range. Called each frame the menu is shown.
+    pub fn set_tab_count(&mut self, count: usize) {
+        self.tab_count = count;
+        if self.tab_selected > count {
+            self.tab_selected = count;
         }
     }
 

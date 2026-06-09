@@ -1,6 +1,6 @@
 # Handheld Port (Knulli / muOS / ROCKNIX)
 
-Status of porting retsurf to run as a PortMaster port on aarch64 handhelds.
+Status of running retsurf to run as a PortMaster port on aarch64 handhelds.
 
 ## Goal & target
 
@@ -28,20 +28,6 @@ Agreed approach: **Path A first (software render), then Path B (GPU-accelerated)
 
 ## Architecture
 
-```
-            ┌──────────────────────── retsurf process ────────────────────────┐
-            │                                                                  │
- SDL2  ─────┼──► window + GLES context (EGL/GBM on device)                     │
-            │        │                                                         │
-            │        ▼                                                         │
- egui  ─────┼──► glow over SDL2's GLES context ──► composites toolbar + page   │
-            │        ▲                                  │                       │
-            │        │ (browser frame as a texture)     ▼                       │
-            │   ┌────┴─────────┐                 SDL2 swap → screen            │
- Servo ─────┼──►│ render target │                                              │
-            │   └───────────────┘                                              │
-            └──────────────────────────────────────────────────────────────────┘
-
 Path A (done):    Servo render target = SoftwareRenderingContext (offscreen, llvmpipe).
                   Each frame: read_to_image() → upload as egui texture → composite.
 
@@ -49,7 +35,6 @@ Path B (current): Servo render target = an FBO in SDL2's own GL context, via a c
                   `RenderingContext` impl (src/render.rs). egui draws that FBO's color
                   texture directly. Zero CPU readback, GPU-accelerated, single GL
                   context, no surfman software adapter / llvmpipe.
-```
 
 > **Path B turned out simpler than the original "adopt SDL's context via surfman"
 > plan.** Since SDL2 owns the only GL context, we implement `servo::RenderingContext`

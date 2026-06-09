@@ -4,7 +4,7 @@ use crate::{
 };
 use servo::{EventLoopWaker, RenderingContext, WebView};
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, RefCell, RefMut},
     rc::Rc,
 };
 use url::Url;
@@ -64,16 +64,33 @@ impl Default for BrowserState {
     }
 }
 
+/// One open tab: its WebView plus the toolbar state (URL text, load status) for
+/// that tab. All tabs share the single rendering context; only the active one is
+/// shown (see [`AppBrowser::switch_to`]).
+struct Tab {
+    webview: WebView,
+    state: BrowserState,
+}
+
+/// A read-only snapshot of a tab for the menu's Tabs section.
+pub struct TabInfo {
+    /// Page title, falling back to the URL (then "New tab") when unknown.
+    pub title: String,
+    /// Whether this is the currently shown tab.
+    pub active: bool,
+}
+
 struct AppBrowserInner {
-    webviews: RefCell<Vec<WebView>>,
+    tabs: RefCell<Vec<Tab>>,
+    /// Index of the shown tab in `tabs`.
+    active: Cell<usize>,
     event_sender: UserEventSender,
     servo: servo::Servo,
     rendering_ctx: Rc<dyn RenderingContext>,
     repaint_pending: Cell<bool>,
-    state: RefCell<BrowserState>,
-    /// URLs the focused webview has actually navigated to since the last drain,
-    /// for the history log. Sourced from `notify_url_changed` (a real navigation),
-    /// *not* the address-bar text — so typing a URL doesn't pollute history.
+    /// URLs the active webview has actually navigated to since the last drain, for
+    /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
+    /// the address-bar text — so typing a URL doesn't pollute history.
     visited: RefCell<Vec<String>>,
 }
 
@@ -84,30 +101,27 @@ impl AppBrowserInner {
         event_sender: UserEventSender,
     ) -> Self {
         Self {
-            webviews: RefCell::new(vec![]),
+            tabs: RefCell::new(vec![]),
+            active: Cell::new(0),
             event_sender,
             servo,
             rendering_ctx,
             repaint_pending: Cell::new(false),
-            state: RefCell::new(BrowserState::default()),
             visited: RefCell::new(vec![]),
         }
     }
 
-    pub fn add_webview(&self, tab: WebView) {
-        self.webviews.borrow_mut().push(tab);
+    /// The currently shown tab's webview, if any.
+    fn active_webview(&self) -> Option<WebView> {
+        self.tabs
+            .borrow()
+            .get(self.active.get())
+            .map(|t| t.webview.clone())
     }
 
-    pub fn get_focused_webview(&self) -> Option<WebView> {
-        self.webviews.borrow().last().cloned()
-    }
-
-    fn is_focused_webview(&self, id: servo::WebViewId) -> bool {
-        if let Some(focused) = self.get_focused_webview() {
-            return focused.id() == id;
-        }
-
-        false
+    /// Index of the tab owning `id`, if any.
+    fn tab_index(&self, id: servo::WebViewId) -> Option<usize> {
+        self.tabs.borrow().iter().position(|t| t.webview.id() == id)
     }
 }
 
@@ -118,16 +132,20 @@ impl servo::WebViewDelegate for AppBrowserInner {
     }
 
     fn notify_url_changed(&self, webview: WebView, url: Url) {
-        if self.is_focused_webview(webview.id()) {
+        // Update whichever tab navigated (so its address bar is right once shown);
+        // only log to history when it's the tab the user is actually viewing.
+        if let Some(i) = self.tab_index(webview.id()) {
             let url = url.to_string();
-            self.state.borrow_mut().location = url.clone();
-            self.visited.borrow_mut().push(url);
+            self.tabs.borrow_mut()[i].state.location = url.clone();
+            if i == self.active.get() {
+                self.visited.borrow_mut().push(url);
+            }
         }
     }
 
     fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
-        if self.is_focused_webview(webview.id()) {
-            self.state.borrow_mut().load_status = status;
+        if let Some(i) = self.tab_index(webview.id()) {
+            self.tabs.borrow_mut()[i].state.load_status = status;
         }
     }
 }
@@ -151,18 +169,22 @@ impl AppBrowser {
         })
     }
 
-
     #[inline]
     pub fn is_animating(&self) -> bool {
         self.inner
-            .get_focused_webview()
+            .active_webview()
             .map(|tab| tab.animating())
             .unwrap_or(false)
     }
 
+    /// The active tab's toolbar state (address bar text + load status). Panics if
+    /// there are no tabs — there is always at least one once the app is running.
     #[inline]
-    pub fn get_state_mut(&self) -> std::cell::RefMut<'_, BrowserState> {
-        self.inner.state.borrow_mut()
+    pub fn get_state_mut(&self) -> RefMut<'_, BrowserState> {
+        let active = self.inner.active.get();
+        RefMut::map(self.inner.tabs.borrow_mut(), move |tabs| {
+            &mut tabs[active].state
+        })
     }
 
     /// Take and clear the URLs navigated to since the last call, for the history
@@ -172,8 +194,44 @@ impl AppBrowser {
         std::mem::take(&mut self.inner.visited.borrow_mut())
     }
 
+    /// Number of open tabs.
+    #[inline]
+    pub fn tab_count(&self) -> usize {
+        self.inner.tabs.borrow().len()
+    }
+
+    /// Index of the active tab.
+    #[inline]
+    pub fn active_tab(&self) -> usize {
+        self.inner.active.get()
+    }
+
+    /// A snapshot of the open tabs for the menu's Tabs section.
+    pub fn tabs(&self) -> Vec<TabInfo> {
+        let active = self.inner.active.get();
+        self.inner
+            .tabs
+            .borrow()
+            .iter()
+            .enumerate()
+            .map(|(i, tab)| {
+                let title = tab
+                    .webview
+                    .page_title()
+                    .filter(|t| !t.is_empty())
+                    .or_else(|| Some(tab.state.location.clone()).filter(|l| !l.is_empty()))
+                    .unwrap_or_else(|| "New tab".to_string());
+                TabInfo {
+                    title,
+                    active: i == active,
+                }
+            })
+            .collect()
+    }
+
+    /// Open a new tab at `url` and make it the active (shown) one.
     pub fn open_tab(&mut self, url: &str) {
-        let url = url::Url::parse(url).unwrap();
+        let url = Url::parse(url).unwrap();
         let webview =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
                 .url(url)
@@ -181,8 +239,81 @@ impl AppBrowser {
                 .delegate(self.inner.clone())
                 .build();
 
+        // Hide the previously shown tab before switching to the new one (all tabs
+        // share one rendering context, so only one may be shown at a time).
+        if let Some(cur) = self.inner.active_webview() {
+            cur.hide();
+        }
+        webview.show();
         webview.focus();
-        self.inner.add_webview(webview);
+
+        let mut tabs = self.inner.tabs.borrow_mut();
+        tabs.push(Tab {
+            webview,
+            state: BrowserState::default(),
+        });
+        self.inner.active.set(tabs.len() - 1);
+        drop(tabs);
+        self.inner.repaint_pending.set(true);
+    }
+
+    /// Switch the shown tab to `index` (no-op if out of range or already active).
+    pub fn switch_to(&self, index: usize) {
+        let tabs = self.inner.tabs.borrow();
+        let active = self.inner.active.get();
+        if index >= tabs.len() || index == active {
+            return;
+        }
+        if let Some(cur) = tabs.get(active) {
+            cur.webview.hide();
+        }
+        let target = &tabs[index];
+        target.webview.show();
+        target.webview.focus();
+        drop(tabs);
+        self.inner.active.set(index);
+        self.inner.repaint_pending.set(true);
+    }
+
+    /// Switch the active tab by `delta` positions, wrapping around (e.g. -1 for the
+    /// previous tab, +1 for the next). No-op with fewer than two tabs.
+    pub fn cycle_tab(&self, delta: i32) {
+        let count = self.tab_count();
+        if count <= 1 {
+            return;
+        }
+        let active = self.inner.active.get() as i32;
+        let next = (active + delta).rem_euclid(count as i32) as usize;
+        self.switch_to(next);
+    }
+
+    /// Close the tab at `index`. Keeps at least one tab open. If the active tab is
+    /// closed, the next tab becomes active and is shown.
+    pub fn close_tab(&self, index: usize) {
+        let mut tabs = self.inner.tabs.borrow_mut();
+        if index >= tabs.len() || tabs.len() == 1 {
+            return;
+        }
+        let active = self.inner.active.get();
+        let was_active = index == active;
+        // Removing the WebView drops it, which closes it in Servo (see `Drop`).
+        tabs.remove(index);
+
+        let new_active = if was_active {
+            index.min(tabs.len() - 1)
+        } else if index < active {
+            active - 1
+        } else {
+            active
+        };
+        self.inner.active.set(new_active);
+        if was_active {
+            let tab = &tabs[new_active];
+            tab.webview.show();
+            tab.webview.focus();
+        }
+        drop(tabs);
+        self.inner.repaint_pending.set(true);
     }
 
     /// Spin the Servo event loop once, running delegate callbacks and updating paint output.
@@ -191,13 +322,13 @@ impl AppBrowser {
         self.inner.servo.spin_event_loop();
     }
 
-    /// Paint the contents of the focused WebView into its RenderingContext. Returns true if a paint was performed.
+    /// Paint the contents of the active WebView into its RenderingContext. Returns true if a paint was performed.
     pub fn paint(&self) -> bool {
         if !self.inner.repaint_pending.get() {
             return false;
         }
 
-        if let Some(tab) = self.inner.get_focused_webview() {
+        if let Some(tab) = self.inner.active_webview() {
             self.inner.repaint_pending.set(false);
             tab.paint();
             return true;
@@ -207,7 +338,7 @@ impl AppBrowser {
     }
 
     pub fn handle_input(&self, event: servo::InputEvent) {
-        let Some(tab) = self.inner.get_focused_webview() else {
+        let Some(tab) = self.inner.active_webview() else {
             return;
         };
 
@@ -224,11 +355,11 @@ impl AppBrowser {
         }
     }
 
-    /// Scroll the focused page by a device-pixel delta at `(x, y)`. Positive `dy`
+    /// Scroll the active page by a device-pixel delta at `(x, y)`. Positive `dy`
     /// reveals content lower on the page. This is the native compositor scroll
     /// (`InputEvent::Wheel` only fires the DOM `wheel` event, it does not scroll).
     pub fn scroll(&self, dx: f32, dy: f32, x: f32, y: f32) {
-        let Some(tab) = self.inner.get_focused_webview() else {
+        let Some(tab) = self.inner.active_webview() else {
             return;
         };
         let delta = servo::Scroll::Delta(servo::DeviceVector2D::new(dx, dy).into());
@@ -238,17 +369,22 @@ impl AppBrowser {
 
     pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
         match command {
-            BrowserCommand::Back => _ = self.inner.get_focused_webview().map(|x| x.go_back(1)),
-            BrowserCommand::Foward => _ = self.inner.get_focused_webview().map(|x| x.go_forward(1)),
-            BrowserCommand::Reload => _ = self.inner.get_focused_webview().map(|x| x.reload()),
+            BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
+            BrowserCommand::Foward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
+            BrowserCommand::Reload => _ = self.inner.active_webview().map(|x| x.reload()),
             BrowserCommand::Load => {
-                let location = &self.inner.state.borrow().location;
-                let Some(url) = try_into_url(location, &config.search_page) else {
+                let active = self.inner.active.get();
+                let tabs = self.inner.tabs.borrow();
+                let Some(tab) = tabs.get(active) else {
+                    return;
+                };
+                let Some(url) = try_into_url(&tab.state.location, &config.search_page) else {
                     log::warn!("failed to parse location");
                     return;
                 };
-
-                self.inner.get_focused_webview().map(|x| x.load(url));
+                let webview = tab.webview.clone();
+                drop(tabs);
+                webview.load(url);
             }
         }
     }
@@ -258,9 +394,15 @@ impl AppBrowser {
             return;
         }
         let size = dpi::PhysicalSize::new(w, h);
-        self.inner.rendering_ctx.resize(size);
-        if let Some(tab) = self.inner.get_focused_webview() {
-            tab.resize(size);
+        // Servo's `resize_rendering_context` resizes our rendering context *and*
+        // reflows the page — but it early-returns when the context size already
+        // matches. So we must NOT resize the context ourselves first: doing that
+        // made Servo skip the reflow, so the page never adjusted. Let
+        // `WebView::resize` drive both (it resizes the shared context, covering all
+        // tabs). With no tab yet, resize the context directly.
+        match self.inner.active_webview() {
+            Some(tab) => tab.resize(size),
+            None => self.inner.rendering_ctx.resize(size),
         }
     }
 }
