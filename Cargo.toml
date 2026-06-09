@@ -35,6 +35,11 @@ percent-encoding = "2"
 # ureq is blocking (one thread per download) and bundles webpki roots, so TLS
 # works on handhelds without a system CA store.
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+# Ad blocking: Brave's engine (EasyList syntax), driven from Servo's
+# load_web_resource hook. content-security-policy is already in Servo's tree —
+# we only need its Destination enum to classify intercepted requests.
+adblock = "0.12"
+content-security-policy = "0.8"
 keyboard-types = "0.8.1"
 egui-sdl2 = { version = "0.3.0", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"

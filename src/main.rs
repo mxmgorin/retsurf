@@ -1,3 +1,4 @@
+mod adblock;
 mod app;
 mod bookmarks;
 mod config;

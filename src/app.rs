@@ -1,3 +1,4 @@
+use crate::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::gamepad::Gamepad;
 use crate::event::handler::AppEventHandler;
@@ -121,6 +122,7 @@ impl App {
             event_sender.clone(),
             &config.browser,
             config.downloads.extensions.clone(),
+            Adblock::new(&config.adblock),
         )?;
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;

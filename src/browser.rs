@@ -1,4 +1,5 @@
 use crate::{
+    adblock::Adblock,
     config::BrowserConfig,
     event::user::{UserEvent, UserEventSender},
 };
@@ -98,6 +99,8 @@ struct AppBrowserInner {
     download_requests: RefCell<Vec<String>>,
     /// Lowercased URL path extensions treated as downloads (from `[downloads]`).
     download_exts: Vec<String>,
+    /// Network-level ad blocking, consulted for every resource load.
+    adblock: Adblock,
 }
 
 impl AppBrowserInner {
@@ -106,6 +109,7 @@ impl AppBrowserInner {
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         download_exts: Vec<String>,
+        adblock: Adblock,
     ) -> Self {
         Self {
             tabs: RefCell::new(vec![]),
@@ -120,6 +124,7 @@ impl AppBrowserInner {
                 .into_iter()
                 .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
                 .collect(),
+            adblock,
         }
     }
 
@@ -191,6 +196,18 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // Wake the main loop so the download starts right away even when idle.
         self.event_sender.send(UserEvent::DownloadUpdate);
     }
+
+    /// Run every resource load through the ad blocker. Blocked loads get an
+    /// empty 200 response, so scripts/images fail soft instead of raising
+    /// network errors; everything else proceeds untouched (dropping the load
+    /// means "do not intercept").
+    fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
+        if self.adblock.should_block(load.request()) {
+            log::debug!("adblock: blocked {}", load.request().url);
+            let response = servo::WebResourceResponse::new(load.request().url.clone());
+            load.intercept(response).finish();
+        }
+    }
 }
 
 impl AppBrowser {
@@ -199,6 +216,7 @@ impl AppBrowser {
         event_sender: UserEventSender,
         config: &BrowserConfig,
         download_exts: Vec<String>,
+        adblock: Adblock,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
@@ -206,7 +224,13 @@ impl AppBrowser {
             .event_loop_waker(event_sender.clone_box())
             .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
-        let inner = AppBrowserInner::new(servo, rendering_ctx, event_sender.clone(), download_exts);
+        let inner = AppBrowserInner::new(
+            servo,
+            rendering_ctx,
+            event_sender.clone(),
+            download_exts,
+            adblock,
+        );
 
         Ok(Self {
             inner: Rc::new(inner),
