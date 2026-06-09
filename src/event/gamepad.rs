@@ -52,22 +52,24 @@ impl Gamepad {
     }
 
     pub fn on_axis(&mut self, axis: Axis, value: i16, commands: &mut Vec<AppCommand>) {
-        // L2/R2 are throttle-style axes: emit Shift/Enter on the press edge so a
-        // single pull fires once. The router applies them only when the OSK is open.
+        // L2/R2 are throttle-style axes. The router applies these only when the
+        // OSK is open. L2 is a held Shift modifier — reported on both edges so
+        // Shift follows the trigger; R2 is Enter, firing once on the press edge.
         if matches!(axis, Axis::TriggerLeft | Axis::TriggerRight) {
             let pressed = value as f32 / AXIS_MAX > self.cfg.trigger_threshold;
-            let was = match axis {
-                Axis::TriggerLeft => &mut self.l2_down,
-                _ => &mut self.r2_down,
-            };
-            let rising = pressed && !*was;
-            *was = pressed;
-            if rising {
-                let cmd = match axis {
-                    Axis::TriggerLeft => OskCommand::Shift,
-                    _ => OskCommand::Enter,
-                };
-                commands.push(AppCommand::Input(InputCommand::Osk(cmd)));
+            match axis {
+                Axis::TriggerLeft if pressed != self.l2_down => {
+                    self.l2_down = pressed;
+                    commands.push(AppCommand::Input(InputCommand::Osk(OskCommand::Shift(
+                        pressed,
+                    ))));
+                }
+                Axis::TriggerRight if pressed && !self.r2_down => {
+                    self.r2_down = pressed;
+                    commands.push(AppCommand::Input(InputCommand::Osk(OskCommand::Enter)));
+                }
+                Axis::TriggerRight => self.r2_down = pressed,
+                _ => {}
             }
             return;
         }
