@@ -7,6 +7,9 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
     match event {
         UserEvent::BrowserWakeup => None,
         UserEvent::BrowserFrameReady => None,
+        // Sent by download workers/interception purely to wake the loop; the
+        // per-frame downloads poll in `App::run` picks up the new state.
+        UserEvent::DownloadUpdate => None,
     }
 }
 
@@ -15,10 +18,15 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
 pub enum UserEvent {
     BrowserWakeup = 0,
     BrowserFrameReady = 1,
+    DownloadUpdate = 2,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 2] = [UserEvent::BrowserWakeup, UserEvent::BrowserFrameReady];
+    pub const ALL: [UserEvent; 3] = [
+        UserEvent::BrowserWakeup,
+        UserEvent::BrowserFrameReady,
+        UserEvent::DownloadUpdate,
+    ];
 
     pub fn from_code(code: i32) -> UserEvent {
         Self::ALL[code as usize]

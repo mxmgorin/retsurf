@@ -1,12 +1,13 @@
 //! The full-screen menu opened with Select (or the ☰ toolbar button): a tabbed
-//! overlay over the page with **Tabs · Bookmarks · History** sections. It owns the
-//! overlay state (whether it's shown, which section is active) and the Bookmarks
-//! and History stores. The central router ([`crate::app`]) maps gamepad / keyboard
-//! / mouse input to section switches, selection moves, open, delete, and clear;
-//! [`crate::ui`] renders it. Tabs is a placeholder until multi-tab support lands.
+//! overlay over the page with **Tabs · Bookmarks · History · Downloads** sections.
+//! It owns the overlay state (whether it's shown, which section is active) and the
+//! Bookmarks, History, and Downloads stores. The central router ([`crate::app`])
+//! maps gamepad / keyboard / mouse input to section switches, selection moves,
+//! open, delete, and clear; [`crate::ui`] renders it.
 
 use crate::bookmarks::Bookmarks;
-use crate::config::HistoryConfig;
+use crate::config::{DownloadsConfig, HistoryConfig};
+use crate::downloads::Downloads;
 use crate::history::History;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -14,17 +15,24 @@ pub enum Section {
     Tabs,
     Bookmarks,
     History,
+    Downloads,
 }
 
 impl Section {
     /// Left-to-right order of the section bar.
-    pub const ALL: [Section; 3] = [Section::Tabs, Section::Bookmarks, Section::History];
+    pub const ALL: [Section; 4] = [
+        Section::Tabs,
+        Section::Bookmarks,
+        Section::History,
+        Section::Downloads,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Section::Tabs => "Tabs",
             Section::Bookmarks => "Bookmarks",
             Section::History => "History",
+            Section::Downloads => "Downloads",
         }
     }
 
@@ -38,6 +46,7 @@ pub struct Menu {
     section: Section,
     bookmarks: Bookmarks,
     history: History,
+    pub downloads: Downloads,
     /// Highlighted row in the Tabs section. The tab list lives in the browser, so
     /// this index is clamped against `tab_count`, refreshed each frame the menu is
     /// shown. The row at index `tab_count` is the "+ New tab" entry.
@@ -46,12 +55,13 @@ pub struct Menu {
 }
 
 impl Menu {
-    pub fn new(history_cfg: &HistoryConfig) -> Self {
+    pub fn new(history_cfg: &HistoryConfig, downloads_cfg: &DownloadsConfig) -> Self {
         Self {
             visible: false,
             section: Section::Tabs,
             bookmarks: Bookmarks::load(),
             history: History::load(history_cfg),
+            downloads: Downloads::load(downloads_cfg),
             tab_selected: 0,
             tab_count: 0,
         }
@@ -62,6 +72,7 @@ impl Menu {
         self.visible = true;
         self.bookmarks.reset();
         self.history.reset();
+        self.downloads.reset();
         self.tab_selected = 0;
     }
 
@@ -98,6 +109,7 @@ impl Menu {
         match self.section {
             Section::Bookmarks => self.bookmarks.move_sel(dy),
             Section::History => self.history.move_sel(dy),
+            Section::Downloads => self.downloads.move_sel(dy),
             // Rows are the tabs plus a trailing "+ New tab" entry at `tab_count`.
             Section::Tabs => {
                 let last = self.tab_count as i32;
@@ -120,20 +132,24 @@ impl Menu {
         }
     }
 
-    /// URL of the highlighted entry in the active section, if any (Tabs: none yet).
+    /// URL of the highlighted entry in the active section, if any (Tabs: none;
+    /// Downloads: the `file://` URL of a successfully finished entry).
     pub fn selected_url(&self) -> Option<String> {
         match self.section {
             Section::Bookmarks => self.bookmarks.selected_url(),
             Section::History => self.history.selected_url(),
+            Section::Downloads => self.downloads.selected_open_url(),
             Section::Tabs => None,
         }
     }
 
-    /// Remove the highlighted entry in the active section.
+    /// Remove the highlighted entry in the active section (Downloads: cancels the
+    /// entry instead while it's still in flight).
     pub fn remove_selected(&mut self) {
         match self.section {
             Section::Bookmarks => self.bookmarks.remove_selected(),
             Section::History => self.history.remove_selected(),
+            Section::Downloads => self.downloads.remove_selected(),
             Section::Tabs => {}
         }
     }
@@ -143,14 +159,18 @@ impl Menu {
         match self.section {
             Section::Bookmarks => self.bookmarks.remove(index),
             Section::History => self.history.remove(index),
+            Section::Downloads => self.downloads.remove(index),
             Section::Tabs => {}
         }
     }
 
-    /// Clear all entries in the active section (only History offers this today).
+    /// Clear the active section's list: all history entries, or all finished
+    /// downloads (active ones stay).
     pub fn clear(&mut self) {
-        if self.section == Section::History {
-            self.history.clear();
+        match self.section {
+            Section::History => self.history.clear(),
+            Section::Downloads => self.downloads.clear_finished(),
+            Section::Tabs | Section::Bookmarks => {}
         }
     }
 

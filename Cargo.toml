@@ -30,9 +30,14 @@ servo = { version = "0.2", default-features = false, features = ["clipboard", "j
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
+percent-encoding = "2"
+# Downloads are fetched by the embedder itself (Servo 0.2 has no download API).
+# ureq is blocking (one thread per download) and bundles webpki roots, so TLS
+# works on handhelds without a system CA store.
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
 keyboard-types = "0.8.1"
-egui-sdl2 = { git = "https://github.com/mxmgorin/egui-sdl2", default-features = false, features = ["glow-backend"] }
-sdl2-keyboard-types = { git = "https://github.com/mxmgorin/sdl2-keyboard-types", tag = "0.1.0" }
+egui-sdl2 = { version = "0.3.0", default-features = false, features = ["glow-backend"] }
+sdl2-keyboard-types = "0.1.0"
 
 # Vendored servo-paint with the surfman connection made optional, so Servo runs
 # on EGL 1.4 devices (Mali) where surfman can't create a connection. See

@@ -4,6 +4,7 @@ mod config;
 mod window;
 mod event;
 mod browser;
+mod downloads;
 mod history;
 mod menu;
 mod osk;

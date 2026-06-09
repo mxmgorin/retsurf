@@ -101,6 +101,8 @@ pub struct App {
     browser: AppBrowser,
     ui: AppUi,
     gamepad: Gamepad,
+    /// For handing to download workers so they can wake the idle-blocked loop.
+    event_sender: UserEventSender,
     /// Router timing for analog motion (cursor-speed integration).
     last_tick: Instant,
     /// Keyboard grid-navigation auto-repeat: latched direction and next fire time.
@@ -114,11 +116,15 @@ impl App {
         let window = AppWindow::new(sdl, &config.interface)?;
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
-        let browser =
-            AppBrowser::new(window.get_rendering_ctx(), event_sender, &config.browser)?;
+        let browser = AppBrowser::new(
+            window.get_rendering_ctx(),
+            event_sender.clone(),
+            &config.browser,
+            config.downloads.extensions.clone(),
+        )?;
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;
-        let ui = AppUi::new(&window, &config.interface, &config.history);
+        let ui = AppUi::new(&window, &config.interface, &config.history, &config.downloads);
         let gamepad = Gamepad::new(config.gamepad);
         log::info!("init: app constructed");
 
@@ -129,6 +135,7 @@ impl App {
             event_handler,
             ui,
             gamepad,
+            event_sender,
             state: AppState::Initialized,
             last_tick: Instant::now(),
             osk_nav_dir: (0, 0),
@@ -157,6 +164,13 @@ impl App {
                 &mut self.gamepad,
                 &mut commands,
             );
+
+            // Apply background download progress/finishes before building the UI,
+            // and start any downloads the browser denied navigation for.
+            self.ui.downloads_poll();
+            for url in self.browser.take_download_requests() {
+                self.ui.start_download(&url, &self.event_sender);
+            }
 
             // Emit this frame's analog state as a command for the router to apply.
             self.gamepad.tick(&mut commands);
@@ -275,7 +289,9 @@ impl App {
             }
         } else if let Some(url) = self.ui.menu_selected_url() {
             self.open_url(url);
-        } else {
+        } else if self.ui.menu_section() != Section::Downloads {
+            // A on an active/failed download has nothing to open — keep the menu
+            // up so the user can watch the progress; other sections close.
             self.ui.menu_close();
         }
     }

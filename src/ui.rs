@@ -1,7 +1,8 @@
 use crate::{
     app::{AppCommand, MenuAction},
     browser::{AppBrowser, BrowserCommand, BrowserState, TabInfo},
-    config::{HistoryConfig, InterfaceConfig},
+    config::{DownloadsConfig, HistoryConfig, InterfaceConfig},
+    event::user::UserEventSender,
     history,
     menu::{Menu, Section},
     osk::{Osk, OskCommand},
@@ -49,6 +50,7 @@ impl AppUi {
         window: &AppWindow,
         interface: &InterfaceConfig,
         history: &HistoryConfig,
+        downloads: &DownloadsConfig,
     ) -> Self {
         let mut egui =
             EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
@@ -72,7 +74,7 @@ impl AppUi {
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(),
-            menu: Menu::new(history),
+            menu: Menu::new(history, downloads),
         }
     }
 
@@ -253,6 +255,19 @@ impl AppUi {
         self.menu.record_history(url);
     }
 
+    /// Pull progress from download worker threads into the menu's Downloads list
+    /// (records finishes; cheap when nothing is downloading).
+    #[inline]
+    pub fn downloads_poll(&mut self) {
+        self.menu.downloads.poll();
+    }
+
+    /// Start downloading `url` in the background (see [`crate::downloads`]).
+    #[inline]
+    pub fn start_download(&mut self, url: &str, sender: &UserEventSender) {
+        self.menu.downloads.start(url, sender);
+    }
+
     /// Add or remove `url` from the saved bookmarks (★ button / Start).
     #[inline]
     pub fn toggle_bookmark(&mut self, url: &str) {
@@ -333,7 +348,15 @@ impl AppUi {
                 root.set_clip_rect(ctx.content_rect());
 
                 let bookmarked = self.menu.is_bookmarked(state.get_location());
-                add_toolbar(&mut root, &mut state, commands, bookmarked, tab_pos);
+                let active_downloads = self.menu.downloads.active_count();
+                add_toolbar(
+                    &mut root,
+                    &mut state,
+                    commands,
+                    bookmarked,
+                    tab_pos,
+                    active_downloads,
+                );
 
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
@@ -440,6 +463,8 @@ fn add_toolbar(
     bookmarked: bool,
     // 1-based active tab index and total tab count, e.g. `(2, 3)` → "2/3".
     tab_pos: (usize, usize),
+    // Downloads still in flight; shown as a `⬇N` chip that jumps to the section.
+    active_downloads: usize,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -475,11 +500,29 @@ fn add_toolbar(
                         if ui.add(new_toolbar_button("☰")).clicked() {
                             commands.push(AppCommand::Menu(MenuAction::Open));
                         }
+                        // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
+                        // plain arrow, only the emoji one renders.
+                        if active_downloads > 0 {
+                            let label = format!("⬇{active_downloads}");
+                            if ui.add(new_toolbar_button(&label)).clicked() {
+                                commands.push(AppCommand::Menu(MenuAction::Open));
+                                commands.push(AppCommand::Menu(MenuAction::SetSection(
+                                    Section::Downloads,
+                                )));
+                            }
+                        }
                         // Active tab position, bracketed (e.g. "[2/3]") beside the
                         // menu button — a full border would read as a selection.
-                        // Shown only with multiple tabs.
+                        // Shown only with multiple tabs; clicking it opens the
+                        // menu's Tabs section (like the ⬇ chip for downloads).
                         if tab_pos.1 > 1 {
-                            ui.label(format!("[{}/{}]", tab_pos.0, tab_pos.1));
+                            let label = format!("[{}/{}]", tab_pos.0, tab_pos.1);
+                            if ui.add(new_toolbar_button(&label)).clicked() {
+                                commands.push(AppCommand::Menu(MenuAction::Open));
+                                commands.push(AppCommand::Menu(MenuAction::SetSection(
+                                    Section::Tabs,
+                                )));
+                            }
                         }
                         if ui
                             .add(new_toolbar_button(if bookmarked { "★" } else { "☆" }))
@@ -573,7 +616,8 @@ fn add_menu(
                 .show(ui, |ui| {
                     ui.set_min_size(screen.size());
 
-                    // Section bar (active tab highlighted) and a mouse Close.
+                    // Section bar (active tab highlighted), with a mouse-only ✖
+                    // pinned to the top-right corner (the gamepad closes with B).
                     ui.horizontal(|ui| {
                         for section in Section::ALL {
                             let active = section == menu.section();
@@ -585,12 +629,54 @@ fn add_menu(
                                 commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
                             }
                         }
-                        if ui
-                            .button(egui::RichText::new("✖ Close").color(egui::Color32::WHITE))
-                            .clicked()
-                        {
-                            commands.push(AppCommand::Menu(MenuAction::Close));
-                        }
+                        // Width from `screen`, not `available_width()`: the frame's
+                        // min-size is screen + margins, so "available" runs past the
+                        // visible right edge and would push the ✖ offscreen.
+                        let remaining = screen.width() - 32.0 - ui.min_rect().width();
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(remaining.max(26.0), 26.0),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                // Fixed square, like the rows' ✖ — auto-sizing pads
+                                // the glyph unevenly.
+                                if ui
+                                    .add_sized(
+                                        [26.0, 26.0],
+                                        egui::Button::new(
+                                            egui::RichText::new("✖")
+                                                .color(egui::Color32::WHITE),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    commands.push(AppCommand::Menu(MenuAction::Close));
+                                }
+                                // The active section's bulk-clear action lives here
+                                // (dim, mouse-only) instead of above its list, so
+                                // the list starts at a stable height.
+                                let clear_label = match menu.section() {
+                                    Section::History
+                                        if !menu.history().entries().is_empty() =>
+                                    {
+                                        Some("Clear all")
+                                    }
+                                    Section::Downloads if menu.downloads.has_finished() => {
+                                        Some("Clear finished")
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(label) = clear_label {
+                                    if ui
+                                        .add(egui::Button::new(
+                                            egui::RichText::new(label).color(dim),
+                                        ))
+                                        .clicked()
+                                    {
+                                        commands.push(AppCommand::Menu(MenuAction::Clear));
+                                    }
+                                }
+                            },
+                        );
                     });
                     ui.label(
                         egui::RichText::new("⏴⏵ section   ⏶⏷ select   A open   X delete   B close")
@@ -604,6 +690,7 @@ fn add_menu(
                         }
                         Section::Bookmarks => add_bookmarks_section(ui, screen, menu, dim, commands),
                         Section::History => add_history_section(ui, screen, menu, dim, commands),
+                        Section::Downloads => add_downloads_section(ui, screen, menu, dim, commands),
                     }
                 });
         });
@@ -703,8 +790,59 @@ fn add_bookmarks_section(
     });
 }
 
-/// History section: visited URLs (most-recent first) with their visit date, plus
-/// a "Clear all" button.
+/// Downloads section: most-recent first, each row showing the file name and a
+/// status (progress while active, size + date when done, the error otherwise).
+/// ✖ cancels an active download or removes a finished entry (the file on disk is
+/// kept); clicking a finished row opens the file in the browser. "Clear finished"
+/// (in the menu's top bar) drops everything not in flight.
+fn add_downloads_section(
+    ui: &mut egui::Ui,
+    screen: egui::Rect,
+    menu: &Menu,
+    dim: egui::Color32,
+    commands: &mut Vec<AppCommand>,
+) {
+    let downloads = &menu.downloads;
+    if downloads.items().is_empty() {
+        ui.label(egui::RichText::new("No downloads yet.").color(dim));
+        return;
+    }
+
+    let del_w = 26.0;
+    let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
+    let row_w = screen.width() - 32.0 - del_w - status_w - 12.0;
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        for (i, item) in downloads.items().iter().enumerate() {
+            let selected = i == downloads.selected();
+            ui.horizontal(|ui| {
+                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                }
+                let row = ui.add_sized(
+                    [row_w, 26.0],
+                    egui::Button::selectable(
+                        selected,
+                        egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
+                    )
+                    .truncate(),
+                );
+                if row.clicked() {
+                    if let Some(url) = downloads.open_url(i) {
+                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(url)));
+                    }
+                }
+                ui.add_sized(
+                    [status_w, 26.0],
+                    egui::Label::new(egui::RichText::new(item.status_text()).color(dim))
+                        .truncate(),
+                );
+            });
+        }
+    });
+}
+
+/// History section: visited URLs (most-recent first) with their visit date.
+/// "Clear all" sits in the menu's top bar.
 fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -717,14 +855,6 @@ fn add_history_section(
         ui.label(egui::RichText::new("No history yet.").color(dim));
         return;
     }
-
-    if ui
-        .button(egui::RichText::new("Clear all").color(egui::Color32::WHITE))
-        .clicked()
-    {
-        commands.push(AppCommand::Menu(MenuAction::Clear));
-    }
-    ui.add_space(4.0);
 
     let del_w = 26.0;
     let date_w = 118.0; // fits "YYYY-MM-DD HH:MM"

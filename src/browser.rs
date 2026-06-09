@@ -92,6 +92,12 @@ struct AppBrowserInner {
     /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
     /// the address-bar text — so typing a URL doesn't pollute history.
     visited: RefCell<Vec<String>>,
+    /// URLs whose navigation was denied because they look like file downloads
+    /// (see `request_navigation`), drained once per frame by the main loop which
+    /// hands them to the downloads store.
+    download_requests: RefCell<Vec<String>>,
+    /// Lowercased URL path extensions treated as downloads (from `[downloads]`).
+    download_exts: Vec<String>,
 }
 
 impl AppBrowserInner {
@@ -99,6 +105,7 @@ impl AppBrowserInner {
         servo: servo::Servo,
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
+        download_exts: Vec<String>,
     ) -> Self {
         Self {
             tabs: RefCell::new(vec![]),
@@ -108,6 +115,11 @@ impl AppBrowserInner {
             rendering_ctx,
             repaint_pending: Cell::new(false),
             visited: RefCell::new(vec![]),
+            download_requests: RefCell::new(vec![]),
+            download_exts: download_exts
+                .into_iter()
+                .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
+                .collect(),
         }
     }
 
@@ -122,6 +134,21 @@ impl AppBrowserInner {
     /// Index of the tab owning `id`, if any.
     fn tab_index(&self, id: servo::WebViewId) -> Option<usize> {
         self.tabs.borrow().iter().position(|t| t.webview.id() == id)
+    }
+
+    /// Whether navigating to `url` should download it instead: an `http(s)` URL
+    /// whose path's last segment carries one of the configured file extensions.
+    fn is_download_url(&self, url: &Url) -> bool {
+        if url.scheme() != "http" && url.scheme() != "https" {
+            return false;
+        }
+        let Some(name) = url.path_segments().and_then(|mut s| s.next_back()) else {
+            return false;
+        };
+        let Some((stem, ext)) = name.rsplit_once('.') else {
+            return false;
+        };
+        !stem.is_empty() && self.download_exts.iter().any(|e| e.eq_ignore_ascii_case(ext))
     }
 }
 
@@ -148,6 +175,22 @@ impl servo::WebViewDelegate for AppBrowserInner {
             self.tabs.borrow_mut()[i].state.load_status = status;
         }
     }
+
+    /// Servo can't download: navigating to a file URL would just fail to render.
+    /// Deny those navigations and queue the URL for our own fetch instead (see
+    /// [`crate::downloads`]). Everything else proceeds normally.
+    fn request_navigation(&self, _webview: WebView, request: servo::NavigationRequest) {
+        if !self.is_download_url(&request.url) {
+            request.allow();
+            return;
+        }
+        let url = request.url.to_string();
+        log::info!("intercepting download navigation: {url}");
+        request.deny();
+        self.download_requests.borrow_mut().push(url);
+        // Wake the main loop so the download starts right away even when idle.
+        self.event_sender.send(UserEvent::DownloadUpdate);
+    }
 }
 
 impl AppBrowser {
@@ -155,6 +198,7 @@ impl AppBrowser {
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         config: &BrowserConfig,
+        download_exts: Vec<String>,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
@@ -162,7 +206,7 @@ impl AppBrowser {
             .event_loop_waker(event_sender.clone_box())
             .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
-        let inner = AppBrowserInner::new(servo, rendering_ctx, event_sender.clone());
+        let inner = AppBrowserInner::new(servo, rendering_ctx, event_sender.clone(), download_exts);
 
         Ok(Self {
             inner: Rc::new(inner),
@@ -192,6 +236,13 @@ impl AppBrowser {
     #[inline]
     pub fn take_visited(&self) -> Vec<String> {
         std::mem::take(&mut self.inner.visited.borrow_mut())
+    }
+
+    /// Take and clear the download URLs whose navigation was denied since the
+    /// last call. Drained once per frame by the main loop.
+    #[inline]
+    pub fn take_download_requests(&self) -> Vec<String> {
+        std::mem::take(&mut self.inner.download_requests.borrow_mut())
     }
 
     /// Number of open tabs.
