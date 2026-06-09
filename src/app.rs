@@ -5,6 +5,7 @@ use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::event::user::UserEventSender;
 use crate::osk::OskCommand;
 use crate::ui::AppUi;
+use crate::menu::Section;
 use crate::{
     config::{AppConfig, GamepadConfig},
     window::AppWindow,
@@ -25,29 +26,37 @@ pub enum AppCommand {
     Resize(u32, u32),
     Browser(BrowserCommand),
     Input(InputCommand),
-    Bookmark(BookmarkAction),
+    Menu(MenuAction),
+    /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
+    ToggleBookmark,
 }
 
-/// Toolbar-driven bookmark actions (the in-overlay navigation is routed from
-/// [`InputCommand`] instead, see [`App::route_input`]).
+/// Actions on the full-screen menu (Tabs / Bookmarks / History). The mouse pushes
+/// the absolute variants (`SetSection`, `OpenUrl`, `RemoveAt`); the gamepad and
+/// keyboard push the relative ones, routed from [`InputCommand`] via
+/// [`App::route_input`].
 #[derive(Clone)]
-pub enum BookmarkAction {
-    /// Add the current page to bookmarks, or remove it if already saved (★).
-    ToggleCurrent,
-    /// Open the full-screen bookmarks overlay (☰).
+pub enum MenuAction {
+    /// Toggle the menu open/closed (Select / ☰).
     Open,
-    /// Close the overlay (clicking its Close button).
+    /// Close the menu (B / Close button / Esc).
     Close,
-    /// Load a specific bookmark and close the overlay (clicking a list row).
-    OpenUrl(String),
-    /// Remove the bookmark at `index` (clicking its ✖ button).
-    Remove(usize),
-    /// Open the highlighted bookmark (keyboard Enter).
-    OpenSelected,
-    /// Remove the highlighted bookmark (keyboard Delete).
-    RemoveSelected,
-    /// Move the overlay selection by `dy` rows (keyboard arrows).
+    /// Switch the active section by a delta (gamepad/keyboard ◀▶).
+    SwitchSection(i32),
+    /// Jump to a specific section (clicking its tab).
+    SetSection(Section),
+    /// Move the active section's selection by `dy` rows (gamepad/keyboard ▲▼).
     Move(i32),
+    /// Open the highlighted entry and close the menu (A / Enter).
+    OpenSelected,
+    /// Remove the highlighted entry (X / Delete).
+    RemoveSelected,
+    /// Clear all entries in the active section (History's "Clear all").
+    Clear,
+    /// Load a specific URL and close the menu (clicking a list row).
+    OpenUrl(String),
+    /// Remove the entry at `index` in the active section (clicking its ✖).
+    RemoveAt(usize),
 }
 
 /// A *contextual* input intent from a control device — one whose effect depends
@@ -64,6 +73,9 @@ pub enum InputCommand {
     Cancel,
     /// Keyboard (X): toggle the on-screen keyboard, or backspace while it's open.
     Keyboard,
+    /// Shoulder (L1/R1) by direction (-1 left, +1 right): switch the menu's section
+    /// while it's open, otherwise navigate the page back / forward.
+    Shoulder(i32),
     /// A dedicated keyboard key (Y/L2/R2). Applied only while the keyboard is open.
     Osk(OskCommand),
     /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
@@ -97,7 +109,7 @@ impl App {
             AppBrowser::new(window.get_rendering_ctx(), event_sender, &config.browser)?;
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;
-        let ui = AppUi::new(&window, &config.interface);
+        let ui = AppUi::new(&window, &config.interface, &config.history);
         let gamepad = Gamepad::new(config.gamepad);
         log::info!("init: app constructed");
 
@@ -122,6 +134,13 @@ impl App {
 
         while self.state == AppState::Running {
             self.browser.pump_event_loop();
+
+            // Record any pages the focused webview navigated to this frame. Sourced
+            // from real navigations (not address-bar text), so typing doesn't log.
+            for url in self.browser.take_visited() {
+                self.ui.menu_record_history(&url);
+            }
+
             self.event_handler.wait(
                 &self.window,
                 &mut self.ui,
@@ -166,52 +185,59 @@ impl App {
                 self.browser.execute_command(command, &self.config.browser)
             }
             AppCommand::Input(command) => self.route_input(command, out),
-            AppCommand::Bookmark(action) => self.bookmark_action(action),
+            AppCommand::Menu(action) => self.menu_action(action),
+            AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
         };
     }
 
-    /// Toolbar bookmark buttons: toggle the current page, or open the overlay.
-    fn bookmark_action(&mut self, action: &BookmarkAction) {
+    /// Apply a menu action (Tabs / Bookmarks / History overlay).
+    fn menu_action(&mut self, action: &MenuAction) {
         match action {
-            BookmarkAction::ToggleCurrent => {
-                let url = self.browser.get_state_mut().get_location().to_string();
-                if !url.is_empty() {
-                    self.ui.bookmark_toggle(&url);
-                }
-            }
-            // Select toggles the overlay (the ☰ button only ever opens it, since
-            // it's hidden behind the overlay once shown).
-            BookmarkAction::Open => {
-                if self.ui.bookmarks_visible() {
-                    self.ui.bookmarks_hide();
+            // Select toggles the menu; the ☰ button only ever opens it (it's hidden
+            // behind the menu once shown).
+            MenuAction::Open => {
+                if self.ui.menu_visible() {
+                    self.ui.menu_close();
                 } else {
-                    self.ui.bookmarks_open();
+                    self.ui.menu_open();
                 }
             }
-            BookmarkAction::Close => self.ui.bookmarks_hide(),
-            BookmarkAction::OpenUrl(url) => self.open_bookmark(url.clone()),
-            BookmarkAction::Remove(index) => self.ui.bookmarks_remove_at(*index),
-            BookmarkAction::OpenSelected => self.open_selected_bookmark(),
-            BookmarkAction::RemoveSelected => self.ui.bookmarks_remove_selected(),
-            BookmarkAction::Move(dy) => self.ui.bookmarks_move(*dy),
+            MenuAction::Close => self.ui.menu_close(),
+            MenuAction::SwitchSection(delta) => self.ui.menu_switch(*delta),
+            MenuAction::SetSection(section) => self.ui.menu_set_section(*section),
+            MenuAction::Move(dy) => self.ui.menu_move(*dy),
+            MenuAction::OpenSelected => self.menu_open_selected(),
+            MenuAction::RemoveSelected => self.ui.menu_remove_selected(),
+            MenuAction::Clear => self.ui.menu_clear(),
+            MenuAction::OpenUrl(url) => self.open_url(url.clone()),
+            MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
         }
     }
 
-    /// Open the highlighted bookmark (the **A** button) and close the overlay.
-    fn open_selected_bookmark(&mut self) {
-        if let Some(url) = self.ui.bookmarks_selected_url() {
-            self.open_bookmark(url);
+    /// Toggle the current page in saved bookmarks (the ★ button / Start).
+    fn toggle_current_bookmark(&mut self) {
+        let url = self.browser.get_state_mut().get_location().to_string();
+        if !url.is_empty() {
+            self.ui.toggle_bookmark(&url);
+        }
+    }
+
+    /// Open the highlighted menu entry (the **A** button / Enter) and close the
+    /// menu; if nothing is selectable (e.g. the Tabs placeholder), just close it.
+    fn menu_open_selected(&mut self) {
+        if let Some(url) = self.ui.menu_selected_url() {
+            self.open_url(url);
         } else {
-            self.ui.bookmarks_hide();
+            self.ui.menu_close();
         }
     }
 
-    /// Load `url` in the focused tab and close the overlay.
-    fn open_bookmark(&mut self, url: String) {
+    /// Load `url` in the focused tab and close the menu.
+    fn open_url(&mut self, url: String) {
         *self.browser.get_state_mut().get_location_mut() = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);
-        self.ui.bookmarks_hide();
+        self.ui.menu_close();
     }
 
     /// Central input router: decide what a contextual [`InputCommand`] does given
@@ -220,17 +246,17 @@ impl App {
     fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         match command {
             InputCommand::Primary(pressed) => {
-                if self.ui.bookmarks_visible() {
+                if self.ui.menu_visible() {
                     if *pressed {
-                        self.open_selected_bookmark();
+                        self.menu_open_selected();
                     }
                 } else {
                     self.primary_action(*pressed, out);
                 }
             }
             InputCommand::Cancel => {
-                if self.ui.bookmarks_visible() {
-                    self.ui.bookmarks_hide();
+                if self.ui.menu_visible() {
+                    self.ui.menu_close();
                 } else if self.ui.osk_visible() {
                     self.ui.osk(OskCommand::Hide, &self.browser, out);
                 } else {
@@ -239,9 +265,9 @@ impl App {
                 }
             }
             InputCommand::Keyboard => {
-                if self.ui.bookmarks_visible() {
-                    // X deletes the highlighted bookmark.
-                    self.ui.bookmarks_remove_selected();
+                if self.ui.menu_visible() {
+                    // X deletes the highlighted entry.
+                    self.ui.menu_remove_selected();
                 } else {
                     let cmd = if self.ui.osk_visible() {
                         OskCommand::Backspace
@@ -253,6 +279,18 @@ impl App {
             }
             // Dedicated keyboard keys act only while the keyboard is open. The one
             // exception is Y (Space): outside the keyboard it reloads the page.
+            InputCommand::Shoulder(delta) => {
+                if self.ui.menu_visible() {
+                    self.ui.menu_switch(*delta);
+                } else {
+                    let cmd = if *delta < 0 {
+                        BrowserCommand::Back
+                    } else {
+                        BrowserCommand::Foward
+                    };
+                    self.browser.execute_command(&cmd, &self.config.browser);
+                }
+            }
             InputCommand::Osk(cmd) => {
                 if self.ui.osk_visible() {
                     self.ui.osk(*cmd, &self.browser, out);
@@ -297,11 +335,16 @@ impl App {
         let dt = if dt > 0.1 { 0.0 } else { dt };
         let cfg = self.config.gamepad;
 
-        // The bookmarks overlay: the stick scrolls the highlighted row (vertical).
-        if self.ui.bookmarks_visible() {
+        // The menu: left/right switches section, up/down moves the selection
+        // (dominant axis only, so a diagonal nudge does just one thing).
+        if self.ui.menu_visible() {
             let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
-            if self.nav_repeat((0, dir.1), now, &cfg) {
-                self.ui.bookmarks_move(dir.1);
+            if self.nav_repeat(dir, now, &cfg) {
+                if dir.0 != 0 {
+                    self.ui.menu_switch(dir.0);
+                } else if dir.1 != 0 {
+                    self.ui.menu_move(dir.1);
+                }
             }
             return;
         }

@@ -4,6 +4,8 @@ mod config;
 mod window;
 mod event;
 mod browser;
+mod history;
+mod menu;
 mod osk;
 mod render;
 mod resources;

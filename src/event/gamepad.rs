@@ -1,5 +1,4 @@
-use crate::app::{AppCommand, BookmarkAction, InputCommand};
-use crate::browser::BrowserCommand;
+use crate::app::{AppCommand, InputCommand, MenuAction};
 use crate::config::GamepadConfig;
 use crate::osk::OskCommand;
 use sdl2::controller::{Axis, Button};
@@ -103,10 +102,11 @@ impl Gamepad {
             // Y is "space" on the open keyboard; the router reloads the page with
             // it otherwise.
             Button::Y => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
-            Button::LeftShoulder => AppCommand::Browser(BrowserCommand::Back),
-            Button::RightShoulder => AppCommand::Browser(BrowserCommand::Foward),
-            Button::Start => AppCommand::Bookmark(BookmarkAction::ToggleCurrent),
-            Button::Back => AppCommand::Bookmark(BookmarkAction::Open),
+            // Contextual: switch menu sections when the menu is open, else back/forward.
+            Button::LeftShoulder => AppCommand::Input(InputCommand::Shoulder(-1)),
+            Button::RightShoulder => AppCommand::Input(InputCommand::Shoulder(1)),
+            Button::Start => AppCommand::ToggleBookmark,
+            Button::Back => AppCommand::Menu(MenuAction::Open),
             _ => return,
         };
         commands.push(cmd);

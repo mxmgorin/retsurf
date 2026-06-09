@@ -1,7 +1,7 @@
 //! Saved bookmarks: a flat list of URLs persisted to `bookmarks.toml` in the
-//! user data dir, plus the state of the full-screen bookmarks overlay (which
-//! entry is selected, whether it's shown). Rendered by [`crate::ui`] and driven
-//! by the central router.
+//! user data dir, plus the highlighted row in the menu's Bookmarks section. The
+//! menu (see [`crate::menu`]) owns whether the overlay is shown; this just owns
+//! the list and selection. Rendered by [`crate::ui`], driven by the central router.
 
 use crate::config;
 use serde::{Deserialize, Serialize};
@@ -15,9 +15,7 @@ struct Store {
 
 pub struct Bookmarks {
     urls: Vec<String>,
-    /// Whether the bookmarks overlay is shown.
-    pub visible: bool,
-    /// Highlighted row in the overlay.
+    /// Highlighted row in the menu's Bookmarks section.
     selected: usize,
 }
 
@@ -29,11 +27,7 @@ impl Bookmarks {
             .and_then(|text| toml::from_str::<Store>(&text).ok())
             .map(|store| store.urls)
             .unwrap_or_default();
-        Self {
-            urls,
-            visible: false,
-            selected: 0,
-        }
+        Self { urls, selected: 0 }
     }
 
     fn path() -> String {
@@ -78,13 +72,9 @@ impl Bookmarks {
         self.save();
     }
 
-    pub fn show(&mut self) {
-        self.visible = true;
+    /// Reset the highlight to the top (called when the menu opens).
+    pub fn reset(&mut self) {
         self.selected = 0;
-    }
-
-    pub fn hide(&mut self) {
-        self.visible = false;
     }
 
     /// Move the highlight by `dy` rows, clamped to the list.

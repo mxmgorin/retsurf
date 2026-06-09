@@ -71,6 +71,10 @@ struct AppBrowserInner {
     rendering_ctx: Rc<dyn RenderingContext>,
     repaint_pending: Cell<bool>,
     state: RefCell<BrowserState>,
+    /// URLs the focused webview has actually navigated to since the last drain,
+    /// for the history log. Sourced from `notify_url_changed` (a real navigation),
+    /// *not* the address-bar text — so typing a URL doesn't pollute history.
+    visited: RefCell<Vec<String>>,
 }
 
 impl AppBrowserInner {
@@ -86,6 +90,7 @@ impl AppBrowserInner {
             rendering_ctx,
             repaint_pending: Cell::new(false),
             state: RefCell::new(BrowserState::default()),
+            visited: RefCell::new(vec![]),
         }
     }
 
@@ -114,7 +119,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
     fn notify_url_changed(&self, webview: WebView, url: Url) {
         if self.is_focused_webview(webview.id()) {
-            self.state.borrow_mut().location = url.to_string();
+            let url = url.to_string();
+            self.state.borrow_mut().location = url.clone();
+            self.visited.borrow_mut().push(url);
         }
     }
 
@@ -156,6 +163,13 @@ impl AppBrowser {
     #[inline]
     pub fn get_state_mut(&self) -> std::cell::RefMut<'_, BrowserState> {
         self.inner.state.borrow_mut()
+    }
+
+    /// Take and clear the URLs navigated to since the last call, for the history
+    /// log. Drained once per frame by the main loop.
+    #[inline]
+    pub fn take_visited(&self) -> Vec<String> {
+        std::mem::take(&mut self.inner.visited.borrow_mut())
     }
 
     pub fn open_tab(&mut self, url: &str) {

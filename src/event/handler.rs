@@ -1,6 +1,6 @@
 use super::gamepad::Gamepad;
 use crate::{
-    app::{AppCommand, BookmarkAction},
+    app::{AppCommand, MenuAction},
     browser::AppBrowser,
     event::{user::handle_user, window::handle_window},
     ui::AppUi,
@@ -133,19 +133,22 @@ impl AppEventHandler {
                 const WHEEL_PX: f32 = 60.0;
                 browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
             }
-            // While the bookmarks overlay is open it captures the keyboard: Esc
-            // closes, Enter opens, Delete removes, arrows move the selection.
-            Event::KeyDown { keycode: Some(kc), .. } if ui.bookmarks_visible() => {
+            // While the menu is open it captures the keyboard: Esc closes, Enter
+            // opens, Delete removes, up/down move the selection, left/right switch
+            // section.
+            Event::KeyDown { keycode: Some(kc), .. } if ui.menu_visible() => {
                 match kc {
-                    Keycode::Escape => commands.push(AppCommand::Bookmark(BookmarkAction::Close)),
+                    Keycode::Escape => commands.push(AppCommand::Menu(MenuAction::Close)),
                     Keycode::Return | Keycode::KpEnter => {
-                        commands.push(AppCommand::Bookmark(BookmarkAction::OpenSelected))
+                        commands.push(AppCommand::Menu(MenuAction::OpenSelected))
                     }
                     Keycode::Delete | Keycode::Backspace => {
-                        commands.push(AppCommand::Bookmark(BookmarkAction::RemoveSelected))
+                        commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
                     }
-                    Keycode::Up => commands.push(AppCommand::Bookmark(BookmarkAction::Move(-1))),
-                    Keycode::Down => commands.push(AppCommand::Bookmark(BookmarkAction::Move(1))),
+                    Keycode::Up => commands.push(AppCommand::Menu(MenuAction::Move(-1))),
+                    Keycode::Down => commands.push(AppCommand::Menu(MenuAction::Move(1))),
+                    Keycode::Left => commands.push(AppCommand::Menu(MenuAction::SwitchSection(-1))),
+                    Keycode::Right => commands.push(AppCommand::Menu(MenuAction::SwitchSection(1))),
                     _ => {}
                 }
             }
@@ -160,8 +163,8 @@ impl AppEventHandler {
                 let event = servo::InputEvent::Keyboard(event);
                 browser.handle_input(event);
             }
-            // Swallow key releases too while the overlay owns the keyboard.
-            Event::KeyUp { .. } if ui.bookmarks_visible() => {}
+            // Swallow key releases too while the menu owns the keyboard.
+            Event::KeyUp { .. } if ui.menu_visible() => {}
             Event::KeyUp {
                 keycode: Some(kc),
                 scancode: Some(sc),
