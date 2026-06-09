@@ -81,6 +81,16 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
+    /// Ask the main loop to render one more frame immediately, without blocking on
+    /// input. Commands are drained *after* this frame's [`AppUi::update`] builds the
+    /// egui output, so a command that changes UI state (open a menu, switch section,
+    /// type on the keyboard) wouldn't show until the next input wakes the loop. This
+    /// schedules that follow-up frame so the change appears at once.
+    #[inline]
+    pub fn request_repaint(&mut self) {
+        self.repaint_delay = Some(Duration::ZERO);
+    }
+
     /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
     /// to the window (inset by the cursor's painted extent so the whole circle
     /// stays on screen); it may roam over the toolbar so its buttons are clickable.
@@ -528,7 +538,7 @@ fn add_menu(
                         }
                     });
                     ui.label(
-                        egui::RichText::new("◀▶ section   ▲▼ select   A open   X delete   B close")
+                        egui::RichText::new("⏴⏵ section   ⏶⏷ select   A open   X delete   B close")
                             .color(dim),
                     );
                     ui.add_space(8.0);
@@ -550,7 +560,7 @@ fn add_tabs_section(ui: &mut egui::Ui, current_url: &str, dim: egui::Color32) {
     } else {
         current_url
     };
-    ui.label(egui::RichText::new(format!("● {label}")).color(egui::Color32::WHITE));
+    ui.label(egui::RichText::new(format!("• {label}")).color(egui::Color32::WHITE));
     ui.add_space(4.0);
     ui.label(egui::RichText::new("Multiple tabs coming soon.").color(dim));
 }
@@ -615,7 +625,7 @@ fn add_history_section(
     }
 
     if ui
-        .button(egui::RichText::new("🗑 Clear all").color(egui::Color32::WHITE))
+        .button(egui::RichText::new("Clear all").color(egui::Color32::WHITE))
         .clicked()
     {
         commands.push(AppCommand::Menu(MenuAction::Clear));

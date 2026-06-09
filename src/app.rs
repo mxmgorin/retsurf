@@ -188,6 +188,20 @@ impl App {
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
         };
+
+        // Commands are drained after `ui.update` already built this frame, so a
+        // discrete command that changes UI state needs a follow-up frame to show —
+        // otherwise the loop blocks on input and the change lingers unrendered. The
+        // per-frame analog tick is excluded: it fires every frame and forcing a
+        // repaint from it would spin the idle loop.
+        if !matches!(
+            command,
+            AppCommand::Input(InputCommand::Analog { .. })
+                | AppCommand::Resize(..)
+                | AppCommand::Shutdown
+        ) {
+            self.ui.request_repaint();
+        }
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History overlay).
