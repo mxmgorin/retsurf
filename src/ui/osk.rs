@@ -1,0 +1,55 @@
+//! Rendering of the on-screen keyboard (state and input handling live in
+//! [`crate::osk`]).
+
+use crate::osk::{key_label, Key, LAYOUT};
+use egui_sdl2::egui;
+
+/// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
+/// to the bottom, with the selected key (and active Shift/Caps) highlighted.
+pub(super) fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool, caps: bool) {
+    let highlight = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
+    let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
+    // Char keys are 36 wide with 4px gaps, so the 14-key top rows span 574px
+    // (≈598 with the frame margin, inside the 640px window). Enter and Shift are
+    // sized to make their (shorter) rows fill that same width.
+    let key_width = |key: &Key| match key {
+        Key::Space => 298.0,
+        Key::Shift => 85.0,
+        Key::Enter => 76.0,
+        Key::Tab | Key::Caps | Key::Backspace | Key::Lang | Key::Hide => 54.0,
+        _ => 36.0,
+    };
+
+    egui::Area::new(egui::Id::new("osk"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+        .show(ctx, |ui| {
+            egui::Frame::default()
+                .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
+                .corner_radius(12.0)
+                .inner_margin(12.0)
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(4.0, 5.0);
+                    for (r, row) in LAYOUT.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            for (c, key) in row.iter().enumerate() {
+                                let is_sel = (r, c) == selected;
+                                let active = is_sel
+                                    || (*key == Key::Shift && shift)
+                                    || (*key == Key::Caps && caps);
+                                let size = egui::vec2(key_width(key), 38.0);
+                                let fill = if active { highlight } else { key_fill };
+                                let button = egui::Button::new(
+                                    egui::RichText::new(key_label(*key, shift, caps))
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .fill(fill)
+                                .corner_radius(6.0)
+                                .min_size(size);
+                                ui.add(button);
+                            }
+                        });
+                    }
+                });
+        });
+}

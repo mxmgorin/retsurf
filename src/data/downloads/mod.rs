@@ -11,8 +11,8 @@ mod store;
 mod worker;
 
 use crate::config::DownloadsConfig;
+use crate::data::history;
 use crate::event::user::UserEventSender;
-use crate::history;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 

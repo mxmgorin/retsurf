@@ -4,9 +4,7 @@ use sdl2::event::WindowEvent;
 pub fn handle_window(win_event: WindowEvent) -> Option<AppCommand> {
     match win_event {
         WindowEvent::Close => Some(AppCommand::Shutdown),
-        WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
-            Some(AppCommand::Resize(w as u32, h as u32))
-        }
+        WindowEvent::Resized(..) | WindowEvent::SizeChanged(..) => Some(AppCommand::Resize),
         WindowEvent::None
         | WindowEvent::Shown
         | WindowEvent::Hidden

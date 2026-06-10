@@ -170,7 +170,7 @@ impl Default for AdblockConfig {
 
 /// File-download settings (`[downloads]` in the config). Servo has no download
 /// support, so retsurf intercepts navigations to file-like URLs and fetches them
-/// itself — see [`crate::downloads`].
+/// itself — see [`crate::data::downloads`].
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct DownloadsConfig {

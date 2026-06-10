@@ -5,10 +5,10 @@
 //! maps gamepad / keyboard / mouse input to section switches, selection moves,
 //! open, delete, and clear; [`crate::ui`] renders it.
 
-use crate::bookmarks::Bookmarks;
 use crate::config::{DownloadsConfig, HistoryConfig};
-use crate::downloads::Downloads;
-use crate::history::History;
+use crate::data::bookmarks::Bookmarks;
+use crate::data::downloads::Downloads;
+use crate::data::history::History;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Section {

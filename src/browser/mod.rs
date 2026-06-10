@@ -1,14 +1,24 @@
+//! The embedded Servo browser: tab list, painting, input, and commands. All
+//! reactions to Servo (the `WebViewDelegate` impl, including download
+//! interception and ad blocking) live in [`delegate`]; address-bar text
+//! interpretation in [`url`].
+
+mod delegate;
+mod url;
+
+pub use url::try_into_url;
+
 use crate::{
     adblock::Adblock,
     config::BrowserConfig,
-    event::user::{UserEvent, UserEventSender},
+    event::user::UserEventSender,
 };
+use ::url::Url;
 use servo::{EventLoopWaker, RenderingContext, WebView};
 use std::{
     cell::{Cell, RefCell, RefMut},
     rc::Rc,
 };
-use url::Url;
 
 #[derive(Clone)]
 pub enum BrowserCommand {
@@ -81,6 +91,8 @@ pub struct TabInfo {
     pub active: bool,
 }
 
+/// Shared state behind the [`AppBrowser`] handle. Servo calls back into it as
+/// the webviews' delegate — see [`delegate`] for that side.
 struct AppBrowserInner {
     tabs: RefCell<Vec<Tab>>,
     /// Index of the shown tab in `tabs`.
@@ -94,8 +106,8 @@ struct AppBrowserInner {
     /// the address-bar text — so typing a URL doesn't pollute history.
     visited: RefCell<Vec<String>>,
     /// URLs whose navigation was denied because they look like file downloads
-    /// (see `request_navigation`), drained once per frame by the main loop which
-    /// hands them to the downloads store.
+    /// (see [`delegate`]), drained once per frame by the main loop which hands
+    /// them to the downloads store.
     download_requests: RefCell<Vec<String>>,
     /// Lowercased URL path extensions treated as downloads (from `[downloads]`).
     download_exts: Vec<String>,
@@ -139,74 +151,6 @@ impl AppBrowserInner {
     /// Index of the tab owning `id`, if any.
     fn tab_index(&self, id: servo::WebViewId) -> Option<usize> {
         self.tabs.borrow().iter().position(|t| t.webview.id() == id)
-    }
-
-    /// Whether navigating to `url` should download it instead: an `http(s)` URL
-    /// whose path's last segment carries one of the configured file extensions.
-    fn is_download_url(&self, url: &Url) -> bool {
-        if url.scheme() != "http" && url.scheme() != "https" {
-            return false;
-        }
-        let Some(name) = url.path_segments().and_then(|mut s| s.next_back()) else {
-            return false;
-        };
-        let Some((stem, ext)) = name.rsplit_once('.') else {
-            return false;
-        };
-        !stem.is_empty() && self.download_exts.iter().any(|e| e.eq_ignore_ascii_case(ext))
-    }
-}
-
-impl servo::WebViewDelegate for AppBrowserInner {
-    fn notify_new_frame_ready(&self, _: WebView) {
-        self.repaint_pending.set(true);
-        self.event_sender.send(UserEvent::BrowserFrameReady);
-    }
-
-    fn notify_url_changed(&self, webview: WebView, url: Url) {
-        // Update whichever tab navigated (so its address bar is right once shown);
-        // only log to history when it's the tab the user is actually viewing.
-        if let Some(i) = self.tab_index(webview.id()) {
-            let url = url.to_string();
-            self.tabs.borrow_mut()[i].state.location = url.clone();
-            if i == self.active.get() {
-                self.visited.borrow_mut().push(url);
-            }
-        }
-    }
-
-    fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
-        if let Some(i) = self.tab_index(webview.id()) {
-            self.tabs.borrow_mut()[i].state.load_status = status;
-        }
-    }
-
-    /// Servo can't download: navigating to a file URL would just fail to render.
-    /// Deny those navigations and queue the URL for our own fetch instead (see
-    /// [`crate::downloads`]). Everything else proceeds normally.
-    fn request_navigation(&self, _webview: WebView, request: servo::NavigationRequest) {
-        if !self.is_download_url(&request.url) {
-            request.allow();
-            return;
-        }
-        let url = request.url.to_string();
-        log::info!("intercepting download navigation: {url}");
-        request.deny();
-        self.download_requests.borrow_mut().push(url);
-        // Wake the main loop so the download starts right away even when idle.
-        self.event_sender.send(UserEvent::DownloadUpdate);
-    }
-
-    /// Run every resource load through the ad blocker. Blocked loads get an
-    /// empty 200 response, so scripts/images fail soft instead of raising
-    /// network errors; everything else proceeds untouched (dropping the load
-    /// means "do not intercept").
-    fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
-        if self.adblock.should_block(load.request()) {
-            log::debug!("adblock: blocked {}", load.request().url);
-            let response = servo::WebResourceResponse::new(load.request().url.clone());
-            load.intercept(response).finish();
-        }
     }
 }
 
@@ -480,48 +424,6 @@ impl AppBrowser {
             None => self.inner.rendering_ctx.resize(size),
         }
     }
-}
-
-/// Interpret an input URL.
-///
-/// If this is not a valid URL, try to "fix" it by adding a scheme or if all else fails,
-/// interpret the string as a search term.
-pub fn try_into_url<S: AsRef<str>>(request: S, searchpage: &str) -> Option<Url> {
-    let request = request.as_ref().trim();
-
-    Url::parse(request)
-        .ok()
-        .or_else(|| try_as_file(request))
-        .or_else(|| try_as_domain(request))
-        .or_else(|| try_as_search_page(request, searchpage))
-}
-
-fn try_as_file(request: &str) -> Option<Url> {
-    if request.starts_with('/') {
-        return Url::parse(&format!("file://{}", request)).ok();
-    }
-    None
-}
-
-fn try_as_domain(request: &str) -> Option<Url> {
-    fn is_domain_like(s: &str) -> bool {
-        !s.starts_with('/') && s.contains('/')
-            || (!s.contains(' ') && !s.starts_with('.') && s.split('.').count() > 1)
-    }
-
-    if !request.contains(' ') && servo::is_reg_domain(request) || is_domain_like(request) {
-        return Url::parse(&format!("https://{}", request)).ok();
-    }
-
-    None
-}
-
-fn try_as_search_page(request: &str, searchpage: &str) -> Option<Url> {
-    if request.is_empty() {
-        return None;
-    }
-
-    Url::parse(&searchpage.replace("%s", request)).ok()
 }
 
 fn set_experimental_prefs(servo: &servo::Servo, value: bool) {

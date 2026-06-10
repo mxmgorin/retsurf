@@ -26,13 +26,18 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
-- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, and **History** sections — switch / open / close tabs, and open, delete, or clear saved entries
+- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
 - Right-stick scroll · A = click/select · B = back / close · L1/R1 = back / forward · L2/R2 = switch tabs · Start = bookmark page · Y = reload
 
-**Platform**
-- Minimal **egui** toolbar: address bar, back / forward / reload
-- Keyboard, mouse, and gamepad input
-- Single self-contained binary
+**Downloads**
+- Navigating to a file link downloads it in the background instead of rendering it
+- Progress, cancel, and history of finished downloads in the menu's **Downloads** section; a ⬇ toolbar chip shows what's in flight
+- Saves into the system download folder (`XDG_DOWNLOAD_DIR` / `~/Downloads`) or any configured directory
+
+**Ad blocking**
+- Network-level ad & tracker blocking with [Brave's adblock-rust](https://github.com/brave/adblock-rust) engine (EasyList + EasyPrivacy by default)
+- Filter lists are fetched in the background, compiled, and cached locally — warm starts are instant and work offline
+- Fully configurable: toggle it off, change the lists, or change the refresh interval
 
 ## How it works
 
@@ -97,6 +102,26 @@ cursor_linger_ms = 1500    # how long the gamepad cursor stays visible after mov
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)
 max_entries = 200          # cap on retained entries; oldest are dropped past this
 
+[downloads]
+# Where files are saved. Empty picks the system download folder (XDG_DOWNLOAD_DIR /
+# ~/Downloads) when it exists, otherwise downloads/ in the user data dir. Point it
+# at the SD card on a handheld, e.g. "/userdata/roms".
+dir = ""
+# URL path extensions treated as downloads when navigated to (navigation is
+# cancelled and the file is fetched in the background instead). URLs without a
+# listed extension load in the browser as usual. The default (written to the
+# template on first run) covers archives, disc images, packages, PDFs, and
+# common cartridge-ROM extensions, e.g.:
+extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
+
+[adblock]
+enabled = true             # master switch for ad & tracker blocking
+lists = [                  # filter lists (EasyList syntax) compiled into the engine
+    "https://easylist.to/easylist/easylist.txt",
+    "https://easylist.to/easylist/easyprivacy.txt",
+]
+update_days = 7            # re-download lists when the cached engine is older; 0 = never
+
 [gamepad]
 deadzone = 0.25            # stick deflection below this is treated as centered
 cursor_speed = 750.0       # cursor speed at full deflection (logical px/s)
@@ -106,10 +131,6 @@ osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboa
 osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 ```
-
-## Status
-
-Experimental. Basic page rendering and navigation work, including full gamepad control on real hardware. WebGL is disabled on devices whose EGL stack is too old for surfman (e.g. EGL 1.4 Mali blobs); everything else renders normally. Many browser features are not yet implemented — contributions and device reports welcome.
 
 ## References
 
