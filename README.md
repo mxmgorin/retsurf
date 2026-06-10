@@ -25,10 +25,11 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
-- **Link hints** (L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
+- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
 - **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
-- Right-stick scroll · A = click/select · B = back / close · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = bookmark page · Y = reload
+- **Rebindable buttons** (`bindings.toml`) with tap, hold, and two-button chord gestures, plus a D-pad cursor↔scroll toggle for devices without analog sticks
+- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = reload (hold: bookmark) · Select = menu
 
 **Downloads**
 - Navigating to a file link downloads it in the background instead of rendering it
@@ -131,7 +132,38 @@ trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
 osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
 osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
 osk_nav_repeat_ms = 140          # interval between auto-repeats
+hold_ms = 400              # holding a button this long fires its "hold:" gesture
 ```
+
+## Button bindings (`bindings.toml`)
+
+Button layout lives in its own file, `bindings.toml`, next to `config.toml`
+(a template with the defaults is written on first run). Each entry maps a
+*gesture* to an *action*:
+
+```toml
+[gamepad]
+a = "confirm"              # tap: fires on press
+"hold:start" = "bookmark"  # hold the button for hold_ms
+"l1+r1" = "reload"         # chord: press one while holding the other
+y = "none"                 # explicitly unbind
+```
+
+Gestures: a tap (`a`), a hold (`"hold:a"`), or a two-button chord (`"a+b"`).
+Buttons: `a b x y l1 r1 l3 r3 start select` (the D-pad aims the cursor and
+L2/R2 cycle tabs / drive the keyboard — they're not bindable). A button with a
+hold or chord gesture fires its tap on release instead of press (the gesture is
+ambiguous until then); `confirm` needs the press edge for clicks and drags, so
+hold/chord gestures on its button are rejected.
+
+Actions: `confirm` (click/select) · `cancel` (close/back) · `osk` (on-screen
+keyboard) · `reload` · `prev` / `next` (menu section or history) · `hints`
+(link hints) · `bookmark` · `menu` · `scroll` (toggle the D-pad / left stick
+between cursor and page scroll — the scroll fallback for devices without a
+right analog stick) · `none`.
+
+Invalid buttons, actions, or gestures are logged and skipped at startup —
+check the log if a binding doesn't respond.
 
 ## References
 

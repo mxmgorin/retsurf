@@ -102,7 +102,11 @@ impl App {
                         .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }
             }
-            InputCommand::Analog { aim, scroll } => self.route_analog(*aim, *scroll, out),
+            InputCommand::Analog {
+                aim,
+                scroll,
+                scroll_mode,
+            } => self.route_analog(*aim, *scroll, *scroll_mode, out),
         }
     }
 
@@ -145,7 +149,18 @@ impl App {
 
     /// Apply per-frame analog state: keyboard grid navigation (with auto-repeat)
     /// while the keyboard is open, otherwise cursor movement and page scroll.
-    fn route_analog(&mut self, aim: (f32, f32), scroll: f32, out: &mut Vec<AppCommand>) {
+    /// `scroll_mode` only changes the bare-page meaning of the aim vector
+    /// (scroll instead of cursor) — overlay navigation always gets the raw aim.
+    fn route_analog(
+        &mut self,
+        aim: (f32, f32),
+        scroll: f32,
+        scroll_mode: bool,
+        out: &mut Vec<AppCommand>,
+    ) {
+        // Keep the UI's scroll-mode indicator in sync (drawn in place of the
+        // cursor while the mode is latched).
+        self.ui.set_scroll_mode(scroll_mode);
         let now = Instant::now();
         let dt = (now - self.last_tick).as_secs_f32();
         self.last_tick = now;
@@ -198,6 +213,19 @@ impl App {
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
                 self.browser.scroll(0.0, dy, x, y);
                 self.ui.hints_mark_stale();
+            }
+            return;
+        }
+
+        // Scroll mode: the aim vector scrolls the page (combined with the right
+        // stick) and the cursor stays parked.
+        if scroll_mode {
+            let dy = (scroll + aim.1).clamp(-1.0, 1.0) * scroll_speed * dt;
+            if dy != 0.0 {
+                // The parked cursor may sit over the toolbar; scroll the page
+                // from its top edge in that case.
+                let (x, y) = self.ui.cursor_browser_rel();
+                self.browser.scroll(0.0, dy, x, y.max(1.0));
             }
             return;
         }

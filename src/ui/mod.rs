@@ -55,6 +55,9 @@ pub struct AppUi {
     menu: Menu,
     /// Link-hint navigation state (L3); the rects come from the browser.
     hints: Hints,
+    /// The gamepad's latched D-pad scroll mode, mirrored each frame by the
+    /// router; drawn as an autoscroll-style indicator in place of the cursor.
+    scroll_mode: bool,
 }
 
 impl AppUi {
@@ -88,6 +91,7 @@ impl AppUi {
             osk: Osk::new(),
             menu: Menu::new(history, downloads),
             hints: Hints::new(),
+            scroll_mode: false,
         }
     }
 
@@ -338,6 +342,13 @@ impl AppUi {
         self.hints.take_refresh_due()
     }
 
+    /// Mirror the gamepad's latched D-pad scroll mode (called by the router
+    /// every analog frame) so the indicator tracks it.
+    #[inline]
+    pub fn set_scroll_mode(&mut self, on: bool) {
+        self.scroll_mode = on;
+    }
+
     /// Whether the address-bar text field currently holds keyboard focus.
     fn address_bar_focused(&self) -> bool {
         self.egui
@@ -457,7 +468,7 @@ impl AppUi {
                     osk::add_osk(ctx, self.osk.selected(), self.osk.shift(), self.osk.caps);
                 } else if self.hints.visible {
                     hints::add_hints(ctx, &self.hints, self.webview_top);
-                } else if cursor_visible.is_some() {
+                } else if self.scroll_mode || cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.
                     let painter = ctx.layer_painter(egui::LayerId::new(
@@ -465,12 +476,23 @@ impl AppUi {
                         egui::Id::new("gamepad_cursor"),
                     ));
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
-                    painter.circle_filled(pos, CURSOR_RADIUS, egui::Color32::from_white_alpha(235));
-                    painter.circle_stroke(
-                        pos,
-                        CURSOR_RADIUS,
-                        egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK),
-                    );
+                    if self.scroll_mode {
+                        // Autoscroll-style indicator (dot + up/down arrowheads),
+                        // persistent while the mode is latched so it's never
+                        // ambiguous what the D-pad currently does.
+                        add_scroll_indicator(&painter, pos);
+                    } else {
+                        painter.circle_filled(
+                            pos,
+                            CURSOR_RADIUS,
+                            egui::Color32::from_white_alpha(235),
+                        );
+                        painter.circle_stroke(
+                            pos,
+                            CURSOR_RADIUS,
+                            egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK),
+                        );
+                    }
                 }
             });
         }
@@ -505,5 +527,24 @@ impl AppUi {
         };
 
         pos.y < self.webview_top
+    }
+}
+
+/// The D-pad scroll-mode indicator at the parked cursor position: a center dot
+/// with up/down arrowheads, like a browser's middle-click autoscroll marker.
+fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
+    let fill = egui::Color32::from_white_alpha(235);
+    let stroke = egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK);
+    painter.circle_filled(pos, 2.5, fill);
+    painter.circle_stroke(pos, 2.5, stroke);
+    for dir in [-1.0f32, 1.0] {
+        let tip = egui::pos2(pos.x, pos.y + dir * 12.0);
+        let base = pos.y + dir * 5.5;
+        let points = vec![
+            tip,
+            egui::pos2(pos.x - 4.5, base),
+            egui::pos2(pos.x + 4.5, base),
+        ];
+        painter.add(egui::Shape::convex_polygon(points, fill, stroke));
     }
 }

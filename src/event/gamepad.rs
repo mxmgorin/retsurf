@@ -226,8 +226,10 @@ impl Gamepad {
     }
 
     /// Emit this frame's analog state for the router to apply, and fire any
-    /// `hold:` gesture whose threshold just passed. In scroll mode the aim
-    /// vector scrolls the page instead of aiming the cursor.
+    /// `hold:` gesture whose threshold just passed. The aim vector is sent raw
+    /// along with the latched scroll-mode flag — what it means in the current
+    /// context (cursor, overlay navigation, or page scroll) is the router's
+    /// decision.
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
         let mut fired = vec![];
         for h in &mut self.held {
@@ -242,11 +244,10 @@ impl Gamepad {
             self.emit(action, true, commands);
         }
 
-        let (aim, scroll) = if self.scroll_mode {
-            ((0.0, 0.0), self.aim().1)
-        } else {
-            (self.aim(), self.right.1)
-        };
-        commands.push(AppCommand::Input(InputCommand::Analog { aim, scroll }));
+        commands.push(AppCommand::Input(InputCommand::Analog {
+            aim: self.aim(),
+            scroll: self.right.1,
+            scroll_mode: self.scroll_mode,
+        }));
     }
 }

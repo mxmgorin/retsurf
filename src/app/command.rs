@@ -83,6 +83,13 @@ pub enum InputCommand {
     Hints,
     /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
     /// stick Y), each normalized to -1..=1. Drives the cursor, keyboard grid
-    /// navigation, or page scroll depending on context.
-    Analog { aim: (f32, f32), scroll: f32 },
+    /// navigation, or page scroll depending on context. `scroll_mode` is the
+    /// gamepad's latched toggle (the `scroll` action): overlays keep using the
+    /// raw aim for navigation, but on the bare page the aim scrolls instead of
+    /// moving the cursor.
+    Analog {
+        aim: (f32, f32),
+        scroll: f32,
+        scroll_mode: bool,
+    },
 }
