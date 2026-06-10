@@ -1,24 +1,27 @@
 use super::gamepad::Gamepad;
+use super::keyboard::{KeyEvent, Keyboard};
 use crate::{
-    app::{AppCommand, MenuAction},
+    app::AppCommand,
     browser::AppBrowser,
-    event::{bindings::KeyBindings, user::handle_user, window::handle_window},
+    config::GamepadConfig,
+    event::{user::handle_user, window::handle_window},
     ui::AppUi,
     window::AppWindow,
 };
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
-    /// Keyboard shortcuts from `bindings.toml` (`[keyboard]`).
-    key_bindings: KeyBindings,
+    /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
+    gamepad: Gamepad,
+    /// Keyboard-side counterpart of [`Gamepad`]: shortcuts + overlay keys.
+    keyboard: Keyboard,
 }
 
 impl AppEventHandler {
-    pub fn new(sdl: &sdl2::Sdl) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: GamepadConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
 
@@ -33,7 +36,8 @@ impl AppEventHandler {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            key_bindings: KeyBindings::load(),
+            gamepad: Gamepad::new(gamepad_cfg),
+            keyboard: Keyboard::new(),
         })
     }
 
@@ -42,24 +46,23 @@ impl AppEventHandler {
         window: &AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
-        gamepad: &mut Gamepad,
         commands: &mut Vec<AppCommand>,
     ) {
         // Block for the next event only when idle. When the gamepad is active or
         // the page is animating, return promptly so the main loop keeps ticking
         // (vsync caps the rate); blocking here would stall cursor/scroll motion.
-        if !browser.is_animating() && !gamepad.is_active() {
+        if !browser.is_animating() && !self.gamepad.is_active() {
             match ui.take_repain_delay() {
                 Some(delay) => {
                     if let Some(event) =
                         self.event_pump.wait_event_timeout(delay.as_millis() as u32)
                     {
-                        self.handle_event(event, window, ui, browser, gamepad, commands);
+                        self.handle_event(event, window, ui, browser, commands);
                     }
                 }
                 None => {
                     let event = self.event_pump.wait_event();
-                    self.handle_event(event, window, ui, browser, gamepad, commands);
+                    self.handle_event(event, window, ui, browser, commands);
                 }
             }
         }
@@ -67,29 +70,12 @@ impl AppEventHandler {
         // Drain everything else queued this frame (notably the flood of analog
         // stick axis events) so we always act on the latest input — no backlog lag.
         while let Some(event) = self.event_pump.poll_event() {
-            self.handle_event(event, window, ui, browser, gamepad, commands);
+            self.handle_event(event, window, ui, browser, commands);
         }
-    }
 
-    /// Resolve a key event against the `[keyboard]` bindings, applying the
-    /// firing rules: `nav_*` steps need an open overlay (and, unlike the other
-    /// shortcuts, auto-repeat while held); plain bindings (no Ctrl/Alt) are
-    /// muted while anything editable has focus, so they can't hijack typing.
-    fn lookup_shortcut(
-        &self,
-        kc: Keycode,
-        keymod: sdl2::keyboard::Mod,
-        repeat: bool,
-        overlay: bool,
-        typing: bool,
-    ) -> Option<crate::event::bindings::Action> {
-        let (action, plain) = self.key_bindings.lookup(kc, keymod)?;
-        let fire = if action.is_nav() {
-            overlay
-        } else {
-            !repeat && (!plain || !typing)
-        };
-        fire.then_some(action)
+        // Emit this frame's analog state as a command for the router to apply,
+        // and fire any `hold:` gesture whose threshold just passed.
+        self.gamepad.tick(commands);
     }
 
     fn handle_event(
@@ -98,7 +84,6 @@ impl AppEventHandler {
         window: &AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
-        gamepad: &mut Gamepad,
         commands: &mut Vec<AppCommand>,
     ) {
         let consumed = ui.handle_event(window, &event);
@@ -157,32 +142,6 @@ impl AppEventHandler {
                 const WHEEL_PX: f32 = 60.0;
                 browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
             }
-            // While the menu is open it captures the keyboard: Esc closes, Enter
-            // opens, Delete removes; navigation and shortcuts go through the
-            // bindings (arrows are the default `nav_*` gestures).
-            Event::KeyDown {
-                keycode: Some(kc),
-                keymod,
-                repeat,
-                ..
-            } if ui.menu_visible() => {
-                // The menu overlay covers everything, so nothing editable can
-                // hold focus — `typing` is moot here.
-                if let Some(action) = self.lookup_shortcut(kc, keymod, repeat, true, false) {
-                    action.push_tap(commands);
-                    return;
-                }
-                match kc {
-                    Keycode::Escape => commands.push(AppCommand::Menu(MenuAction::Close)),
-                    Keycode::Return | Keycode::KpEnter => {
-                        commands.push(AppCommand::Menu(MenuAction::OpenSelected))
-                    }
-                    Keycode::Delete | Keycode::Backspace => {
-                        commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
-                    }
-                    _ => {}
-                }
-            }
             Event::KeyDown {
                 keycode: Some(kc),
                 scancode: Some(sc),
@@ -190,34 +149,15 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                // Hint mode's fixed keys (its navigation comes from the
-                // `nav_*` bindings below).
-                if ui.hints_visible() {
-                    use crate::app::InputCommand;
-                    let cmd = match kc {
-                        Keycode::Return | Keycode::KpEnter => {
-                            Some(InputCommand::Confirm(true))
-                        }
-                        Keycode::Escape => Some(InputCommand::Cancel),
-                        _ => None,
-                    };
-                    if let Some(cmd) = cmd {
-                        commands.push(AppCommand::Input(cmd));
-                        return;
-                    }
-                }
-                let overlay = ui.osk_visible() || ui.hints_visible();
-                let typing = browser.text_input_focused() || ui.address_bar_focused();
-                if let Some(action) = self.lookup_shortcut(kc, keymod, repeat, overlay, typing) {
-                    action.push_tap(commands);
-                    return;
-                }
-                let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, true, repeat);
-                let event = servo::InputEvent::Keyboard(event);
-                browser.handle_input(event);
+                let key = KeyEvent {
+                    kc,
+                    sc,
+                    keymod,
+                    repeat,
+                    pressed: true,
+                };
+                self.keyboard.on_key(&key, ui, browser, commands);
             }
-            // Swallow key releases too while the menu owns the keyboard.
-            Event::KeyUp { .. } if ui.menu_visible() => {}
             Event::KeyUp {
                 keycode: Some(kc),
                 scancode: Some(sc),
@@ -225,18 +165,23 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, false, repeat);
-                let event = servo::InputEvent::Keyboard(event);
-                browser.handle_input(event);
+                let key = KeyEvent {
+                    kc,
+                    sc,
+                    keymod,
+                    repeat,
+                    pressed: false,
+                };
+                self.keyboard.on_key(&key, ui, browser, commands);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {
-                gamepad.on_axis(axis, value, commands);
+                self.gamepad.on_axis(axis, value, commands);
             }
             Event::ControllerButtonDown { button, .. } => {
-                gamepad.on_button(button, true, commands);
+                self.gamepad.on_button(button, true, commands);
             }
             Event::ControllerButtonUp { button, .. } => {
-                gamepad.on_button(button, false, commands);
+                self.gamepad.on_button(button, false, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {

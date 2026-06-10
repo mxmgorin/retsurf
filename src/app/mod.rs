@@ -10,7 +10,6 @@ pub use command::{AppCommand, InputCommand, MenuAction};
 
 use crate::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
-use crate::event::gamepad::Gamepad;
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::menu::Section;
@@ -33,7 +32,6 @@ pub struct App {
     state: AppState,
     browser: AppBrowser,
     ui: AppUi,
-    gamepad: Gamepad,
     /// For handing to download workers so they can wake the idle-blocked loop.
     event_sender: UserEventSender,
     /// Router timing for analog motion (cursor-speed integration).
@@ -57,9 +55,8 @@ impl App {
             Adblock::new(&config.adblock),
         )?;
         log::info!("init: browser ready; creating event handler + ui");
-        let event_handler = AppEventHandler::new(sdl)?;
+        let event_handler = AppEventHandler::new(sdl, config.gamepad.clone())?;
         let ui = AppUi::new(&window, &config.interface, &config.history, &config.downloads);
-        let gamepad = Gamepad::new(config.gamepad.clone());
         log::info!("init: app constructed");
 
         Ok(Self {
@@ -68,7 +65,6 @@ impl App {
             browser,
             event_handler,
             ui,
-            gamepad,
             event_sender,
             state: AppState::Initialized,
             last_tick: Instant::now(),
@@ -91,13 +87,8 @@ impl App {
                 self.ui.menu_record_history(&url);
             }
 
-            self.event_handler.wait(
-                &self.window,
-                &mut self.ui,
-                &mut self.browser,
-                &mut self.gamepad,
-                &mut commands,
-            );
+            self.event_handler
+                .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
@@ -114,9 +105,6 @@ impl App {
             if self.ui.hints_refresh_due() {
                 self.browser.collect_hints();
             }
-
-            // Emit this frame's analog state as a command for the router to apply.
-            self.gamepad.tick(&mut commands);
 
             // Render Servo into its FBO; egui composites that FBO's texture.
             self.browser.paint();
