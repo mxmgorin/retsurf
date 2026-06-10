@@ -94,9 +94,17 @@ height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 cursor_linger_ms = 1500    # how long the gamepad cursor stays visible after moving
 
+[performance]
+# Servo thread counts. The defaults (0 = auto) size everything from the CPU core
+# count, which matters on 4-core handhelds where Servo's desktop defaults
+# oversubscribe the cores. Set explicit values to override.
+layout_threads = 0         # Stylo/layout threads; auto = cores - 2, clamped to 1..4
+worker_pool_max = 0        # cap per worker pool (image cache, async runtime, storage,
+                           # WebRender); auto = half the cores, at least 2
+
 [history]
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)
-max_entries = 200          # cap on retained entries; oldest are dropped past this
+max_entries = 25           # cap on retained entries; oldest are dropped past this
 
 [downloads]
 # Where files are saved. Empty picks the system download folder (XDG_DOWNLOAD_DIR /

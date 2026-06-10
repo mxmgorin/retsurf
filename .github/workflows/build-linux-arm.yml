@@ -47,6 +47,12 @@ jobs:
           rustc --version
 
       - name: Build
+        env:
+          # Tune for the target handheld cores: Cortex-A35 (RK3326), A53 (H700),
+          # A55 (RK3566). cortex-a53 is the safe common denominator — all three
+          # are ARMv8.0 with fp/neon/crc, and crypto (optional on A53) stays off,
+          # so the binary runs on every target while getting in-order scheduling.
+          RUSTFLAGS: "-C target-cpu=cortex-a53"
         run: |
           set -eux
           # --no-default-features drops `webgl`: surfman can't init on EGL 1.4 Mali

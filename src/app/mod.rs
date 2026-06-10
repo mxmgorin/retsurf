@@ -51,6 +51,7 @@ impl App {
             window.get_rendering_ctx(),
             event_sender.clone(),
             &config.browser,
+            &config.performance,
             config.downloads.extensions.clone(),
             Adblock::new(&config.adblock),
         )?;

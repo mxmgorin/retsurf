@@ -9,6 +9,7 @@ pub struct AppConfig {
     pub history: HistoryConfig,
     pub downloads: DownloadsConfig,
     pub adblock: AdblockConfig,
+    pub performance: PerformanceConfig,
 }
 
 impl AppConfig {
@@ -136,7 +137,7 @@ impl Default for HistoryConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_entries: 200,
+            max_entries: 25,
         }
     }
 }
@@ -242,6 +243,23 @@ fn system_download_dir() -> Option<String> {
     std::path::Path::new(&dir)
         .is_dir()
         .then(|| format!("{}/", dir.trim_end_matches('/')))
+}
+
+/// Servo thread-count tuning (`[performance]` in the config). Servo's defaults
+/// assume a desktop (3 layout threads, worker pools of 4–6); on a 4-core
+/// handheld that oversubscribes the cores, with the pools competing against
+/// layout, script, and WebRender itself. `0` everywhere (the default) sizes
+/// them from the machine's core count instead.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PerformanceConfig {
+    /// Stylo/layout threads. `0` = auto: cores − 2 (clamped to 1..=4), leaving
+    /// room for the script thread and WebRender.
+    pub layout_threads: u32,
+    /// Cap on each of Servo's worker pools (image cache, async runtime,
+    /// storage, WebRender workers). `0` = auto: half the cores (at least 2),
+    /// never raising a pool above its own default.
+    pub worker_pool_max: u32,
 }
 
 /// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,

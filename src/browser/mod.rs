@@ -10,7 +10,7 @@ pub use url::try_into_url;
 
 use crate::{
     adblock::Adblock,
-    config::BrowserConfig,
+    config::{BrowserConfig, PerformanceConfig},
     event::user::{UserEvent, UserEventSender},
     hints::Hint,
 };
@@ -169,12 +169,14 @@ impl AppBrowser {
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         config: &BrowserConfig,
+        perf: &PerformanceConfig,
         download_exts: Vec<String>,
         adblock: Adblock,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
+            .preferences(build_preferences(perf))
             .event_loop_waker(event_sender.clone_box())
             .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
@@ -515,6 +517,42 @@ const COLLECT_HINTS_JS: &str = r#"
     return out;
 })()
 "#;
+
+/// Servo preferences sized to the hardware (see [`PerformanceConfig`]). These
+/// must go through `ServoBuilder` — the thread pools are created at startup,
+/// so `set_preference` after `build()` would be too late.
+fn build_preferences(perf: &PerformanceConfig) -> servo::Preferences {
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(4) as i64;
+    let defaults = servo::Preferences::default();
+
+    // Each `*_workers_max` pref caps a pool Servo sizes from the core count.
+    let cap = |default_max: i64| match perf.worker_pool_max {
+        0 => default_max.min((cores / 2).max(2)),
+        n => n as i64,
+    };
+    let prefs = servo::Preferences {
+        layout_threads: match perf.layout_threads {
+            0 => (cores - 2).clamp(1, 4),
+            n => n as i64,
+        },
+        threadpools_async_runtime_workers_max: cap(defaults.threadpools_async_runtime_workers_max),
+        threadpools_fallback_worker_num: cap(defaults.threadpools_fallback_worker_num),
+        threadpools_image_cache_workers_max: cap(defaults.threadpools_image_cache_workers_max),
+        threadpools_indexeddb_workers_max: cap(defaults.threadpools_indexeddb_workers_max),
+        threadpools_webstorage_workers_max: cap(defaults.threadpools_webstorage_workers_max),
+        threadpools_webrender_workers_max: cap(defaults.threadpools_webrender_workers_max),
+        ..defaults
+    };
+
+    log::info!(
+        "servo threads: {cores} cores -> layout={}, pool cap={}",
+        prefs.layout_threads,
+        cap(i64::MAX),
+    );
+    prefs
+}
 
 fn set_experimental_prefs(servo: &servo::Servo, value: bool) {
     let value = servo::PrefValue::Bool(value);
