@@ -16,13 +16,16 @@
 //! button are rejected at load. Unknown names are logged and skipped, never
 //! silently dropped.
 //!
-//! [`Action`] itself is input-device-agnostic (it only names a command), so a
-//! future `[keyboard.bindings]` can reuse it with its own gesture parser.
+//! The same file carries a `[keyboard]` table mapping shortcuts to the same
+//! actions ([`KeyBindings`]): modifier combos (`"ctrl+r"`) always fire, while
+//! plain keys (`"f"`, Vimium-style) are suppressed whenever a text input — on
+//! the page or the address bar — holds focus, so typing stays intact.
 
 use crate::app::{AppCommand, InputCommand, MenuAction};
 use crate::config;
 use crate::osk::OskCommand;
 use sdl2::controller::Button;
+use sdl2::keyboard::{Keycode, Mod};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -50,6 +53,17 @@ pub enum Action {
     Bookmark,
     /// Open / close the full-screen menu.
     Menu,
+    /// Switch to the next open tab (wraps around).
+    TabNext,
+    /// Switch to the previous open tab (wraps around).
+    TabPrev,
+    /// Overlay navigation by one step (arrow keys by default): menu rows /
+    /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
+    /// through to the page when none is.
+    NavUp,
+    NavDown,
+    NavLeft,
+    NavRight,
     /// Toggle the D-pad / left stick between moving the cursor and scrolling
     /// the page — the scroll fallback for devices without a right analog
     /// stick. Handled inside the gamepad (it changes how the aim vector is
@@ -60,7 +74,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 11] = [
+    const ALL: [Action; 17] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -70,9 +84,25 @@ impl Action {
         Action::Hints,
         Action::Bookmark,
         Action::Menu,
+        Action::TabNext,
+        Action::TabPrev,
+        Action::NavUp,
+        Action::NavDown,
+        Action::NavLeft,
+        Action::NavRight,
         Action::Scroll,
         Action::None,
     ];
+
+    /// Whether this is an overlay-navigation step (see [`Action::NavUp`]):
+    /// these fire only while an overlay is open (otherwise the key goes to the
+    /// page) and, unlike other shortcuts, auto-repeat while held.
+    pub fn is_nav(self) -> bool {
+        matches!(
+            self,
+            Action::NavUp | Action::NavDown | Action::NavLeft | Action::NavRight
+        )
+    }
 
     /// The config-file name of this action; [`Action::parse`] is its inverse,
     /// so typed code (e.g. the default bindings) never spells raw strings.
@@ -87,6 +117,12 @@ impl Action {
             Action::Hints => "hints",
             Action::Bookmark => "bookmark",
             Action::Menu => "menu",
+            Action::TabNext => "tab_next",
+            Action::TabPrev => "tab_prev",
+            Action::NavUp => "nav_up",
+            Action::NavDown => "nav_down",
+            Action::NavLeft => "nav_left",
+            Action::NavRight => "nav_right",
             Action::Scroll => "scroll",
             Action::None => "none",
         }
@@ -96,11 +132,20 @@ impl Action {
         Self::ALL.into_iter().find(|action| action.name() == name)
     }
 
+    /// Emit this action as a one-shot gesture (keyboard shortcuts): Confirm
+    /// sends its press+release pair, everything else fires once.
+    pub fn push_tap(self, commands: &mut Vec<AppCommand>) {
+        commands.extend(self.command(true));
+        if self == Action::Confirm {
+            commands.extend(self.command(false));
+        }
+    }
+
     /// The command a gesture emits. `pressed` matters only for [`Action::Confirm`]
     /// (the press/release edges of a click); everything else fires once.
     pub fn command(self, pressed: bool) -> Option<AppCommand> {
         Some(match self {
-            Action::Confirm => AppCommand::Input(InputCommand::Primary(pressed)),
+            Action::Confirm => AppCommand::Input(InputCommand::Confirm(pressed)),
             Action::Cancel => AppCommand::Input(InputCommand::Cancel),
             Action::Osk => AppCommand::Input(InputCommand::ToggleOsk),
             // Routed through the contextual OSK-space intent: space while the
@@ -112,6 +157,12 @@ impl Action {
             Action::Hints => AppCommand::Input(InputCommand::Hints),
             Action::Bookmark => AppCommand::ToggleBookmark,
             Action::Menu => AppCommand::Menu(MenuAction::Open),
+            Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
+            Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
+            Action::NavUp => AppCommand::Input(InputCommand::Nav(0, -1)),
+            Action::NavDown => AppCommand::Input(InputCommand::Nav(0, 1)),
+            Action::NavLeft => AppCommand::Input(InputCommand::Nav(-1, 0)),
+            Action::NavRight => AppCommand::Input(InputCommand::Nav(1, 0)),
             // Scroll is resolved inside the gamepad, not routed.
             Action::Scroll | Action::None => return None,
         })
@@ -136,12 +187,14 @@ pub fn parse_button(name: &str) -> Option<Button> {
     })
 }
 
-/// On-disk shape of `bindings.toml`: one table per input device (a keyboard
-/// table can join later). BTreeMap so the written template is sorted stably.
+/// On-disk shape of `bindings.toml`: one table per input device. BTreeMap so
+/// the written template is sorted stably.
 #[derive(Default, Serialize, Deserialize)]
 struct Store {
     #[serde(default)]
     gamepad: BTreeMap<String, String>,
+    #[serde(default)]
+    keyboard: BTreeMap<String, String>,
 }
 
 /// The stock layout, spelled with the typed [`Action`]s (no raw strings to
@@ -160,6 +213,29 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         ("hold:start", Action::Bookmark),
         ("hold:y", Action::Scroll),
         ("select", Action::Menu),
+    ]
+    .into_iter()
+    .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
+    .collect()
+}
+
+/// The stock keyboard shortcuts — all behind Ctrl, so none can collide with
+/// typing into the page. Plain keys (e.g. Vimium's `f`) are supported in the
+/// config; they're just not bound by default.
+fn default_keyboard_bindings() -> BTreeMap<String, String> {
+    [
+        ("ctrl+r", Action::Reload),
+        ("ctrl+b", Action::Bookmark),
+        ("ctrl+m", Action::Menu),
+        ("ctrl+left", Action::Prev),
+        ("ctrl+right", Action::Next),
+        ("ctrl+f", Action::Hints),
+        ("ctrl+t", Action::TabNext),
+        ("ctrl+shift+t", Action::TabPrev),
+        ("up", Action::NavUp),
+        ("down", Action::NavDown),
+        ("left", Action::NavLeft),
+        ("right", Action::NavRight),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -186,6 +262,7 @@ fn load_store() -> Store {
         Err(_) => {
             let store = Store {
                 gamepad: default_gamepad_bindings(),
+                keyboard: default_keyboard_bindings(),
             };
             match toml::to_string_pretty(&store) {
                 Ok(text) => {
@@ -316,4 +393,107 @@ fn normalize(a: Button, b: Button) -> (Button, Button) {
     } else {
         (b, a)
     }
+}
+
+/// Modifier bitmask for keyboard shortcuts (left/right variants folded).
+const CTRL: u8 = 1;
+const ALT: u8 = 2;
+const SHIFT: u8 = 4;
+
+fn mods_of(keymod: Mod) -> u8 {
+    let mut mods = 0;
+    if keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) {
+        mods |= CTRL;
+    }
+    if keymod.intersects(Mod::LALTMOD | Mod::RALTMOD) {
+        mods |= ALT;
+    }
+    if keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD) {
+        mods |= SHIFT;
+    }
+    mods
+}
+
+/// Keyboard shortcuts from the `[keyboard]` table: `"ctrl+shift+t"`-style
+/// gestures over the same [`Action`]s. Matching is strict (the pressed
+/// modifiers must equal the bound ones), so `f` won't fire while Shift is down.
+pub struct KeyBindings {
+    map: HashMap<(Keycode, u8), Action>,
+}
+
+impl KeyBindings {
+    /// Load and parse the keyboard table of `bindings.toml`; an empty/absent
+    /// table falls back to the defaults.
+    pub fn load() -> Self {
+        let store = load_store();
+        let map = if store.keyboard.is_empty() {
+            default_keyboard_bindings()
+        } else {
+            store.keyboard
+        };
+        Self::from_map(&map)
+    }
+
+    fn from_map(map: &BTreeMap<String, String>) -> Self {
+        let mut table = HashMap::new();
+        for (gesture, action_name) in map {
+            let Some(action) = Action::parse(action_name) else {
+                log::warn!("key bindings: unknown action `{action_name}` for `{gesture}`");
+                continue;
+            };
+            if action == Action::Scroll {
+                log::warn!("key bindings: `scroll` is gamepad-only; ignoring `{gesture}`");
+                continue;
+            }
+            let mut mods = 0u8;
+            let mut key = None;
+            for token in gesture.trim().to_ascii_lowercase().split('+') {
+                match token.trim() {
+                    "ctrl" => mods |= CTRL,
+                    "alt" => mods |= ALT,
+                    "shift" => mods |= SHIFT,
+                    token => match (parse_key(token), key) {
+                        (Some(parsed), None) => key = Some(parsed),
+                        _ => {
+                            key = None;
+                            break;
+                        }
+                    },
+                }
+            }
+            match key {
+                Some(key) => _ = table.insert((key, mods), action),
+                None => log::warn!("key bindings: invalid shortcut `{gesture}`"),
+            }
+        }
+        Self { map: table }
+    }
+
+    /// The bound action for this key event, plus whether the binding is a
+    /// *plain* one (no Ctrl/Alt) — those are only safe outside text inputs.
+    pub fn lookup(&self, key: Keycode, keymod: Mod) -> Option<(Action, bool)> {
+        let mods = mods_of(keymod);
+        self.map
+            .get(&(key, mods))
+            .map(|action| (*action, mods & (CTRL | ALT) == 0))
+    }
+}
+
+/// Resolve a key name: a few friendly aliases, then SDL's own key names
+/// (case-normalized, so `f`, `left`, and `f5` all work).
+fn parse_key(name: &str) -> Option<Keycode> {
+    let name = match name {
+        "esc" => "Escape",
+        "enter" => "Return",
+        "pageup" => "PageUp",
+        "pagedown" => "PageDown",
+        other => other,
+    };
+    Keycode::from_name(name)
+        .or_else(|| Keycode::from_name(&name.to_ascii_uppercase()))
+        .or_else(|| {
+            let mut chars = name.chars();
+            let first = chars.next()?.to_ascii_uppercase();
+            Keycode::from_name(&format!("{first}{}", chars.as_str()))
+        })
 }

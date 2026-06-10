@@ -183,9 +183,7 @@ impl App {
                 }
             }
             MenuAction::Close => self.ui.menu_close(),
-            MenuAction::SwitchSection(delta) => self.ui.menu_switch(*delta),
             MenuAction::SetSection(section) => self.ui.menu_set_section(*section),
-            MenuAction::Move(dy) => self.ui.menu_move(*dy),
             MenuAction::OpenSelected => self.menu_open_selected(),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu_clear(),

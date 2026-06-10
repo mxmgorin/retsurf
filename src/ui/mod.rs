@@ -349,8 +349,9 @@ impl AppUi {
         self.scroll_mode = on;
     }
 
-    /// Whether the address-bar text field currently holds keyboard focus.
-    fn address_bar_focused(&self) -> bool {
+    /// Whether the address-bar text field currently holds keyboard focus (also
+    /// guards plain-key keyboard shortcuts in the event handler).
+    pub fn address_bar_focused(&self) -> bool {
         self.egui
             .ctx
             .memory(|m| m.has_focus(egui::Id::new("location")))

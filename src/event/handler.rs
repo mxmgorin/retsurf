@@ -2,7 +2,7 @@ use super::gamepad::Gamepad;
 use crate::{
     app::{AppCommand, MenuAction},
     browser::AppBrowser,
-    event::{user::handle_user, window::handle_window},
+    event::{bindings::KeyBindings, user::handle_user, window::handle_window},
     ui::AppUi,
     window::AppWindow,
 };
@@ -13,6 +13,8 @@ pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
+    /// Keyboard shortcuts from `bindings.toml` (`[keyboard]`).
+    key_bindings: KeyBindings,
 }
 
 impl AppEventHandler {
@@ -31,6 +33,7 @@ impl AppEventHandler {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
+            key_bindings: KeyBindings::load(),
         })
     }
 
@@ -66,6 +69,27 @@ impl AppEventHandler {
         while let Some(event) = self.event_pump.poll_event() {
             self.handle_event(event, window, ui, browser, gamepad, commands);
         }
+    }
+
+    /// Resolve a key event against the `[keyboard]` bindings, applying the
+    /// firing rules: `nav_*` steps need an open overlay (and, unlike the other
+    /// shortcuts, auto-repeat while held); plain bindings (no Ctrl/Alt) are
+    /// muted while anything editable has focus, so they can't hijack typing.
+    fn lookup_shortcut(
+        &self,
+        kc: Keycode,
+        keymod: sdl2::keyboard::Mod,
+        repeat: bool,
+        overlay: bool,
+        typing: bool,
+    ) -> Option<crate::event::bindings::Action> {
+        let (action, plain) = self.key_bindings.lookup(kc, keymod)?;
+        let fire = if action.is_nav() {
+            overlay
+        } else {
+            !repeat && (!plain || !typing)
+        };
+        fire.then_some(action)
     }
 
     fn handle_event(
@@ -134,9 +158,20 @@ impl AppEventHandler {
                 browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
             }
             // While the menu is open it captures the keyboard: Esc closes, Enter
-            // opens, Delete removes, up/down move the selection, left/right switch
-            // section.
-            Event::KeyDown { keycode: Some(kc), .. } if ui.menu_visible() => {
+            // opens, Delete removes; navigation and shortcuts go through the
+            // bindings (arrows are the default `nav_*` gestures).
+            Event::KeyDown {
+                keycode: Some(kc),
+                keymod,
+                repeat,
+                ..
+            } if ui.menu_visible() => {
+                // The menu overlay covers everything, so nothing editable can
+                // hold focus — `typing` is moot here.
+                if let Some(action) = self.lookup_shortcut(kc, keymod, repeat, true, false) {
+                    action.push_tap(commands);
+                    return;
+                }
                 match kc {
                     Keycode::Escape => commands.push(AppCommand::Menu(MenuAction::Close)),
                     Keycode::Return | Keycode::KpEnter => {
@@ -145,10 +180,6 @@ impl AppEventHandler {
                     Keycode::Delete | Keycode::Backspace => {
                         commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
                     }
-                    Keycode::Up => commands.push(AppCommand::Menu(MenuAction::Move(-1))),
-                    Keycode::Down => commands.push(AppCommand::Menu(MenuAction::Move(1))),
-                    Keycode::Left => commands.push(AppCommand::Menu(MenuAction::SwitchSection(-1))),
-                    Keycode::Right => commands.push(AppCommand::Menu(MenuAction::SwitchSection(1))),
                     _ => {}
                 }
             }
@@ -159,6 +190,28 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
+                // Hint mode's fixed keys (its navigation comes from the
+                // `nav_*` bindings below).
+                if ui.hints_visible() {
+                    use crate::app::InputCommand;
+                    let cmd = match kc {
+                        Keycode::Return | Keycode::KpEnter => {
+                            Some(InputCommand::Confirm(true))
+                        }
+                        Keycode::Escape => Some(InputCommand::Cancel),
+                        _ => None,
+                    };
+                    if let Some(cmd) = cmd {
+                        commands.push(AppCommand::Input(cmd));
+                        return;
+                    }
+                }
+                let overlay = ui.osk_visible() || ui.hints_visible();
+                let typing = browser.text_input_focused() || ui.address_bar_focused();
+                if let Some(action) = self.lookup_shortcut(kc, keymod, repeat, overlay, typing) {
+                    action.push_tap(commands);
+                    return;
+                }
                 let event = super::sdl2_servo::into_keyboard_event(kc, sc, keymod, true, repeat);
                 let event = servo::InputEvent::Keyboard(event);
                 browser.handle_input(event);

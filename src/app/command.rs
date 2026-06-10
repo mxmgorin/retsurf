@@ -32,12 +32,9 @@ pub enum MenuAction {
     Open,
     /// Close the menu (B / Close button / Esc).
     Close,
-    /// Switch the active section by a delta (gamepad/keyboard ◀▶).
-    SwitchSection(i32),
-    /// Jump to a specific section (clicking its tab).
+    /// Jump to a specific section (clicking its tab). Relative section/row
+    /// movement comes through [`InputCommand::Nav`] instead.
     SetSection(Section),
-    /// Move the active section's selection by `dy` rows (gamepad/keyboard ▲▼).
-    Move(i32),
     /// Open the highlighted entry and close the menu (A / Enter).
     OpenSelected,
     /// Remove the highlighted entry (X / Delete).
@@ -65,7 +62,7 @@ pub enum MenuAction {
 pub enum InputCommand {
     /// Primary action (A): activate the keyboard key, or click the page/toolbar.
     /// Carries the press state so page clicks get matching down/up events.
-    Primary(bool),
+    Confirm(bool),
     /// Cancel (B): close the on-screen keyboard if open, else go back.
     Cancel,
     /// Keyboard (X): toggle the on-screen keyboard, or backspace while it's open.
@@ -81,6 +78,13 @@ pub enum InputCommand {
     /// Link-hint mode (L3): enter it (collecting the page's clickable elements)
     /// or exit if already shown. See [`crate::hints`].
     Hints,
+    /// Switch the active tab by a delta, wrapping (the `tab_next` / `tab_prev`
+    /// binding actions).
+    CycleTab(i32),
+    /// One overlay-navigation step — keyboard arrows (`nav_*` bindings) or the
+    /// stick shaped by the router's threshold + auto-repeat. Acts on whichever
+    /// overlay is open (menu / OSK / hints); a no-op with none.
+    Nav(i32, i32),
     /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
     /// stick Y), each normalized to -1..=1. Drives the cursor, keyboard grid
     /// navigation, or page scroll depending on context. `scroll_mode` is the

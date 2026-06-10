@@ -18,17 +18,12 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 ## Features
 
-**Rendering**
-- Real web rendering via the **Servo** engine (WebRender)
-- Runs on **OpenGL ES 3.x**; no X11/Wayland required (works on bare KMS/DRM)
-- Single GL context, zero CPU readback — Servo renders straight into the on-screen context
-
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
 - **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
-- **Rebindable buttons** (`bindings.toml`) with tap, hold, and two-button chord gestures, plus a D-pad cursor↔scroll toggle for devices without analog sticks
+- **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
 - Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = reload (hold: bookmark) · Select = menu
 
 **Downloads**
@@ -41,13 +36,12 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - Filter lists are fetched in the background, compiled, and cached locally — warm starts are instant and work offline
 - Fully configurable: toggle it off, change the lists, or change the refresh interval
 
-## How it works
-
-SDL2 owns the window and the single GL/GLES context. Servo renders each page into an offscreen framebuffer (FBO) in that context; egui then composites the page texture together with the toolbar and presents the frame via SDL2. Keeping everything on one GLES context — with no compositor and no CPU readback — is what lets it run on bare handheld hardware.
+**Rendering**
+- Real web rendering via the **Servo** engine (WebRender)
+- Runs on **OpenGL ES 3.x**; no X11/Wayland required (works on bare KMS/DRM)
+- Single GL context, zero CPU readback — Servo renders straight into the on-screen context
 
 ## Building & running
-
-### Desktop (Linux)
 
 You need Servo's build dependencies. On Debian/Ubuntu:
 
@@ -135,11 +129,11 @@ osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
 ```
 
-## Button bindings (`bindings.toml`)
+## Bindings (`bindings.toml`)
 
-Button layout lives in its own file, `bindings.toml`, next to `config.toml`
-(a template with the defaults is written on first run). Each entry maps a
-*gesture* to an *action*:
+Gamepad and keyboard layouts live in their own file, `bindings.toml`, next to
+`config.toml` (a template with the defaults is written on first run). Each
+entry maps a *gesture* to an *action*:
 
 ```toml
 [gamepad]
@@ -147,24 +141,40 @@ a = "confirm"              # tap: fires on press
 "hold:start" = "bookmark"  # hold the button for hold_ms
 "l1+r1" = "reload"         # chord: press one while holding the other
 y = "none"                 # explicitly unbind
+
+[keyboard]
+"ctrl+r" = "reload"        # modifier shortcuts always fire
+f = "hints"                # plain keys fire only while no text input has focus
+k = "nav_up"               # overlay navigation can move to vim-style keys
 ```
 
-Gestures: a tap (`a`), a hold (`"hold:a"`), or a two-button chord (`"a+b"`).
-Buttons: `a b x y l1 r1 l3 r3 start select` (the D-pad aims the cursor and
-L2/R2 cycle tabs / drive the keyboard — they're not bindable). A button with a
-hold or chord gesture fires its tap on release instead of press (the gesture is
-ambiguous until then); `confirm` needs the press edge for clicks and drags, so
-hold/chord gestures on its button are rejected.
+**Gamepad gestures**: a tap (`a`), a hold (`"hold:a"`), or a two-button chord
+(`"a+b"`). Buttons: `a b x y l1 r1 l3 r3 start select` (the D-pad aims the
+cursor and L2/R2 cycle tabs / drive the keyboard — they're not bindable). A
+button with a hold or chord gesture fires its tap on release instead of press
+(the gesture is ambiguous until then); `confirm` needs the press edge for
+clicks and drags, so hold/chord gestures on its button are rejected.
 
-Actions: `confirm` (click/select) · `cancel` (close/back) · `osk` (on-screen
-keyboard) · `reload` · `prev` / `next` (menu section or history) · `hints`
-(link hints) · `bookmark` · `menu` · `scroll` (toggle the D-pad / left stick
-between cursor and page scroll — the scroll fallback for devices without a
-right analog stick) · `none`.
+**Keyboard shortcuts**: any key with optional `ctrl`/`alt`/`shift` modifiers,
+matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
+on the page or the address bar — holds focus, so they can't hijack typing.
+Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+m` menu · `ctrl+left`/
+`ctrl+right` back/forward · `ctrl+f` link hints · `ctrl+t`/`ctrl+shift+t`
+next/previous tab · arrows = overlay navigation.
 
-Invalid buttons, actions, or gestures are logged and skipped at startup —
+**Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
+(on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
+`hints` (link hints) · `bookmark` · `menu` · `tab_next` / `tab_prev` ·
+`nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay
+is open — menu, on-screen keyboard, or link hints; with none open the key goes
+to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
+cursor and page scroll — the scroll fallback for devices without a right
+analog stick) · `none`.
+
+Invalid buttons, keys, actions, or gestures are logged and skipped at startup —
 check the log if a binding doesn't respond.
 
 ## References
 
+- [Handheld port notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
 - [The Servo Book](https://book.servo.org/title-page.html)

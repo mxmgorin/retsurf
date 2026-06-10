@@ -26,6 +26,10 @@ Agreed approach: **Path A first (software render), then Path B (GPU-accelerated)
   handle on kmsdrm. Therefore **SDL2 must own the GL context** (it does this via EGL/GBM,
   like every other SDL2 port) and Servo renders *into* it.
 
+## How it works
+
+SDL2 owns the window and the single GL/GLES context. Servo renders each page into an offscreen framebuffer (FBO) in that context; egui then composites the page texture together with the toolbar and presents the frame via SDL2. Keeping everything on one GLES context — with no compositor and no CPU readback — is what lets it run on bare handheld hardware.
+
 ## Architecture
 
 Path A (done):    Servo render target = SoftwareRenderingContext (offscreen, llvmpipe).

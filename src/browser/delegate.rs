@@ -66,6 +66,22 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.event_sender.send(UserEvent::DownloadUpdate);
     }
 
+    /// Servo requests an IME whenever an editable element gains focus — we
+    /// don't show one, but the request marks "the user is typing", which mutes
+    /// plain-key keyboard shortcuts. Other controls (select dropdowns, dialogs)
+    /// aren't rendered yet; dropping them dismisses them with their defaults.
+    fn show_embedder_control(&self, _webview: WebView, control: servo::EmbedderControl) {
+        if let servo::EmbedderControl::InputMethod(ime) = &control {
+            self.ime_control.set(Some(ime.id()));
+        }
+    }
+
+    fn hide_embedder_control(&self, _webview: WebView, id: servo::EmbedderControlId) {
+        if self.ime_control.get() == Some(id) {
+            self.ime_control.set(None);
+        }
+    }
+
     /// Run every resource load through the ad blocker. Blocked loads get an
     /// empty 200 response, so scripts/images fail soft instead of raising
     /// network errors; everything else proceeds untouched (dropping the load

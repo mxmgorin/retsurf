@@ -13,7 +13,7 @@ impl App {
     /// Route one contextual input intent.
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         match command {
-            InputCommand::Primary(pressed) => {
+            InputCommand::Confirm(pressed) => {
                 if self.ui.menu_visible() {
                     if *pressed {
                         self.menu_open_selected();
@@ -51,6 +51,25 @@ impl App {
                         OskCommand::Show
                     };
                     self.ui.osk(cmd, &self.browser, out);
+                }
+            }
+            InputCommand::CycleTab(delta) => self.browser.cycle_tab(*delta),
+            // One overlay-navigation step (keyboard arrows / nav_* bindings, or
+            // the stick shaped by `route_analog`): whichever overlay is open
+            // owns it; with none open it's a no-op (the event handler forwards
+            // unconsumed arrows to the page instead).
+            InputCommand::Nav(dx, dy) => {
+                if self.ui.menu_visible() {
+                    if *dx != 0 {
+                        self.ui.menu_switch(*dx);
+                    } else if *dy != 0 {
+                        self.ui.menu_move(*dy);
+                    }
+                } else if self.ui.osk_visible() {
+                    self.ui
+                        .osk(OskCommand::Move(*dx, *dy), &self.browser, out);
+                } else if self.ui.hints_visible() {
+                    self.ui.hints_move((*dx, *dy));
                 }
             }
             // L3: toggle link-hint navigation (collection is asynchronous — the
@@ -175,37 +194,18 @@ impl App {
         let (cursor_speed, scroll_speed, nav_threshold) =
             (cfg.cursor_speed, cfg.scroll_speed, cfg.osk_nav_threshold);
 
-        // The menu: left/right switches section, up/down moves the selection
-        // (dominant axis only, so a diagonal nudge does just one thing).
-        if self.ui.menu_visible() {
-            let dir = osk_nav_dir(aim, nav_threshold);
-            if self.nav_repeat(dir, now) {
-                if dir.0 != 0 {
-                    self.ui.menu_switch(dir.0);
-                } else if dir.1 != 0 {
-                    self.ui.menu_move(dir.1);
-                }
-            }
-            return;
-        }
-
-        // The keyboard: the stick navigates the key grid.
-        if self.ui.osk_visible() {
-            let dir = osk_nav_dir(aim, nav_threshold);
-            if self.nav_repeat(dir, now) {
-                self.ui.osk(OskCommand::Move(dir.0, dir.1), &self.browser, out);
-            }
-            return;
-        }
-
-        // Hint mode: the stick hops between hints; the right stick still scrolls
-        // (badges go stale as the page moves — schedule a re-collect).
-        if self.ui.hints_visible() {
+        // Overlays (menu / OSK / hints): the stick becomes discrete navigation,
+        // shaped (dead zone + auto-repeat) into the same `Nav` steps the
+        // keyboard arrows emit — one execution path for both devices. The menu
+        // takes the dominant axis only, so a diagonal nudge does just one thing.
+        if self.ui.menu_visible() || self.ui.osk_visible() || self.ui.hints_visible() {
             let dir = osk_nav_dir(aim, nav_threshold);
             if self.nav_repeat(dir, now) && dir != (0, 0) {
-                self.ui.hints_move(dir);
+                out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));
             }
-            if scroll != 0.0 {
+            // In hint mode the right stick still scrolls the page (the badges
+            // go stale as it moves — schedule a re-collect).
+            if self.ui.hints_visible() && scroll != 0.0 {
                 let dy = scroll * scroll_speed * dt;
                 let (x, y) = self
                     .ui

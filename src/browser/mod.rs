@@ -117,6 +117,10 @@ struct AppBrowserInner {
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
     hint_rects: RefCell<Option<Vec<Hint>>>,
+    /// The live IME request, present while an editable element on the page
+    /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
+    /// suppressed while it's set so they can't hijack typing.
+    ime_control: Cell<Option<servo::EmbedderControlId>>,
 }
 
 impl AppBrowserInner {
@@ -142,6 +146,7 @@ impl AppBrowserInner {
                 .collect(),
             adblock,
             hint_rects: RefCell::new(None),
+            ime_control: Cell::new(None),
         }
     }
 
@@ -263,6 +268,13 @@ impl AppBrowser {
     #[inline]
     pub fn take_hint_rects(&self) -> Option<Vec<Hint>> {
         self.inner.hint_rects.borrow_mut().take()
+    }
+
+    /// Whether an editable element on the page currently holds focus (guards
+    /// plain-key keyboard shortcuts against hijacking typed input).
+    #[inline]
+    pub fn text_input_focused(&self) -> bool {
+        self.inner.ime_control.get().is_some()
     }
 
     /// Number of open tabs.
