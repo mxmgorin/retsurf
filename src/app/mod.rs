@@ -59,7 +59,7 @@ impl App {
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl)?;
         let ui = AppUi::new(&window, &config.interface, &config.history, &config.downloads);
-        let gamepad = Gamepad::new(config.gamepad);
+        let gamepad = Gamepad::new(config.gamepad.clone());
         log::info!("init: app constructed");
 
         Ok(Self {

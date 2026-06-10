@@ -244,8 +244,9 @@ fn system_download_dir() -> Option<String> {
         .then(|| format!("{}/", dir.trim_end_matches('/')))
 }
 
-/// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+/// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,
+/// plus the button bindings (see [`crate::event::bindings`]).
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GamepadConfig {
     /// Stick deflection below this (normalized 0..1) is treated as centered.
@@ -262,6 +263,10 @@ pub struct GamepadConfig {
     pub osk_nav_initial_delay_ms: u64,
     /// Interval between auto-repeats of stick-driven OSK navigation, in ms.
     pub osk_nav_repeat_ms: u64,
+    /// Holding a bound button this long fires its `hold:` gesture. The
+    /// bindings themselves live in `bindings.toml` — see
+    /// [`crate::event::bindings`].
+    pub hold_ms: u64,
 }
 
 impl Default for GamepadConfig {
@@ -274,6 +279,7 @@ impl Default for GamepadConfig {
             osk_nav_threshold: 0.5,
             osk_nav_initial_delay_ms: 350,
             osk_nav_repeat_ms: 140,
+            hold_ms: 400,
         }
     }
 }

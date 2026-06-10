@@ -1,16 +1,29 @@
-use crate::app::{AppCommand, InputCommand, MenuAction};
+//! Translates raw controller input into [`AppCommand`]s — and nothing more. It
+//! holds device state (stick/D-pad/trigger positions, pressed buttons) and maps
+//! physical controls to intents via the configurable [`Bindings`] table; *what*
+//! each intent does is decided by the central router (`App::route_input`). On a
+//! handheld the pad is the only input device, so this is the primary UI.
+//!
+//! Gesture resolution: a button whose only binding is a tap fires immediately
+//! on the press edge, exactly like the old hardcoded layout. A button that also
+//! carries a `hold:` binding or takes part in a chord is ambiguous on press, so
+//! it's *deferred*: tap fires on release (if it comes before `hold_ms`), the
+//! hold action fires once the threshold passes, and a chord fires the moment
+//! its second button goes down (consuming both presses).
+//!
+//! The one action handled here rather than routed is [`Action::Scroll`]: it
+//! latches `scroll_mode`, which turns the aim vector (D-pad / left stick) into
+//! page scrolling — the fallback for devices without a right analog stick.
+
+use crate::app::{AppCommand, InputCommand};
 use crate::config::GamepadConfig;
-use crate::osk::OskCommand;
+use crate::event::bindings::{Action, Bindings};
 use sdl2::controller::{Axis, Button};
+use std::time::{Duration, Instant};
 
 /// `i16::MAX`, the full-scale value SDL reports for a stick/trigger axis.
 const AXIS_MAX: f32 = 32767.0;
 
-/// Translates raw controller input into [`InputCommand`]s — and nothing more. It
-/// holds device state (stick/D-pad/trigger positions) and maps physical controls
-/// to intents with a flat lookup; *what* each intent does, and where it goes, is
-/// decided by the central router (`App::route_input`). On a handheld the pad is
-/// the only input device, so this is the primary UI.
 pub struct Gamepad {
     /// Left stick vector, normalized and dead-zoned (-1..=1).
     left: (f32, f32),
@@ -23,6 +36,25 @@ pub struct Gamepad {
     r2_down: bool,
     /// Tunables (dead zones, trigger threshold) loaded from the config file.
     cfg: GamepadConfig,
+    /// Gesture → action tables loaded from `bindings.toml`.
+    bindings: Bindings,
+    /// The `hold:` gesture threshold.
+    hold: Duration,
+    /// While latched (the `scroll` action toggles it), the aim vector scrolls
+    /// the page instead of moving the cursor.
+    scroll_mode: bool,
+    /// Buttons currently down, with their gesture-resolution state.
+    held: Vec<Held>,
+}
+
+/// One pressed button awaiting (or past) gesture resolution.
+struct Held {
+    button: Button,
+    at: Instant,
+    /// The gesture was decided — tap already dispatched on press, a chord
+    /// consumed this press, or the hold fired. Release is then a no-op (except
+    /// the confirm button's release edge).
+    resolved: bool,
 }
 
 impl Gamepad {
@@ -33,6 +65,10 @@ impl Gamepad {
             right: (0.0, 0.0),
             l2_down: false,
             r2_down: false,
+            bindings: Bindings::load(),
+            hold: Duration::from_millis(cfg.hold_ms),
+            scroll_mode: false,
+            held: vec![],
             cfg,
         }
     }
@@ -45,9 +81,26 @@ impl Gamepad {
         )
     }
 
-    /// Whether the loop should keep ticking at ~60fps to animate cursor/scroll.
+    /// Whether the loop should keep ticking at ~60fps: to animate cursor/scroll,
+    /// and to time pending `hold:` gestures (no SDL event marks the threshold).
     pub fn is_active(&self) -> bool {
-        self.aim() != (0.0, 0.0) || self.right.1 != 0.0
+        self.aim() != (0.0, 0.0)
+            || self.right.1 != 0.0
+            || self
+                .held
+                .iter()
+                .any(|h| !h.resolved && self.bindings.hold(h.button).is_some())
+    }
+
+    /// Dispatch a resolved gesture. The scroll toggle is gamepad-internal (it
+    /// changes how the aim vector is read); everything else becomes a command
+    /// for the router.
+    fn emit(&mut self, action: Action, pressed: bool, commands: &mut Vec<AppCommand>) {
+        if action == Action::Scroll {
+            self.scroll_mode = !self.scroll_mode;
+            return;
+        }
+        commands.extend(action.command(pressed));
     }
 
     pub fn on_axis(&mut self, axis: Axis, value: i16, commands: &mut Vec<AppCommand>) {
@@ -87,41 +140,113 @@ impl Gamepad {
         }
     }
 
-    /// Map a controller button to a command — a flat translation with no state
-    /// branches. The D-pad just feeds the aim vector (see [`Gamepad::tick`]); the
-    /// contextual A/B/X become intents the router resolves.
+    /// Resolve a button edge against the binding tables (see the module docs
+    /// for the tap / hold / chord rules).
     pub fn on_button(&mut self, button: Button, pressed: bool, commands: &mut Vec<AppCommand>) {
-        let cmd = match button {
+        match button {
             // The D-pad contributes to the aim vector on both edges.
             Button::DPadLeft => return self.dpad.0 = if pressed { -1.0 } else { 0.0 },
             Button::DPadRight => return self.dpad.0 = if pressed { 1.0 } else { 0.0 },
             Button::DPadUp => return self.dpad.1 = if pressed { -1.0 } else { 0.0 },
             Button::DPadDown => return self.dpad.1 = if pressed { 1.0 } else { 0.0 },
-            // A clicks, so it needs both edges; everything else fires on press.
-            Button::A => AppCommand::Input(InputCommand::Primary(pressed)),
-            _ if !pressed => return,
-            Button::B => AppCommand::Input(InputCommand::Cancel),
-            Button::X => AppCommand::Input(InputCommand::ToggleOsk),
-            // Y is "space" on the open keyboard; the router reloads the page with
-            // it otherwise.
-            Button::Y => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
-            // Contextual: switch menu sections when the menu is open, else back/forward.
-            Button::LeftShoulder => AppCommand::Input(InputCommand::Shoulder(-1)),
-            Button::RightShoulder => AppCommand::Input(InputCommand::Shoulder(1)),
-            // L3 toggles link-hint navigation over the page.
-            Button::LeftStick => AppCommand::Input(InputCommand::Hints),
-            Button::Start => AppCommand::ToggleBookmark,
-            Button::Back => AppCommand::Menu(MenuAction::Open),
-            _ => return,
-        };
-        commands.push(cmd);
+            _ => {}
+        }
+
+        if pressed {
+            self.on_press(button, commands);
+        } else {
+            self.on_release(button, commands);
+        }
     }
 
-    /// Emit this frame's analog state for the router to apply.
+    fn on_press(&mut self, button: Button, commands: &mut Vec<AppCommand>) {
+        // A chord resolves the moment its second button goes down, consuming
+        // both presses (neither fires its own tap on release).
+        if let Some(i) = self
+            .held
+            .iter()
+            .position(|h| !h.resolved && self.bindings.chord(h.button, button).is_some())
+        {
+            let action = self
+                .bindings
+                .chord(self.held[i].button, button)
+                .expect("position() just matched");
+            self.held[i].resolved = true;
+            self.held.push(Held {
+                button,
+                at: Instant::now(),
+                resolved: true,
+            });
+            self.emit(action, true, commands);
+            return;
+        }
+
+        // Unambiguous buttons dispatch on the press edge (zero latency);
+        // hold/chord candidates wait — for release, the threshold, or a chord.
+        let immediate = !self.bindings.is_deferred(button);
+        self.held.push(Held {
+            button,
+            at: Instant::now(),
+            resolved: immediate,
+        });
+        if immediate {
+            if let Some(action) = self.bindings.tap(button) {
+                self.emit(action, true, commands);
+            }
+        }
+    }
+
+    fn on_release(&mut self, button: Button, commands: &mut Vec<AppCommand>) {
+        let Some(i) = self.held.iter().position(|h| h.button == button) else {
+            return; // e.g. pressed before startup
+        };
+        let held = self.held.remove(i);
+        let action = self.bindings.tap(button);
+
+        if held.resolved {
+            // Confirm carries the press/release pair (clicks, drags): its
+            // release edge always follows the press edge sent in `on_press`.
+            if action == Some(Action::Confirm) {
+                self.emit(Action::Confirm, false, commands);
+            }
+            return;
+        }
+
+        // A deferred button released before the hold threshold is a tap. Past
+        // the threshold the hold action fires here as a fallback in case no
+        // tick ran in between (the loop may have been blocked on this event).
+        let gesture = if held.at.elapsed() >= self.hold {
+            self.bindings.hold(button).or(action)
+        } else {
+            action
+        };
+        if let Some(action) = gesture {
+            self.emit(action, true, commands);
+        }
+    }
+
+    /// Emit this frame's analog state for the router to apply, and fire any
+    /// `hold:` gesture whose threshold just passed. In scroll mode the aim
+    /// vector scrolls the page instead of aiming the cursor.
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
-        commands.push(AppCommand::Input(InputCommand::Analog {
-            aim: self.aim(),
-            scroll: self.right.1,
-        }));
+        let mut fired = vec![];
+        for h in &mut self.held {
+            if !h.resolved && h.at.elapsed() >= self.hold {
+                if let Some(action) = self.bindings.hold(h.button) {
+                    h.resolved = true;
+                    fired.push(action);
+                }
+            }
+        }
+        for action in fired {
+            self.emit(action, true, commands);
+        }
+
+        let (aim, scroll) = if self.scroll_mode {
+            ((0.0, 0.0), self.aim().1)
+        } else {
+            (self.aim(), self.right.1)
+        };
+        commands.push(AppCommand::Input(InputCommand::Analog { aim, scroll }));
     }
 }

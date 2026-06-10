@@ -5,7 +5,6 @@
 
 use super::{App, AppCommand, InputCommand};
 use crate::browser::BrowserCommand;
-use crate::config::GamepadConfig;
 use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::osk::OskCommand;
 use std::time::{Duration, Instant};
@@ -155,13 +154,17 @@ impl App {
         // (a D-pad tap jumps ~`cursor_speed * dt`), so treat any over-long frame
         // as a fresh start: no motion this frame, normal motion from the next.
         let dt = if dt > 0.1 { 0.0 } else { dt };
-        let cfg = self.config.gamepad;
+        // Scalar copies: the config holds non-Copy data (the bindings map), so
+        // it can't be borrowed across the `&mut self` calls below.
+        let cfg = &self.config.gamepad;
+        let (cursor_speed, scroll_speed, nav_threshold) =
+            (cfg.cursor_speed, cfg.scroll_speed, cfg.osk_nav_threshold);
 
         // The menu: left/right switches section, up/down moves the selection
         // (dominant axis only, so a diagonal nudge does just one thing).
         if self.ui.menu_visible() {
-            let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
-            if self.nav_repeat(dir, now, &cfg) {
+            let dir = osk_nav_dir(aim, nav_threshold);
+            if self.nav_repeat(dir, now) {
                 if dir.0 != 0 {
                     self.ui.menu_switch(dir.0);
                 } else if dir.1 != 0 {
@@ -173,8 +176,8 @@ impl App {
 
         // The keyboard: the stick navigates the key grid.
         if self.ui.osk_visible() {
-            let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
-            if self.nav_repeat(dir, now, &cfg) {
+            let dir = osk_nav_dir(aim, nav_threshold);
+            if self.nav_repeat(dir, now) {
                 self.ui.osk(OskCommand::Move(dir.0, dir.1), &self.browser, out);
             }
             return;
@@ -183,12 +186,12 @@ impl App {
         // Hint mode: the stick hops between hints; the right stick still scrolls
         // (badges go stale as the page moves — schedule a re-collect).
         if self.ui.hints_visible() {
-            let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
-            if self.nav_repeat(dir, now, &cfg) && dir != (0, 0) {
+            let dir = osk_nav_dir(aim, nav_threshold);
+            if self.nav_repeat(dir, now) && dir != (0, 0) {
                 self.ui.hints_move(dir);
             }
             if scroll != 0.0 {
-                let dy = scroll * cfg.scroll_speed * dt;
+                let dy = scroll * scroll_speed * dt;
                 let (x, y) = self
                     .ui
                     .hints_selected_center()
@@ -201,8 +204,8 @@ impl App {
 
         if aim != (0.0, 0.0) {
             self.ui.move_cursor(
-                aim.0 * cfg.cursor_speed * dt,
-                aim.1 * cfg.cursor_speed * dt,
+                aim.0 * cursor_speed * dt,
+                aim.1 * cursor_speed * dt,
                 &self.window,
             );
             // Only hover the page while the cursor is over it; over the toolbar
@@ -216,7 +219,7 @@ impl App {
 
         if scroll != 0.0 && self.ui.cursor_over_browser() {
             // Stick down (+1) reveals lower content (positive Servo dy).
-            let dy = scroll * cfg.scroll_speed * dt;
+            let dy = scroll * scroll_speed * dt;
             let (x, y) = self.ui.cursor_browser_rel();
             self.browser.scroll(0.0, dy, x, y);
         }
@@ -224,7 +227,8 @@ impl App {
 
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction
     /// and paces repeats, returning `true` on the frames a step should fire.
-    fn nav_repeat(&mut self, dir: (i32, i32), now: Instant, cfg: &GamepadConfig) -> bool {
+    fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
+        let cfg = &self.config.gamepad;
         if dir != self.osk_nav_dir {
             self.osk_nav_dir = dir;
             if dir != (0, 0) {
