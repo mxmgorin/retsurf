@@ -106,6 +106,15 @@ impl App {
                 self.ui.start_download(&url, &self.event_sender);
             }
 
+            // Hint mode: hand freshly collected clickable rects to the UI, and
+            // start a re-collect once a post-scroll refresh comes due.
+            if let Some(rects) = self.browser.take_hint_rects() {
+                self.ui.hints_apply(rects);
+            }
+            if self.ui.hints_refresh_due() {
+                self.browser.collect_hints();
+            }
+
             // Emit this frame's analog state as a command for the router to apply.
             self.gamepad.tick(&mut commands);
 

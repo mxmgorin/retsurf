@@ -3,6 +3,7 @@
 //! Servo's FBO texture under the chrome. The actual widgets are rendered by the
 //! submodules: [`toolbar`], [`menu`] (the full-screen overlay), and [`osk`].
 
+mod hints;
 mod menu;
 mod osk;
 mod toolbar;
@@ -12,6 +13,7 @@ use crate::{
     browser::AppBrowser,
     config::{DownloadsConfig, HistoryConfig, InterfaceConfig},
     event::user::UserEventSender,
+    hints::{Hint, Hints},
     menu::{Menu, Section},
     osk::{Osk, OskCommand},
     window::AppWindow,
@@ -51,6 +53,8 @@ pub struct AppUi {
     osk: Osk,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
     menu: Menu,
+    /// Link-hint navigation state (L3); the rects come from the browser.
+    hints: Hints,
 }
 
 impl AppUi {
@@ -83,6 +87,7 @@ impl AppUi {
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(),
             menu: Menu::new(history, downloads),
+            hints: Hints::new(),
         }
     }
 
@@ -282,6 +287,57 @@ impl AppUi {
         self.menu.toggle_bookmark(url);
     }
 
+    /// Whether link-hint navigation is currently shown.
+    #[inline]
+    pub fn hints_visible(&self) -> bool {
+        self.hints.visible
+    }
+
+    /// L3 pressed: a hint-collection round was started in the browser.
+    #[inline]
+    pub fn hints_begin_collect(&mut self) {
+        self.hints.begin_collect();
+    }
+
+    /// Fresh clickable rects from the page. Selection lands near the previous
+    /// one (a post-scroll refresh) or near the gamepad cursor (mode entry).
+    pub fn hints_apply(&mut self, rects: Vec<Hint>) {
+        let near = self
+            .hints
+            .selected_center()
+            .unwrap_or_else(|| self.cursor_browser_rel());
+        self.hints.show(rects, near);
+    }
+
+    #[inline]
+    pub fn hints_hide(&mut self) {
+        self.hints.hide();
+    }
+
+    /// Hop the hint selection in `dir` (a dominant-axis step from the router).
+    #[inline]
+    pub fn hints_move(&mut self, dir: (i32, i32)) {
+        self.hints.move_sel(dir);
+    }
+
+    /// Center of the selected hint in browser-relative coordinates.
+    #[inline]
+    pub fn hints_selected_center(&self) -> Option<(f32, f32)> {
+        self.hints.selected_center()
+    }
+
+    /// The page scrolled under the badges: schedule a re-collect.
+    #[inline]
+    pub fn hints_mark_stale(&mut self) {
+        self.hints.mark_stale();
+    }
+
+    /// Whether the post-scroll re-collect is due (cleared on read).
+    #[inline]
+    pub fn hints_refresh_due(&mut self) -> bool {
+        self.hints.take_refresh_due()
+    }
+
     /// Whether the address-bar text field currently holds keyboard focus.
     fn address_bar_focused(&self) -> bool {
         self.egui
@@ -326,12 +382,17 @@ impl AppUi {
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
         // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible = if self.osk.visible || self.menu.visible {
+        let cursor_visible = if self.osk.visible || self.menu.visible || self.hints.visible {
             None
         } else {
             self.cursor_visible_for()
         };
         self.repaint_delay = cursor_visible;
+        // A pending post-scroll hint refresh also needs the loop to wake by
+        // itself — without this the wait blocks on input and it never fires.
+        if let Some(refresh) = self.hints.refresh_in() {
+            self.repaint_delay = Some(self.repaint_delay.map_or(refresh, |d| d.min(refresh)));
+        }
 
         // Read tab info *before* borrowing the active tab's state below — both read
         // the browser's tab list, so they can't overlap. `tab_pos` is the 1-based
@@ -394,6 +455,8 @@ impl AppUi {
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.osk.visible {
                     osk::add_osk(ctx, self.osk.selected(), self.osk.shift(), self.osk.caps);
+                } else if self.hints.visible {
+                    hints::add_hints(ctx, &self.hints, self.webview_top);
                 } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.

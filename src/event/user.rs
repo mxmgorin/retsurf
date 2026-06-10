@@ -10,6 +10,9 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
         // Sent by download workers/interception purely to wake the loop; the
         // per-frame downloads poll in `App::run` picks up the new state.
         UserEvent::DownloadUpdate => None,
+        // Sent by the hint-collection JS callback purely to wake the loop; the
+        // main loop drains the collected rects.
+        UserEvent::HintsReady => None,
     }
 }
 
@@ -19,13 +22,15 @@ pub enum UserEvent {
     BrowserWakeup = 0,
     BrowserFrameReady = 1,
     DownloadUpdate = 2,
+    HintsReady = 3,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 3] = [
+    pub const ALL: [UserEvent; 4] = [
         UserEvent::BrowserWakeup,
         UserEvent::BrowserFrameReady,
         UserEvent::DownloadUpdate,
+        UserEvent::HintsReady,
     ];
 
     pub fn from_code(code: i32) -> UserEvent {

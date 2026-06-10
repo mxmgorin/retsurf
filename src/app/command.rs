@@ -69,7 +69,7 @@ pub enum InputCommand {
     /// Cancel (B): close the on-screen keyboard if open, else go back.
     Cancel,
     /// Keyboard (X): toggle the on-screen keyboard, or backspace while it's open.
-    Keyboard,
+    ToggleOsk,
     /// Shoulder (L1/R1) by direction (-1 left, +1 right): switch the menu's section
     /// while it's open, otherwise navigate the page back / forward.
     Shoulder(i32),
@@ -78,6 +78,9 @@ pub enum InputCommand {
     Trigger { right: bool, pressed: bool },
     /// A dedicated keyboard key (Y). Applied only while the keyboard is open.
     Osk(OskCommand),
+    /// Link-hint mode (L3): enter it (collecting the page's clickable elements)
+    /// or exit if already shown. See [`crate::hints`].
+    Hints,
     /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
     /// stick Y), each normalized to -1..=1. Drives the cursor, keyboard grid
     /// navigation, or page scroll depending on context.

@@ -101,13 +101,15 @@ impl Gamepad {
             Button::A => AppCommand::Input(InputCommand::Primary(pressed)),
             _ if !pressed => return,
             Button::B => AppCommand::Input(InputCommand::Cancel),
-            Button::X => AppCommand::Input(InputCommand::Keyboard),
+            Button::X => AppCommand::Input(InputCommand::ToggleOsk),
             // Y is "space" on the open keyboard; the router reloads the page with
             // it otherwise.
             Button::Y => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
             // Contextual: switch menu sections when the menu is open, else back/forward.
             Button::LeftShoulder => AppCommand::Input(InputCommand::Shoulder(-1)),
             Button::RightShoulder => AppCommand::Input(InputCommand::Shoulder(1)),
+            // L3 toggles link-hint navigation over the page.
+            Button::LeftStick => AppCommand::Input(InputCommand::Hints),
             Button::Start => AppCommand::ToggleBookmark,
             Button::Back => AppCommand::Menu(MenuAction::Open),
             _ => return,

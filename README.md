@@ -25,9 +25,10 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
+- **Link hints** (L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
 - **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
-- Right-stick scroll · A = click/select · B = back / close · L1/R1 = back / forward · L2/R2 = switch tabs · Start = bookmark page · Y = reload
+- Right-stick scroll · A = click/select · B = back / close · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = bookmark page · Y = reload
 
 **Downloads**
 - Navigating to a file link downloads it in the background instead of rendering it

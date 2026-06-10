@@ -19,6 +19,10 @@ impl App {
                     if *pressed {
                         self.menu_open_selected();
                     }
+                } else if !self.ui.osk_visible() && self.ui.hints_visible() {
+                    if *pressed {
+                        self.activate_hint();
+                    }
                 } else {
                     self.primary_action(*pressed, out);
                 }
@@ -28,22 +32,38 @@ impl App {
                     self.ui.menu_close();
                 } else if self.ui.osk_visible() {
                     self.ui.osk(OskCommand::Hide, &self.browser, out);
+                } else if self.ui.hints_visible() {
+                    self.ui.hints_hide();
                 } else {
                     self.browser
                         .execute_command(&BrowserCommand::Back, &self.config.browser);
                 }
             }
-            InputCommand::Keyboard => {
+            InputCommand::ToggleOsk => {
                 if self.ui.menu_visible() {
                     // X deletes the highlighted entry (closes a tab in the Tabs section).
                     self.delete_menu_selection();
                 } else {
+                    // The keyboard takes over the stick and A — leave hint mode.
+                    self.ui.hints_hide();
                     let cmd = if self.ui.osk_visible() {
                         OskCommand::Backspace
                     } else {
                         OskCommand::Show
                     };
                     self.ui.osk(cmd, &self.browser, out);
+                }
+            }
+            // L3: toggle link-hint navigation (collection is asynchronous — the
+            // badges appear once the page reports its clickable elements). Inert
+            // under the menu/keyboard overlays, which own the stick and A.
+            InputCommand::Hints => {
+                if self.ui.menu_visible() || self.ui.osk_visible() {
+                } else if self.ui.hints_visible() {
+                    self.ui.hints_hide();
+                } else {
+                    self.ui.hints_begin_collect();
+                    self.browser.collect_hints();
                 }
             }
             // Dedicated keyboard keys act only while the keyboard is open. The one
@@ -84,6 +104,24 @@ impl App {
                 }
             }
             InputCommand::Analog { aim, scroll } => self.route_analog(*aim, *scroll, out),
+        }
+    }
+
+    /// Click the selected hint: a synthetic mouse move + press + release at its
+    /// center (so JS click handlers fire like for a real click), then leave hint
+    /// mode — the click usually navigates, invalidating the rects anyway.
+    fn activate_hint(&mut self) {
+        let Some((x, y)) = self.ui.hints_selected_center() else {
+            self.ui.hints_hide();
+            return;
+        };
+        self.ui.hints_hide();
+        self.browser
+            .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+        for pressed in [true, false] {
+            let event = into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
+            self.browser
+                .handle_input(servo::InputEvent::MouseButton(event));
         }
     }
 
@@ -138,6 +176,25 @@ impl App {
             let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
             if self.nav_repeat(dir, now, &cfg) {
                 self.ui.osk(OskCommand::Move(dir.0, dir.1), &self.browser, out);
+            }
+            return;
+        }
+
+        // Hint mode: the stick hops between hints; the right stick still scrolls
+        // (badges go stale as the page moves — schedule a re-collect).
+        if self.ui.hints_visible() {
+            let dir = osk_nav_dir(aim, cfg.osk_nav_threshold);
+            if self.nav_repeat(dir, now, &cfg) && dir != (0, 0) {
+                self.ui.hints_move(dir);
+            }
+            if scroll != 0.0 {
+                let dy = scroll * cfg.scroll_speed * dt;
+                let (x, y) = self
+                    .ui
+                    .hints_selected_center()
+                    .unwrap_or_else(|| self.ui.cursor_browser_rel());
+                self.browser.scroll(0.0, dy, x, y);
+                self.ui.hints_mark_stale();
             }
             return;
         }

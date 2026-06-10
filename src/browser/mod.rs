@@ -11,7 +11,8 @@ pub use url::try_into_url;
 use crate::{
     adblock::Adblock,
     config::BrowserConfig,
-    event::user::UserEventSender,
+    event::user::{UserEvent, UserEventSender},
+    hints::Hint,
 };
 use ::url::Url;
 use servo::{EventLoopWaker, RenderingContext, WebView};
@@ -113,6 +114,9 @@ struct AppBrowserInner {
     download_exts: Vec<String>,
     /// Network-level ad blocking, consulted for every resource load.
     adblock: Adblock,
+    /// Clickable-element rects reported by the page for hint mode (see
+    /// [`AppBrowser::collect_hints`]), drained once by the main loop.
+    hint_rects: RefCell<Option<Vec<Hint>>>,
 }
 
 impl AppBrowserInner {
@@ -137,6 +141,7 @@ impl AppBrowserInner {
                 .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
                 .collect(),
             adblock,
+            hint_rects: RefCell::new(None),
         }
     }
 
@@ -211,6 +216,53 @@ impl AppBrowser {
     #[inline]
     pub fn take_download_requests(&self) -> Vec<String> {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
+    }
+
+    /// Ask the active page for its visible clickable elements (hint mode). The
+    /// JS runs asynchronously; the resulting rects land in `hint_rects` (drained
+    /// via [`AppBrowser::take_hint_rects`]) and a wake-up event is sent. An
+    /// evaluation error yields an empty list, which exits hint mode.
+    pub fn collect_hints(&self) {
+        let Some(webview) = self.inner.active_webview() else {
+            return;
+        };
+        let inner = self.inner.clone();
+        webview.evaluate_javascript(COLLECT_HINTS_JS, move |result| {
+            let mut hints = vec![];
+            match result {
+                // The script returns a flat array of numbers: x, y, w, h per
+                // element (viewport-relative CSS px), the simplest JSValue to
+                // decode.
+                Ok(servo::JSValue::Array(values)) => {
+                    let nums: Vec<f32> = values
+                        .iter()
+                        .filter_map(|v| match v {
+                            servo::JSValue::Number(n) => Some(*n as f32),
+                            _ => None,
+                        })
+                        .collect();
+                    for c in nums.chunks_exact(4) {
+                        hints.push(Hint {
+                            x: c[0],
+                            y: c[1],
+                            w: c[2],
+                            h: c[3],
+                        });
+                    }
+                }
+                Ok(other) => log::warn!("hint collection returned unexpected value: {other:?}"),
+                Err(e) => log::warn!("hint collection failed: {e:?}"),
+            }
+            *inner.hint_rects.borrow_mut() = Some(hints);
+            inner.event_sender.send(UserEvent::HintsReady);
+        });
+    }
+
+    /// Take the rects from the last hint collection, if it has finished since
+    /// the previous call. Drained once per frame by the main loop.
+    #[inline]
+    pub fn take_hint_rects(&self) -> Option<Vec<Hint>> {
+        self.inner.hint_rects.borrow_mut().take()
     }
 
     /// Number of open tabs.
@@ -425,6 +477,32 @@ impl AppBrowser {
         }
     }
 }
+
+/// Collect the visible clickable elements as a flat `[x, y, w, h, …]` array
+/// (viewport-relative CSS px). Skips off-viewport, zero-size, hidden, and
+/// click-through elements; capped so a link-farm page can't flood the IPC
+/// channel. Cross-origin iframes are unreachable from the top document — their
+/// content gets no hints (the virtual cursor remains the fallback).
+const COLLECT_HINTS_JS: &str = r#"
+(function () {
+    const out = [];
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const els = document.querySelectorAll(
+        'a[href], button, input:not([type="hidden"]), select, textarea, summary, ' +
+        '[onclick], [role="button"], [role="link"], [role="tab"], [contenteditable="true"]'
+    );
+    for (const el of els) {
+        if (out.length >= 600) break; // 150 hints
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        if (r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) continue;
+        const s = window.getComputedStyle(el);
+        if (s.visibility !== 'visible' || s.pointerEvents === 'none') continue;
+        out.push(r.left, r.top, r.width, r.height);
+    }
+    return out;
+})()
+"#;
 
 fn set_experimental_prefs(servo: &servo::Servo, value: bool) {
     let value = servo::PrefValue::Bool(value);
