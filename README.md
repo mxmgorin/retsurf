@@ -1,4 +1,5 @@
 [![Build linux ARM](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml)
+[![Windows & macOS](https://github.com/mxmgorin/retsurf/actions/workflows/build-desktop.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-desktop.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
 
 # 🌊 retsurf
