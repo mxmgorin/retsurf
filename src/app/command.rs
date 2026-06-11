@@ -20,6 +20,23 @@ pub enum AppCommand {
     Menu(MenuAction),
     /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
     ToggleBookmark,
+    /// An action on the modal page-prompt overlay (select pickers and JS
+    /// dialogs — see [`crate::prompt`]).
+    Prompt(PromptAction),
+}
+
+/// Actions on the modal page-prompt overlay. The gamepad and keyboard push
+/// `Activate` / `Cancel` through the router; mouse clicks push `ClickSlot`
+/// with the row or button they hit.
+#[derive(Clone)]
+pub enum PromptAction {
+    /// Activate the focused slot (A / Enter): choose or toggle an option, or
+    /// press the focused dialog button.
+    Activate,
+    /// Dismiss the front control with its default response (B / Esc).
+    Cancel,
+    /// Focus and activate slot `index` (clicking it).
+    ClickSlot(usize),
 }
 
 /// Actions on the full-screen menu (Tabs / Bookmarks / History / Downloads). The

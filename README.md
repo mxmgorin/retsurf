@@ -26,6 +26,11 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
 - Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
 
+**Page dialogs**
+- `<select>` dropdowns (incl. optgroups and multi-selects) and the JS `alert` / `confirm` / `prompt` dialogs open as a modal overlay instead of needing native widgets
+- Fully gamepad-driveable: stick/D-pad moves the focus, A activates (toggles a multi-select option), B dismisses; the keyboard uses arrows / Enter / Esc, the mouse just clicks
+- `prompt()` text entry goes through the on-screen keyboard (X opens it over the dialog)
+
 **Reader mode**
 - Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
 - Runs in place — no refetch, so it works on logged-in and dynamic pages; toggling off reloads

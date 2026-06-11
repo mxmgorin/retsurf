@@ -68,18 +68,31 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
     /// Servo requests an IME whenever an editable element gains focus — we
     /// don't show one, but the request marks "the user is typing", which mutes
-    /// plain-key keyboard shortcuts. Other controls (select dropdowns, dialogs)
-    /// aren't rendered yet; dropping them dismisses them with their defaults.
+    /// plain-key keyboard shortcuts. Select pickers and JS dialogs are queued
+    /// for the modal prompt overlay (see [`crate::prompt`]); the rest (color /
+    /// file pickers, context menus) aren't rendered yet — dropping them
+    /// dismisses them with their defaults.
     fn show_embedder_control(&self, _webview: WebView, control: servo::EmbedderControl) {
-        if let servo::EmbedderControl::InputMethod(ime) = &control {
-            self.ime_control.set(Some(ime.id()));
+        match control {
+            servo::EmbedderControl::InputMethod(ime) => self.ime_control.set(Some(ime.id())),
+            servo::EmbedderControl::SelectElement(_) | servo::EmbedderControl::SimpleDialog(_) => {
+                self.embedder_controls.borrow_mut().push(control);
+                // Wake the main loop so the prompt shows even when idle.
+                self.event_sender.send(UserEvent::ControlPending);
+            }
+            _ => log::info!("unhandled embedder control: dismissed with its default"),
         }
     }
 
     fn hide_embedder_control(&self, _webview: WebView, id: servo::EmbedderControlId) {
         if self.ime_control.get() == Some(id) {
             self.ime_control.set(None);
+            return;
         }
+        // A queued select/dialog Servo retracted (navigation, element removal,
+        // …) — ids we never queued are harmless to push, the drain ignores them.
+        self.dismissed_controls.borrow_mut().push(id);
+        self.event_sender.send(UserEvent::ControlPending);
     }
 
     /// Run every resource load through the ad blocker. Blocked loads get an

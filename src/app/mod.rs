@@ -6,7 +6,7 @@
 mod command;
 mod router;
 
-pub use command::{AppCommand, InputCommand, MenuAction};
+pub use command::{AppCommand, InputCommand, MenuAction, PromptAction};
 
 use crate::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
@@ -104,6 +104,18 @@ impl App {
                 self.ui.start_download(&url, &self.event_sender);
             }
 
+            // Modal page controls (select pickers, JS dialogs): queue fresh
+            // ones for the prompt overlay and drop ones Servo retracted.
+            let controls = self.browser.take_embedder_controls();
+            let dismissed = self.browser.take_dismissed_controls();
+            let prompt_changed = !controls.is_empty() || !dismissed.is_empty();
+            for control in controls {
+                self.ui.prompt.push(control);
+            }
+            for id in dismissed {
+                self.ui.prompt.dismiss(id);
+            }
+
             // Hint mode: hand freshly collected clickable rects to the UI, and
             // start a re-collect once a post-scroll refresh comes due.
             if let Some(rects) = self.browser.take_hint_rects() {
@@ -117,6 +129,14 @@ impl App {
             self.browser.paint();
 
             self.ui.update(&mut self.browser, &mut commands);
+
+            // A prompt change needs a follow-up frame like commands below do
+            // (egui sizes a fresh overlay invisibly on its first pass, and
+            // `update` just rebuilt the idle wait) — request it after `update`
+            // so it isn't clobbered.
+            if prompt_changed {
+                self.ui.request_repaint();
+            }
 
             // Drain in waves: routing a command (e.g. an OSK Enter) may queue more.
             while !commands.is_empty() {
@@ -148,6 +168,14 @@ impl App {
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
+            AppCommand::Prompt(action) => match action {
+                PromptAction::Activate => self.ui.prompt.activate(),
+                PromptAction::Cancel => self.ui.prompt.cancel(),
+                PromptAction::ClickSlot(index) => {
+                    self.ui.prompt.set_selected(*index);
+                    self.ui.prompt.activate();
+                }
+            },
         };
 
         // Commands are drained after `ui.update` already built this frame, so a

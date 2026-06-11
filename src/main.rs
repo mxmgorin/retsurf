@@ -7,6 +7,7 @@ mod event;
 mod hints;
 mod menu;
 mod osk;
+mod prompt;
 mod render;
 mod resources;
 mod ui;

@@ -3,18 +3,24 @@
 //! over the page or toolbar?" branches live — the gamepad itself stays
 //! state-agnostic and only emits intents.
 
-use super::{App, AppCommand, InputCommand};
+use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
 use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::osk::OskCommand;
 use std::time::{Duration, Instant};
 
 impl App {
-    /// Route one contextual input intent.
+    /// Route one contextual input intent. The modal page prompt (select picker
+    /// / JS dialog) outranks the other overlays — only the on-screen keyboard
+    /// stays above it, since it's how a gamepad types into a `prompt()` field.
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         match command {
             InputCommand::Confirm(pressed) => {
-                if self.ui.menu_visible() {
+                if self.ui.prompt.visible() && !self.ui.osk_visible() {
+                    if *pressed {
+                        out.push(AppCommand::Prompt(PromptAction::Activate));
+                    }
+                } else if self.ui.menu_visible() {
                     if *pressed {
                         self.menu_open_selected();
                     }
@@ -27,10 +33,12 @@ impl App {
                 }
             }
             InputCommand::Cancel => {
-                if self.ui.menu_visible() {
-                    self.ui.menu_close();
-                } else if self.ui.osk_visible() {
+                if self.ui.osk_visible() {
                     self.ui.osk(OskCommand::Hide, &self.browser, out);
+                } else if self.ui.prompt.visible() {
+                    out.push(AppCommand::Prompt(PromptAction::Cancel));
+                } else if self.ui.menu_visible() {
+                    self.ui.menu_close();
                 } else if self.ui.hints_visible() {
                     self.ui.hints_hide();
                 } else {
@@ -39,7 +47,7 @@ impl App {
                 }
             }
             InputCommand::ToggleOsk => {
-                if self.ui.menu_visible() {
+                if self.ui.menu_visible() && !self.ui.prompt.visible() {
                     // X deletes the highlighted entry (closes a tab in the Tabs section).
                     self.delete_menu_selection();
                 } else {
@@ -53,21 +61,29 @@ impl App {
                     self.ui.osk(cmd, &self.browser, out);
                 }
             }
-            InputCommand::CycleTab(delta) => self.browser.cycle_tab(*delta),
+            // Tab switching is parked while a modal prompt is up — it belongs
+            // to the page that opened it.
+            InputCommand::CycleTab(delta) => {
+                if !self.ui.prompt.visible() {
+                    self.browser.cycle_tab(*delta);
+                }
+            }
             // One overlay-navigation step (keyboard arrows / nav_* bindings, or
             // the stick shaped by `route_analog`): whichever overlay is open
             // owns it; with none open it's a no-op (the event handler forwards
             // unconsumed arrows to the page instead).
             InputCommand::Nav(dx, dy) => {
-                if self.ui.menu_visible() {
+                if self.ui.osk_visible() {
+                    self.ui
+                        .osk(OskCommand::Move(*dx, *dy), &self.browser, out);
+                } else if self.ui.prompt.visible() {
+                    self.ui.prompt.move_sel(*dx, *dy);
+                } else if self.ui.menu_visible() {
                     if *dx != 0 {
                         self.ui.menu_switch(*dx);
                     } else if *dy != 0 {
                         self.ui.menu_move(*dy);
                     }
-                } else if self.ui.osk_visible() {
-                    self.ui
-                        .osk(OskCommand::Move(*dx, *dy), &self.browser, out);
                 } else if self.ui.hints_visible() {
                     self.ui.hints_move((*dx, *dy));
                 }
@@ -76,7 +92,7 @@ impl App {
             // badges appear once the page reports its clickable elements). Inert
             // under the menu/keyboard overlays, which own the stick and A.
             InputCommand::Hints => {
-                if self.ui.menu_visible() || self.ui.osk_visible() {
+                if self.ui.menu_visible() || self.ui.osk_visible() || self.ui.prompt.visible() {
                 } else if self.ui.hints_visible() {
                     self.ui.hints_hide();
                 } else {
@@ -89,7 +105,9 @@ impl App {
             InputCommand::Shoulder(delta) => {
                 if self.ui.menu_visible() {
                     self.ui.menu_switch(*delta);
-                } else {
+                } else if !self.ui.prompt.visible() {
+                    // Page navigation is parked under a modal prompt, like
+                    // tab switching.
                     let cmd = if *delta < 0 {
                         BrowserCommand::Back
                     } else {
@@ -108,7 +126,7 @@ impl App {
                     } else {
                         self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
-                } else if *pressed {
+                } else if *pressed && !self.ui.prompt.visible() {
                     // Quick tab switch: L2 previous, R2 next (wraps).
                     self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
@@ -198,7 +216,11 @@ impl App {
         // shaped (dead zone + auto-repeat) into the same `Nav` steps the
         // keyboard arrows emit — one execution path for both devices. The menu
         // takes the dominant axis only, so a diagonal nudge does just one thing.
-        if self.ui.menu_visible() || self.ui.osk_visible() || self.ui.hints_visible() {
+        if self.ui.menu_visible()
+            || self.ui.osk_visible()
+            || self.ui.hints_visible()
+            || self.ui.prompt.visible()
+        {
             let dir = osk_nav_dir(aim, nav_threshold);
             if self.nav_repeat(dir, now) && dir != (0, 0) {
                 out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));

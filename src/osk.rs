@@ -9,12 +9,22 @@
 //! through them in that order. Each layout defines only the four character
 //! rows — the frame (Tab, Caps, Enter, Shift, Space, arrows) is fixed.
 
-use crate::app::AppCommand;
+use crate::app::{AppCommand, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
 use std::collections::HashMap;
+
+/// Where typed input goes: the egui address bar, a modal `prompt()` dialog's
+/// text field (its edit buffer is borrowed in), or the web page's focused
+/// element (via Servo keyboard events). Picked per command by
+/// [`crate::ui::AppUi::osk`] from what currently holds focus.
+pub enum OskTarget<'a> {
+    AddressBar,
+    Prompt(&'a mut String),
+    Page,
+}
 
 /// An operation on the on-screen keyboard. The router produces these from
 /// contextual buttons (A→Activate, X→Show/Backspace, B→Hide), the stick (→Move)
@@ -246,12 +256,12 @@ impl Osk {
         self.shift_held || self.shift_once
     }
 
-    /// Dispatch an [`OskCommand`]. `to_address_bar` selects where typed input
-    /// goes: the egui address bar, or the web page's focused element.
+    /// Dispatch an [`OskCommand`]; `target` is where typed input goes (see
+    /// [`OskTarget`]).
     pub fn handle(
         &mut self,
         cmd: OskCommand,
-        to_address_bar: bool,
+        target: OskTarget,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
@@ -264,11 +274,11 @@ impl Osk {
                 self.shift_once = false;
             }
             OskCommand::Hide => self.visible = false,
-            OskCommand::Activate => self.activate(to_address_bar, browser, commands),
-            OskCommand::Backspace => self.backspace(to_address_bar, browser),
-            OskCommand::Space => self.type_space(to_address_bar, browser),
+            OskCommand::Activate => self.activate(target, browser, commands),
+            OskCommand::Backspace => self.backspace(target, browser),
+            OskCommand::Space => self.type_space(target, browser),
             OskCommand::Shift(held) => self.shift_held = held,
-            OskCommand::Enter => self.enter(to_address_bar, browser, commands),
+            OskCommand::Enter => self.enter(target, browser, commands),
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
         }
     }
@@ -290,12 +300,11 @@ impl Osk {
         self.col = (self.col as i32 + dx).clamp(0, cols - 1) as usize;
     }
 
-    /// Apply the selected key. Input is routed to the focused text field: the egui
-    /// address bar when `to_address_bar`, otherwise the web page's focused element
-    /// (via Servo keyboard events).
+    /// Apply the selected key. Typed input goes to whatever `target` points at
+    /// (address bar / prompt dialog / the page, via Servo keyboard events).
     fn activate(
         &mut self,
-        to_address_bar: bool,
+        target: OskTarget,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
@@ -307,21 +316,22 @@ impl Osk {
             Char(c) => {
                 let shift = self.shift();
                 let ch = self.layout().resolve_char(c, shift, self.caps);
-                input_char(to_address_bar, ch, shift, browser);
+                input_char(target, ch, shift, browser);
                 // Consume the one-shot; the held (L2) modifier stays as-is.
                 self.shift_once = false;
             }
-            Space => self.type_space(to_address_bar, browser),
-            Backspace => self.backspace(to_address_bar, browser),
+            Space => self.type_space(target, browser),
+            Backspace => self.backspace(target, browser),
             // Tab and the arrow keys are sent to the focused page element only;
-            // the address bar is append-only here, so they do nothing there.
-            Tab if !to_address_bar => send_named(browser, NamedKey::Tab, Code::Tab),
-            Left if !to_address_bar => send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft),
-            Right if !to_address_bar => send_named(browser, NamedKey::ArrowRight, Code::ArrowRight),
-            Up if !to_address_bar => send_named(browser, NamedKey::ArrowUp, Code::ArrowUp),
-            Down if !to_address_bar => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
+            // the address bar and prompt field are append-only here, so they
+            // do nothing there.
+            Tab if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::Tab, Code::Tab),
+            Left if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft),
+            Right if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowRight, Code::ArrowRight),
+            Up if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowUp, Code::ArrowUp),
+            Down if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
             Tab | Left | Right | Up | Down => {}
-            Enter => self.enter(to_address_bar, browser, commands),
+            Enter => self.enter(target, browser, commands),
             Lang => {
                 self.lang = (self.lang + 1) % self.layouts.len();
                 // The frame is fixed but rows differ in length across
@@ -333,42 +343,46 @@ impl Osk {
     }
 
     /// Type a space (the **Space** key or **Y**).
-    fn type_space(&self, to_address_bar: bool, browser: &AppBrowser) {
-        input_char(to_address_bar, ' ', self.shift(), browser);
+    fn type_space(&self, target: OskTarget, browser: &AppBrowser) {
+        input_char(target, ' ', self.shift(), browser);
     }
 
     /// Delete the character before the caret (the **Backspace** key or **X**).
-    fn backspace(&self, to_address_bar: bool, browser: &AppBrowser) {
-        if to_address_bar {
-            browser.get_state_mut().get_location_mut().pop();
-        } else {
-            send_named(browser, NamedKey::Backspace, Code::Backspace);
+    fn backspace(&self, target: OskTarget, browser: &AppBrowser) {
+        match target {
+            OskTarget::AddressBar => _ = browser.get_state_mut().get_location_mut().pop(),
+            OskTarget::Prompt(buf) => _ = buf.pop(),
+            OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
     }
 
-    /// Submit: load the address bar or send Enter to the page, then hide (the
-    /// **Go** key or **R2**).
+    /// Submit: load the address bar, confirm the prompt dialog, or send Enter
+    /// to the page — then hide (the **Go** key or **R2**).
     fn enter(
         &mut self,
-        to_address_bar: bool,
+        target: OskTarget,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if to_address_bar {
-            commands.push(AppCommand::Browser(BrowserCommand::Load));
-        } else {
-            send_named(browser, NamedKey::Enter, Code::Enter);
+        match target {
+            OskTarget::AddressBar => commands.push(AppCommand::Browser(BrowserCommand::Load)),
+            OskTarget::Prompt(_) => {
+                commands.push(AppCommand::Prompt(PromptAction::ClickSlot(0)))
+            }
+            OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
         }
         self.visible = false;
     }
 }
 
-fn input_char(to_address_bar: bool, c: char, shift: bool, browser: &AppBrowser) {
-    if to_address_bar {
-        browser.get_state_mut().get_location_mut().push(c);
-    } else {
-        browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, true)));
-        browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, false)));
+fn input_char(target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
+    match target {
+        OskTarget::AddressBar => browser.get_state_mut().get_location_mut().push(c),
+        OskTarget::Prompt(buf) => buf.push(c),
+        OskTarget::Page => {
+            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, true)));
+            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, false)));
+        }
     }
 }
 

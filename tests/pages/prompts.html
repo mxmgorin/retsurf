@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Manual test page for the modal prompt overlay (src/prompt.rs):
+     <select> pickers (single / preselected / disabled / optgroup / multiple)
+     and the JS simple dialogs. The auto-alert 2s after load covers the
+     idle-loop regression: a dialog must appear without any user input.
+     Run: cargo run, then open file:///<repo>/tests/pages/prompts.html -->
+<html><head><meta charset="utf-8"><title>prompt test</title></head>
+<body style="background:#fff;font-size:20px">
+<h2>Prompt overlay test</h2>
+<p>
+<select id="s">
+  <option>First option</option>
+  <option selected>Second (preselected)</option>
+  <option disabled>Disabled option</option>
+  <optgroup label="Group A">
+    <option>Grouped one</option>
+    <option>Grouped two</option>
+  </optgroup>
+</select>
+</p>
+<p><select multiple size="1" id="m">
+  <option>Red</option><option selected>Green</option><option>Blue</option>
+</select></p>
+<p><button onclick="alert('Alert message from the page')">alert</button>
+<button onclick="document.title = confirm('Proceed?') ? 'yes' : 'no'">confirm</button>
+<button onclick="document.title = prompt('Your name?', 'anon')">prompt</button></p>
+<script>setTimeout(function () { alert('Hello from the page — auto alert'); document.title = 'alert-closed'; }, 2000);</script>
+</body></html>

@@ -42,6 +42,30 @@ impl Keyboard {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // A modal page prompt (select picker / JS dialog) captures the keyboard
+        // first: Enter activates, Esc dismisses, the `nav_*` bindings move the
+        // focus, and everything else is muted so a shortcut can't fire under
+        // the modal (typing goes to its text field through egui). The on-screen
+        // keyboard stays above it — that's how a gamepad types into `prompt()`.
+        if ui.prompt.visible() && !ui.osk_visible() {
+            if key.pressed {
+                match key.kc {
+                    Keycode::Return | Keycode::KpEnter => {
+                        commands.push(AppCommand::Input(InputCommand::Confirm(true)))
+                    }
+                    Keycode::Escape => commands.push(AppCommand::Input(InputCommand::Cancel)),
+                    _ => {
+                        if let Some(action) = self.lookup(key, true, true) {
+                            if action.is_nav() {
+                                action.push_tap(commands);
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
         // While the menu is open it captures the keyboard wholesale — both
         // edges, so no stray release reaches the page either.
         if ui.menu_visible() {

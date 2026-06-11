@@ -13,6 +13,9 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
         // Sent by the hint-collection JS callback purely to wake the loop; the
         // main loop drains the collected rects.
         UserEvent::HintsReady => None,
+        // Sent by the embedder-control delegate purely to wake the loop; the
+        // main loop drains the pending/dismissed controls.
+        UserEvent::ControlPending => None,
     }
 }
 
@@ -23,14 +26,16 @@ pub enum UserEvent {
     BrowserFrameReady = 1,
     DownloadUpdate = 2,
     HintsReady = 3,
+    ControlPending = 4,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 4] = [
+    pub const ALL: [UserEvent; 5] = [
         UserEvent::BrowserWakeup,
         UserEvent::BrowserFrameReady,
         UserEvent::DownloadUpdate,
         UserEvent::HintsReady,
+        UserEvent::ControlPending,
     ];
 
     pub fn from_code(code: i32) -> UserEvent {

@@ -6,6 +6,7 @@
 mod hints;
 mod menu;
 mod osk;
+mod prompt;
 mod toolbar;
 
 use crate::{
@@ -15,7 +16,8 @@ use crate::{
     event::user::UserEventSender,
     hints::{Hint, Hints},
     menu::{Menu, Section},
-    osk::{Osk, OskCommand},
+    osk::{Osk, OskCommand, OskTarget},
+    prompt::Prompt,
     window::AppWindow,
 };
 use egui_sdl2::egui;
@@ -55,6 +57,9 @@ pub struct AppUi {
     menu: Menu,
     /// Link-hint navigation state (L3); the rects come from the browser.
     hints: Hints,
+    /// Modal page prompts: queued `<select>` pickers and JS dialogs. Public —
+    /// the router and main loop drive [`Prompt`]'s own methods directly.
+    pub prompt: Prompt,
     /// The gamepad's latched D-pad scroll mode, mirrored each frame by the
     /// router; drawn as an autoscroll-style indicator in place of the cursor.
     scroll_mode: bool,
@@ -92,6 +97,7 @@ impl AppUi {
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             hints: Hints::new(),
+            prompt: Prompt::new(),
             scroll_mode: false,
         }
     }
@@ -183,11 +189,19 @@ impl AppUi {
         self.osk.visible
     }
 
-    /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input to
-    /// the address bar when it holds focus, otherwise to the focused page element.
+    /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input
+    /// to a modal `prompt()` dialog's field when one is up, else the address
+    /// bar when it holds focus, otherwise the focused page element.
     pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let to_address_bar = self.address_bar_focused();
-        self.osk.handle(cmd, to_address_bar, browser, commands);
+        let target = if self.prompt.visible() && self.prompt.has_text_field() {
+            OskTarget::Prompt(self.prompt.input_mut())
+        } else if to_address_bar {
+            OskTarget::AddressBar
+        } else {
+            OskTarget::Page
+        };
+        self.osk.handle(cmd, target, browser, commands);
     }
 
     /// Whether the full-screen menu is shown.
@@ -395,7 +409,11 @@ impl AppUi {
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
         // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible = if self.osk.visible || self.menu.visible || self.hints.visible {
+        let cursor_visible = if self.osk.visible
+            || self.menu.visible
+            || self.hints.visible
+            || self.prompt.visible()
+        {
             None
         } else {
             self.cursor_visible_for()
@@ -463,6 +481,12 @@ impl AppUi {
                         ui.painter()
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
+
+                // The modal prompt draws on top of whatever else is up (its
+                // egui layer order puts it above the other overlays).
+                if self.prompt.visible() {
+                    prompt::add_prompt(ctx, &mut self.prompt, commands);
+                }
 
                 if self.menu.visible {
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);

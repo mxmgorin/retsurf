@@ -124,6 +124,12 @@ struct AppBrowserInner {
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
     ime_control: Cell<Option<servo::EmbedderControlId>>,
+    /// Select pickers and JS dialogs the page opened (see [`delegate`]),
+    /// drained once per frame by the main loop into the prompt overlay.
+    embedder_controls: RefCell<Vec<servo::EmbedderControl>>,
+    /// Controls Servo retracted before they were answered, drained alongside
+    /// `embedder_controls` so the overlay drops them.
+    dismissed_controls: RefCell<Vec<servo::EmbedderControlId>>,
 }
 
 impl AppBrowserInner {
@@ -150,6 +156,8 @@ impl AppBrowserInner {
             adblock,
             hint_rects: RefCell::new(None),
             ime_control: Cell::new(None),
+            embedder_controls: RefCell::new(vec![]),
+            dismissed_controls: RefCell::new(vec![]),
         }
     }
 
@@ -273,6 +281,20 @@ impl AppBrowser {
     #[inline]
     pub fn take_hint_rects(&self) -> Option<Vec<Hint>> {
         self.inner.hint_rects.borrow_mut().take()
+    }
+
+    /// Take the select pickers / JS dialogs the pages opened since the last
+    /// call, for the modal prompt overlay. Drained once per frame.
+    #[inline]
+    pub fn take_embedder_controls(&self) -> Vec<servo::EmbedderControl> {
+        std::mem::take(&mut self.inner.embedder_controls.borrow_mut())
+    }
+
+    /// Take the ids of controls Servo retracted since the last call, so the
+    /// prompt overlay drops them. Drained once per frame.
+    #[inline]
+    pub fn take_dismissed_controls(&self) -> Vec<servo::EmbedderControlId> {
+        std::mem::take(&mut self.inner.dismissed_controls.borrow_mut())
     }
 
     /// Whether an editable element on the page currently holds focus (guards
