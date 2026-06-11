@@ -21,7 +21,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
-- **On-screen keyboard** with symbols, caps, and shift for typing URLs and searches
+- **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
 - Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = reload (hold: bookmark) · Select = menu
@@ -93,6 +93,12 @@ width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 cursor_linger_ms = 1500    # how long the gamepad cursor stays visible after moving
+
+[osk]
+# Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
+# them in this order. Available: "en" (QWERTY), "ru" (ЙЦУКЕН). Unknown names are
+# logged and skipped; an empty list falls back to ["en"].
+layouts = ["en", "ru"]
 
 [performance]
 # Servo thread counts. The defaults (0 = auto) size everything from the CPU core

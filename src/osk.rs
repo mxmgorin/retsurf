@@ -3,11 +3,18 @@
 //! doubles as search). Owned and rendered by [`crate::ui`], which drives it from
 //! gamepad input. Beyond grid navigation (D-pad + **A**), the common keys have
 //! direct shortcuts: **X** backspace, **Y** space, **L2** shift, **R2** enter.
+//!
+//! Layouts are built in ([`LAYOUTS`]: QWERTY and ЙЦУКЕН so far); the config's
+//! `[osk] layouts` list picks which are enabled, and the **Lang** key cycles
+//! through them in that order. Each layout defines only the four character
+//! rows — the frame (Tab, Caps, Enter, Shift, Space, arrows) is fixed.
 
 use crate::app::AppCommand;
 use crate::browser::{AppBrowser, BrowserCommand};
+use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
+use std::collections::HashMap;
 
 /// An operation on the on-screen keyboard. The router produces these from
 /// contextual buttons (A→Activate, X→Show/Backspace, B→Hide), the stick (→Move)
@@ -46,7 +53,7 @@ pub enum Key {
     Down,
     Right,
     Enter,
-    /// Current input language indicator (display-only for now).
+    /// Cycle to the next enabled layout; labeled with the current one's name.
     Lang,
     /// Hides the keyboard.
     Hide,
@@ -54,81 +61,109 @@ pub enum Key {
 
 use Key::*;
 
-/// Keyboard layout, row by row, arranged like a real keyboard: Backspace top
-/// right, Enter at the home-row right, Shift at the bottom-letter-row left,
-/// Space along the bottom with the arrow cluster after it. Rows may differ in
-/// length.
-pub static LAYOUT: &[&[Key]] = &[
-    &[
-        Char('`'), Char('1'), Char('2'), Char('3'), Char('4'), Char('5'),
-        Char('6'), Char('7'), Char('8'), Char('9'), Char('0'),
-        Char('-'), Char('='), Backspace,
-    ],
-    &[
-        Tab, Char('q'), Char('w'), Char('e'), Char('r'), Char('t'),
-        Char('y'), Char('u'), Char('i'), Char('o'), Char('p'),
-        Char('['), Char(']'), Char('\\'),
-    ],
-    &[
-        Caps, Char('a'), Char('s'), Char('d'), Char('f'), Char('g'),
-        Char('h'), Char('j'), Char('k'), Char('l'), Char(';'), Char('\''), Enter,
-    ],
-    &[
-        Shift, Char('z'), Char('x'), Char('c'), Char('v'),
-        Char('b'), Char('n'), Char('m'), Char(','), Char('.'), Char('/'), Shift,
-    ],
-    &[Lang, Space, Left, Up, Down, Right, Hide],
-];
-
-/// The character produced by a key when Shift is held, mirroring a US keyboard
-/// (number row → symbols, letters → uppercase).
-pub fn shift_char(c: char) -> char {
-    match c {
-        '1' => '!', '2' => '@', '3' => '#', '4' => '$', '5' => '%',
-        '6' => '^', '7' => '&', '8' => '*', '9' => '(', '0' => ')',
-        '-' => '_', '=' => '+', '/' => '?', '.' => '>', ',' => '<', ';' => ':',
-        '`' => '~', '[' => '{', ']' => '}', '\\' => '|', '\'' => '"',
-        c => c.to_ascii_uppercase(),
-    }
+/// A built-in layout's data: the four character rows between the fixed frame
+/// keys, each mirrored by its shifted variant (position by position).
+struct LayoutDef {
+    /// Config name (matched case-insensitively) and the Lang key's label.
+    name: &'static str,
+    rows: [&'static str; 4],
+    shift_rows: [&'static str; 4],
 }
 
-/// The character a `Char` key produces given the modifier state. Shift shifts
-/// everything (US-keyboard style); Caps Lock only flips letter case, so for a
-/// letter the case is `shift XOR caps`.
-pub fn resolve_char(c: char, shift: bool, caps: bool) -> char {
-    if c.is_ascii_alphabetic() {
-        if shift ^ caps {
-            c.to_ascii_uppercase()
+/// The built-in layouts, selectable via `[osk] layouts` in the config. Adding
+/// a language is adding an entry here: four rows of characters arranged like
+/// the physical keyboard, plus their shifted forms.
+static LAYOUTS: &[LayoutDef] = &[
+    LayoutDef {
+        name: "en",
+        rows: [
+            "`1234567890-=",
+            "qwertyuiop[]\\",
+            "asdfghjkl;'",
+            "zxcvbnm,./",
+        ],
+        shift_rows: [
+            "~!@#$%^&*()_+",
+            "QWERTYUIOP{}|",
+            "ASDFGHJKL:\"",
+            "ZXCVBNM<>?",
+        ],
+    },
+    LayoutDef {
+        name: "ru",
+        rows: [
+            "ё1234567890-=",
+            "йцукенгшщзхъ\\",
+            "фывапролджэ",
+            "ячсмитьбю.",
+        ],
+        shift_rows: [
+            "Ё!\"№;%:?*()_+",
+            "ЙЦУКЕНГШЩЗХЪ/",
+            "ФЫВАПРОЛДЖЭ",
+            "ЯЧСМИТЬБЮ,",
+        ],
+    },
+];
+
+/// A ready-to-use layout: the full key grid (character rows wrapped in the
+/// fixed frame) and the Shift mapping for non-letter characters.
+pub struct Layout {
+    /// Shown on the Lang key.
+    pub name: &'static str,
+    keys: Vec<Vec<Key>>,
+    shift_map: HashMap<char, char>,
+}
+
+impl Layout {
+    /// Wrap a definition's character rows in the fixed frame: Backspace top
+    /// right, Enter at the home-row right, Shift around the bottom letter row,
+    /// Space along the bottom with the arrow cluster after it.
+    fn build(def: &LayoutDef) -> Self {
+        let chars = |r: usize| def.rows[r].chars().map(Char);
+        let keys = vec![
+            chars(0).chain([Backspace]).collect(),
+            [Tab].into_iter().chain(chars(1)).collect(),
+            [Caps].into_iter().chain(chars(2)).chain([Enter]).collect(),
+            [Shift].into_iter().chain(chars(3)).chain([Shift]).collect(),
+            vec![Lang, Space, Left, Up, Down, Right, Hide],
+        ];
+        let mut shift_map = HashMap::new();
+        for (row, shifted) in def.rows.iter().zip(def.shift_rows) {
+            shift_map.extend(row.chars().zip(shifted.chars()));
+        }
+        Self {
+            name: def.name,
+            keys,
+            shift_map,
+        }
+    }
+
+    /// The key grid, row by row (rows may differ in length).
+    pub fn keys(&self) -> &[Vec<Key>] {
+        &self.keys
+    }
+
+    /// The character a `Char` key produces given the modifier state. Letters
+    /// flip case by `shift XOR caps` (Caps Lock only affects case); anything
+    /// else shifts through the layout's mapping.
+    pub fn resolve_char(&self, c: char, shift: bool, caps: bool) -> char {
+        if c.is_alphabetic() {
+            if shift ^ caps {
+                c.to_uppercase().next().unwrap_or(c)
+            } else {
+                c
+            }
+        } else if shift {
+            self.shift_map.get(&c).copied().unwrap_or(c)
         } else {
             c
         }
-    } else if shift {
-        shift_char(c)
-    } else {
-        c
     }
 }
 
-/// Label to show on a key, honoring the current shift/caps state.
-pub fn key_label(key: Key, shift: bool, caps: bool) -> String {
-    match key {
-        Char(c) => resolve_char(c, shift, caps).to_string(),
-        Tab => "Tab".to_string(),
-        Caps => "Caps".to_string(),
-        Space => "Space".to_string(),
-        Backspace => "Bksp".to_string(),
-        Shift => "Shift".to_string(),
-        Left => "<".to_string(),
-        Up => "^".to_string(),
-        Down => "v".to_string(),
-        Right => ">".to_string(),
-        Enter => "Enter".to_string(),
-        Lang => "EN".to_string(),
-        Hide => "Hide".to_string(),
-    }
-}
-
-/// On-screen keyboard state: visibility, the selected cell, and shift/caps.
+/// On-screen keyboard state: visibility, the selected cell, shift/caps, and
+/// the enabled layouts.
 pub struct Osk {
     pub visible: bool,
     pub caps: bool,
@@ -139,10 +174,32 @@ pub struct Osk {
     shift_once: bool,
     row: usize,
     col: usize,
+    /// The enabled layouts in Lang-cycle order; never empty.
+    layouts: Vec<Layout>,
+    /// Index of the active layout.
+    lang: usize,
 }
 
 impl Osk {
-    pub fn new() -> Self {
+    pub fn new(cfg: &OskConfig) -> Self {
+        let mut layouts: Vec<Layout> = cfg
+            .layouts
+            .iter()
+            .filter_map(|id| {
+                let def = LAYOUTS.iter().find(|d| d.name.eq_ignore_ascii_case(id));
+                if def.is_none() {
+                    let known: Vec<_> = LAYOUTS.iter().map(|d| d.name).collect();
+                    log::warn!("osk: unknown layout `{id}` (available: {known:?}); skipping");
+                }
+                def.map(Layout::build)
+            })
+            .collect();
+        // The keyboard is the only text input on a handheld — never come up
+        // without one.
+        if layouts.is_empty() {
+            layouts.push(Layout::build(&LAYOUTS[0]));
+        }
+
         Self {
             visible: false,
             caps: false,
@@ -150,6 +207,36 @@ impl Osk {
             shift_once: false,
             row: 0,
             col: 0,
+            layouts,
+            lang: 0,
+        }
+    }
+
+    /// The active layout.
+    pub fn layout(&self) -> &Layout {
+        &self.layouts[self.lang]
+    }
+
+    /// Label to show on a key, honoring the current shift/caps state and the
+    /// active layout.
+    pub fn key_label(&self, key: Key) -> String {
+        match key {
+            Char(c) => self
+                .layout()
+                .resolve_char(c, self.shift(), self.caps)
+                .to_string(),
+            Tab => "Tab".to_string(),
+            Caps => "Caps".to_string(),
+            Space => "Space".to_string(),
+            Backspace => "Bksp".to_string(),
+            Shift => "Shift".to_string(),
+            Left => "<".to_string(),
+            Up => "^".to_string(),
+            Down => "v".to_string(),
+            Right => ">".to_string(),
+            Enter => "Enter".to_string(),
+            Lang => self.layout().name.to_uppercase(),
+            Hide => "Hide".to_string(),
         }
     }
 
@@ -191,15 +278,15 @@ impl Osk {
     }
 
     fn current(&self) -> Key {
-        LAYOUT[self.row][self.col]
+        self.layout().keys[self.row][self.col]
     }
 
     /// Move the selection by one cell; `dx`/`dy` are -1, 0 or 1. The column is
     /// clamped to the (possibly shorter) destination row.
     fn move_sel(&mut self, dx: i32, dy: i32) {
-        let rows = LAYOUT.len() as i32;
+        let rows = self.layout().keys.len() as i32;
         self.row = (self.row as i32 + dy).clamp(0, rows - 1) as usize;
-        let cols = LAYOUT[self.row].len() as i32;
+        let cols = self.layout().keys[self.row].len() as i32;
         self.col = (self.col as i32 + dx).clamp(0, cols - 1) as usize;
     }
 
@@ -219,7 +306,7 @@ impl Osk {
             Caps => self.caps = !self.caps,
             Char(c) => {
                 let shift = self.shift();
-                let ch = resolve_char(c, shift, self.caps);
+                let ch = self.layout().resolve_char(c, shift, self.caps);
                 input_char(to_address_bar, ch, shift, browser);
                 // Consume the one-shot; the held (L2) modifier stays as-is.
                 self.shift_once = false;
@@ -235,8 +322,12 @@ impl Osk {
             Down if !to_address_bar => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
             Tab | Left | Right | Up | Down => {}
             Enter => self.enter(to_address_bar, browser, commands),
-            // Display-only for now (single language).
-            Lang => {}
+            Lang => {
+                self.lang = (self.lang + 1) % self.layouts.len();
+                // The frame is fixed but rows differ in length across
+                // layouts — keep the selection on a valid cell.
+                self.col = self.col.min(self.layout().keys[self.row].len() - 1);
+            }
             Hide => self.visible = false,
         }
     }

@@ -11,7 +11,7 @@ mod toolbar;
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::{DownloadsConfig, HistoryConfig, InterfaceConfig},
+    config::{DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
     event::user::UserEventSender,
     hints::{Hint, Hints},
     menu::{Menu, Section},
@@ -66,6 +66,7 @@ impl AppUi {
         interface: &InterfaceConfig,
         history: &HistoryConfig,
         downloads: &DownloadsConfig,
+        osk: &OskConfig,
     ) -> Self {
         let mut egui =
             EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
@@ -88,7 +89,7 @@ impl AppUi {
             },
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
-            osk: Osk::new(),
+            osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             hints: Hints::new(),
             scroll_mode: false,
@@ -466,7 +467,7 @@ impl AppUi {
                 if self.menu.visible {
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.osk.visible {
-                    osk::add_osk(ctx, self.osk.selected(), self.osk.shift(), self.osk.caps);
+                    osk::add_osk(ctx, &self.osk);
                 } else if self.hints.visible {
                     hints::add_hints(ctx, &self.hints, self.webview_top);
                 } else if self.scroll_mode || cursor_visible.is_some() {

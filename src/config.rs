@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub downloads: DownloadsConfig,
     pub adblock: AdblockConfig,
     pub performance: PerformanceConfig,
+    pub osk: OskConfig,
 }
 
 impl AppConfig {
@@ -243,6 +244,25 @@ fn system_download_dir() -> Option<String> {
     std::path::Path::new(&dir)
         .is_dir()
         .then(|| format!("{}/", dir.trim_end_matches('/')))
+}
+
+/// On-screen-keyboard settings (`[osk]` in the config): which of the built-in
+/// layouts are enabled — see [`crate::osk`] for the layout data itself.
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct OskConfig {
+    /// Enabled layouts, in the order the keyboard's Lang key cycles them.
+    /// Unknown names are logged and skipped; an empty (or fully invalid) list
+    /// falls back to `["en"]`, so the keyboard always works.
+    pub layouts: Vec<String>,
+}
+
+impl Default for OskConfig {
+    fn default() -> Self {
+        Self {
+            layouts: vec!["en".to_string(), "ru".to_string()],
+        }
+    }
 }
 
 /// Servo thread-count tuning (`[performance]` in the config). Servo's defaults

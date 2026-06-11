@@ -1,12 +1,14 @@
 //! Rendering of the on-screen keyboard (state and input handling live in
 //! [`crate::osk`]).
 
-use crate::osk::{key_label, Key, LAYOUT};
+use crate::osk::{Key, Osk};
 use egui_sdl2::egui;
 
 /// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
 /// to the bottom, with the selected key (and active Shift/Caps) highlighted.
-pub(super) fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool, caps: bool) {
+pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
+    let selected = osk.selected();
+    let shift = osk.shift();
     let highlight = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
     let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
     // Char keys are 36 wide with 4px gaps, so the 14-key top rows span 574px
@@ -30,23 +32,40 @@ pub(super) fn add_osk(ctx: &egui::Context, selected: (usize, usize), shift: bool
                 .inner_margin(12.0)
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(4.0, 5.0);
-                    for (r, row) in LAYOUT.iter().enumerate() {
+                    for (r, row) in osk.layout().keys().iter().enumerate() {
                         ui.horizontal(|ui| {
                             for (c, key) in row.iter().enumerate() {
                                 let is_sel = (r, c) == selected;
                                 let active = is_sel
                                     || (*key == Key::Shift && shift)
-                                    || (*key == Key::Caps && caps);
+                                    || (*key == Key::Caps && osk.caps);
                                 let size = egui::vec2(key_width(key), 38.0);
                                 let fill = if active { highlight } else { key_fill };
                                 let button = egui::Button::new(
-                                    egui::RichText::new(key_label(*key, shift, caps))
+                                    egui::RichText::new(osk.key_label(*key))
                                         .color(egui::Color32::WHITE),
                                 )
                                 .fill(fill)
                                 .corner_radius(6.0)
                                 .min_size(size);
-                                ui.add(button);
+                                let response = ui.add(button);
+                                // Physical-keyboard style: the shifted symbol
+                                // sits small and dim in the top-right corner
+                                // (letters skip it — case is obvious), and the
+                                // two swap while Shift is in effect.
+                                if let Key::Char(ch) = key {
+                                    let main = osk.layout().resolve_char(*ch, shift, osk.caps);
+                                    let alt = osk.layout().resolve_char(*ch, !shift, osk.caps);
+                                    if !ch.is_alphabetic() && alt != main {
+                                        ui.painter().text(
+                                            response.rect.right_top() + egui::vec2(-4.0, 2.0),
+                                            egui::Align2::RIGHT_TOP,
+                                            alt,
+                                            egui::FontId::proportional(10.0),
+                                            egui::Color32::from_gray(150),
+                                        );
+                                    }
+                                }
                             }
                         });
                     }
