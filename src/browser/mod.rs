@@ -189,7 +189,7 @@ impl AppBrowser {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
-            .preferences(build_preferences(perf))
+            .preferences(build_preferences(config, perf))
             .event_loop_waker(event_sender.clone_box())
             .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
@@ -546,10 +546,11 @@ const COLLECT_HINTS_JS: &str = r#"
 })()
 "#;
 
-/// Servo preferences sized to the hardware (see [`PerformanceConfig`]). These
-/// must go through `ServoBuilder` — the thread pools are created at startup,
-/// so `set_preference` after `build()` would be too late.
-fn build_preferences(perf: &PerformanceConfig) -> servo::Preferences {
+/// Servo preferences sized to the hardware (see [`PerformanceConfig`]) plus
+/// the configured user agent. These must go through `ServoBuilder` — the
+/// thread pools are created at startup, so `set_preference` after `build()`
+/// would be too late.
+fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo::Preferences {
     let cores = std::thread::available_parallelism()
         .map(std::num::NonZeroUsize::get)
         .unwrap_or(4) as i64;
@@ -560,7 +561,7 @@ fn build_preferences(perf: &PerformanceConfig) -> servo::Preferences {
         0 => default_max.min((cores / 2).max(2)),
         n => n as i64,
     };
-    let prefs = servo::Preferences {
+    let mut prefs = servo::Preferences {
         layout_threads: match perf.layout_threads {
             0 => (cores - 2).clamp(1, 4),
             n => n as i64,
@@ -574,12 +575,34 @@ fn build_preferences(perf: &PerformanceConfig) -> servo::Preferences {
         ..defaults
     };
 
+    if let Some(ua) = resolve_user_agent(&config.user_agent) {
+        log::info!("user agent: {ua}");
+        prefs.user_agent = ua;
+    }
+
     log::info!(
         "servo threads: {cores} cores -> layout={}, pool cap={}",
         prefs.layout_threads,
         cap(i64::MAX),
     );
     prefs
+}
+
+/// Resolve the `[browser] user_agent` config value: empty (or `default`)
+/// keeps Servo's platform default, the keywords pick a stock UA string, and
+/// anything else is sent verbatim. `mobile` is the interesting one on a
+/// handheld — sites serve their phone layouts, which fit a small screen far
+/// better than the desktop ones.
+fn resolve_user_agent(value: &str) -> Option<String> {
+    let value = value.trim();
+    let platform = match value.to_ascii_lowercase().as_str() {
+        "" | "default" => return None,
+        "desktop" => servo::UserAgentPlatform::Desktop,
+        "mobile" | "android" => servo::UserAgentPlatform::Android,
+        "ios" => servo::UserAgentPlatform::Ios,
+        _ => return Some(value.to_string()),
+    };
+    Some(platform.to_user_agent_string())
 }
 
 fn set_experimental_prefs(servo: &servo::Servo, value: bool) {

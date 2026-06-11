@@ -97,6 +97,11 @@ to their defaults, so a partial file (just one section, or one key) is valid.
 home_page = "https://duckduckgo.com"
 search_page = "https://duckduckgo.com/?q=%s"   # %s is replaced with the query
 experimental_prefs_enabled = true              # enable Servo's experimental web features
+# The User-Agent sites see. Empty = Servo's platform default. The keywords
+# "desktop", "mobile" (or "android"), and "ios" pick a stock UA — "mobile"
+# makes sites serve their phone layouts, which fit a small screen far better;
+# any other string is sent verbatim.
+user_agent = ""
 
 [interface]
 width = 640

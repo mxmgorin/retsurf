@@ -85,6 +85,11 @@ pub struct BrowserConfig {
     pub home_page: String,
     pub experimental_prefs_enabled: bool,
     pub search_page: String,
+    /// The User-Agent header sites see. Empty keeps Servo's platform default;
+    /// the keywords `desktop`, `mobile` (or `android`), and `ios` pick the
+    /// matching stock UA — `mobile` makes sites serve their phone layouts,
+    /// which fit a small screen far better; anything else is sent verbatim.
+    pub user_agent: String,
 }
 
 impl Default for BrowserConfig {
@@ -93,6 +98,7 @@ impl Default for BrowserConfig {
             home_page: "https://duckduckgo.com".to_string(),
             experimental_prefs_enabled: true,
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
+            user_agent: String::new(),
         }
     }
 }
