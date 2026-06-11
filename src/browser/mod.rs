@@ -3,6 +3,8 @@
 //! interception and ad blocking) live in [`delegate`]; address-bar text
 //! interpretation in [`url`].
 
+pub mod adblock;
+
 mod delegate;
 mod reader;
 mod url;
@@ -10,10 +12,10 @@ mod url;
 pub use url::try_into_url;
 
 use crate::{
-    adblock::Adblock,
+    browser::adblock::Adblock,
     config::{BrowserConfig, PerformanceConfig},
     event::user::{UserEvent, UserEventSender},
-    hints::Hint,
+    overlay::hints::Hint,
 };
 use ::url::Url;
 use servo::{EventLoopWaker, RenderingContext, WebView};

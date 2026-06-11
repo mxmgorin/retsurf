@@ -1,6 +1,6 @@
 //! Saved bookmarks: a flat list of URLs persisted to `bookmarks.toml` in the
 //! user data dir, plus the highlighted row in the menu's Bookmarks section. The
-//! menu (see [`crate::menu`]) owns whether the overlay is shown; this just owns
+//! menu (see [`crate::overlay::menu`]) owns whether the overlay is shown; this just owns
 //! the list and selection. Rendered by [`crate::ui`], driven by the central router.
 
 use crate::config;

@@ -1,10 +1,10 @@
 //! Rendering of the modal page-prompt overlay (state and resolution live in
-//! [`crate::prompt`]): `<select>` pickers and the JS `alert` / `confirm` /
+//! [`crate::overlay::prompt`]): `<select>` pickers and the JS `alert` / `confirm` /
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
 use crate::app::{AppCommand, PromptAction};
-use crate::prompt::Prompt;
+use crate::overlay::prompt::Prompt;
 use egui_sdl2::egui;
 use servo::{EmbedderControl, SelectElement, SelectElementOption, SimpleDialog};
 

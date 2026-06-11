@@ -23,7 +23,7 @@ pub struct Prompt {
     /// into the control) until **OK**, so cancelling discards the toggles.
     chosen: Vec<usize>,
     /// Edit buffer for a `prompt()` dialog's text field. The on-screen
-    /// keyboard types into it via [`crate::osk::OskTarget::Prompt`].
+    /// keyboard types into it via [`crate::overlay::osk::OskTarget::Prompt`].
     input: String,
 }
 

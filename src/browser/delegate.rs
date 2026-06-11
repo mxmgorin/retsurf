@@ -1,7 +1,7 @@
 //! Every reaction to Servo lives here: the [`servo::WebViewDelegate`] impl on
 //! [`AppBrowserInner`] — frame/URL/load-status notifications, the
 //! download-navigation interception (see [`crate::data::downloads`]), and the
-//! ad-block hook over every resource load (see [`crate::adblock`]). New
+//! ad-block hook over every resource load (see [`crate::browser::adblock`]). New
 //! delegate hooks (favicons, dialogs, notifications, …) belong in this file.
 
 use super::AppBrowserInner;
@@ -69,7 +69,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// Servo requests an IME whenever an editable element gains focus — we
     /// don't show one, but the request marks "the user is typing", which mutes
     /// plain-key keyboard shortcuts. Select pickers and JS dialogs are queued
-    /// for the modal prompt overlay (see [`crate::prompt`]); the rest (color /
+    /// for the modal prompt overlay (see [`crate::overlay::prompt`]); the rest (color /
     /// file pickers, context menus) aren't rendered yet — dropping them
     /// dismisses them with their defaults.
     fn show_embedder_control(&self, _webview: WebView, control: servo::EmbedderControl) {

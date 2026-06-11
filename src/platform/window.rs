@@ -1,5 +1,5 @@
 use crate::config::InterfaceConfig;
-use crate::render::SdlRenderingContext;
+use crate::platform::render::SdlRenderingContext;
 use gleam::gl::Gl;
 use sdl2::video::{GLContext, GLProfile};
 use sdl2::Sdl;

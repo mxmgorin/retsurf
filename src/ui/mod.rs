@@ -1,5 +1,5 @@
 //! The egui layer: [`AppUi`] owns the egui context, the gamepad cursor, and the
-//! overlay state holders ([`crate::menu`], [`crate::osk`]), and composites
+//! overlay state holders ([`crate::overlay::menu`], [`crate::overlay::osk`]), and composites
 //! Servo's FBO texture under the chrome. The actual widgets are rendered by the
 //! submodules: [`toolbar`], [`menu`] (the full-screen overlay), and [`osk`].
 
@@ -14,11 +14,11 @@ use crate::{
     browser::AppBrowser,
     config::{DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
     event::user::UserEventSender,
-    hints::{Hint, Hints},
-    menu::{Menu, Section},
-    osk::{Osk, OskCommand, OskTarget},
-    prompt::Prompt,
-    window::AppWindow,
+    overlay::hints::{Hint, Hints},
+    overlay::menu::{Menu, Section},
+    overlay::osk::{Osk, OskCommand, OskTarget},
+    overlay::prompt::Prompt,
+    platform::window::AppWindow,
 };
 use egui_sdl2::egui;
 use egui_sdl2::EguiGlow;

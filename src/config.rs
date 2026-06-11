@@ -144,7 +144,7 @@ impl Default for HistoryConfig {
 }
 
 /// Ad-blocker settings (`[adblock]` in the config): network-level filtering via
-/// Brave's adblock-rust engine — see [`crate::adblock`].
+/// Brave's adblock-rust engine — see [`crate::browser::adblock`].
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdblockConfig {
@@ -247,7 +247,7 @@ fn system_download_dir() -> Option<String> {
 }
 
 /// On-screen-keyboard settings (`[osk]` in the config): which of the built-in
-/// layouts are enabled — see [`crate::osk`] for the layout data itself.
+/// layouts are enabled — see [`crate::overlay::osk`] for the layout data itself.
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct OskConfig {

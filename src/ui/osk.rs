@@ -1,7 +1,7 @@
 //! Rendering of the on-screen keyboard (state and input handling live in
-//! [`crate::osk`]).
+//! [`crate::overlay::osk`]).
 
-use crate::osk::{Key, Osk};
+use crate::overlay::osk::{Key, Osk};
 use egui_sdl2::egui;
 
 /// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored

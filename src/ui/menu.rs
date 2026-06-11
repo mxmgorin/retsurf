@@ -1,11 +1,11 @@
-//! Rendering of the full-screen menu overlay (state lives in [`crate::menu`]):
+//! Rendering of the full-screen menu overlay (state lives in [`crate::overlay::menu`]):
 //! the section bar with the ✖ close and contextual clear actions, and the four
 //! section lists (Tabs / Bookmarks / History / Downloads).
 
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
-use crate::menu::{Menu, Section};
+use crate::overlay::menu::{Menu, Section};
 use egui_sdl2::egui;
 
 /// Draw the full-screen menu overlay: a dark panel with a top section bar

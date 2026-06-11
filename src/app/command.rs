@@ -5,8 +5,8 @@
 //! [`super::router`]).
 
 use crate::browser::BrowserCommand;
-use crate::menu::Section;
-use crate::osk::OskCommand;
+use crate::overlay::menu::Section;
+use crate::overlay::osk::OskCommand;
 
 #[derive(Clone)]
 pub enum AppCommand {
@@ -21,7 +21,7 @@ pub enum AppCommand {
     /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
     ToggleBookmark,
     /// An action on the modal page-prompt overlay (select pickers and JS
-    /// dialogs — see [`crate::prompt`]).
+    /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
 }
 
@@ -93,7 +93,7 @@ pub enum InputCommand {
     /// A dedicated keyboard key (Y). Applied only while the keyboard is open.
     Osk(OskCommand),
     /// Link-hint mode (L3): enter it (collecting the page's clickable elements)
-    /// or exit if already shown. See [`crate::hints`].
+    /// or exit if already shown. See [`crate::overlay::hints`].
     Hints,
     /// Switch the active tab by a delta, wrapping (the `tab_next` / `tab_prev`
     /// binding actions).

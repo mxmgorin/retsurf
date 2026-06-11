@@ -36,7 +36,7 @@ Path A (done):    Servo render target = SoftwareRenderingContext (offscreen, llv
                   Each frame: read_to_image() → upload as egui texture → composite.
 
 Path B (current): Servo render target = an FBO in SDL2's own GL context, via a custom
-                  `RenderingContext` impl (src/render.rs). egui draws that FBO's color
+                  `RenderingContext` impl (src/platform/render.rs). egui draws that FBO's color
                   texture directly. Zero CPU readback, GPU-accelerated, single GL
                   context, no surfman software adapter / llvmpipe.
 
@@ -59,8 +59,8 @@ No surfman software adapter, no CPU readback, single GL context.
 
 | File | Change |
 |------|--------|
-| `src/render.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
-| `src/window.rs`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
+| `src/platform/render.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
+| `src/platform/window.rs`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
 | `src/browser.rs` | Takes the shared `Rc<dyn RenderingContext>`; `resize()` resizes the context + webview. |
 | `src/ui.rs`      | Registers the FBO color texture once (`register_native_texture`) and draws it (V-flipped) in the central panel; drives browser viewport size from the central rect. |
 | `src/app.rs`     | Loop: `browser.paint()` (Servo → FBO) → `ui.update` → `ui.draw` (egui composites + present). Resizes reactive. `process::exit(0)` on shutdown. |
@@ -112,7 +112,7 @@ SDL_VIDEODRIVER=wayland cargo run
 ## Remaining
 
 ### 1. Path B — GPU-accelerated (real target) ✅ done on desktop
-- [x] Custom `RenderingContext` over SDL2's GL context + FBO (`src/render.rs`).
+- [x] Custom `RenderingContext` over SDL2's GL context + FBO (`src/platform/render.rs`).
 - [x] Servo renders into the FBO; egui composites the texture; no CPU readback.
 - [x] Verified on desktop at GLES 3.2, 0 GL errors.
 - [x] **Verified on device** — runs on Knulli (Mali, EGL 1.4) after the surfman-optional
@@ -128,7 +128,7 @@ Servo's `register_rendering_context` hard-`expect()`s a surfman `Connection`, bu
 connection is only ever used for **WebGL/WebGPU** external images.
 
 Fix (two parts):
-- `src/render.rs`: `connection()` is now optional — `surfman::Connection::new()` is wrapped
+- `src/platform/render.rs`: `connection()` is now optional — `surfman::Connection::new()` is wrapped
   in `catch_unwind` (surfman *panics* rather than returning `Err` on missing EGL symbols).
   Capable platforms (desktop, EGL 1.5) keep a real connection **and WebGL**; EGL 1.4 devices
   get `None`.
@@ -170,7 +170,7 @@ docker run -it --name builder_aarch64 -v "$(pwd)":/workspace --platform=linux/ar
 Implemented in `src/event/gamepad.rs` (SDL GameController), no gptokeyb needed:
 - Left stick / D-pad → cursor · **A** → click · right stick → scroll
 - **B** / **L** → back · **R** → forward · **Start** → reload
-- **Y** → on-screen keyboard (`src/osk.rs`); D-pad selects, **A** types into the
+- **Y** → on-screen keyboard (`src/overlay/osk.rs`); D-pad selects, **A** types into the
   address bar (also searches), **Go** loads, **B** closes.
 - [x] Per-frame event draining + vsync so the cursor isn't laggy on device.
 - [x] Text entry via on-screen keyboard.

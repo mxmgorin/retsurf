@@ -5,7 +5,7 @@
 //! [`worker`]); finished entries persist to `downloads.toml` (see [`store`]),
 //! active ones live only in memory (they don't survive a restart). This module
 //! owns the entry list and the highlighted row in the menu's Downloads section
-//! (see [`crate::menu`]); [`crate::ui`] renders it.
+//! (see [`crate::overlay::menu`]); [`crate::ui`] renders it.
 
 mod store;
 mod worker;

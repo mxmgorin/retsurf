@@ -1,7 +1,7 @@
 //! Visit history: a capped, most-recent-first list of visited URLs (each with a
 //! visit timestamp) persisted to `history.toml` in the user data dir. Recording
 //! can be disabled and the cap configured via `[history]` in the config file (see
-//! [`crate::config`]). The full-screen menu (see [`crate::menu`]) renders it; the
+//! [`crate::config`]). The full-screen menu (see [`crate::overlay::menu`]) renders it; the
 //! central router drives selection / open / delete / clear.
 
 use crate::config::{self, HistoryConfig};

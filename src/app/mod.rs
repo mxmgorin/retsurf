@@ -8,13 +8,13 @@ mod router;
 
 pub use command::{AppCommand, InputCommand, MenuAction, PromptAction};
 
-use crate::adblock::Adblock;
+use crate::browser::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
-use crate::menu::Section;
+use crate::overlay::menu::Section;
 use crate::ui::AppUi;
-use crate::{config::AppConfig, window::AppWindow};
+use crate::{config::AppConfig, platform::window::AppWindow};
 use sdl2::Sdl;
 use std::time::Instant;
 

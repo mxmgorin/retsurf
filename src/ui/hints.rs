@@ -1,8 +1,8 @@
-//! Rendering of the link-hint overlay (state lives in [`crate::hints`]): a thin
+//! Rendering of the link-hint overlay (state lives in [`crate::overlay::hints`]): a thin
 //! accent frame on every clickable element, with the selected one filled and
 //! outlined brighter.
 
-use crate::hints::Hints;
+use crate::overlay::hints::Hints;
 use egui_sdl2::egui;
 
 pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview_top: f32) {

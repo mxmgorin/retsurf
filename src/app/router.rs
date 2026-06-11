@@ -6,7 +6,7 @@
 use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
 use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
-use crate::osk::OskCommand;
+use crate::overlay::osk::OskCommand;
 use std::time::{Duration, Instant};
 
 impl App {

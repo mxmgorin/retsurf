@@ -3,7 +3,7 @@
 
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::{BrowserCommand, BrowserState};
-use crate::menu::Section;
+use crate::overlay::menu::Section;
 use egui_sdl2::egui::{self, Vec2};
 
 /// Create a frameless button with square sizing, as used in the toolbar.

@@ -1,17 +1,11 @@
-mod adblock;
 mod app;
 mod browser;
 mod config;
 mod data;
 mod event;
-mod hints;
-mod menu;
-mod osk;
-mod prompt;
-mod render;
-mod resources;
+mod overlay;
+mod platform;
 mod ui;
-mod window;
 
 use crate::app::App;
 

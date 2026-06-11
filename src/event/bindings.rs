@@ -24,7 +24,7 @@
 use crate::app::{AppCommand, InputCommand, MenuAction};
 use crate::browser::BrowserCommand;
 use crate::config;
-use crate::osk::OskCommand;
+use crate::overlay::osk::OskCommand;
 use sdl2::controller::Button;
 use sdl2::keyboard::{Keycode, Mod};
 use serde::{Deserialize, Serialize};

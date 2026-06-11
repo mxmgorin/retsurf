@@ -5,8 +5,8 @@ use crate::{
     browser::AppBrowser,
     config::GamepadConfig,
     event::{user::handle_user, window::handle_window},
+    platform::window::AppWindow,
     ui::AppUi,
-    window::AppWindow,
 };
 use sdl2::event::Event;
 
