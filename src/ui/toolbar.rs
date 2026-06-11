@@ -99,6 +99,12 @@ pub(super) fn add_toolbar(
                         {
                             commands.push(AppCommand::ToggleBookmark);
                         }
+                        // 🖹 "document with text" — the page-with-lines reader
+                        // glyph; lives in egui's emoji-icon-font (cmap-checked;
+                        // most other reader-ish glyphs are tofu).
+                        if ui.add(new_toolbar_button("🖹")).clicked() {
+                            commands.push(AppCommand::Browser(BrowserCommand::Reader));
+                        }
                         let location =
                             ui.add_sized(ui.available_size(), new_text_edit(state.get_location_mut(), "location"));
                         if is_key_pressed(ui, location, egui::Key::Enter) {

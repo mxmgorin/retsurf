@@ -22,6 +22,7 @@
 //! the page or the address bar — holds focus, so typing stays intact.
 
 use crate::app::{AppCommand, InputCommand, MenuAction};
+use crate::browser::BrowserCommand;
 use crate::config;
 use crate::osk::OskCommand;
 use sdl2::controller::Button;
@@ -51,6 +52,8 @@ pub enum Action {
     Hints,
     /// Bookmark the current page.
     Bookmark,
+    /// Toggle reader mode on the current page.
+    Reader,
     /// Open / close the full-screen menu.
     Menu,
     /// Switch to the next open tab (wraps around).
@@ -74,7 +77,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 17] = [
+    const ALL: [Action; 18] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -83,6 +86,7 @@ impl Action {
         Action::Next,
         Action::Hints,
         Action::Bookmark,
+        Action::Reader,
         Action::Menu,
         Action::TabNext,
         Action::TabPrev,
@@ -116,6 +120,7 @@ impl Action {
             Action::Next => "next",
             Action::Hints => "hints",
             Action::Bookmark => "bookmark",
+            Action::Reader => "reader",
             Action::Menu => "menu",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
@@ -156,6 +161,7 @@ impl Action {
             Action::Next => AppCommand::Input(InputCommand::Shoulder(1)),
             Action::Hints => AppCommand::Input(InputCommand::Hints),
             Action::Bookmark => AppCommand::ToggleBookmark,
+            Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
@@ -209,8 +215,12 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         ("l1", Action::Prev),
         ("r1", Action::Next),
         ("l3", Action::Hints),
+        ("r3", Action::Reader),
         ("start", Action::Reload),
         ("hold:start", Action::Bookmark),
+        // Reader also lives on a hold so stickless devices (no R3) have it out
+        // of the box; the OSK tap moves to X's release as a side effect.
+        ("hold:x", Action::Reader),
         ("hold:y", Action::Scroll),
         ("select", Action::Menu),
     ]
@@ -226,6 +236,7 @@ fn default_keyboard_bindings() -> BTreeMap<String, String> {
     [
         ("ctrl+r", Action::Reload),
         ("ctrl+b", Action::Bookmark),
+        ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),

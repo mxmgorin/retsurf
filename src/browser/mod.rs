@@ -4,6 +4,7 @@
 //! interpretation in [`url`].
 
 mod delegate;
+mod reader;
 mod url;
 
 pub use url::try_into_url;
@@ -27,6 +28,8 @@ pub enum BrowserCommand {
     Foward,
     Reload,
     Load,
+    /// Toggle reader mode on the active page (see [`reader`]).
+    Reader,
 }
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
@@ -457,6 +460,7 @@ impl AppBrowser {
             BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
             BrowserCommand::Foward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
             BrowserCommand::Reload => _ = self.inner.active_webview().map(|x| x.reload()),
+            BrowserCommand::Reader => self.toggle_reader(),
             BrowserCommand::Load => {
                 let active = self.inner.active.get();
                 let tabs = self.inner.tabs.borrow();

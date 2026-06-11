@@ -24,7 +24,12 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · Start = reload (hold: bookmark) · Select = menu
+- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
+
+**Reader mode**
+- Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
+- Runs in place — no refetch, so it works on logged-in and dynamic pages; toggling off reloads
+- Toggle via the 🖹 toolbar button, R3 (or hold X on stickless devices), `ctrl+e`, or the bindable `reader` action
 
 **Downloads**
 - Navigating to a file link downloads it in the background instead of rendering it
@@ -172,13 +177,14 @@ clicks and drags, so hold/chord gestures on its button are rejected.
 **Keyboard shortcuts**: any key with optional `ctrl`/`alt`/`shift` modifiers,
 matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
 on the page or the address bar — holds focus, so they can't hijack typing.
-Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+m` menu · `ctrl+left`/
-`ctrl+right` back/forward · `ctrl+f` link hints · `ctrl+t`/`ctrl+shift+t`
-next/previous tab · arrows = overlay navigation.
+Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+e` reader mode ·
+`ctrl+m` menu · `ctrl+left`/`ctrl+right` back/forward · `ctrl+f` link hints ·
+`ctrl+t`/`ctrl+shift+t` next/previous tab · arrows = overlay navigation.
 
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
-`hints` (link hints) · `bookmark` · `menu` · `tab_next` / `tab_prev` ·
+`hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
+`tab_next` / `tab_prev` ·
 `nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay
 is open — menu, on-screen keyboard, or link hints; with none open the key goes
 to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
