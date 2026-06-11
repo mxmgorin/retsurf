@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- Manual test page for the [browser] user_agent config: shows what
+     navigator.userAgent reports (the HTTP header reads the same Servo pref).
+     Run with user_agent = "mobile" (or "desktop"/"ios"/a custom string) in
+     config.toml and open file:///<repo>/tests/pages/ua.html -->
+<html><head><meta charset="utf-8"><title>ua</title></head>
+<body style="background:#fff;font-size:22px;word-wrap:break-word">
+<p id="ua">no js</p>
+<script>document.getElementById('ua').textContent = navigator.userAgent;</script>
+</body></html>
