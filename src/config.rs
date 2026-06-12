@@ -106,6 +106,10 @@ pub struct BrowserConfig {
     /// `localstorage.json`, …). When false everything is in-memory only and
     /// gone on exit.
     pub persist_site_data: bool,
+    /// Default page zoom for every tab (1.0 = 100%). Reflows the layout, so
+    /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
+    /// `zoom_out` step from here, `zoom_reset` returns.
+    pub page_zoom: f32,
 }
 
 impl Default for BrowserConfig {
@@ -116,6 +120,7 @@ impl Default for BrowserConfig {
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
             user_agent: String::new(),
             persist_site_data: true,
+            page_zoom: 1.0,
         }
     }
 }
@@ -221,8 +226,7 @@ impl Default for DownloadsConfig {
                 // disc/flash images and packages
                 "iso", "img", "bin", "cue", "chd", "pbp", "apk", "ipk", "deb", "rpm", "exe", "dmg",
                 // documents servo can't render
-                "pdf",
-                // cartridge ROMs
+                "pdf", // cartridge ROMs
                 "nes", "sfc", "smc", "gba", "gbc", "gb", "nds", "n64", "z64", "v64", "smd", "gen",
                 "32x", "sms", "gg", "pce", "ngp", "ngc", "ws", "wsc", "a26", "a78", "lnx", "vb",
                 "rom",

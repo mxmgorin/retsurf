@@ -45,8 +45,7 @@ impl Adblock {
 
         let cache = cache_path();
         let engine = load_cached(&cache);
-        if (engine.is_none() || cache_is_stale(&cache, cfg.update_days)) && !cfg.lists.is_empty()
-        {
+        if (engine.is_none() || cache_is_stale(&cache, cfg.update_days)) && !cfg.lists.is_empty() {
             let lists = cfg.lists.clone();
             let fresh = fresh.clone();
             std::thread::spawn(move || build_engine(lists, cache, fresh));

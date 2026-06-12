@@ -66,10 +66,7 @@ impl AppBrowser {
         let Some(webview) = self.inner.active_webview() else {
             return;
         };
-        let toggle = TOGGLE_JS.replace(
-            "__RETSURF_READER_CSS__",
-            &READER_CSS.replace('\n', " "),
-        );
+        let toggle = TOGGLE_JS.replace("__RETSURF_READER_CSS__", &READER_CSS.replace('\n', " "));
         let script = format!("(function() {{\n{READABILITY_JS}\n{toggle}\n}})()");
         webview.clone().evaluate_javascript(script, move |result| {
             match result {

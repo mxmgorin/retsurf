@@ -325,11 +325,21 @@ impl Osk {
             // Tab and the arrow keys are sent to the focused page element only;
             // the address bar and prompt field are append-only here, so they
             // do nothing there.
-            Tab if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::Tab, Code::Tab),
-            Left if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft),
-            Right if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowRight, Code::ArrowRight),
-            Up if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowUp, Code::ArrowUp),
-            Down if matches!(target, OskTarget::Page) => send_named(browser, NamedKey::ArrowDown, Code::ArrowDown),
+            Tab if matches!(target, OskTarget::Page) => {
+                send_named(browser, NamedKey::Tab, Code::Tab)
+            }
+            Left if matches!(target, OskTarget::Page) => {
+                send_named(browser, NamedKey::ArrowLeft, Code::ArrowLeft)
+            }
+            Right if matches!(target, OskTarget::Page) => {
+                send_named(browser, NamedKey::ArrowRight, Code::ArrowRight)
+            }
+            Up if matches!(target, OskTarget::Page) => {
+                send_named(browser, NamedKey::ArrowUp, Code::ArrowUp)
+            }
+            Down if matches!(target, OskTarget::Page) => {
+                send_named(browser, NamedKey::ArrowDown, Code::ArrowDown)
+            }
             Tab | Left | Right | Up | Down => {}
             Enter => self.enter(target, browser, commands),
             Lang => {
@@ -358,17 +368,10 @@ impl Osk {
 
     /// Submit: load the address bar, confirm the prompt dialog, or send Enter
     /// to the page — then hide (the **Go** key or **R2**).
-    fn enter(
-        &mut self,
-        target: OskTarget,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
+    fn enter(&mut self, target: OskTarget, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         match target {
             OskTarget::AddressBar => commands.push(AppCommand::Browser(BrowserCommand::Load)),
-            OskTarget::Prompt(_) => {
-                commands.push(AppCommand::Prompt(PromptAction::ClickSlot(0)))
-            }
+            OskTarget::Prompt(_) => commands.push(AppCommand::Prompt(PromptAction::ClickSlot(0))),
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
         }
         self.visible = false;
@@ -380,13 +383,21 @@ fn input_char(target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
         OskTarget::AddressBar => browser.get_state_mut().get_location_mut().push(c),
         OskTarget::Prompt(buf) => buf.push(c),
         OskTarget::Page => {
-            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, true)));
-            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(c, shift, false)));
+            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
+                c, shift, true,
+            )));
+            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
+                c, shift, false,
+            )));
         }
     }
 }
 
 fn send_named(browser: &AppBrowser, key: NamedKey, code: Code) {
-    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, true)));
-    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(key, code, false)));
+    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(
+        key, code, true,
+    )));
+    browser.handle_input(servo::InputEvent::Keyboard(named_keyboard_event(
+        key, code, false,
+    )));
 }

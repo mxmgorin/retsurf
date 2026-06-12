@@ -73,8 +73,7 @@ impl AppUi {
         downloads: &DownloadsConfig,
         osk: &OskConfig,
     ) -> Self {
-        let mut egui =
-            EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
+        let mut egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
         // Register the FBO color texture once; its GL name is stable across
         // resizes, so this TextureId stays valid for the program's lifetime.
         let browser_tex_id = egui
@@ -409,15 +408,13 @@ impl AppUi {
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
         // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible = if self.osk.visible
-            || self.menu.visible
-            || self.hints.visible
-            || self.prompt.visible()
-        {
-            None
-        } else {
-            self.cursor_visible_for()
-        };
+        let cursor_visible =
+            if self.osk.visible || self.menu.visible || self.hints.visible || self.prompt.visible()
+            {
+                None
+            } else {
+                self.cursor_visible_for()
+            };
         self.repaint_delay = cursor_visible;
         // A pending post-scroll hint refresh also needs the loop to wake by
         // itself — without this the wait blocks on input and it never fires.
@@ -429,6 +426,7 @@ impl AppUi {
         // the browser's tab list, so they can't overlap. `tab_pos` is the 1-based
         // active index and count, shown in the toolbar; `tab_infos` feeds the menu.
         let tab_pos = (browser.active_tab() + 1, browser.tab_count());
+        let zoom_pct = browser.zoom_chip();
         let tab_infos = if self.menu.visible {
             self.menu.set_tab_count(browser.tab_count());
             browser.tabs()
@@ -456,6 +454,7 @@ impl AppUi {
                     bookmarked,
                     tab_pos,
                     active_downloads,
+                    zoom_pct,
                 );
 
                 let frame = egui::Frame::default().inner_margin(0.0);
@@ -474,10 +473,8 @@ impl AppUi {
                         ));
 
                         // WebRender renders bottom-up into the FBO, so flip V.
-                        let uv = egui::Rect::from_min_max(
-                            egui::pos2(0.0, 1.0),
-                            egui::pos2(1.0, 0.0),
-                        );
+                        let uv =
+                            egui::Rect::from_min_max(egui::pos2(0.0, 1.0), egui::pos2(1.0, 0.0));
                         ui.painter()
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });

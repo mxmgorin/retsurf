@@ -14,11 +14,7 @@ const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
 /// Draw the front pending control as a modal: a dimmed backdrop and a centered
 /// panel. Gamepad/keyboard: ▲▼ move, A/Enter activate, B/Esc dismiss; the
 /// mouse clicks rows and buttons directly.
-pub(super) fn add_prompt(
-    ctx: &egui::Context,
-    prompt: &mut Prompt,
-    commands: &mut Vec<AppCommand>,
-) {
+pub(super) fn add_prompt(ctx: &egui::Context, prompt: &mut Prompt, commands: &mut Vec<AppCommand>) {
     let screen = ctx.content_rect();
     // Dim what's behind so the modal reads as blocking.
     ctx.layer_painter(egui::LayerId::new(
@@ -55,7 +51,9 @@ pub(super) fn add_prompt(
                 .show(ui, |ui| {
                     ui.set_max_width((screen.width() - 64.0).min(480.0));
                     if let Some((message, has_input, has_cancel)) = dialog {
-                        add_dialog(ui, screen, prompt, &message, has_input, has_cancel, commands);
+                        add_dialog(
+                            ui, screen, prompt, &message, has_input, has_cancel, commands,
+                        );
                     } else if let Some(EmbedderControl::SelectElement(select)) = prompt.front() {
                         add_select(ui, screen, prompt, select, commands);
                     }
@@ -96,7 +94,13 @@ fn add_select(
                 match entry {
                     servo::SelectElementOptionOrOptgroup::Option(option) => {
                         add_option_row(
-                            ui, option, row_w, &mut slot, selected_slot, prompt, multiple,
+                            ui,
+                            option,
+                            row_w,
+                            &mut slot,
+                            selected_slot,
+                            prompt,
+                            multiple,
                             commands,
                         );
                     }
@@ -104,7 +108,13 @@ fn add_select(
                         ui.label(egui::RichText::new(label).color(dim).small());
                         for option in options {
                             add_option_row(
-                                ui, option, row_w, &mut slot, selected_slot, prompt, multiple,
+                                ui,
+                                option,
+                                row_w,
+                                &mut slot,
+                                selected_slot,
+                                prompt,
+                                multiple,
                                 commands,
                             );
                         }

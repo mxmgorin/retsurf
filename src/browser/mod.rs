@@ -32,7 +32,15 @@ pub enum BrowserCommand {
     Load,
     /// Toggle reader mode on the active page (see [`reader`]).
     Reader,
+    /// Step the active tab's page zoom along [`ZOOM_LADDER`] (+1 in, -1 out);
+    /// `0` resets to the config default.
+    Zoom(i32),
 }
+
+/// The page-zoom steps (Firefox's ladder), walked by [`BrowserCommand::Zoom`].
+const ZOOM_LADDER: &[f32] = &[
+    0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0,
+];
 
 static EXPERIMENTAL_PREFS: &[&str] = &[
     "dom_async_clipboard_enabled",
@@ -132,6 +140,9 @@ struct AppBrowserInner {
     /// Controls Servo retracted before they were answered, drained alongside
     /// `embedder_controls` so the overlay drops them.
     dismissed_controls: RefCell<Vec<servo::EmbedderControlId>>,
+    /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
+    /// target (also hides the toolbar zoom chip when a tab is back at it).
+    default_zoom: f32,
 }
 
 impl AppBrowserInner {
@@ -141,6 +152,7 @@ impl AppBrowserInner {
         event_sender: UserEventSender,
         download_exts: Vec<String>,
         adblock: Adblock,
+        default_zoom: f32,
     ) -> Self {
         Self {
             tabs: RefCell::new(vec![]),
@@ -160,6 +172,7 @@ impl AppBrowserInner {
             ime_control: Cell::new(None),
             embedder_controls: RefCell::new(vec![]),
             dismissed_controls: RefCell::new(vec![]),
+            default_zoom,
         }
     }
 
@@ -194,12 +207,20 @@ impl AppBrowser {
             .event_loop_waker(event_sender.clone_box())
             .build();
         set_experimental_prefs(&servo, config.experimental_prefs_enabled);
+        // Sanitize the config value: Servo clamps zoom to [0.1, 10.0] anyway,
+        // and a zero/negative/NaN default would make every tab unusable.
+        let default_zoom = if config.page_zoom.is_finite() && config.page_zoom > 0.0 {
+            config.page_zoom.clamp(0.1, 10.0)
+        } else {
+            1.0
+        };
         let inner = AppBrowserInner::new(
             servo,
             rendering_ctx,
             event_sender.clone(),
             download_exts,
             adblock,
+            default_zoom,
         );
 
         Ok(Self {
@@ -352,6 +373,10 @@ impl AppBrowser {
                 .delegate(self.inner.clone())
                 .build();
 
+        if self.inner.default_zoom != 1.0 {
+            webview.set_page_zoom(self.inner.default_zoom);
+        }
+
         // Hide the previously shown tab before switching to the new one (all tabs
         // share one rendering context, so only one may be shown at a time).
         if let Some(cur) = self.inner.active_webview() {
@@ -486,6 +511,7 @@ impl AppBrowser {
             BrowserCommand::Foward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
             BrowserCommand::Reload => _ = self.inner.active_webview().map(|x| x.reload()),
             BrowserCommand::Reader => self.toggle_reader(),
+            BrowserCommand::Zoom(delta) => self.zoom(*delta),
             BrowserCommand::Load => {
                 let active = self.inner.active.get();
                 let tabs = self.inner.tabs.borrow();
@@ -512,6 +538,37 @@ impl AppBrowser {
         // Dropping the webviews releases their delegate handles, making `self`
         // the last owner of the inner state — dropping it drops the `Servo`.
         self.inner.tabs.borrow_mut().clear();
+    }
+
+    /// Step the active tab's page zoom to the next [`ZOOM_LADDER`] entry in
+    /// the given direction (so an off-ladder config default still steps
+    /// sensibly); `0` resets to the config default. Page zoom reflows the
+    /// layout and is per-WebView, so each tab keeps its own level.
+    fn zoom(&self, delta: i32) {
+        let Some(webview) = self.inner.active_webview() else {
+            return;
+        };
+        let current = webview.page_zoom();
+        let target = match delta {
+            0 => self.inner.default_zoom,
+            d if d > 0 => *ZOOM_LADDER
+                .iter()
+                .find(|z| **z > current + 0.005)
+                .unwrap_or(ZOOM_LADDER.last().unwrap()),
+            _ => *ZOOM_LADDER
+                .iter()
+                .rev()
+                .find(|z| **z < current - 0.005)
+                .unwrap_or(&ZOOM_LADDER[0]),
+        };
+        webview.set_page_zoom(target);
+    }
+
+    /// The active tab's page zoom as a percentage, when it differs from the
+    /// config default — feeds the toolbar's zoom chip (hidden at the default).
+    pub fn zoom_chip(&self) -> Option<u16> {
+        let zoom = self.inner.active_webview().map(|w| w.page_zoom())?;
+        ((zoom - self.inner.default_zoom).abs() > 0.005).then(|| (zoom * 100.0).round() as u16)
     }
 
     pub fn resize(&self, w: u32, h: u32) {

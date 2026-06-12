@@ -34,85 +34,99 @@ pub(super) fn add_toolbar(
     tab_pos: (usize, usize),
     // Downloads still in flight; shown as a `⬇N` chip that jumps to the section.
     active_downloads: usize,
+    // Active tab's page zoom percent when off the config default (chip hidden at it).
+    zoom_pct: Option<u16>,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
         .inner_margin(4.0);
-    egui::Panel::top("toolbar").frame(frame).show_inside(ui, |ui| {
-        ui.allocate_ui_with_layout(
-            ui.available_size(),
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                if ui.add(new_toolbar_button("⏴")).clicked() {
-                    commands.push(AppCommand::Browser(BrowserCommand::Back));
-                }
-                if ui.add(new_toolbar_button("⏵")).clicked() {
-                    commands.push(AppCommand::Browser(BrowserCommand::Foward));
-                }
-
-                if state.is_loading() {
-                    ui.add(new_toolbar_button("X"));
-                } else {
-                    if ui.add(new_toolbar_button("↻")).clicked() {
-                        commands.push(AppCommand::Browser(BrowserCommand::Reload));
+    egui::Panel::top("toolbar")
+        .frame(frame)
+        .show_inside(ui, |ui| {
+            ui.allocate_ui_with_layout(
+                ui.available_size(),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    if ui.add(new_toolbar_button("⏴")).clicked() {
+                        commands.push(AppCommand::Browser(BrowserCommand::Back));
                     }
-                }
+                    if ui.add(new_toolbar_button("⏵")).clicked() {
+                        commands.push(AppCommand::Browser(BrowserCommand::Foward));
+                    }
 
-                ui.add_space(2.0);
-                // The bookmark icons sit at the right edge; the address bar fills
-                // the gap between them and the navigation buttons. ★ toggles the
-                // current page (filled when saved); ☰ opens the menu.
-                ui.allocate_ui_with_layout(
-                    ui.available_size(),
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        if ui.add(new_toolbar_button("☰")).clicked() {
-                            commands.push(AppCommand::Menu(MenuAction::Open));
+                    if state.is_loading() {
+                        ui.add(new_toolbar_button("X"));
+                    } else {
+                        if ui.add(new_toolbar_button("↻")).clicked() {
+                            commands.push(AppCommand::Browser(BrowserCommand::Reload));
                         }
-                        // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
-                        // plain arrow, only the emoji one renders.
-                        if active_downloads > 0 {
-                            let label = format!("⬇{active_downloads}");
-                            if ui.add(new_toolbar_button(&label)).clicked() {
+                    }
+
+                    ui.add_space(2.0);
+                    // The bookmark icons sit at the right edge; the address bar fills
+                    // the gap between them and the navigation buttons. ★ toggles the
+                    // current page (filled when saved); ☰ opens the menu.
+                    ui.allocate_ui_with_layout(
+                        ui.available_size(),
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui.add(new_toolbar_button("☰")).clicked() {
                                 commands.push(AppCommand::Menu(MenuAction::Open));
-                                commands.push(AppCommand::Menu(MenuAction::SetSection(
-                                    Section::Downloads,
-                                )));
                             }
-                        }
-                        // Active tab position, bracketed (e.g. "[2/3]") beside the
-                        // menu button — a full border would read as a selection.
-                        // Shown only with multiple tabs; clicking it opens the
-                        // menu's Tabs section (like the ⬇ chip for downloads).
-                        if tab_pos.1 > 1 {
-                            let label = format!("[{}/{}]", tab_pos.0, tab_pos.1);
-                            if ui.add(new_toolbar_button(&label)).clicked() {
-                                commands.push(AppCommand::Menu(MenuAction::Open));
-                                commands.push(AppCommand::Menu(MenuAction::SetSection(
-                                    Section::Tabs,
-                                )));
+                            // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
+                            // plain arrow, only the emoji one renders.
+                            if active_downloads > 0 {
+                                let label = format!("⬇{active_downloads}");
+                                if ui.add(new_toolbar_button(&label)).clicked() {
+                                    commands.push(AppCommand::Menu(MenuAction::Open));
+                                    commands.push(AppCommand::Menu(MenuAction::SetSection(
+                                        Section::Downloads,
+                                    )));
+                                }
                             }
-                        }
-                        if ui
-                            .add(new_toolbar_button(if bookmarked { "★" } else { "☆" }))
-                            .clicked()
-                        {
-                            commands.push(AppCommand::ToggleBookmark);
-                        }
-                        // 🖹 "document with text" — the page-with-lines reader
-                        // glyph; lives in egui's emoji-icon-font (cmap-checked;
-                        // most other reader-ish glyphs are tofu).
-                        if ui.add(new_toolbar_button("🖹")).clicked() {
-                            commands.push(AppCommand::Browser(BrowserCommand::Reader));
-                        }
-                        let location =
-                            ui.add_sized(ui.available_size(), new_text_edit(state.get_location_mut(), "location"));
-                        if is_key_pressed(ui, location, egui::Key::Enter) {
-                            commands.push(AppCommand::Browser(BrowserCommand::Load));
-                        }
-                    },
-                );
-            },
-        );
-    });
+                            // Active tab position, bracketed (e.g. "[2/3]") beside the
+                            // menu button — a full border would read as a selection.
+                            // Shown only with multiple tabs; clicking it opens the
+                            // menu's Tabs section (like the ⬇ chip for downloads).
+                            if tab_pos.1 > 1 {
+                                let label = format!("[{}/{}]", tab_pos.0, tab_pos.1);
+                                if ui.add(new_toolbar_button(&label)).clicked() {
+                                    commands.push(AppCommand::Menu(MenuAction::Open));
+                                    commands.push(AppCommand::Menu(MenuAction::SetSection(
+                                        Section::Tabs,
+                                    )));
+                                }
+                            }
+                            // Page-zoom chip (e.g. "125%"), shown only while the
+                            // active tab is off the config default; clicking resets.
+                            if let Some(pct) = zoom_pct {
+                                let label = format!("{pct}%");
+                                if ui.add(new_toolbar_button(&label)).clicked() {
+                                    commands.push(AppCommand::Browser(BrowserCommand::Zoom(0)));
+                                }
+                            }
+                            if ui
+                                .add(new_toolbar_button(if bookmarked { "★" } else { "☆" }))
+                                .clicked()
+                            {
+                                commands.push(AppCommand::ToggleBookmark);
+                            }
+                            // 🖹 "document with text" — the page-with-lines reader
+                            // glyph; lives in egui's emoji-icon-font (cmap-checked;
+                            // most other reader-ish glyphs are tofu).
+                            if ui.add(new_toolbar_button("🖹")).clicked() {
+                                commands.push(AppCommand::Browser(BrowserCommand::Reader));
+                            }
+                            let location = ui.add_sized(
+                                ui.available_size(),
+                                new_text_edit(state.get_location_mut(), "location"),
+                            );
+                            if is_key_pressed(ui, location, egui::Key::Enter) {
+                                commands.push(AppCommand::Browser(BrowserCommand::Load));
+                            }
+                        },
+                    );
+                },
+            );
+        });
 }

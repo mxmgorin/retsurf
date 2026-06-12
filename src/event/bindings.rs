@@ -60,6 +60,10 @@ pub enum Action {
     TabNext,
     /// Switch to the previous open tab (wraps around).
     TabPrev,
+    /// Step the page zoom up / down the ladder, or back to the config default.
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
     /// Overlay navigation by one step (arrow keys by default): menu rows /
     /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
     /// through to the page when none is.
@@ -77,7 +81,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 18] = [
+    const ALL: [Action; 21] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -90,6 +94,9 @@ impl Action {
         Action::Menu,
         Action::TabNext,
         Action::TabPrev,
+        Action::ZoomIn,
+        Action::ZoomOut,
+        Action::ZoomReset,
         Action::NavUp,
         Action::NavDown,
         Action::NavLeft,
@@ -124,6 +131,9 @@ impl Action {
             Action::Menu => "menu",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
+            Action::ZoomIn => "zoom_in",
+            Action::ZoomOut => "zoom_out",
+            Action::ZoomReset => "zoom_reset",
             Action::NavUp => "nav_up",
             Action::NavDown => "nav_down",
             Action::NavLeft => "nav_left",
@@ -165,6 +175,9 @@ impl Action {
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
+            Action::ZoomIn => AppCommand::Browser(BrowserCommand::Zoom(1)),
+            Action::ZoomOut => AppCommand::Browser(BrowserCommand::Zoom(-1)),
+            Action::ZoomReset => AppCommand::Browser(BrowserCommand::Zoom(0)),
             Action::NavUp => AppCommand::Input(InputCommand::Nav(0, -1)),
             Action::NavDown => AppCommand::Input(InputCommand::Nav(0, 1)),
             Action::NavLeft => AppCommand::Input(InputCommand::Nav(-1, 0)),
@@ -214,6 +227,10 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         ("y", Action::Hints),
         ("l1", Action::Prev),
         ("r1", Action::Next),
+        // Holds on the shoulders defer their taps to release (the gesture is
+        // ambiguous until then) — back/forward survive that fine.
+        ("hold:l1", Action::ZoomOut),
+        ("hold:r1", Action::ZoomIn),
         ("l3", Action::Hints),
         ("r3", Action::Reader),
         ("start", Action::Reload),
@@ -243,6 +260,9 @@ fn default_keyboard_bindings() -> BTreeMap<String, String> {
         ("ctrl+f", Action::Hints),
         ("ctrl+t", Action::TabNext),
         ("ctrl+shift+t", Action::TabPrev),
+        ("ctrl+=", Action::ZoomIn),
+        ("ctrl+-", Action::ZoomOut),
+        ("ctrl+0", Action::ZoomReset),
         ("up", Action::NavUp),
         ("down", Action::NavDown),
         ("left", Action::NavLeft),

@@ -57,8 +57,7 @@ pub(super) fn add_menu(
                                     .add_sized(
                                         [26.0, 26.0],
                                         egui::Button::new(
-                                            egui::RichText::new("✖")
-                                                .color(egui::Color32::WHITE),
+                                            egui::RichText::new("✖").color(egui::Color32::WHITE),
                                         ),
                                     )
                                     .clicked()
@@ -69,9 +68,7 @@ pub(super) fn add_menu(
                                 // (dim, mouse-only) instead of above its list, so
                                 // the list starts at a stable height.
                                 let clear_label = match menu.section() {
-                                    Section::History
-                                        if !menu.history().entries().is_empty() =>
-                                    {
+                                    Section::History if !menu.history().entries().is_empty() => {
                                         Some("Clear all")
                                     }
                                     Section::Downloads if menu.downloads.has_finished() => {
@@ -102,9 +99,13 @@ pub(super) fn add_menu(
                         Section::Tabs => {
                             add_tabs_section(ui, screen, tabs, menu.tab_selected(), commands)
                         }
-                        Section::Bookmarks => add_bookmarks_section(ui, screen, menu, dim, commands),
+                        Section::Bookmarks => {
+                            add_bookmarks_section(ui, screen, menu, dim, commands)
+                        }
                         Section::History => add_history_section(ui, screen, menu, dim, commands),
-                        Section::Downloads => add_downloads_section(ui, screen, menu, dim, commands),
+                        Section::Downloads => {
+                            add_downloads_section(ui, screen, menu, dim, commands)
+                        }
                     }
                 });
         });
@@ -124,7 +125,10 @@ fn add_tabs_section(
     egui::ScrollArea::vertical().show(ui, |ui| {
         for (i, tab) in tabs.iter().enumerate() {
             ui.horizontal(|ui| {
-                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                if ui
+                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
+                    .clicked()
+                {
                     commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
                 }
                 // The active (shown) tab stands out in the accent color and bold;
@@ -170,9 +174,7 @@ fn add_bookmarks_section(
 ) {
     let bookmarks = menu.bookmarks();
     if bookmarks.urls().is_empty() {
-        ui.label(
-            egui::RichText::new("No bookmarks yet — press ★ to add this page.").color(dim),
-        );
+        ui.label(egui::RichText::new("No bookmarks yet — press ★ to add this page.").color(dim));
         return;
     }
 
@@ -185,7 +187,10 @@ fn add_bookmarks_section(
             let selected = i == bookmarks.selected();
             // ✖ deletes, the row opens (mouse); the gamepad uses the stick + A/X.
             ui.horizontal(|ui| {
-                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                if ui
+                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
+                    .clicked()
+                {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
                 let row = ui.add_sized(
@@ -229,7 +234,10 @@ fn add_downloads_section(
         for (i, item) in downloads.items().iter().enumerate() {
             let selected = i == downloads.selected();
             ui.horizontal(|ui| {
-                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                if ui
+                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
+                    .clicked()
+                {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
                 let row = ui.add_sized(
@@ -247,8 +255,7 @@ fn add_downloads_section(
                 }
                 ui.add_sized(
                     [status_w, 26.0],
-                    egui::Label::new(egui::RichText::new(item.status_text()).color(dim))
-                        .truncate(),
+                    egui::Label::new(egui::RichText::new(item.status_text()).color(dim)).truncate(),
                 );
             });
         }
@@ -277,7 +284,10 @@ fn add_history_section(
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = i == hist.selected();
             ui.horizontal(|ui| {
-                if ui.add_sized([del_w, 26.0], egui::Button::new("✖")).clicked() {
+                if ui
+                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
+                    .clicked()
+                {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
                 let row = ui.add_sized(

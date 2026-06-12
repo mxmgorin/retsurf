@@ -26,12 +26,12 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
+- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
 
-**Page dialogs**
-- `<select>` dropdowns (incl. optgroups and multi-selects) and the JS `alert` / `confirm` / `prompt` dialogs open as a modal overlay instead of needing native widgets
-- Fully gamepad-driveable: stick/D-pad moves the focus, A activates (toggles a multi-select option), B dismisses; the keyboard uses arrows / Enter / Esc, the mouse just clicks
-- `prompt()` text entry goes through the on-screen keyboard (X opens it over the dialog)
+**Page zoom**
+- Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
+- `[browser] page_zoom` in the config scales every tab by default — set `1.25` once and the whole web fits a small screen better
+- Hold R1/L1, `ctrl+=`/`ctrl+-`/`ctrl+0`, or the bindable `zoom_in`/`zoom_out`/`zoom_reset` actions; a toolbar chip ("125%") shows while off the default and resets on click
 
 **Reader mode**
 - Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
@@ -103,11 +103,14 @@ experimental_prefs_enabled = true              # enable Servo's experimental web
 # The User-Agent sites see. Empty = Servo's platform default. The keywords
 # "desktop", "mobile" (or "android"), and "ios" pick a stock UA — "mobile"
 # makes sites serve their phone layouts, which fit a small screen far better;
-# any other string is sent verbatim.
 user_agent = ""
 # Keep site data (cookies, localStorage, HSTS) across restarts so logins
 # survive. Stored in the user data dir; false = in-memory only, gone on exit.
 persist_site_data = true
+# Default page zoom for every tab (1.0 = 100%). Real zoom — it reflows the
+# layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /
+# zoom_out step a Firefox-style ladder from here, zoom_reset returns.
+page_zoom = 1.0
 
 [interface]
 width = 640
@@ -140,9 +143,7 @@ max_entries = 25           # cap on retained entries; oldest are dropped past th
 dir = ""
 # URL path extensions treated as downloads when navigated to (navigation is
 # cancelled and the file is fetched in the background instead). URLs without a
-# listed extension load in the browser as usual. The default (written to the
-# template on first run) covers archives, disc images, packages, PDFs, and
-# common cartridge-ROM extensions, e.g.:
+# listed extension load in the browser as usual.
 extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 
 [adblock]
@@ -195,12 +196,15 @@ matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
 on the page or the address bar — holds focus, so they can't hijack typing.
 Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+e` reader mode ·
 `ctrl+m` menu · `ctrl+left`/`ctrl+right` back/forward · `ctrl+f` link hints ·
-`ctrl+t`/`ctrl+shift+t` next/previous tab · arrows = overlay navigation.
+`ctrl+t`/`ctrl+shift+t` next/previous tab · `ctrl+=`/`ctrl+-`/`ctrl+0`
+zoom in/out/reset · arrows = overlay navigation.
 
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
 `hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
 `tab_next` / `tab_prev` ·
+`zoom_in` / `zoom_out` / `zoom_reset` (page zoom along a Firefox-style 50–300%
+ladder / back to the config default) ·
 `nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay
 is open — menu, on-screen keyboard, or link hints; with none open the key goes
 to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between

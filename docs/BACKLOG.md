@@ -1,21 +1,5 @@
 # Backlog
 
-## Page zoom — designed, ready to build
-
-Real page zoom (`WebView::set_page_zoom`, reflows layout — not the pinch
-magnifier; pinch can become a separate action later if a "loupe" is wanted).
-
-- Firefox-style zoom ladder: 50 67 80 90 **100** 110 125 150 175 200 250 300 %.
-- Per-tab for free (page zoom lives on the WebView).
-- `[browser] page_zoom = 1.0` config default — set `1.25` once and the whole
-  web is bigger; arguably the most valuable part on a small screen.
-- Three bindable actions: `zoom_in` / `zoom_out` / `zoom_reset`.
-  Keyboard defaults `ctrl+=` / `ctrl+-` / `ctrl+0`; gamepad defaults
-  `hold:r1` / `hold:l1` (taps stay back/forward, holds are free).
-- Toolbar chip "125%" visible only while zoom ≠ 100%; clicking it resets.
-- Pieces: bindings actions, `BrowserCommand::Zoom`, ladder step in
-  `browser/mod.rs`, toolbar chip, config key, README.
-
 ## Home page (speed dial) — designed, ready to build
 
 Internal page on a custom protocol, NOT an egui overlay (chrome = egui,

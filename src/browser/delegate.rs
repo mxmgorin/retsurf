@@ -22,7 +22,11 @@ impl AppBrowserInner {
         let Some((stem, ext)) = name.rsplit_once('.') else {
             return false;
         };
-        !stem.is_empty() && self.download_exts.iter().any(|e| e.eq_ignore_ascii_case(ext))
+        !stem.is_empty()
+            && self
+                .download_exts
+                .iter()
+                .any(|e| e.eq_ignore_ascii_case(ext))
     }
 }
 

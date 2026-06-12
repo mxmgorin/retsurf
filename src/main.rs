@@ -52,7 +52,8 @@ fn main() {
     // fails. On a Wayland desktop SDL still often defaults to x11, so align it to
     // Wayland. On the handheld (no WAYLAND_DISPLAY) this is skipped and SDL falls
     // back to its kmsdrm driver as intended. An explicit SDL_VIDEODRIVER wins.
-    if std::env::var_os("SDL_VIDEODRIVER").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_some()
+    if std::env::var_os("SDL_VIDEODRIVER").is_none()
+        && std::env::var_os("WAYLAND_DISPLAY").is_some()
     {
         std::env::set_var("SDL_VIDEODRIVER", "wayland");
     }
@@ -69,8 +70,8 @@ fn main() {
 fn install_panic_hook() {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let path = std::env::var("RETSURF_PANIC_FILE")
-            .unwrap_or_else(|_| "retsurf-panic.log".to_string());
+        let path =
+            std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
         let backtrace = std::backtrace::Backtrace::force_capture();
         let _ = std::fs::write(&path, format!("{info}\n\nbacktrace:\n{backtrace}\n"));
         default(info);

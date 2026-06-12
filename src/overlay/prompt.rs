@@ -64,7 +64,10 @@ impl Prompt {
         let before = self.queue.len();
         self.queue.retain(|c| c.id() != id);
         if self.queue.len() != before {
-            log::debug!("prompt: control dismissed by servo (len={})", self.queue.len());
+            log::debug!(
+                "prompt: control dismissed by servo (len={})",
+                self.queue.len()
+            );
         }
         if was_front {
             self.reset_for_front();
@@ -106,8 +109,7 @@ impl Prompt {
             return;
         }
         let delta = if dy != 0 { dy } else { dx };
-        self.selected =
-            (self.selected as i32 + delta).clamp(0, count as i32 - 1) as usize;
+        self.selected = (self.selected as i32 + delta).clamp(0, count as i32 - 1) as usize;
     }
 
     /// Focus slot `index` directly (a mouse click lands here before

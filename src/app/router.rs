@@ -74,8 +74,7 @@ impl App {
             // unconsumed arrows to the page instead).
             InputCommand::Nav(dx, dy) => {
                 if self.ui.osk_visible() {
-                    self.ui
-                        .osk(OskCommand::Move(*dx, *dy), &self.browser, out);
+                    self.ui.osk(OskCommand::Move(*dx, *dy), &self.browser, out);
                 } else if self.ui.prompt.visible() {
                     self.ui.prompt.move_sel(*dx, *dy);
                 } else if self.ui.menu_visible() {
