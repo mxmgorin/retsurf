@@ -1,0 +1,84 @@
+name: Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    # 22.04 over latest: its glibc 2.35 keeps the binary runnable on older
+    # distros (glibc only guarantees backward compatibility).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Diagnostics
+        run: |
+          set -eux
+          uname -m
+          ldd --version | head -1
+          nproc
+          free -h || true
+          df -h /
+
+      - name: Install Servo build dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake curl git gperf pkg-config \
+            python3 python3-pip ca-certificates \
+            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
+            libsdl2-dev zip
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          # rust-toolchain.toml pins the channel; rustup (preinstalled) honors it.
+          rustup show
+          rustc --version
+
+      # System SDL2, dynamically linked — desktop distros all package it, unlike
+      # the windows/macos targets where a bundled static build is the only sane
+      # option. Default features stay on: desktop GL has working surfman, so
+      # webgl keeps its connection probe.
+      - name: Build
+        run: |
+          set -eux
+          cargo build --release
+          df -h /
+
+      - name: Stage binary
+        run: |
+          set -eux
+          mkdir -p dist
+          cp target/release/retsurf dist/
+          strip dist/retsurf || true
+          ls -la dist/
+
+      # Upload the raw binary; upload-artifact archives it into a single zip.
+      # (Pre-zipping here would produce a zip-inside-a-zip on download.)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-linux-x86_64
+          path: dist/retsurf
+
+      - name: Zip for release
+        if: github.event_name == 'release'
+        run: cd dist && zip -r ../retsurf-linux-x86_64.zip .
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: retsurf-linux-x86_64.zip

@@ -33,8 +33,12 @@ jobs:
       # mozjs' prebuilt archive for aarch64-apple-darwin (jit+intl on, so its
       # build script downloads instead of compiling). Default features stay on:
       # desktop GL has working surfman, so webgl keeps its connection probe.
+      # CMAKE_POLICY_VERSION_MINIMUM: the SDL2 bundled in sdl2-sys declares
+      # cmake_minimum_required < 3.5, which CMake 4.x refuses outright.
       - name: Build
         run: cargo build --release --features sdl2-bundled,sdl2-static-link
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
       # A bare Mach-O in a zip is a poor citizen on macOS: Finder can't launch
       # it, and artifact zips drop the execute bit anyway. Ship a minimal .app
