@@ -1,0 +1,87 @@
+name: macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    # arm64 (Apple silicon) runner.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # cmake builds the bundled SDL2; pkg-config resolves the rest. Both are
+      # usually preinstalled on the runner images — this pins the assumption.
+      - name: Install build dependencies
+        run: brew install cmake pkg-config
+
+      - name: Rust toolchain
+        run: |
+          rustup show
+          rustc --version
+
+      # SDL2 is built from source and linked statically (no system SDL2 on the
+      # runner, and users shouldn't need one either). SpiderMonkey comes as
+      # mozjs' prebuilt archive for aarch64-apple-darwin (jit+intl on, so its
+      # build script downloads instead of compiling). Default features stay on:
+      # desktop GL has working surfman, so webgl keeps its connection probe.
+      - name: Build
+        run: cargo build --release --features sdl2-bundled,sdl2-static-link
+
+      # A bare Mach-O in a zip is a poor citizen on macOS: Finder can't launch
+      # it, and artifact zips drop the execute bit anyway. Ship a minimal .app
+      # bundle instead, ad-hoc signed — Apple silicon refuses to run unsigned
+      # binaries at all, and `strip` invalidates the linker's ad-hoc signature.
+      # (Unsigned-developer caveat still applies: a downloaded app is
+      # quarantined, first launch needs right-click → Open.)
+      - name: Package Retsurf.app
+        run: |
+          set -eux
+          VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          APP=dist/Retsurf.app
+          mkdir -p "$APP/Contents/MacOS"
+          cp target/release/retsurf "$APP/Contents/MacOS/retsurf"
+          strip -x "$APP/Contents/MacOS/retsurf" || true
+          cat > "$APP/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleName</key><string>Retsurf</string>
+            <key>CFBundleDisplayName</key><string>Retsurf</string>
+            <key>CFBundleIdentifier</key><string>com.mxmgorin.retsurf</string>
+            <key>CFBundleExecutable</key><string>retsurf</string>
+            <key>CFBundleVersion</key><string>$VERSION</string>
+            <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          codesign --force --deep -s - "$APP"
+          ls -la dist/
+
+      # A dmg survives both the artifact pipeline and a browser download with
+      # permissions and signature intact (zip via upload-artifact would not).
+      - name: Create dmg
+        run: hdiutil create -volname Retsurf -srcfolder dist -ov -format UDZO retsurf-macos-aarch64.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-macos-aarch64
+          path: retsurf-macos-aarch64.dmg
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: retsurf-macos-aarch64.dmg

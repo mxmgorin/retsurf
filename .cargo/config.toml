@@ -1,0 +1,5 @@
+# Style threads recurse per DOM-tree depth; stylo's default 512 KB stack
+# overflows on deeply nested pages ("StyleThread#N has overflowed its stack").
+# stylo reads this at compile time (option_env! in stylo/parallel.rs).
+[env]
+SERVO_STYLE_THREAD_STACK_SIZE_KB = "2048"

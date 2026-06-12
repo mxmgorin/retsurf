@@ -1,0 +1,63 @@
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      # Servo's dependency tree nests deep enough to blow past MAX_PATH.
+      - name: Enable long paths
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup show
+          rustc --version
+
+      # SDL2 is built from source and linked statically (no system SDL2 on the
+      # runner, and users shouldn't need a DLL either). SpiderMonkey comes as
+      # mozjs' prebuilt archive for x86_64-pc-windows-msvc (jit+intl on, so its
+      # build script downloads instead of compiling — no MozTools needed).
+      # Default features stay on: desktop GL has working surfman, so webgl
+      # keeps its connection probe.
+      - name: Build
+        run: cargo build --release --features sdl2-bundled,sdl2-static-link
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p dist
+          cp target/release/retsurf.exe dist/
+          ls -la dist/
+
+      # Upload the raw binary; upload-artifact archives it into a single zip.
+      # (Pre-zipping here would produce a zip-inside-a-zip on download.)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-windows-x86_64
+          path: dist/retsurf.exe
+
+      - name: Zip for release
+        if: github.event_name == 'release'
+        shell: bash
+        run: cd dist && 7z a ../retsurf-windows-x86_64.zip .
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: retsurf-windows-x86_64.zip
