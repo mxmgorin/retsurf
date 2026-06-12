@@ -77,6 +77,11 @@ impl Keyboard {
 
         if key.pressed {
             self.on_key_down(key, ui, browser, commands);
+        } else if ui.hints_visible() && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+            // Hint mode times Enter as a tap-vs-hold gesture, so its release edge
+            // decides (click vs open-in-new-tab) in the router rather than going
+            // to the page like other key-ups.
+            commands.push(AppCommand::Input(InputCommand::Confirm(false)));
         } else {
             browser.handle_input(servo::InputEvent::Keyboard(into_servo(key)));
         }
@@ -112,16 +117,22 @@ impl Keyboard {
         commands: &mut Vec<AppCommand>,
     ) {
         // Hint mode's fixed keys (its navigation comes from the `nav_*`
-        // bindings below).
+        // bindings below). Enter is a tap-vs-hold gesture timed in the router,
+        // so only its first edge counts — drop autorepeat, and let the release
+        // edge (handled in `on_key`) close the gesture.
         if ui.hints_visible() {
-            let cmd = match key.kc {
-                Keycode::Return | Keycode::KpEnter => Some(InputCommand::Confirm(true)),
-                Keycode::Escape => Some(InputCommand::Cancel),
-                _ => None,
-            };
-            if let Some(cmd) = cmd {
-                commands.push(AppCommand::Input(cmd));
-                return;
+            match key.kc {
+                Keycode::Return | Keycode::KpEnter => {
+                    if !key.repeat {
+                        commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+                    }
+                    return;
+                }
+                Keycode::Escape => {
+                    commands.push(AppCommand::Input(InputCommand::Cancel));
+                    return;
+                }
+                _ => {}
             }
         }
 

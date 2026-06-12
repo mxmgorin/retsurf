@@ -17,6 +17,10 @@ pub struct Hint {
     pub y: f32,
     pub w: f32,
     pub h: f32,
+    /// Absolute http(s) URL when the element is a link — lets the "open in new
+    /// tab" gesture skip the click and load it directly. `None` for buttons and
+    /// other non-link clickables, which fall back to a normal click.
+    pub url: Option<String>,
 }
 
 impl Hint {
@@ -89,6 +93,11 @@ impl Hints {
 
     pub fn selected_center(&self) -> Option<(f32, f32)> {
         self.hints.get(self.selected).map(Hint::center)
+    }
+
+    /// The selected hint's link URL, if it is a link (`None` for buttons etc.).
+    pub fn selected_url(&self) -> Option<&str> {
+        self.hints.get(self.selected)?.url.as_deref()
     }
 
     /// Hop the selection to the nearest hint in direction `dir` (a dominant-axis

@@ -272,24 +272,25 @@ impl AppBrowser {
         webview.evaluate_javascript(COLLECT_HINTS_JS, move |result| {
             let mut hints = vec![];
             match result {
-                // The script returns a flat array of numbers: x, y, w, h per
-                // element (viewport-relative CSS px), the simplest JSValue to
-                // decode.
+                // The script returns a flat array, five entries per element:
+                // x, y, w, h (viewport-relative CSS px numbers) then the link's
+                // absolute URL as a string (empty for non-link clickables).
                 Ok(servo::JSValue::Array(values)) => {
-                    let nums: Vec<f32> = values
-                        .iter()
-                        .filter_map(|v| match v {
-                            servo::JSValue::Number(n) => Some(*n as f32),
+                    let num = |v: &servo::JSValue| match v {
+                        servo::JSValue::Number(n) => Some(*n as f32),
+                        _ => None,
+                    };
+                    for c in values.chunks_exact(5) {
+                        let (Some(x), Some(y), Some(w), Some(h)) =
+                            (num(&c[0]), num(&c[1]), num(&c[2]), num(&c[3]))
+                        else {
+                            continue;
+                        };
+                        let url = match &c[4] {
+                            servo::JSValue::String(s) if !s.is_empty() => Some(s.clone()),
                             _ => None,
-                        })
-                        .collect();
-                    for c in nums.chunks_exact(4) {
-                        hints.push(Hint {
-                            x: c[0],
-                            y: c[1],
-                            w: c[2],
-                            h: c[3],
-                        });
+                        };
+                        hints.push(Hint { x, y, w, h, url });
                     }
                 }
                 Ok(other) => log::warn!("hint collection returned unexpected value: {other:?}"),
@@ -363,19 +364,28 @@ impl AppBrowser {
             .collect()
     }
 
-    /// Open a new tab at `url` and make it the active (shown) one.
-    pub fn open_tab(&mut self, url: &str) {
-        let url = Url::parse(url).unwrap();
+    /// Build a webview loading `url` (with the default page zoom applied), or
+    /// `None` if the URL won't parse. It is not shown or focused — the callers
+    /// decide whether the new tab is foreground or background.
+    fn build_tab(&self, url: &str) -> Option<servo::WebView> {
+        let url = Url::parse(url).ok()?;
         let webview =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
                 .url(url)
                 .hidpi_scale_factor(euclid::Scale::new(1.0))
                 .delegate(self.inner.clone())
                 .build();
-
         if self.inner.default_zoom != 1.0 {
             webview.set_page_zoom(self.inner.default_zoom);
         }
+        Some(webview)
+    }
+
+    /// Open a new tab at `url` and make it the active (shown) one.
+    pub fn open_tab(&mut self, url: &str) {
+        let Some(webview) = self.build_tab(url) else {
+            return;
+        };
 
         // Hide the previously shown tab before switching to the new one (all tabs
         // share one rendering context, so only one may be shown at a time).
@@ -393,6 +403,20 @@ impl AppBrowser {
         self.inner.active.set(tabs.len() - 1);
         drop(tabs);
         self.inner.repaint_pending.set(true);
+    }
+
+    /// Open `url` in a new background tab: built and loading, but left unshown
+    /// and unfocused so the current tab stays in view (the link-hints "open in
+    /// new tab" gesture). Loading is independent of `show()`, so it fetches in
+    /// the background; switch to it later via the tab cycle or menu.
+    pub fn open_tab_background(&mut self, url: &str) {
+        let Some(webview) = self.build_tab(url) else {
+            return;
+        };
+        self.inner.tabs.borrow_mut().push(Tab {
+            webview,
+            state: BrowserState::default(),
+        });
     }
 
     /// Switch the shown tab to `index` (no-op if out of range or already active).
@@ -603,13 +627,17 @@ const COLLECT_HINTS_JS: &str = r#"
         '[onclick], [role="button"], [role="link"], [role="tab"], [contenteditable="true"]'
     );
     for (const el of els) {
-        if (out.length >= 600) break; // 150 hints
+        if (out.length >= 750) break; // 150 hints (5 entries each)
         const r = el.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) continue;
         if (r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) continue;
         const s = window.getComputedStyle(el);
         if (s.visibility !== 'visible' || s.pointerEvents === 'none') continue;
-        out.push(r.left, r.top, r.width, r.height);
+        // el.href on an <a> is the resolved absolute URL; restrict to http(s)
+        // so "open in new tab" skips javascript:/mailto:/fragment links (those
+        // fall back to a normal click). '' marks a non-link clickable.
+        const href = (el.tagName === 'A' && /^https?:/i.test(el.href)) ? el.href : '';
+        out.push(r.left, r.top, r.width, r.height, href);
     }
     return out;
 })()

@@ -39,6 +39,10 @@ pub struct App {
     /// Keyboard grid-navigation auto-repeat: latched direction and next fire time.
     osk_nav_dir: (i32, i32),
     osk_nav_next: Instant,
+    /// When A/Enter went down on a hint, for the tap-vs-hold split (tap clicks
+    /// the hint, hold opens its link in a background tab). `None` when no press
+    /// is in flight over a hint.
+    hint_press_at: Option<Instant>,
 }
 
 impl App {
@@ -77,6 +81,7 @@ impl App {
             last_tick: Instant::now(),
             osk_nav_dir: (0, 0),
             osk_nav_next: Instant::now(),
+            hint_press_at: None,
         })
     }
 

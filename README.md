@@ -1,7 +1,9 @@
-[![Build linux ARM](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml)
+[![Linux ARM](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml)
 [![Windows](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml)
 [![macOS](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml)
+[![Linux](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
+
 
 # 🌊 retsurf
 
@@ -22,7 +24,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
-- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks; scrolling re-collects the hints
+- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab); scrolling re-collects the hints
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks

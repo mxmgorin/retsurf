@@ -344,6 +344,12 @@ impl AppUi {
         self.hints.selected_center()
     }
 
+    /// The selected hint's link URL (owned), if it is a link.
+    #[inline]
+    pub fn hints_selected_url(&self) -> Option<String> {
+        self.hints.selected_url().map(str::to_owned)
+    }
+
     /// The page scrolled under the badges: schedule a re-collect.
     #[inline]
     pub fn hints_mark_stale(&mut self) {

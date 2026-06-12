@@ -34,7 +34,6 @@ shutdown, restore instead of `home_page` when present.
 ## Smaller items
 
 - **Favicons** in tabs/menu — delegate hook noted in `browser/delegate.rs` docs.
-- **Open in new tab** as a second link-hints gesture (e.g. hold A on a hint).
 - **Color picker / file picker / context menu** — currently dismissed with
   defaults; the prompt-overlay infrastructure (`overlay/prompt.rs`) is ready,
   they just need rendering + slots.

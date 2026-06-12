@@ -25,8 +25,25 @@ impl App {
                         self.menu_open_selected();
                     }
                 } else if !self.ui.osk_visible() && self.ui.hints_visible() {
+                    // Tap vs hold on the selected hint: the press just starts the
+                    // clock (so the click lands on release, where the duration is
+                    // known); a hold past the gesture threshold opens the hint's
+                    // link in a background tab instead, a tap clicks it as before.
                     if *pressed {
-                        self.activate_hint();
+                        self.hint_press_at = Some(Instant::now());
+                    } else {
+                        let hold = Duration::from_millis(self.config.gamepad.hold_ms);
+                        let held_long = self
+                            .hint_press_at
+                            .take()
+                            .is_some_and(|t| t.elapsed() >= hold);
+                        match self.ui.hints_selected_url().filter(|_| held_long) {
+                            Some(url) => {
+                                self.ui.hints_hide();
+                                self.browser.open_tab_background(&url);
+                            }
+                            None => self.activate_hint(),
+                        }
                     }
                 } else {
                     self.primary_action(*pressed, out);
