@@ -33,7 +33,7 @@ jobs:
           set -eux
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake curl git gperf pkg-config \
+            build-essential clang libclang-14-dev cmake curl git gperf pkg-config \
             python3 python3-pip ca-certificates \
             libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
@@ -51,7 +51,13 @@ jobs:
       # the windows/macos targets where a bundled static build is the only sane
       # option. Default features stay on: desktop GL has working surfman, so
       # webgl keeps its connection probe.
+      # LIBCLANG_PATH: the runner image ships several LLVMs; clang-sys picks the
+      # newest libclang while bindgen takes resource headers from the default
+      # clang (14). Clang 15 dropped the __builtin_ia32_* sat-math builtins those
+      # headers use, so mozangle's shader bindgen dies — pin libclang to 14.
       - name: Build
+        env:
+          LIBCLANG_PATH: /usr/lib/llvm-14/lib
         run: |
           set -eux
           cargo build --release
