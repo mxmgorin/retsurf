@@ -78,6 +78,7 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
+| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, cookies, caches) — created on demand; useful for portable installs or separate profiles |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
 | `RETSURF_LOG_FILE` | — | Mirror logs to this file (handheld launchers often discard stderr) |
@@ -104,6 +105,9 @@ experimental_prefs_enabled = true              # enable Servo's experimental web
 # makes sites serve their phone layouts, which fit a small screen far better;
 # any other string is sent verbatim.
 user_agent = ""
+# Keep site data (cookies, localStorage, HSTS) across restarts so logins
+# survive. Stored in the user data dir; false = in-memory only, gone on exit.
+persist_site_data = true
 
 [interface]
 width = 640

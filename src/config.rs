@@ -56,11 +56,22 @@ impl AppConfig {
 }
 
 /// The per-user data directory (with a trailing separator) where retsurf keeps
-/// its writable files — config now, history/bookmarks/sessions later. Backed by
-/// SDL's `SDL_GetPrefPath` (e.g. `~/.local/share/mxmgorin/retsurf/` on Linux),
-/// which is guaranteed writable and created on demand. Falls back to the working
+/// its writable files — config, history/bookmarks, cookies, the adblock cache.
+/// `RETSURF_DATA_DIR` overrides it (created on demand — handy for a portable
+/// install or to keep several profiles apart); otherwise it's SDL's
+/// `SDL_GetPrefPath` (e.g. `~/.local/share/mxmgorin/retsurf/` on Linux), which
+/// is guaranteed writable and created on demand. Falls back to the working
 /// directory if SDL can't provide a pref path.
 pub fn data_dir() -> String {
+    if let Ok(dir) = std::env::var("RETSURF_DATA_DIR") {
+        let dir = dir.trim_end_matches('/');
+        if !dir.is_empty() {
+            if let Err(e) = std::fs::create_dir_all(dir) {
+                log::warn!("could not create RETSURF_DATA_DIR `{dir}`: {e}");
+            }
+            return format!("{dir}/");
+        }
+    }
     match sdl2::filesystem::pref_path("mxmgorin", "retsurf") {
         Ok(dir) => dir,
         Err(e) => {
@@ -90,6 +101,11 @@ pub struct BrowserConfig {
     /// matching stock UA — `mobile` makes sites serve their phone layouts,
     /// which fit a small screen far better; anything else is sent verbatim.
     pub user_agent: String,
+    /// Keep site data (cookies, localStorage, HSTS) across restarts, so logins
+    /// survive. Stored in the user data dir (`cookie_jar.json`,
+    /// `localstorage.json`, …). When false everything is in-memory only and
+    /// gone on exit.
+    pub persist_site_data: bool,
 }
 
 impl Default for BrowserConfig {
@@ -99,6 +115,7 @@ impl Default for BrowserConfig {
             experimental_prefs_enabled: true,
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
             user_agent: String::new(),
+            persist_site_data: true,
         }
     }
 }

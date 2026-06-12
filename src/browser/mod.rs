@@ -189,6 +189,7 @@ impl AppBrowser {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
+            .opts(build_opts(config))
             .preferences(build_preferences(config, perf))
             .event_loop_waker(event_sender.clone_box())
             .build();
@@ -502,6 +503,17 @@ impl AppBrowser {
         }
     }
 
+    /// Shut Servo down cleanly: close every webview, then drop the `Servo`
+    /// handle — its `Drop` sends Exit to the constellation and spins the event
+    /// loop to completion. That exit pass is when the net and storage threads
+    /// write the persisted site data (`cookie_jar.json`, `localstorage.json`,
+    /// …) into `config_dir`; skipping it (a bare `process::exit`) loses logins.
+    pub fn shutdown(self) {
+        // Dropping the webviews releases their delegate handles, making `self`
+        // the last owner of the inner state — dropping it drops the `Servo`.
+        self.inner.tabs.borrow_mut().clear();
+    }
+
     pub fn resize(&self, w: u32, h: u32) {
         if w == 0 || h == 0 {
             return;
@@ -545,6 +557,18 @@ const COLLECT_HINTS_JS: &str = r#"
     return out;
 })()
 "#;
+
+/// Servo options: with `persist_site_data` on, point `config_dir` at the user
+/// data dir — Servo's net and storage threads then load cookies / HSTS /
+/// localStorage from it at startup and write them back on a clean shutdown
+/// (see [`AppBrowser::shutdown`]), so logins survive restarts.
+fn build_opts(config: &BrowserConfig) -> servo::Opts {
+    let mut opts = servo::Opts::default();
+    if config.persist_site_data {
+        opts.config_dir = Some(std::path::PathBuf::from(crate::config::data_dir()));
+    }
+    opts
+}
 
 /// Servo preferences sized to the hardware (see [`PerformanceConfig`]) plus
 /// the configured user agent. These must go through `ServoBuilder` — the

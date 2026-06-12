@@ -150,6 +150,10 @@ impl App {
 
         self.ui.destroy();
 
+        // Shut Servo down cleanly first — that's when cookies / localStorage
+        // are written to disk, so logins survive (see `AppBrowser::shutdown`).
+        self.browser.shutdown();
+
         // Servo's SoftwareRenderingContext does not destroy its surfman context on
         // drop, which trips surfman's "destroy explicitly" guard and panics during
         // unwinding. Exit before running destructors; the OS reclaims everything.
