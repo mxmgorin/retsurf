@@ -383,14 +383,37 @@ impl AppUi {
     /// Move the start-page selection by one dominant-axis step.
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
-        let count = self.menu.bookmark_urls().len();
+        let count = self.menu.dial.urls().len();
         self.home.move_sel(dx, dy, count);
     }
 
-    /// The focused tile's bookmark URL, if a tile (not the search field) is selected.
+    /// The focused tile's pinned URL, if a tile (not the search field) is selected.
     #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
-        self.home.tile().and_then(|i| self.menu.bookmark_urls().get(i).cloned())
+        self.home.tile().and_then(|i| self.menu.dial.urls().get(i).cloned())
+    }
+
+    /// Whether a start-page tile (not the search field) is focused.
+    #[inline]
+    pub fn home_tile_selected(&self) -> bool {
+        self.home.tile().is_some()
+    }
+
+    /// Pin `url` to the speed dial, or unpin it if already pinned (Y on a menu
+    /// Bookmarks / History row, or on a focused start-page tile).
+    #[inline]
+    pub fn dial_toggle(&mut self, url: &str) {
+        self.menu.dial.toggle(url);
+    }
+
+    /// The selected menu entry's URL when the active section can pin it
+    /// (Bookmarks / History) — the target for the menu's pin toggle.
+    #[inline]
+    pub fn menu_pinnable_url(&self) -> Option<String> {
+        match self.menu.section() {
+            Section::Bookmarks | Section::History => self.menu.selected_url(),
+            _ => None,
+        }
     }
 
     /// Whether link-hint navigation is currently shown.
@@ -534,12 +557,12 @@ impl AppUi {
         } else {
             Vec::new()
         };
-        // Snapshot the bookmark list for the start-page speed dial (kept in
-        // sync with the menu's live store), and keep its selection in range.
-        let home_bookmarks = if self.home_active {
-            let count = self.menu.bookmark_urls().len();
+        // Snapshot the pinned speed-dial list for the start page (kept in sync
+        // with the menu's live store), and keep its selection in range.
+        let home_pins = if self.home_active {
+            let count = self.menu.dial.urls().len();
             self.home.clamp(count);
-            self.menu.bookmark_urls().to_vec()
+            self.menu.dial.urls().to_vec()
         } else {
             Vec::new()
         };
@@ -593,7 +616,7 @@ impl AppUi {
                 // view — drawn below the foreground overlays (menu / OSK / etc.)
                 // so they can still open on top of it.
                 if self.home_active {
-                    home::add_home(ctx, &mut self.home, &home_bookmarks, self.webview_top, commands);
+                    home::add_home(ctx, &mut self.home, &home_pins, self.webview_top, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its

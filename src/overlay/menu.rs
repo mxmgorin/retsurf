@@ -7,6 +7,7 @@
 
 use crate::config::{DownloadsConfig, HistoryConfig};
 use crate::data::bookmarks::Bookmarks;
+use crate::data::dial::Dial;
 use crate::data::downloads::Downloads;
 use crate::data::history::History;
 
@@ -45,6 +46,10 @@ pub struct Menu {
     pub visible: bool,
     section: Section,
     bookmarks: Bookmarks,
+    /// The start page's pinned speed-dial (separate from bookmarks; pinned from
+    /// the Bookmarks / History sections with Y). Lives here so both the menu's
+    /// pin action and the start-page renderer ([`crate::ui::home`]) share it.
+    pub dial: Dial,
     history: History,
     pub downloads: Downloads,
     /// Highlighted row in the Tabs section. The tab list lives in the browser, so
@@ -60,6 +65,7 @@ impl Menu {
             visible: false,
             section: Section::Tabs,
             bookmarks: Bookmarks::load(),
+            dial: Dial::load(),
             history: History::load(history_cfg),
             downloads: Downloads::load(downloads_cfg),
             tab_selected: 0,
@@ -86,11 +92,6 @@ impl Menu {
 
     pub fn bookmarks(&self) -> &Bookmarks {
         &self.bookmarks
-    }
-
-    /// The saved bookmark URLs (for the start page's speed dial).
-    pub fn bookmark_urls(&self) -> &[String] {
-        self.bookmarks.urls()
     }
 
     pub fn history(&self) -> &History {

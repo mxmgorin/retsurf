@@ -1,9 +1,10 @@
 //! Rendering of the built-in start page overlay (state lives in
-//! [`crate::overlay::home`]): a wordmark, a search / URL field, and a speed-dial
-//! grid of the saved bookmarks. Gamepad/keyboard navigation (move the selection,
-//! activate) is routed by [`crate::app`]; the mouse can click the field or a
-//! tile directly. Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in
-//! the active tab) — the same path the menu's lists use.
+//! [`crate::overlay::home`]): a wordmark, a search / URL field, a speed-dial grid
+//! of the pinned shortcuts ([`crate::data::dial`]), and a bottom control-hint
+//! bar. Gamepad/keyboard navigation (move the selection, activate, pin/unpin) is
+//! routed by [`crate::app`]; the mouse can click the field or a tile directly.
+//! Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in the active tab)
+//! — the same path the menu's lists use.
 
 use crate::app::{AppCommand, MenuAction};
 use crate::overlay::home::Home;
@@ -27,7 +28,7 @@ const GAP: f32 = 12.0;
 pub(super) fn add_home(
     ctx: &egui::Context,
     home: &mut Home,
-    bookmarks: &[String],
+    pins: &[String],
     webview_top: f32,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -60,12 +61,12 @@ pub(super) fn add_home(
                     const FIELD_H: f32 = 44.0;
                     const GAP_TOP: f32 = 28.0; // wordmark → field
                     const GAP_MID: f32 = 36.0; // field → grid
-                    let rows = if bookmarks.is_empty() {
+                    let rows = if pins.is_empty() {
                         1
                     } else {
-                        bookmarks.len().div_ceil(cols)
+                        pins.len().div_ceil(cols)
                     };
-                    let grid_h = if bookmarks.is_empty() {
+                    let grid_h = if pins.is_empty() {
                         20.0
                     } else {
                         rows as f32 * TILE_H + (rows.saturating_sub(1)) as f32 * GAP
@@ -84,10 +85,57 @@ pub(super) fn add_home(
                         ui.add_space(GAP_TOP);
                         add_search(ui, home, field_w);
                         ui.add_space(GAP_MID);
-                        add_dial(ui, home, bookmarks, field_w, cols, commands);
+                        add_dial(ui, home, pins, field_w, cols, commands);
                     });
+                    add_hint_bar(ui, area);
                 });
         });
+}
+
+/// The bottom control-hint bar: little key-cap pills with their action, centered
+/// near the foot of the page. Painted (not laid out in the centered flow) so it
+/// stays pinned to the bottom regardless of how many tiles there are. Plain
+/// ASCII letters in pills sidestep egui's gappy gamepad-glyph coverage.
+fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
+    const HINTS: &[(&str, &str)] = &[("A", "Open"), ("Y", "Unpin"), ("☰", "Menu")];
+    const PILL_H: f32 = 18.0;
+    const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
+    const GAP_KL: f32 = 6.0; // key pill → its label
+    const GAP_SEG: f32 = 18.0; // between hint segments
+    let key_font = egui::FontId::proportional(12.0);
+    let label_font = egui::FontId::proportional(12.0);
+    let painter = ui.painter();
+
+    // Lay out every glyph first so the row can be centered as a whole.
+    let segs: Vec<_> = HINTS
+        .iter()
+        .map(|(key, label)| {
+            let kg = painter.layout_no_wrap(key.to_string(), key_font.clone(), INK);
+            let lg = painter.layout_no_wrap(label.to_string(), label_font.clone(), MUTED);
+            let pill_w = kg.size().x + PAD * 2.0;
+            let seg_w = pill_w + GAP_KL + lg.size().x;
+            (kg, lg, pill_w, seg_w)
+        })
+        .collect();
+    let total: f32 = segs.iter().map(|s| s.3).sum::<f32>() + GAP_SEG * (segs.len() - 1) as f32;
+
+    let cy = area.bottom() - 18.0;
+    let mut x = area.center().x - total / 2.0;
+    for (kg, lg, pill_w, seg_w) in segs {
+        let pill = egui::Rect::from_min_size(
+            egui::pos2(x, cy - PILL_H / 2.0),
+            egui::vec2(pill_w, PILL_H),
+        );
+        painter.rect_filled(pill, 5.0, SURFACE);
+        painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.0, BORDER), egui::StrokeKind::Inside);
+        painter.galley(pill.center() - kg.size() / 2.0, kg, INK);
+        painter.galley(
+            egui::pos2(x + pill_w + GAP_KL, cy - lg.size().y / 2.0),
+            lg,
+            MUTED,
+        );
+        x += seg_w + GAP_SEG;
+    }
 }
 
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
@@ -133,18 +181,20 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32) {
     });
 }
 
-/// The speed-dial grid: one tile per bookmark, the brand initial over its name.
+/// The speed-dial grid: one tile per pinned shortcut, the brand initial over its
+/// name.
 fn add_dial(
     ui: &mut egui::Ui,
     home: &Home,
-    bookmarks: &[String],
+    pins: &[String],
     width: f32,
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    if bookmarks.is_empty() {
+    if pins.is_empty() {
         ui.label(
-            egui::RichText::new("No bookmarks yet — press ★ to add a page.").color(MUTED),
+            egui::RichText::new("Nothing pinned — press Y on a bookmark or history entry to pin it.")
+                .color(MUTED),
         );
         return;
     }
@@ -153,7 +203,7 @@ fn add_dial(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
-            for (r, row) in bookmarks.chunks(cols).enumerate() {
+            for (r, row) in pins.chunks(cols).enumerate() {
                 ui.horizontal(|ui| {
                     for (j, url) in row.iter().enumerate() {
                         let i = r * cols + j;

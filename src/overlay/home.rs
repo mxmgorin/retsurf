@@ -4,14 +4,14 @@
 //! [`crate::browser::home`]. State here is just which item holds focus (the
 //! search field or a speed-dial tile) and the search field's edit buffer; the
 //! central router moves the selection and activates, and [`crate::ui::home`]
-//! renders it (reading the tile list from the menu's live bookmarks).
+//! renders it (reading the tile list from the menu's live speed dial).
 
 /// The focused item on the start page.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HomeItem {
     /// The search / URL field (the hero, focused on entry).
     Search,
-    /// A speed-dial tile (bookmark) by index.
+    /// A speed-dial tile (pinned shortcut) by index.
     Tile(usize),
 }
 

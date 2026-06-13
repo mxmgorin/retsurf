@@ -120,11 +120,23 @@ impl App {
                 Focus::Home => self.ui.home_move(*dx, *dy),
                 Focus::Page => {}
             },
-            // L3: toggle link-hint navigation (collection is asynchronous — the
-            // badges appear once the page reports its clickable elements). Inert
-            // under the overlays that own the stick and A.
+            // Y / L3: contextually a pin toggle or link-hint navigation. In the
+            // menu's Bookmarks / History sections it pins (or unpins) the selected
+            // entry to the speed dial; on a start-page tile it unpins that tile;
+            // on the bare page it toggles link hints (collection is asynchronous —
+            // the badges appear once the page reports its clickable elements).
             InputCommand::Hints => match focus {
-                Focus::Osk | Focus::Prompt | Focus::Menu | Focus::Home => {}
+                Focus::Menu => {
+                    if let Some(url) = self.ui.menu_pinnable_url() {
+                        self.ui.dial_toggle(&url);
+                    }
+                }
+                Focus::Home => {
+                    if let Some(url) = self.ui.home_selected_url() {
+                        self.ui.dial_toggle(&url);
+                    }
+                }
+                Focus::Osk | Focus::Prompt => {}
                 Focus::Hints => self.ui.hints_hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();

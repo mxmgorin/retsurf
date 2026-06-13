@@ -105,6 +105,9 @@ impl Keyboard {
             Keycode::Delete | Keycode::Backspace => {
                 commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
             }
+            // P pins / unpins the selected Bookmarks or History entry to the speed
+            // dial (Y's role) — a no-op in the other sections (handled in the router).
+            Keycode::P => commands.push(AppCommand::Input(InputCommand::Hints)),
             _ => {}
         }
     }
@@ -169,6 +172,12 @@ impl Keyboard {
                 }
                 if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
                     commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+                    return;
+                }
+                // P toggles the focused tile's pin (Y's role) — routed as the same
+                // intent the Y button emits.
+                if ui.home_tile_selected() && matches!(key.kc, Keycode::P) {
+                    commands.push(AppCommand::Input(InputCommand::Hints));
                     return;
                 }
             }

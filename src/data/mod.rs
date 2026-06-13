@@ -4,5 +4,6 @@
 //! renders them.
 
 pub mod bookmarks;
+pub mod dial;
 pub mod downloads;
 pub mod history;
