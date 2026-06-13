@@ -5,9 +5,12 @@
 
 use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
-use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
+use crate::event::sdl2_servo::{
+    into_mouse_button_event, into_mouse_move_event, named_keyboard_event,
+};
 use crate::overlay::osk::OskCommand;
 use crate::ui::Focus;
+use keyboard_types::{Code, NamedKey};
 use std::time::{Duration, Instant};
 
 impl App {
@@ -56,7 +59,18 @@ impl App {
                         }
                     }
                 }
-                Focus::Page => self.primary_action(*pressed),
+                Focus::Page => {
+                    // On the start page the cursor is parked (the D-pad drives
+                    // focus), so A activates the focused element with Enter —
+                    // following a tile's link or submitting the search box.
+                    if self.browser.on_home_page() {
+                        if *pressed {
+                            self.send_page_key(NamedKey::Enter, Code::Enter);
+                        }
+                    } else {
+                        self.primary_action(*pressed);
+                    }
+                }
             },
             InputCommand::Cancel => match focus {
                 Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
@@ -248,6 +262,18 @@ impl App {
             return;
         }
 
+        // Start page: the aim vector steers focus between its search box and
+        // tiles rather than a cursor. Shape it into discrete Arrow steps (same
+        // dead zone + auto-repeat as overlay nav) and send them to the page.
+        if !scroll_mode && self.browser.on_home_page() {
+            let dir = osk_nav_dir(aim, nav_threshold);
+            if self.nav_repeat(dir, now) && dir != (0, 0) {
+                let (key, code) = arrow_key(dir);
+                self.send_page_key(key, code);
+            }
+            return;
+        }
+
         // Scroll mode: the aim vector scrolls the page (combined with the right
         // stick) and the cursor stays parked.
         if scroll_mode {
@@ -284,6 +310,17 @@ impl App {
         }
     }
 
+    /// Send a named key (both edges) to the page — used to drive the start
+    /// page's in-page focus navigation from the D-pad (Arrow keys) and A (Enter).
+    fn send_page_key(&self, key: NamedKey, code: Code) {
+        for down in [true, false] {
+            self.browser
+                .handle_input(servo::InputEvent::Keyboard(named_keyboard_event(
+                    key, code, down,
+                )));
+        }
+    }
+
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction
     /// and paces repeats, returning `true` on the frames a step should fire.
     fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
@@ -301,6 +338,17 @@ impl App {
             return true;
         }
         false
+    }
+}
+
+/// Map a discrete nav step (one nonzero axis, from [`osk_nav_dir`]) to its Arrow
+/// key. `dy > 0` is downward (stick-down), so it becomes `ArrowDown`.
+fn arrow_key(dir: (i32, i32)) -> (NamedKey, Code) {
+    match dir {
+        (x, _) if x < 0 => (NamedKey::ArrowLeft, Code::ArrowLeft),
+        (x, _) if x > 0 => (NamedKey::ArrowRight, Code::ArrowRight),
+        (_, y) if y < 0 => (NamedKey::ArrowUp, Code::ArrowUp),
+        _ => (NamedKey::ArrowDown, Code::ArrowDown),
     }
 }
 

@@ -6,6 +6,7 @@
 pub mod adblock;
 
 mod delegate;
+mod home;
 mod reader;
 mod url;
 
@@ -143,6 +144,9 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
+    /// `[browser] search_page`: the search-URL template (with `%s`) the built-in
+    /// start page's search box submits to (see [`home`]).
+    search_page: String,
 }
 
 impl AppBrowserInner {
@@ -153,6 +157,7 @@ impl AppBrowserInner {
         download_exts: Vec<String>,
         adblock: Adblock,
         default_zoom: f32,
+        search_page: String,
     ) -> Self {
         Self {
             tabs: RefCell::new(vec![]),
@@ -173,6 +178,7 @@ impl AppBrowserInner {
             embedder_controls: RefCell::new(vec![]),
             dismissed_controls: RefCell::new(vec![]),
             default_zoom,
+            search_page,
         }
     }
 
@@ -221,6 +227,7 @@ impl AppBrowser {
             download_exts,
             adblock,
             default_zoom,
+            config.search_page.clone(),
         );
 
         Ok(Self {
@@ -234,6 +241,15 @@ impl AppBrowser {
             .active_webview()
             .map(|tab| tab.animating())
             .unwrap_or(false)
+    }
+
+    /// Whether the active tab is showing the built-in start page (see [`home`]).
+    /// The router uses this to steer the D-pad as focus navigation on that page.
+    #[inline]
+    pub fn on_home_page(&self) -> bool {
+        let tabs = self.inner.tabs.borrow();
+        tabs.get(self.inner.active.get())
+            .is_some_and(|t| t.state.location == home::HOME_URL)
     }
 
     /// The active tab's toolbar state (address bar text + load status). Panics if

@@ -99,14 +99,32 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.event_sender.send(UserEvent::ControlPending);
     }
 
-    /// Run every resource load through the ad blocker. Blocked loads get an
-    /// empty 200 response, so scripts/images fail soft instead of raising
-    /// network errors; everything else proceeds untouched (dropping the load
-    /// means "do not intercept").
+    /// Intercept resource loads. A top-level navigation to the built-in start
+    /// page (`retsurf:home`) is answered with locally rendered HTML (see
+    /// [`super::home`]); otherwise loads run through the ad blocker, where a
+    /// blocked load gets an empty 200 response so scripts/images fail soft
+    /// instead of raising network errors. Everything else proceeds untouched
+    /// (dropping the load means "do not intercept").
     fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
-        if self.adblock.should_block(load.request()) {
-            log::debug!("adblock: blocked {}", load.request().url);
-            let response = servo::WebResourceResponse::new(load.request().url.clone());
+        let req = load.request();
+        let url = req.url.clone();
+        let is_home = req.is_for_main_frame && super::home::is_home(&url);
+        let block = !is_home && self.adblock.should_block(req);
+
+        if is_home {
+            let html = super::home::render(&self.search_page).into_bytes();
+            let mut headers = http::HeaderMap::new();
+            headers.insert(
+                http::header::CONTENT_TYPE,
+                http::HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            let response = servo::WebResourceResponse::new(url).headers(headers);
+            let mut intercepted = load.intercept(response);
+            intercepted.send_body_data(html);
+            intercepted.finish();
+        } else if block {
+            log::debug!("adblock: blocked {url}");
+            let response = servo::WebResourceResponse::new(url);
             load.intercept(response).finish();
         }
     }

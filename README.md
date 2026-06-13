@@ -48,6 +48,11 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - Filter lists are fetched in the background, compiled, and cached locally — warm starts are instant and work offline
 - Fully configurable: toggle it off, change the lists, or change the refresh interval
 
+**Start page**
+- A built-in start page at `retsurf:home` (the default `home_page`): a search box plus a grid of your saved bookmarks
+- Rendered locally and served to the engine — no network round-trip; the bookmarks grid reflects your current list every time
+- Point `home_page` at any URL instead if you'd rather open a real site
+
 **Rendering**
 - Real web rendering via the **Servo** engine (WebRender)
 - Runs on **OpenGL ES 3.x**; no X11/Wayland required (works on bare KMS/DRM)
@@ -101,7 +106,7 @@ regenerable caches (the adblock engine) under `cache/` — the latter is safe to
 
 ```toml
 [browser]
-home_page = "https://duckduckgo.com"
+home_page = "retsurf:home"                     # built-in start page; or any URL
 search_page = "https://duckduckgo.com/?q=%s"   # %s is replaced with the query
 experimental_prefs_enabled = true              # enable Servo's experimental web features
 # The User-Agent sites see. Empty = Servo's platform default. The keywords

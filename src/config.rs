@@ -138,7 +138,8 @@ pub struct BrowserConfig {
 impl Default for BrowserConfig {
     fn default() -> Self {
         Self {
-            home_page: "https://duckduckgo.com".to_string(),
+            // The built-in start page (crate::browser::home::HOME_URL).
+            home_page: "retsurf:home".to_string(),
             experimental_prefs_enabled: true,
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
             user_agent: String::new(),

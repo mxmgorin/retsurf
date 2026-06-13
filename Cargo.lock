@@ -4888,6 +4888,7 @@ dependencies = [
  "euclid",
  "gleam",
  "glow",
+ "http 1.4.2",
  "keyboard-types",
  "log",
  "percent-encoding",

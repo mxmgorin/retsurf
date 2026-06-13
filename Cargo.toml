@@ -40,6 +40,9 @@ euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
 percent-encoding = "2.3"
+# Matches the version servo-embedder-traits uses, so HeaderMap/StatusCode values
+# we build for intercepted responses (the built-in start page) are the same type.
+http = "1"
 # Downloads are fetched by the embedder itself (Servo 0.2 has no download API).
 # ureq is blocking (one thread per download) and bundles webpki roots, so TLS
 # works on handhelds without a system CA store.
