@@ -31,6 +31,27 @@ const CURSOR_STROKE: f32 = 1.5;
 /// used to keep the whole glyph (not just the center) inside the web view.
 const CURSOR_EXTENT: f32 = CURSOR_RADIUS + CURSOR_STROKE / 2.0;
 
+/// Which surface owns contextual input (Confirm, Cancel, overlay `Nav` steps)
+/// right now: one precedence order derived from the overlay visibility flags,
+/// so the router and event handlers match on this instead of re-combining
+/// `*_visible()` checks at every site. The on-screen keyboard outranks the
+/// modal prompt (it's how a gamepad types into one), the prompt outranks the
+/// user overlays; menu / keyboard / hints never coexist (opening one closes
+/// the others).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Focus {
+    /// The on-screen keyboard — above everything, including the modal prompt.
+    Osk,
+    /// A modal page prompt (select picker / JS dialog) with no keyboard over it.
+    Prompt,
+    /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
+    Menu,
+    /// Link-hint navigation.
+    Hints,
+    /// No overlay: input goes to the page or the toolbar.
+    Page,
+}
+
 pub struct AppUi {
     egui: EguiGlow,
     repaint_delay: Option<Duration>,
@@ -182,10 +203,20 @@ impl AppUi {
         self.into_browser_rel_pos(self.cursor.0, self.cursor.1)
     }
 
-    /// Whether the on-screen keyboard is currently shown.
+    /// The current input owner — see [`Focus`] for the precedence.
     #[inline]
-    pub fn osk_visible(&self) -> bool {
-        self.osk.visible
+    pub fn focus(&self) -> Focus {
+        if self.osk.visible {
+            Focus::Osk
+        } else if self.prompt.visible() {
+            Focus::Prompt
+        } else if self.menu.visible {
+            Focus::Menu
+        } else if self.hints.visible {
+            Focus::Hints
+        } else {
+            Focus::Page
+        }
     }
 
     /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input
@@ -209,9 +240,12 @@ impl AppUi {
         self.menu.visible
     }
 
-    /// Open the menu.
+    /// Open the menu. It takes over the stick and A, so the other user
+    /// overlays close — input focus and draw order can never disagree.
     #[inline]
     pub fn menu_open(&mut self) {
+        self.osk.visible = false;
+        self.hints.hide();
         self.menu.open();
     }
 
@@ -414,13 +448,11 @@ impl AppUi {
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
         // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible =
-            if self.osk.visible || self.menu.visible || self.hints.visible || self.prompt.visible()
-            {
-                None
-            } else {
-                self.cursor_visible_for()
-            };
+        let cursor_visible = if self.focus() == Focus::Page {
+            self.cursor_visible_for()
+        } else {
+            None
+        };
         self.repaint_delay = cursor_visible;
         // A pending post-scroll hint refresh also needs the loop to wake by
         // itself — without this the wait blocks on input and it never fires.

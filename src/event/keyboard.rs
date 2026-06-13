@@ -9,7 +9,7 @@
 use crate::app::{AppCommand, InputCommand, MenuAction};
 use crate::browser::AppBrowser;
 use crate::event::bindings::{Action, KeyBindings};
-use crate::ui::AppUi;
+use crate::ui::{AppUi, Focus};
 use sdl2::keyboard::{Keycode, Mod, Scancode};
 
 /// One key edge as SDL reports it, bundled for resolution.
@@ -47,7 +47,7 @@ impl Keyboard {
         // focus, and everything else is muted so a shortcut can't fire under
         // the modal (typing goes to its text field through egui). The on-screen
         // keyboard stays above it — that's how a gamepad types into `prompt()`.
-        if ui.prompt.visible() && !ui.osk_visible() {
+        if ui.focus() == Focus::Prompt {
             if key.pressed {
                 match key.kc {
                     Keycode::Return | Keycode::KpEnter => {
@@ -136,7 +136,7 @@ impl Keyboard {
             }
         }
 
-        let overlay = ui.osk_visible() || ui.hints_visible();
+        let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints);
         let typing = browser.text_input_focused() || ui.address_bar_focused();
         if let Some(action) = self.lookup(key, overlay, typing) {
             action.push_tap(commands);

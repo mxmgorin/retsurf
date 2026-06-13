@@ -4,15 +4,13 @@
 [![Linux](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
 
-
 # 🌊 retsurf
 
 A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
 It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Linux desktops.
 
-> 🛠️ **Work in progress.** Early development, but it already renders real pages and
-> navigates entirely from a controller on actual hardware (verified on Knulli / Mali).
+> 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
 <!-- TODO: a short demo GIF/video -->
 
@@ -24,16 +22,16 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 **Gamepad support** (no keyboard needed)
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
-- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab); scrolling re-collects the hints
+- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab)
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
-- **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor↔scroll toggle for devices without analog sticks
+- **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
 - Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
 
 **Page zoom**
 - Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
 - `[browser] page_zoom` in the config scales every tab by default — set `1.25` once and the whole web fits a small screen better
-- Hold R1/L1, `ctrl+=`/`ctrl+-`/`ctrl+0`, or the bindable `zoom_in`/`zoom_out`/`zoom_reset` actions; a toolbar chip ("125%") shows while off the default and resets on click
+- Hold R1/L1, `ctrl+=`/`ctrl+-`/`ctrl+0`, or the bindable `zoom_in`/`zoom_out`/`zoom_reset` actions
 
 **Reader mode**
 - Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
@@ -83,7 +81,7 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 | `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, cookies, caches) — created on demand; useful for portable installs or separate profiles |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
-| `RETSURF_LOG_FILE` | — | Mirror logs to this file (handheld launchers often discard stderr) |
+| `RETSURF_LOG_FILE` | — | Write logs to this file |
 | `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
 | `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`/`kmsdrm`); auto-set to `wayland` on a Wayland desktop |
 
@@ -186,7 +184,7 @@ f = "hints"                # plain keys fire only while no text input has focus
 k = "nav_up"               # overlay navigation can move to vim-style keys
 ```
 
-**Gamepad gestures**: a tap (`a`), a hold (`"hold:a"`), or a two-button chord
+**Gamepad gestures**: a tap (`a`), a hold (`"hold:a"`), or a button chord
 (`"a+b"`). Buttons: `a b x y l1 r1 l3 r3 start select` (the D-pad aims the
 cursor and L2/R2 cycle tabs / drive the keyboard — they're not bindable). A
 button with a hold or chord gesture fires its tap on release instead of press
@@ -218,5 +216,5 @@ check the log if a binding doesn't respond.
 
 ## References
 
-- [Handheld port notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
+- [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
 - [The Servo Book](https://book.servo.org/title-page.html)

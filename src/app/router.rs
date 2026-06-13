@@ -7,24 +7,34 @@ use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
 use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::overlay::osk::OskCommand;
+use crate::ui::Focus;
 use std::time::{Duration, Instant};
 
 impl App {
-    /// Route one contextual input intent. The modal page prompt (select picker
-    /// / JS dialog) outranks the other overlays — only the on-screen keyboard
-    /// stays above it, since it's how a gamepad types into a `prompt()` field.
+    /// Route one contextual input intent against the current input owner —
+    /// see [`Focus`] for the overlay precedence (the on-screen keyboard stays
+    /// above the modal prompt, since it's how a gamepad types into a
+    /// `prompt()` field).
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
+        let focus = self.ui.focus();
         match command {
-            InputCommand::Confirm(pressed) => {
-                if self.ui.prompt.visible() && !self.ui.osk_visible() {
+            InputCommand::Confirm(pressed) => match focus {
+                Focus::Osk => {
+                    if *pressed {
+                        self.ui.osk(OskCommand::Activate, &self.browser, out);
+                    }
+                }
+                Focus::Prompt => {
                     if *pressed {
                         out.push(AppCommand::Prompt(PromptAction::Activate));
                     }
-                } else if self.ui.menu_visible() {
+                }
+                Focus::Menu => {
                     if *pressed {
                         self.menu_open_selected();
                     }
-                } else if !self.ui.osk_visible() && self.ui.hints_visible() {
+                }
+                Focus::Hints => {
                     // Tap vs hold on the selected hint: the press just starts the
                     // clock (so the click lands on release, where the duration is
                     // known); a hold past the gesture threshold opens the hint's
@@ -45,32 +55,26 @@ impl App {
                             None => self.activate_hint(),
                         }
                     }
-                } else {
-                    self.primary_action(*pressed, out);
                 }
-            }
-            InputCommand::Cancel => {
-                if self.ui.osk_visible() {
-                    self.ui.osk(OskCommand::Hide, &self.browser, out);
-                } else if self.ui.prompt.visible() {
-                    out.push(AppCommand::Prompt(PromptAction::Cancel));
-                } else if self.ui.menu_visible() {
-                    self.ui.menu_close();
-                } else if self.ui.hints_visible() {
-                    self.ui.hints_hide();
-                } else {
-                    self.browser
-                        .execute_command(&BrowserCommand::Back, &self.config.browser);
-                }
-            }
+                Focus::Page => self.primary_action(*pressed),
+            },
+            InputCommand::Cancel => match focus {
+                Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
+                Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
+                Focus::Menu => self.ui.menu_close(),
+                Focus::Hints => self.ui.hints_hide(),
+                Focus::Page => self
+                    .browser
+                    .execute_command(&BrowserCommand::Back, &self.config.browser),
+            },
             InputCommand::ToggleOsk => {
-                if self.ui.menu_visible() && !self.ui.prompt.visible() {
+                if focus == Focus::Menu {
                     // X deletes the highlighted entry (closes a tab in the Tabs section).
                     self.delete_menu_selection();
                 } else {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints_hide();
-                    let cmd = if self.ui.osk_visible() {
+                    let cmd = if focus == Focus::Osk {
                         OskCommand::Backspace
                     } else {
                         OskCommand::Show
@@ -89,41 +93,36 @@ impl App {
             // the stick shaped by `route_analog`): whichever overlay is open
             // owns it; with none open it's a no-op (the event handler forwards
             // unconsumed arrows to the page instead).
-            InputCommand::Nav(dx, dy) => {
-                if self.ui.osk_visible() {
-                    self.ui.osk(OskCommand::Move(*dx, *dy), &self.browser, out);
-                } else if self.ui.prompt.visible() {
-                    self.ui.prompt.move_sel(*dx, *dy);
-                } else if self.ui.menu_visible() {
+            InputCommand::Nav(dx, dy) => match focus {
+                Focus::Osk => self.ui.osk(OskCommand::Move(*dx, *dy), &self.browser, out),
+                Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
+                Focus::Menu => {
                     if *dx != 0 {
                         self.ui.menu_switch(*dx);
                     } else if *dy != 0 {
                         self.ui.menu_move(*dy);
                     }
-                } else if self.ui.hints_visible() {
-                    self.ui.hints_move((*dx, *dy));
                 }
-            }
+                Focus::Hints => self.ui.hints_move((*dx, *dy)),
+                Focus::Page => {}
+            },
             // L3: toggle link-hint navigation (collection is asynchronous — the
             // badges appear once the page reports its clickable elements). Inert
-            // under the menu/keyboard overlays, which own the stick and A.
-            InputCommand::Hints => {
-                if self.ui.menu_visible() || self.ui.osk_visible() || self.ui.prompt.visible() {
-                } else if self.ui.hints_visible() {
-                    self.ui.hints_hide();
-                } else {
+            // under the overlays that own the stick and A.
+            InputCommand::Hints => match focus {
+                Focus::Osk | Focus::Prompt | Focus::Menu => {}
+                Focus::Hints => self.ui.hints_hide(),
+                Focus::Page => {
                     self.ui.hints_begin_collect();
                     self.browser.collect_hints();
                 }
-            }
-            // Dedicated keyboard keys act only while the keyboard is open. The one
-            // exception is Y (Space): outside the keyboard it reloads the page.
-            InputCommand::Shoulder(delta) => {
-                if self.ui.menu_visible() {
-                    self.ui.menu_switch(*delta);
-                } else if !self.ui.prompt.visible() {
-                    // Page navigation is parked under a modal prompt, like
-                    // tab switching.
+            },
+            InputCommand::Shoulder(delta) => match focus {
+                Focus::Menu => self.ui.menu_switch(*delta),
+                // Page navigation is parked while the modal prompt is up (it
+                // may sit under the keyboard), like tab switching.
+                _ if self.ui.prompt.visible() => {}
+                _ => {
                     let cmd = if *delta < 0 {
                         BrowserCommand::Back
                     } else {
@@ -131,9 +130,9 @@ impl App {
                     };
                     self.browser.execute_command(&cmd, &self.config.browser);
                 }
-            }
+            },
             InputCommand::Trigger { right, pressed } => {
-                if self.ui.osk_visible() {
+                if focus == Focus::Osk {
                     // Keyboard: L2 is a held Shift, R2 is Enter on the press edge.
                     if *right {
                         if *pressed {
@@ -147,8 +146,10 @@ impl App {
                     self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
             }
+            // Dedicated keyboard keys act only while the keyboard is open. The one
+            // exception is Y (Space): outside the keyboard it reloads the page.
             InputCommand::Osk(cmd) => {
-                if self.ui.osk_visible() {
+                if focus == Focus::Osk {
                     self.ui.osk(*cmd, &self.browser, out);
                 } else if matches!(cmd, OskCommand::Space) {
                     self.browser
@@ -181,14 +182,10 @@ impl App {
         }
     }
 
-    /// The A button: activate the selected keyboard key, click the page in Servo,
-    /// or click the egui toolbar — whichever the cursor is currently over.
-    fn primary_action(&mut self, pressed: bool, out: &mut Vec<AppCommand>) {
-        if self.ui.osk_visible() {
-            if pressed {
-                self.ui.osk(OskCommand::Activate, &self.browser, out);
-            }
-        } else if self.ui.cursor_over_browser() {
+    /// The A button with no overlay up: click the page in Servo or the egui
+    /// toolbar — whichever the cursor is currently over.
+    fn primary_action(&mut self, pressed: bool) {
+        if self.ui.cursor_over_browser() {
             let (x, y) = self.ui.cursor_browser_rel();
             self.browser
                 .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
@@ -228,15 +225,11 @@ impl App {
         let (cursor_speed, scroll_speed, nav_threshold) =
             (cfg.cursor_speed, cfg.scroll_speed, cfg.osk_nav_threshold);
 
-        // Overlays (menu / OSK / hints): the stick becomes discrete navigation,
-        // shaped (dead zone + auto-repeat) into the same `Nav` steps the
-        // keyboard arrows emit — one execution path for both devices. The menu
+        // Overlays (menu / OSK / hints / prompt): the stick becomes discrete
+        // navigation, shaped (dead zone + auto-repeat) into the same `Nav` steps
+        // the keyboard arrows emit — one execution path for both devices. The menu
         // takes the dominant axis only, so a diagonal nudge does just one thing.
-        if self.ui.menu_visible()
-            || self.ui.osk_visible()
-            || self.ui.hints_visible()
-            || self.ui.prompt.visible()
-        {
+        if self.ui.focus() != Focus::Page {
             let dir = osk_nav_dir(aim, nav_threshold);
             if self.nav_repeat(dir, now) && dir != (0, 0) {
                 out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));
