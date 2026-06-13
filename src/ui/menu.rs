@@ -9,6 +9,68 @@ use crate::data::history;
 use crate::overlay::menu::{Menu, Section};
 use egui_sdl2::egui;
 
+/// List rows (tabs / bookmarks / history / downloads) share a height, a corner
+/// radius, and a font size so the four sections line up. Rows are taller than
+/// egui's default button so they stay legible on a handheld at arm's length,
+/// and rounded + vertically spaced (see [`ROW_GAP`]) so the list reads as
+/// discrete entries rather than one dense block.
+const ROW_H: f32 = 32.0;
+const ROW_RADIUS: f32 = 6.0;
+const ROW_FONT: f32 = 15.0;
+const ROW_GAP: f32 = 4.0;
+
+/// Inner padding of the menu panel — the sides get more room than the top and
+/// bottom so the lists breathe rather than running to the screen edge. [`SIDES`]
+/// is the pair, subtracted from the screen width wherever a row width is derived.
+const PAD_X: f32 = 30.0;
+const PAD_Y: f32 = 16.0;
+const SIDES: f32 = PAD_X * 2.0;
+/// The square ✖ delete button leading each row, and the menu's close ✖.
+const DEL_W: f32 = 26.0;
+
+/// A row's leading ✖ delete button: dim by default, accent on the selected row
+/// so the cursor's delete target is obvious without shouting on every line.
+fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui::Response {
+    let color = if selected { ACCENT } else { dim };
+    ui.add_sized(
+        [DEL_W, ROW_H],
+        egui::Button::new(egui::RichText::new("✖").color(color)).corner_radius(ROW_RADIUS),
+    )
+}
+
+/// A row's ★/☆ bookmark toggle (Tabs / History): a filled ★ in the accent when
+/// the URL is bookmarked, a dim hollow ☆ otherwise. Sized like [`delete_button`]
+/// so the leading action buttons line up across rows.
+fn bookmark_button(ui: &mut egui::Ui, bookmarked: bool, dim: egui::Color32) -> egui::Response {
+    let (glyph, color) = if bookmarked {
+        ("★", ACCENT)
+    } else {
+        ("☆", dim)
+    };
+    ui.add_sized(
+        [DEL_W, ROW_H],
+        egui::Button::new(egui::RichText::new(glyph).color(color)).corner_radius(ROW_RADIUS),
+    )
+}
+
+/// A selectable list row at the standard height: rounded, truncated, the shared
+/// font size, with its label left-aligned. The caller supplies the colored
+/// label; the trailing [`egui::Atom::grow`] fills the rest of the row so the
+/// text sits at the left edge instead of egui's default centering.
+fn row_button(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    text: egui::RichText,
+) -> egui::Response {
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, (text.size(ROW_FONT), egui::Atom::grow()))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
 /// Draw the full-screen menu overlay: a dark panel with a top section bar
 /// (Tabs · Bookmarks · History · Downloads) over the active section's content,
 /// plus a one-line control hint. Gamepad/keyboard: ◀▶ switch section, ▲▼ move,
@@ -24,22 +86,37 @@ pub(super) fn add_menu(
     egui::Area::new(egui::Id::new("menu"))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
+        // Pin the panel at the top-left: with the frame sized to fill the screen
+        // exactly, egui must not shift it to "fit" (the shift would cancel the
+        // left padding — the bug behind the side margins appearing to do nothing).
+        .constrain(false)
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(egui::Color32::from_rgb(0x18, 0x18, 0x1c))
-                .inner_margin(16.0)
+                .inner_margin(egui::Margin::symmetric(PAD_X as i8, PAD_Y as i8))
                 .show(ui, |ui| {
-                    ui.set_min_size(screen.size());
+                    // Size the *content* to the screen minus the frame margins, so
+                    // the frame itself fills the screen rather than overflowing it
+                    // by 2×PAD (which is what pushed the panel off-edge before).
+                    ui.set_min_size(screen.size() - egui::vec2(SIDES, PAD_Y * 2.0));
 
                     // Section bar (active tab highlighted), with a mouse-only ✖
                     // pinned to the top-right corner (the gamepad closes with B).
                     ui.horizontal(|ui| {
+                        // A little gap between segments turns the flush row of
+                        // buttons into a segmented control; the active one wears
+                        // egui's accent selection wash (see `theme`).
+                        ui.spacing_mut().item_spacing.x = 6.0;
                         for section in Section::ALL {
                             let active = section == menu.section();
                             let tab = egui::Button::selectable(
                                 active,
-                                egui::RichText::new(section.label()).color(egui::Color32::WHITE),
-                            );
+                                egui::RichText::new(section.label())
+                                    .color(egui::Color32::WHITE)
+                                    .size(ROW_FONT),
+                            )
+                            .corner_radius(ROW_RADIUS)
+                            .min_size(egui::vec2(0.0, 28.0));
                             if ui.add(tab).clicked() {
                                 commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
                             }
@@ -47,7 +124,7 @@ pub(super) fn add_menu(
                         // Width from `screen`, not `available_width()`: the frame's
                         // min-size is screen + margins, so "available" runs past the
                         // visible right edge and would push the ✖ offscreen.
-                        let remaining = screen.width() - 32.0 - ui.min_rect().width();
+                        let remaining = screen.width() - SIDES - ui.min_rect().width();
                         ui.allocate_ui_with_layout(
                             egui::vec2(remaining.max(26.0), 26.0),
                             egui::Layout::right_to_left(egui::Align::Center),
@@ -56,22 +133,20 @@ pub(super) fn add_menu(
                                 // the glyph unevenly.
                                 if ui
                                     .add_sized(
-                                        [26.0, 26.0],
+                                        [DEL_W, 28.0],
                                         egui::Button::new(
                                             egui::RichText::new("✖").color(egui::Color32::WHITE),
-                                        ),
+                                        )
+                                        .corner_radius(ROW_RADIUS),
                                     )
                                     .clicked()
                                 {
                                     commands.push(AppCommand::Menu(MenuAction::Close));
                                 }
-                                // The active section's bulk-clear action lives here
-                                // (dim, mouse-only) instead of above its list, so
-                                // the list starts at a stable height.
+                                // Downloads' bulk-clear lives here (dim, mouse-only).
+                                // History's "Clear all" is instead the top row of
+                                // its list (see `add_history_section`).
                                 let clear_label = match menu.section() {
-                                    Section::History if !menu.history().entries().is_empty() => {
-                                        Some("Clear all")
-                                    }
                                     Section::Downloads if menu.downloads.has_finished() => {
                                         Some("Clear finished")
                                     }
@@ -90,14 +165,16 @@ pub(super) fn add_menu(
                             },
                         );
                     });
-                    // Bookmarks / History rows can be pinned to the start-page dial.
-                    let pin_hint = match menu.section() {
-                        Section::Bookmarks | Section::History => "   Y pin",
-                        _ => "",
+                    // Y is section-specific: Bookmarks pins to the start-page
+                    // dial, History/Tabs bookmark the selected entry/tab.
+                    let y_hint = match menu.section() {
+                        Section::Bookmarks => "   Y pin",
+                        Section::History | Section::Tabs => "   Y bookmark",
+                        Section::Downloads => "",
                     };
                     ui.label(
                         egui::RichText::new(format!(
-                            "⏴⏵ section   ⏶⏷ select   A open   X delete{pin_hint}   B close"
+                            "⏴⏵ section   ⏶⏷ select   A open   X delete{y_hint}   B close"
                         ))
                         .color(dim),
                     );
@@ -105,7 +182,7 @@ pub(super) fn add_menu(
 
                     match menu.section() {
                         Section::Tabs => {
-                            add_tabs_section(ui, screen, tabs, menu.tab_selected(), commands)
+                            add_tabs_section(ui, screen, menu, tabs, menu.tab_selected(), commands)
                         }
                         Section::Bookmarks => {
                             add_bookmarks_section(ui, screen, menu, dim, commands)
@@ -119,26 +196,40 @@ pub(super) fn add_menu(
         });
 }
 
-/// Tabs section: the open tabs (active one marked) plus a trailing "+ New tab"
-/// row. A row opens/switches, its ✖ closes, "+ New tab" opens a fresh tab.
+/// Tabs section: a leading "+ New tab" action button (selection index 0) over
+/// the open tabs (active one marked, selection indices `1..=tabs.len()`). A row
+/// opens/switches, its ✖ closes, the button opens a fresh tab.
 fn add_tabs_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    menu: &Menu,
     tabs: &[TabInfo],
     selected: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    let del_w = 26.0;
-    let row_w = screen.width() - 32.0 - del_w - 6.0; // frame margins + delete + spacing
+    let dim = egui::Color32::from_gray(0x99);
+    // Width left for the title before the trailing ★ and ✖ buttons (each DEL_W,
+    // plus the spacing before each).
+    let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
     egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
+        // "+ New tab" action at the top (selection index 0): a plain full-width
+        // row, same height/indent as the tab rows below, marked by the selectable
+        // highlight when it's the cursor row (no fill of its own).
+        if row_button(
+            ui,
+            screen.width() - SIDES,
+            selected == 0,
+            egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
+        )
+        .clicked()
+        {
+            commands.push(AppCommand::Menu(MenuAction::NewTab));
+        }
+
         for (i, tab) in tabs.iter().enumerate() {
+            let sel = selected == i + 1; // index 0 is the "+ New tab" button
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
-                    .clicked()
-                {
-                    commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
-                }
                 // The active (shown) tab stands out in the accent color and bold;
                 // the cursor's row uses the selectable highlight, so the two are
                 // distinguishable even on the same row.
@@ -147,25 +238,20 @@ fn add_tabs_section(
                 } else {
                     egui::RichText::new(&tab.title).color(egui::Color32::WHITE)
                 };
-                let row = ui.add_sized(
-                    [row_w, 26.0],
-                    egui::Button::selectable(i == selected, text).truncate(),
-                );
-                if row.clicked() {
+                if row_button(ui, row_w, sel, text).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
                 }
+                // Trailing actions: ★/☆ bookmark (disabled until the tab has a
+                // URL), then ✖ close at the far right.
+                let can_bookmark = !tab.url.is_empty();
+                let marked = can_bookmark && menu.is_bookmarked(&tab.url);
+                if bookmark_button(ui, marked, dim).clicked() && can_bookmark {
+                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(tab.url.clone())));
+                }
+                if delete_button(ui, sel, dim).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
+                }
             });
-        }
-        // The "+ New tab" row sits at index `tabs.len()`.
-        let row = ui.add_sized(
-            [screen.width() - 32.0, 26.0],
-            egui::Button::selectable(
-                selected == tabs.len(),
-                egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
-            ),
-        );
-        if row.clicked() {
-            commands.push(AppCommand::Menu(MenuAction::NewTab));
         }
     });
 }
@@ -186,32 +272,27 @@ fn add_bookmarks_section(
 
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
-    let del_w = 26.0;
-    let row_w = screen.width() - 32.0 - del_w - 6.0; // frame margins + delete + spacing
+    let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
     egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, url) in bookmarks.urls().iter().enumerate() {
             let selected = i == bookmarks.selected();
-            // Pinned rows are tinted; Y toggles the pin (see the legend).
-            let color = if menu.dial.contains(url) {
-                ACCENT
+            // A leading 📌 marks a row pinned to the start-page dial; Y toggles
+            // the pin (see the legend).
+            let label = if menu.dial.contains(url) {
+                format!("📌 {url}")
             } else {
-                egui::Color32::WHITE
+                url.clone()
             };
-            // ✖ deletes, the row opens (mouse); the gamepad uses the stick + A/X.
+            // The row opens (mouse); ✖ at the far right deletes. The gamepad
+            // uses the stick + A/X.
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
-                    .clicked()
-                {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
-                }
-                let row = ui.add_sized(
-                    [row_w, 26.0],
-                    egui::Button::selectable(selected, egui::RichText::new(url).color(color))
-                        .truncate(),
-                );
-                if row.clicked() {
+                let text = egui::RichText::new(label).color(egui::Color32::WHITE);
+                if row_button(ui, row_w, selected, text).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
+                }
+                if delete_button(ui, selected, dim).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
             });
         }
@@ -236,36 +317,32 @@ fn add_downloads_section(
         return;
     }
 
-    let del_w = 26.0;
     let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
-    let row_w = screen.width() - 32.0 - del_w - status_w - 12.0;
+    let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
     egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, item) in downloads.items().iter().enumerate() {
             let selected = i == downloads.selected();
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
-                    .clicked()
+                if row_button(
+                    ui,
+                    row_w,
+                    selected,
+                    egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
+                )
+                .clicked()
                 {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
-                }
-                let row = ui.add_sized(
-                    [row_w, 26.0],
-                    egui::Button::selectable(
-                        selected,
-                        egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
-                    )
-                    .truncate(),
-                );
-                if row.clicked() {
                     if let Some(url) = downloads.open_url(i) {
                         commands.push(AppCommand::Menu(MenuAction::OpenUrl(url)));
                     }
                 }
                 ui.add_sized(
-                    [status_w, 26.0],
+                    [status_w, ROW_H],
                     egui::Label::new(egui::RichText::new(item.status_text()).color(dim)).truncate(),
                 );
+                if delete_button(ui, selected, dim).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                }
             });
         }
     });
@@ -286,42 +363,47 @@ fn add_history_section(
         return;
     }
 
-    let del_w = 26.0;
     let date_w = 118.0; // fits "YYYY-MM-DD HH:MM"
-    let row_w = screen.width() - 32.0 - del_w - date_w - 12.0;
+    // Width left for the URL after the leading ✖ and ★ buttons and the date.
+    let row_w = screen.width() - SIDES - 2.0 * DEL_W - date_w - 18.0;
     egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
+        // "Clear all" as the top row (cursor index 0, mirroring Tabs' "+ New
+        // tab"): drops every entry, by mouse or A. Dim, to read as a secondary/
+        // destructive action set apart from the URL rows.
+        if row_button(
+            ui,
+            screen.width() - SIDES,
+            hist.selected() == 0,
+            egui::RichText::new("Clear all").color(dim),
+        )
+        .clicked()
+        {
+            commands.push(AppCommand::Menu(MenuAction::Clear));
+        }
         for (i, entry) in hist.entries().iter().enumerate() {
-            let selected = i == hist.selected();
-            let color = if menu.dial.contains(&entry.url) {
-                ACCENT
-            } else {
-                egui::Color32::WHITE
-            };
+            let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized([del_w, 26.0], egui::Button::new("✖"))
-                    .clicked()
-                {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
-                }
-                let row = ui.add_sized(
-                    [row_w, 26.0],
-                    egui::Button::selectable(
-                        selected,
-                        egui::RichText::new(&entry.url).color(color),
-                    )
-                    .truncate(),
-                );
-                if row.clicked() {
+                let text = egui::RichText::new(&entry.url).color(egui::Color32::WHITE);
+                if row_button(ui, row_w, selected, text).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));
                 }
                 ui.add_sized(
-                    [date_w, 26.0],
+                    [date_w, ROW_H],
                     egui::Label::new(
                         egui::RichText::new(history::format_time(entry.time)).color(dim),
                     )
                     .truncate(),
                 );
+                // Trailing actions: ★/☆ bookmark (same as Y), then ✖ delete.
+                let marked = menu.is_bookmarked(&entry.url);
+                if bookmark_button(ui, marked, dim).clicked() {
+                    commands
+                        .push(AppCommand::Menu(MenuAction::ToggleBookmark(entry.url.clone())));
+                }
+                if delete_button(ui, selected, dim).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                }
             });
         }
     });

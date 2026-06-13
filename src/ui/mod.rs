@@ -215,7 +215,7 @@ impl AppUi {
     /// ready to feed to Servo as a mouse position.
     #[inline]
     pub fn cursor_browser_rel(&self) -> (f32, f32) {
-        self.into_browser_rel_pos(self.cursor.0, self.cursor.1)
+        self.to_browser_rel_pos(self.cursor.0, self.cursor.1)
     }
 
     /// The current input owner — see [`Focus`] for the precedence.
@@ -297,6 +297,12 @@ impl AppUi {
     #[inline]
     pub fn menu_tab_selected(&self) -> usize {
         self.menu.tab_selected()
+    }
+
+    /// Whether the History section's "Clear all" top row is highlighted.
+    #[inline]
+    pub fn menu_history_clear_selected(&self) -> bool {
+        self.menu.history_clear_selected()
     }
 
     /// Refresh the Tabs section's known tab count (keeps its selection in range).
@@ -384,19 +390,40 @@ impl AppUi {
         self.home.input().to_string()
     }
 
-    /// Move the start-page selection by one dominant-axis step.
+    /// Move the start-page selection by one dominant-axis step. The grid holds
+    /// one tile per pin plus a trailing "+ Add" tile, hence `len() + 1`.
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
-        let count = self.menu.dial.urls().len();
+        let count = self.menu.dial.urls().len() + 1;
         self.home.move_sel(dx, dy, count);
     }
 
-    /// The focused tile's pinned URL, if a tile (not the search field) is selected.
+    /// The focused tile's pinned URL, if a *pin* tile is selected (the trailing
+    /// "+ Add" tile has no URL — see [`Self::home_tile_is_add`]).
     #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
         self.home
             .tile()
             .and_then(|i| self.menu.dial.urls().get(i).cloned())
+    }
+
+    /// Whether the trailing "+ Add" tile (index == pin count) is focused.
+    #[inline]
+    pub fn home_tile_is_add(&self) -> bool {
+        self.home.tile() == Some(self.menu.dial.urls().len())
+    }
+
+    /// Pin `url` to the speed dial if absent (the "+ Add" tile / address-bar
+    /// pin); unlike [`Self::dial_toggle`] it never unpins.
+    #[inline]
+    pub fn dial_pin(&mut self, url: &str) {
+        self.menu.dial.pin(url);
+    }
+
+    /// Clear the start-page search field (after pinning its contents).
+    #[inline]
+    pub fn home_clear_input(&mut self) {
+        self.home.input_mut().clear();
     }
 
     /// Whether a start-page tile (not the search field) is focused.
@@ -410,16 +437,6 @@ impl AppUi {
     #[inline]
     pub fn dial_toggle(&mut self, url: &str) {
         self.menu.dial.toggle(url);
-    }
-
-    /// The selected menu entry's URL when the active section can pin it
-    /// (Bookmarks / History) — the target for the menu's pin toggle.
-    #[inline]
-    pub fn menu_pinnable_url(&self) -> Option<String> {
-        match self.menu.section() {
-            Section::Bookmarks | Section::History => self.menu.selected_url(),
-            _ => None,
-        }
     }
 
     /// Whether link-hint navigation is currently shown.
@@ -504,7 +521,7 @@ impl AppUi {
     }
 
     #[inline]
-    pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
+    pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y - self.webview_top)
     }
 
@@ -566,7 +583,8 @@ impl AppUi {
         // Snapshot the pinned speed-dial list for the start page (kept in sync
         // with the menu's live store), and keep its selection in range.
         let home_pins = if self.home_active {
-            let count = self.menu.dial.urls().len();
+            // +1 for the trailing "+ Add" tile, so its selection isn't clamped off.
+            let count = self.menu.dial.urls().len() + 1;
             self.home.clamp(count);
             self.menu.dial.urls().to_vec()
         } else {

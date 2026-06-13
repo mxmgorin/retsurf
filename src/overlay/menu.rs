@@ -73,13 +73,15 @@ impl Menu {
         }
     }
 
-    /// Show the menu, resetting every section's highlight to the top.
+    /// Show the menu, resetting every section's highlight to the top. In Tabs,
+    /// index 0 is the "+ New tab" button, so the cursor starts on the first tab
+    /// (index 1) — A then switches tabs rather than spawning a new one.
     pub fn open(&mut self) {
         self.visible = true;
         self.bookmarks.reset();
         self.history.reset();
         self.downloads.reset();
-        self.tab_selected = 0;
+        self.tab_selected = 1;
     }
 
     pub fn close(&mut self) {
@@ -116,7 +118,7 @@ impl Menu {
             Section::Bookmarks => self.bookmarks.move_sel(dy),
             Section::History => self.history.move_sel(dy),
             Section::Downloads => self.downloads.move_sel(dy),
-            // Rows are the tabs plus a trailing "+ New tab" entry at `tab_count`.
+            // Index 0 is the "+ New tab" button; the tabs follow at `1..=tab_count`.
             Section::Tabs => {
                 let last = self.tab_count as i32;
                 self.tab_selected = (self.tab_selected as i32 + dy).clamp(0, last) as usize;
@@ -124,9 +126,16 @@ impl Menu {
         }
     }
 
-    /// Highlighted row in the Tabs section (`tab_count` == the "+ New tab" row).
+    /// Highlighted row in the Tabs section (0 == the "+ New tab" button, then
+    /// the tabs at `1..=tab_count`).
     pub fn tab_selected(&self) -> usize {
         self.tab_selected
+    }
+
+    /// Whether the History section's "Clear all" top row is highlighted (A then
+    /// clears, mirroring how A on the Tabs "+ New tab" row opens a tab).
+    pub fn history_clear_selected(&self) -> bool {
+        self.section == Section::History && self.history.clear_selected()
     }
 
     /// Refresh the known tab count (the tab list lives in the browser), keeping the

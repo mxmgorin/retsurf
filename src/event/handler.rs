@@ -106,7 +106,7 @@ impl AppEventHandler {
             Event::MouseButtonUp {
                 mouse_btn, x, y, ..
             } => {
-                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, false);
                 let event = servo::InputEvent::MouseButton(event);
                 browser.handle_input(event);
@@ -114,14 +114,14 @@ impl AppEventHandler {
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
-                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, true);
                 let event = servo::InputEvent::MouseButton(event);
 
                 browser.handle_input(event);
             }
             Event::MouseMotion { x, y, .. } => {
-                let (x, y) = ui.into_browser_rel_pos(x as f32, y as f32);
+                let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
                 let event = super::sdl2_servo::into_mouse_move_event(x, y);
                 let event = servo::InputEvent::MouseMove(event);
                 browser.handle_input(event);
@@ -133,7 +133,7 @@ impl AppEventHandler {
                 mouse_y,
                 ..
             } => {
-                let (mx, my) = ui.into_browser_rel_pos(mouse_x as f32, mouse_y as f32);
+                let (mx, my) = ui.to_browser_rel_pos(mouse_x as f32, mouse_y as f32);
                 // Fire the DOM `wheel` event (for pages with JS handlers)...
                 let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
                 browser.handle_input(servo::InputEvent::Wheel(event));

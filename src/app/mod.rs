@@ -226,6 +226,14 @@ impl App {
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu_clear(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
+            MenuAction::ToggleBookmark(url) => self.ui.toggle_bookmark(url),
+            MenuAction::AddPin => {
+                // Mouse click on the "+ Add" tile: pin the typed text, or focus
+                // the field to type into when it's empty (no OSK on the mouse path).
+                if !self.add_pin_from_input() {
+                    self.ui.home_focus_search();
+                }
+            }
             MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
@@ -260,12 +268,15 @@ impl App {
     fn menu_open_selected(&mut self) {
         if self.ui.menu_section() == Section::Tabs {
             let sel = self.ui.menu_tab_selected();
-            if sel < self.browser.tab_count() {
-                self.browser.switch_to(sel);
-                self.ui.menu_close();
+            if sel == 0 {
+                self.new_tab(); // the "+ New tab" button (index 0)
             } else {
-                self.new_tab(); // the "+ New tab" row
+                self.browser.switch_to(sel - 1);
+                self.ui.menu_close();
             }
+        } else if self.ui.menu_history_clear_selected() {
+            // History's "Clear all" top row (index 0): wipe the list, stay open.
+            self.ui.menu_clear();
         } else if let Some(url) = self.ui.menu_selected_url() {
             self.open_url(url);
         } else if self.ui.menu_section() != Section::Downloads {
@@ -279,9 +290,10 @@ impl App {
     /// closes the tab; in the URL lists it removes the bookmark / history entry.
     fn delete_menu_selection(&mut self) {
         if self.ui.menu_section() == Section::Tabs {
+            // Index 0 is the "+ New tab" button (nothing to delete); tabs are 1.. .
             let sel = self.ui.menu_tab_selected();
-            if sel < self.browser.tab_count() {
-                self.browser.close_tab(sel);
+            if sel > 0 {
+                self.browser.close_tab(sel - 1);
                 self.ui.menu_set_tab_count(self.browser.tab_count());
             }
         } else {
@@ -289,14 +301,68 @@ impl App {
         }
     }
 
-    /// A on the start page: open the focused speed-dial tile in the active tab,
-    /// or — when the search field is focused — open the OSK to type into it.
+    /// Y in the menu (link-hint toggle elsewhere): the action depends on the
+    /// section. Bookmarks pins/unpins the selected entry on the speed dial;
+    /// History bookmarks (or un-bookmarks) the selected entry; Tabs bookmarks
+    /// the selected tab's URL. Downloads has no Y action.
+    fn menu_y_action(&mut self) {
+        match self.ui.menu_section() {
+            Section::Bookmarks => {
+                if let Some(url) = self.ui.menu_selected_url() {
+                    self.ui.dial_toggle(&url);
+                }
+            }
+            Section::History => {
+                if let Some(url) = self.ui.menu_selected_url() {
+                    self.ui.toggle_bookmark(&url);
+                }
+            }
+            Section::Tabs => {
+                // Index 0 is the "+ New tab" button; the tabs follow at 1..=N.
+                let sel = self.ui.menu_tab_selected();
+                if sel > 0 {
+                    if let Some(info) = self.browser.tabs().get(sel - 1) {
+                        if !info.url.is_empty() {
+                            self.ui.toggle_bookmark(&info.url);
+                        }
+                    }
+                }
+            }
+            Section::Downloads => {}
+        }
+    }
+
+    /// A on the start page: open the focused speed-dial tile, pin the search
+    /// text on the "+ Add" tile, or — when the search field is focused (or the
+    /// "+ Add" tile with an empty field) — open the OSK to type into it.
     fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if let Some(url) = self.ui.home_selected_url() {
+        if self.ui.home_tile_is_add() {
+            // Pin the typed text; if the field is empty, prompt for it instead.
+            if !self.add_pin_from_input() {
+                self.ui.home_focus_search();
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+        } else if let Some(url) = self.ui.home_selected_url() {
             self.open_url(url);
         } else {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         }
+    }
+
+    /// Pin the start-page search field's text to the speed dial, normalized to a
+    /// URL the same way navigation is. Returns `false` if the field was empty
+    /// (nothing pinned) so the caller can prompt for input instead.
+    fn add_pin_from_input(&mut self) -> bool {
+        let text = self.ui.home_search_text();
+        if text.trim().is_empty() {
+            return false;
+        }
+        if let Some(url) = crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
+        {
+            self.ui.dial_pin(url.as_str());
+        }
+        self.ui.home_clear_input();
+        true
     }
 
     /// Load `url` in the focused tab and close the menu.

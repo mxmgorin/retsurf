@@ -58,16 +58,10 @@ pub(super) fn add_home(
                     const FIELD_H: f32 = 44.0;
                     const GAP_TOP: f32 = 28.0; // wordmark → field
                     const GAP_MID: f32 = 36.0; // field → grid
-                    let rows = if pins.is_empty() {
-                        1
-                    } else {
-                        pins.len().div_ceil(cols)
-                    };
-                    let grid_h = if pins.is_empty() {
-                        20.0
-                    } else {
-                        rows as f32 * TILE_H + (rows.saturating_sub(1)) as f32 * GAP
-                    };
+                    // One tile per pin plus the trailing "+ Add" tile.
+                    let tiles = pins.len() + 1;
+                    let rows = tiles.div_ceil(cols);
+                    let grid_h = rows as f32 * TILE_H + (rows.saturating_sub(1)) as f32 * GAP;
                     let content_h = WORDMARK_H + GAP_TOP + FIELD_H + GAP_MID + grid_h;
                     let top = ((ui.available_height() - content_h) / 2.0).max(8.0);
 
@@ -181,8 +175,8 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32) {
     });
 }
 
-/// The speed-dial grid: one tile per pinned shortcut, the brand initial over its
-/// name.
+/// The speed-dial grid: one tile per pinned shortcut (the brand initial over its
+/// name), followed by a trailing "+ Add" tile that pins the search field's text.
 fn add_dial(
     ui: &mut egui::Ui,
     home: &Home,
@@ -191,29 +185,43 @@ fn add_dial(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    if pins.is_empty() {
-        ui.label(
-            egui::RichText::new(
-                "Nothing pinned — press Y on a bookmark or history entry to pin it.",
-            )
-            .color(MUTED),
-        );
-        return;
-    }
+    let tiles = pins.len() + 1; // + the trailing "+ Add" tile
     // Center the grid within the field width.
     ui.allocate_ui_with_layout(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
-            for (r, row) in pins.chunks(cols).enumerate() {
-                ui.horizontal(|ui| {
-                    for (j, url) in row.iter().enumerate() {
-                        let i = r * cols + j;
-                        if add_tile(ui, url, home.tile() == Some(i)).clicked() {
-                            commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
+            for row_start in (0..tiles).step_by(cols) {
+                // Allocate each row at its exact content width so a partial last
+                // row (or a grid narrower than `cols`) stays centred — a plain
+                // `ui.horizontal` would take the full width and left-align.
+                let n = (tiles - row_start).min(cols);
+                let row_w = n as f32 * TILE_W + (n.saturating_sub(1)) as f32 * GAP;
+                ui.allocate_ui_with_layout(
+                    egui::vec2(row_w, TILE_H),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.x = GAP;
+                        for i in row_start..row_start + n {
+                            let selected = home.tile() == Some(i);
+                            match pins.get(i) {
+                                Some(url) => {
+                                    if add_tile(ui, url, selected).clicked() {
+                                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(
+                                            url.clone(),
+                                        )));
+                                    }
+                                }
+                                // i == pins.len(): the trailing "+ Add" tile.
+                                None => {
+                                    if add_add_tile(ui, selected).clicked() {
+                                        commands.push(AppCommand::Menu(MenuAction::AddPin));
+                                    }
+                                }
+                            }
                         }
-                    }
-                });
+                    },
+                );
                 ui.add_space(GAP);
             }
         },
@@ -267,6 +275,45 @@ fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
         truncate(&label, 12),
+        egui::FontId::proportional(12.0),
+        if active { INK } else { MUTED },
+    );
+    resp
+}
+
+/// The trailing "+ Add" tile: an empty (fill-less) glyph square holding a "+",
+/// with "Add" beneath — accent-ringed and brightened when selected or hovered,
+/// like a real tile but unfilled so it reads as an "add a shortcut" slot.
+fn add_add_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
+    let active = selected || resp.hovered();
+    let painter = ui.painter();
+
+    let glyph = egui::Rect::from_center_size(
+        egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
+        egui::vec2(GLYPH, GLYPH),
+    );
+    painter.rect_stroke(
+        glyph,
+        12.0,
+        egui::Stroke::new(
+            if active { 2.0 } else { 1.0 },
+            if active { ACCENT } else { BORDER },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    // Draw the "+" as two centered strokes rather than a glyph: a text "+" is
+    // positioned on the font's math axis (above the line-box centre), so
+    // `CENTER_CENTER` would render it visibly high.
+    let c = glyph.center();
+    let arm = 11.0; // half-length of each stroke
+    let plus = egui::Stroke::new(2.5, if active { ACCENT } else { MUTED });
+    painter.line_segment([egui::pos2(c.x - arm, c.y), egui::pos2(c.x + arm, c.y)], plus);
+    painter.line_segment([egui::pos2(c.x, c.y - arm), egui::pos2(c.x, c.y + arm)], plus);
+    painter.text(
+        egui::pos2(rect.center().x, glyph.bottom() + 14.0),
+        egui::Align2::CENTER_CENTER,
+        "Add",
         egui::FontId::proportional(12.0),
         if active { INK } else { MUTED },
     );

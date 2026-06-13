@@ -60,6 +60,12 @@ pub enum MenuAction {
     Clear,
     /// Load a specific URL and close the menu (clicking a list row).
     OpenUrl(String),
+    /// Toggle `url` in the saved bookmarks, keeping the menu open (clicking a
+    /// row's ★/☆ button in Tabs / History).
+    ToggleBookmark(String),
+    /// Pin the start page's search-field text to the speed dial — the "+ Add"
+    /// tile. Empty field: focus the field instead (see [`crate::app`]).
+    AddPin,
     /// Remove the entry at `index` in the active section (clicking its ✖).
     RemoveAt(usize),
     /// Switch to the tab at `index` and close the menu (clicking a tab row).

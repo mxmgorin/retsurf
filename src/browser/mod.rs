@@ -105,6 +105,9 @@ struct Tab {
 pub struct TabInfo {
     /// Page title, falling back to the URL (then "New tab") when unknown.
     pub title: String,
+    /// The tab's current location (the bookmark target for Y in the menu); may
+    /// be empty for a freshly opened tab that hasn't navigated yet.
+    pub url: String,
     /// Whether this is the currently shown tab.
     pub active: bool,
 }
@@ -371,6 +374,7 @@ impl AppBrowser {
                     .unwrap_or_else(|| "New tab".to_string());
                 TabInfo {
                     title,
+                    url: tab.state.location.clone(),
                     active: i == active,
                 }
             })

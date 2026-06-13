@@ -81,6 +81,15 @@ impl Dial {
         self.urls.iter().any(|u| u == url)
     }
 
+    /// Pin `url` to the end of the dial if not already present; persists. No-op
+    /// on a duplicate (the start page's "+ Add" tile uses this).
+    pub fn pin(&mut self, url: &str) {
+        if !self.contains(url) {
+            self.urls.push(url.to_string());
+            self.save();
+        }
+    }
+
     /// Pin `url` if absent, otherwise unpin it; persists either way.
     pub fn toggle(&mut self, url: &str) {
         if let Some(i) = self.urls.iter().position(|u| u == url) {
