@@ -78,7 +78,7 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
-| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, cookies, caches) — created on demand; useful for portable installs or separate profiles |
+| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) — created on demand; useful for portable installs or separate profiles |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
 | `RETSURF_LOG_FILE` | — | Write logs to this file |
@@ -95,6 +95,10 @@ Settings live in `config.toml` in the user data dir (`SDL_GetPrefPath`, e.g.
 points. A template with the defaults is written on first run; missing fields fall back
 to their defaults, so a partial file (just one section, or one key) is valid.
 
+The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmarks.toml`)
+at its root, with Servo's site data (cookies, localStorage, HSTS) under `servo/` and
+regenerable caches (the adblock engine) under `cache/` — the latter is safe to delete.
+
 ```toml
 [browser]
 home_page = "https://duckduckgo.com"
@@ -105,7 +109,7 @@ experimental_prefs_enabled = true              # enable Servo's experimental web
 # makes sites serve their phone layouts, which fit a small screen far better;
 user_agent = ""
 # Keep site data (cookies, localStorage, HSTS) across restarts so logins
-# survive. Stored in the user data dir; false = in-memory only, gone on exit.
+# survive. Stored in the data dir's servo/ subfolder; false = in-memory only, gone on exit.
 persist_site_data = true
 # Default page zoom for every tab (1.0 = 100%). Real zoom — it reflows the
 # layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /

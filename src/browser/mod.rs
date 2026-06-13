@@ -643,14 +643,15 @@ const COLLECT_HINTS_JS: &str = r#"
 })()
 "#;
 
-/// Servo options: with `persist_site_data` on, point `config_dir` at the user
-/// data dir — Servo's net and storage threads then load cookies / HSTS /
-/// localStorage from it at startup and write them back on a clean shutdown
-/// (see [`AppBrowser::shutdown`]), so logins survive restarts.
+/// Servo options: with `persist_site_data` on, point `config_dir` at the
+/// `servo/` subfolder of the user data dir — Servo's net and storage threads
+/// then load cookies / HSTS / localStorage from it at startup and write them
+/// back on a clean shutdown (see [`AppBrowser::shutdown`]), so logins survive
+/// restarts. The subfolder keeps Servo's files apart from retsurf's own.
 fn build_opts(config: &BrowserConfig) -> servo::Opts {
     let mut opts = servo::Opts::default();
     if config.persist_site_data {
-        opts.config_dir = Some(std::path::PathBuf::from(crate::config::data_dir()));
+        opts.config_dir = Some(std::path::PathBuf::from(crate::config::servo_data_dir()));
     }
     opts
 }

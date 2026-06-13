@@ -7,7 +7,7 @@
 //! The engine is not thread-safe (the crate's faster single-thread build), so
 //! it never leaves the main thread: a background thread downloads the filter
 //! lists, builds its own engine, and hands back the *serialized* DAT (also
-//! cached to `adblock.dat` in the user data dir); the main thread deserializes
+//! cached to `cache/adblock.dat` in the user data dir); the main thread deserializes
 //! it lazily on the next request check. With a cache present, startup loads it
 //! directly and only refreshes in the background once it's older than
 //! `update_days`.
@@ -105,7 +105,7 @@ impl Adblock {
 }
 
 fn cache_path() -> String {
-    format!("{}adblock.dat", config::data_dir())
+    format!("{}adblock.dat", config::cache_dir())
 }
 
 fn deserialize(dat: &[u8]) -> Option<Engine> {

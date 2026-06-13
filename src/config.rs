@@ -81,6 +81,29 @@ pub fn data_dir() -> String {
     }
 }
 
+/// Subdirectory of [`data_dir`] holding the site data Servo itself manages —
+/// cookies, localStorage, HSTS. Kept separate from retsurf's own files (config,
+/// history, bookmarks) so the data dir stays legible. Created on demand; passed
+/// to Servo as its `config_dir` (see [`crate::browser`]).
+pub fn servo_data_dir() -> String {
+    let dir = format!("{}servo/", data_dir());
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::warn!("could not create servo data dir `{dir}`: {e}");
+    }
+    dir
+}
+
+/// Subdirectory of [`data_dir`] for regenerable cache files — currently the
+/// adblock engine (`adblock.dat`). Safe to wipe: anything here is rebuilt or
+/// re-downloaded on demand. Created on demand. See [`crate::browser::adblock`].
+pub fn cache_dir() -> String {
+    let dir = format!("{}cache/", data_dir());
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::warn!("could not create cache dir `{dir}`: {e}");
+    }
+    dir
+}
+
 /// Resolve the config file path: `RETSURF_CONFIG` if set, otherwise `config.toml`
 /// inside [`data_dir`].
 fn config_path() -> String {
@@ -102,9 +125,9 @@ pub struct BrowserConfig {
     /// which fit a small screen far better; anything else is sent verbatim.
     pub user_agent: String,
     /// Keep site data (cookies, localStorage, HSTS) across restarts, so logins
-    /// survive. Stored in the user data dir (`cookie_jar.json`,
-    /// `localstorage.json`, …). When false everything is in-memory only and
-    /// gone on exit.
+    /// survive. Stored in the `servo/` subfolder of the data dir
+    /// (`cookie_jar.json`, `localstorage.json`, …). When false everything is
+    /// in-memory only and gone on exit.
     pub persist_site_data: bool,
     /// Default page zoom for every tab (1.0 = 100%). Reflows the layout, so
     /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
