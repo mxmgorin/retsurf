@@ -4,6 +4,7 @@
 //! the matching egui renderers live in [`crate::ui`]'s submodules, and the
 //! central router ([`crate::app`]) decides which overlay owns the input.
 
+pub mod dial_edit;
 pub mod hints;
 pub mod home;
 pub mod menu;

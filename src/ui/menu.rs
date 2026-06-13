@@ -2,7 +2,7 @@
 //! the section bar with the ✖ close and contextual clear actions, and the four
 //! section lists (Tabs / Bookmarks / History / Downloads).
 
-use super::theme::ACCENT;
+use super::theme::{close_button, ACCENT, CLOSE_SIZE};
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
@@ -100,8 +100,19 @@ pub(super) fn add_menu(
                     // by 2×PAD (which is what pushed the panel off-edge before).
                     ui.set_min_size(screen.size() - egui::vec2(SIDES, PAD_Y * 2.0));
 
-                    // Section bar (active tab highlighted), with a mouse-only ✖
-                    // pinned to the top-right corner (the gamepad closes with B).
+                    // Mouse-only ✖ close pinned to the top-right corner (the
+                    // gamepad closes with B); shared with the dial editor. Painted
+                    // independently of the section-bar row so it can't shift it.
+                    let close_rect = egui::Rect::from_min_size(
+                        egui::pos2(screen.right() - PAD_X - CLOSE_SIZE, screen.top() + PAD_Y),
+                        egui::vec2(CLOSE_SIZE, CLOSE_SIZE),
+                    );
+                    if close_button(ui, close_rect, egui::Id::new("menu_close")).clicked() {
+                        commands.push(AppCommand::Menu(MenuAction::Close));
+                    }
+
+                    // Section bar (active tab highlighted); the active section's
+                    // bulk-clear action sits at its right (left of the ✖ corner).
                     ui.horizontal(|ui| {
                         // A little gap between segments turns the flush row of
                         // buttons into a segmented control; the active one wears
@@ -121,28 +132,17 @@ pub(super) fn add_menu(
                                 commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
                             }
                         }
-                        // Width from `screen`, not `available_width()`: the frame's
-                        // min-size is screen + margins, so "available" runs past the
-                        // visible right edge and would push the ✖ offscreen.
-                        let remaining = screen.width() - SIDES - ui.min_rect().width();
+                        // Width from `screen`, not `available_width()` (which runs
+                        // past the visible edge); reserve the corner ✖'s footprint
+                        // so the clear action sits to its left, not under it.
+                        let remaining = screen.width()
+                            - SIDES
+                            - ui.min_rect().width()
+                            - (CLOSE_SIZE + 8.0);
                         ui.allocate_ui_with_layout(
-                            egui::vec2(remaining.max(26.0), 26.0),
+                            egui::vec2(remaining.max(1.0), 28.0),
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
-                                // Fixed square, like the rows' ✖ — auto-sizing pads
-                                // the glyph unevenly.
-                                if ui
-                                    .add_sized(
-                                        [DEL_W, 28.0],
-                                        egui::Button::new(
-                                            egui::RichText::new("✖").color(egui::Color32::WHITE),
-                                        )
-                                        .corner_radius(ROW_RADIUS),
-                                    )
-                                    .clicked()
-                                {
-                                    commands.push(AppCommand::Menu(MenuAction::Close));
-                                }
                                 // Downloads' bulk-clear lives here (dim, mouse-only).
                                 // History's "Clear all" is instead the top row of
                                 // its list (see `add_history_section`).

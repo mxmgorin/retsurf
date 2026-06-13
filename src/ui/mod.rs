@@ -3,6 +3,7 @@
 //! Servo's FBO texture under the chrome. The actual widgets are rendered by the
 //! submodules: [`toolbar`], [`menu`] (the full-screen overlay), and [`osk`].
 
+mod dial_edit;
 mod hints;
 mod home;
 mod menu;
@@ -16,6 +17,7 @@ use crate::{
     browser::AppBrowser,
     config::{DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
     event::user::UserEventSender,
+    overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, Hints},
     overlay::home::Home,
     overlay::menu::{Menu, Section},
@@ -51,6 +53,8 @@ pub enum Focus {
     Menu,
     /// Link-hint navigation.
     Hints,
+    /// The standalone speed-dial editor (opened from the start page).
+    DialEdit,
     /// The built-in start page overlay (active tab is on `retsurf:home`).
     Home,
     /// No overlay: input goes to the page or the toolbar.
@@ -83,6 +87,8 @@ pub struct AppUi {
     menu: Menu,
     /// The built-in start page overlay's selection / search-field state.
     home: Home,
+    /// The standalone speed-dial editor overlay (opened from the start page).
+    dial_edit: DialEdit,
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
@@ -130,6 +136,7 @@ impl AppUi {
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             home: Home::new(),
+            dial_edit: DialEdit::new(),
             home_active: false,
             hints: Hints::new(),
             prompt: Prompt::new(),
@@ -229,6 +236,8 @@ impl AppUi {
             Focus::Menu
         } else if self.hints.visible {
             Focus::Hints
+        } else if self.dial_edit.visible() {
+            Focus::DialEdit
         } else if self.home_active {
             Focus::Home
         } else {
@@ -243,6 +252,9 @@ impl AppUi {
         let to_address_bar = self.address_bar_focused();
         let target = if self.prompt.visible() && self.prompt.has_text_field() {
             OskTarget::Prompt(self.prompt.input_mut())
+        } else if self.dial_edit.visible() {
+            // The speed-dial editor's URL field (its own buffer); Enter pins it.
+            OskTarget::DialEdit(self.dial_edit.input_mut())
         } else if self.home_active {
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
@@ -399,7 +411,7 @@ impl AppUi {
     }
 
     /// The focused tile's pinned URL, if a *pin* tile is selected (the trailing
-    /// "+ Add" tile has no URL — see [`Self::home_tile_is_add`]).
+    /// "Edit" tile has no URL — see [`Self::home_tile_is_edit`]).
     #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
         self.home
@@ -407,23 +419,74 @@ impl AppUi {
             .and_then(|i| self.menu.dial.urls().get(i).cloned())
     }
 
-    /// Whether the trailing "+ Add" tile (index == pin count) is focused.
+    /// Whether the trailing "Edit" tile (index == pin count) is focused.
     #[inline]
-    pub fn home_tile_is_add(&self) -> bool {
+    pub fn home_tile_is_edit(&self) -> bool {
         self.home.tile() == Some(self.menu.dial.urls().len())
     }
 
-    /// Pin `url` to the speed dial if absent (the "+ Add" tile / address-bar
-    /// pin); unlike [`Self::dial_toggle`] it never unpins.
+    /// Pin `url` to the speed dial if absent (the editor's Add); unlike
+    /// [`Self::dial_toggle`] it never unpins.
     #[inline]
     pub fn dial_pin(&mut self, url: &str) {
         self.menu.dial.pin(url);
     }
 
-    /// Clear the start-page search field (after pinning its contents).
+    // --- Speed-dial editor (the standalone overlay opened from the start page) ---
+
+    /// Open the speed-dial editor overlay.
     #[inline]
-    pub fn home_clear_input(&mut self) {
-        self.home.input_mut().clear();
+    pub fn open_pins_editor(&mut self) {
+        self.dial_edit.open();
+    }
+
+    /// Close the speed-dial editor (back to the start page).
+    #[inline]
+    pub fn close_pins_editor(&mut self) {
+        self.dial_edit.close();
+    }
+
+    /// The editor's focused item (drives the **A** action in the router).
+    #[inline]
+    pub fn dial_edit_item(&self) -> EditItem {
+        self.dial_edit.item()
+    }
+
+    /// Focus the editor's URL field (e.g. before opening the OSK to type).
+    #[inline]
+    pub fn dial_edit_focus_field(&mut self) {
+        self.dial_edit.focus_field();
+    }
+
+    /// The editor's URL field text (trimmed submission lives in the app).
+    #[inline]
+    pub fn dial_edit_input(&self) -> String {
+        self.dial_edit.input().to_string()
+    }
+
+    /// Clear the editor's URL field (after pinning its contents).
+    #[inline]
+    pub fn dial_edit_clear_input(&mut self) {
+        self.dial_edit.clear_input();
+    }
+
+    /// Move the editor's selection by one dominant-axis step.
+    #[inline]
+    pub fn dial_edit_move(&mut self, dx: i32, dy: i32) {
+        let count = self.menu.dial.urls().len();
+        self.dial_edit.move_sel(dx, dy, count);
+    }
+
+    /// The editor's focused pin index, if a tile (not the field / Add) is focused.
+    #[inline]
+    pub fn dial_edit_tile(&self) -> Option<usize> {
+        self.dial_edit.tile()
+    }
+
+    /// Remove the pin at `index` from the speed dial (editor ✖ / X).
+    #[inline]
+    pub fn dial_remove_at(&mut self, index: usize) {
+        self.menu.dial.remove(index);
     }
 
     /// Whether a start-page tile (not the search field) is focused.
@@ -520,6 +583,15 @@ impl AppUi {
             .memory(|m| m.has_focus(egui::Id::new("home_search")))
     }
 
+    /// Whether the speed-dial editor's URL field holds egui keyboard focus —
+    /// like [`Self::home_field_editing`], but for the editor's `dial_edit_url`
+    /// field.
+    pub fn dial_edit_field_editing(&self) -> bool {
+        self.egui
+            .ctx
+            .memory(|m| m.has_focus(egui::Id::new("dial_edit_url")))
+    }
+
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y - self.webview_top)
@@ -580,12 +652,17 @@ impl AppUi {
         } else {
             Vec::new()
         };
-        // Snapshot the pinned speed-dial list for the start page (kept in sync
-        // with the menu's live store), and keep its selection in range.
-        let home_pins = if self.home_active {
-            // +1 for the trailing "+ Add" tile, so its selection isn't clamped off.
-            let count = self.menu.dial.urls().len() + 1;
-            self.home.clamp(count);
+        // Snapshot the pinned speed-dial list for the start page / editor (kept
+        // in sync with the menu's live store), and keep their selections in range.
+        let pin_count = self.menu.dial.urls().len();
+        let pins = if self.home_active || self.dial_edit.visible() {
+            if self.home_active {
+                // +1 for the trailing "Edit" tile, so its selection isn't clamped off.
+                self.home.clamp(pin_count + 1);
+            }
+            if self.dial_edit.visible() {
+                self.dial_edit.clamp(pin_count);
+            }
             self.menu.dial.urls().to_vec()
         } else {
             Vec::new()
@@ -638,9 +715,17 @@ impl AppUi {
 
                 // The start-page overlay is a backdrop over the (blank) web
                 // view — drawn below the foreground overlays (menu / OSK / etc.)
-                // so they can still open on top of it.
-                if self.home_active {
-                    home::add_home(ctx, &mut self.home, &home_pins, self.webview_top, commands);
+                // so they can still open on top of it. The dial editor (also
+                // reached from the start page) fully covers it, so skip the start
+                // page underneath while the editor is up.
+                if self.home_active && !self.dial_edit.visible() {
+                    home::add_home(ctx, &mut self.home, &pins, self.webview_top, commands);
+                }
+
+                // The speed-dial editor: a full-screen overlay above the start
+                // page; the OSK (below) can still open on top to type a URL.
+                if self.dial_edit.visible() {
+                    dial_edit::add_dial_edit(ctx, &mut self.dial_edit, &pins, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its

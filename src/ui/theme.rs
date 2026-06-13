@@ -22,3 +22,33 @@ pub fn apply(ctx: &egui::Context) {
     visuals.text_cursor.stroke.color = ACCENT;
     ctx.set_visuals(visuals);
 }
+
+/// Side of the square ✖ close button (logical px).
+pub const CLOSE_SIZE: f32 = 28.0;
+
+/// A mouse-only ✖ close button drawn at `rect`: a rounded outline with a
+/// centered ✖, both brightening to the accent on hover. Shared by the
+/// full-screen overlays (the menu and the dial editor) — a gamepad closes them
+/// with B instead. Returns the click response. `id` must be unique per call site
+/// (two overlays can be on screen at once).
+pub fn close_button(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
+    let resp = ui.interact(rect, id, egui::Sense::click());
+    let hot = resp.hovered();
+    let line = if hot { ACCENT } else { egui::Color32::from_gray(0x44) };
+    let ink = if hot { ACCENT } else { egui::Color32::from_gray(0xe0) };
+    let painter = ui.painter();
+    painter.rect_stroke(
+        rect,
+        6.0,
+        egui::Stroke::new(1.0, line),
+        egui::StrokeKind::Inside,
+    );
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "✖",
+        egui::FontId::proportional(15.0),
+        ink,
+    );
+    resp
+}

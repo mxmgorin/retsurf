@@ -63,9 +63,15 @@ pub enum MenuAction {
     /// Toggle `url` in the saved bookmarks, keeping the menu open (clicking a
     /// row's ★/☆ button in Tabs / History).
     ToggleBookmark(String),
-    /// Pin the start page's search-field text to the speed dial — the "+ Add"
-    /// tile. Empty field: focus the field instead (see [`crate::app`]).
-    AddPin,
+    /// Open the speed-dial editor overlay (the start page's "Edit" tile).
+    DialEdit,
+    /// Close the speed-dial editor (its ✖ button; the gamepad closes with B).
+    DialClose,
+    /// Pin `url` to the speed dial from the editor's field (normalized to a URL),
+    /// clearing the field; keeps the editor open.
+    DialAdd(String),
+    /// Remove the pin at `index` in the speed-dial editor (clicking its ✖).
+    DialRemoveAt(usize),
     /// Remove the entry at `index` in the active section (clicking its ✖).
     RemoveAt(usize),
     /// Switch to the tab at `index` and close the menu (clicking a tab row).

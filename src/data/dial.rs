@@ -90,6 +90,15 @@ impl Dial {
         }
     }
 
+    /// Remove the pin at `index` (if in range); persists. Used by the editor's
+    /// per-tile ✖ / X.
+    pub fn remove(&mut self, index: usize) {
+        if index < self.urls.len() {
+            self.urls.remove(index);
+            self.save();
+        }
+    }
+
     /// Pin `url` if absent, otherwise unpin it; persists either way.
     pub fn toggle(&mut self, url: &str) {
         if let Some(i) = self.urls.iter().position(|u| u == url) {

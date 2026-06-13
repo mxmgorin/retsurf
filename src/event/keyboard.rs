@@ -183,9 +183,63 @@ impl Keyboard {
             }
         }
 
+        // The speed-dial editor: arrows move the selection and Enter activates,
+        // mirroring the start page. Its URL field, while it holds egui focus,
+        // keeps typing/caret to the editor; Down leaves it for Add, Enter pins.
+        if ui.focus() == Focus::DialEdit {
+            if matches!(key.kc, Keycode::Escape) {
+                commands.push(AppCommand::Input(InputCommand::Cancel));
+                return;
+            }
+            if ui.dial_edit_field_editing() {
+                // Up/Down leave the single-line field for the grid above / the
+                // Add button below (left/right stay as caret movement in egui).
+                if matches!(key.kc, Keycode::Up) {
+                    commands.push(AppCommand::Input(InputCommand::Nav(0, -1)));
+                    return;
+                }
+                if matches!(key.kc, Keycode::Down) {
+                    commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
+                    return;
+                }
+                if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+                    let text = ui.dial_edit_input();
+                    if !text.trim().is_empty() {
+                        commands.push(AppCommand::Menu(MenuAction::DialAdd(text)));
+                    }
+                    return;
+                }
+            } else {
+                let nav = match key.kc {
+                    Keycode::Up => Some((0, -1)),
+                    Keycode::Down => Some((0, 1)),
+                    Keycode::Left => Some((-1, 0)),
+                    Keycode::Right => Some((1, 0)),
+                    _ => None,
+                };
+                if let Some((dx, dy)) = nav {
+                    commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+                    return;
+                }
+                if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+                    commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+                    return;
+                }
+                // Delete the focused tile (X's role), routed as the same intent.
+                if matches!(key.kc, Keycode::Delete | Keycode::Backspace)
+                    && ui.dial_edit_tile().is_some()
+                {
+                    commands.push(AppCommand::Input(InputCommand::ToggleOsk));
+                    return;
+                }
+            }
+        }
+
         let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints);
-        let typing =
-            browser.text_input_focused() || ui.address_bar_focused() || ui.home_field_editing();
+        let typing = browser.text_input_focused()
+            || ui.address_bar_focused()
+            || ui.home_field_editing()
+            || ui.dial_edit_field_editing();
         if let Some(action) = self.lookup(key, overlay, typing) {
             action.push_tap(commands);
             return;

@@ -63,6 +63,13 @@ impl App {
                         self.home_confirm(out);
                     }
                 }
+                // The speed-dial editor: A types into the field / pins via Add
+                // (tiles are edit-only — see [`App::dial_edit_confirm`]).
+                Focus::DialEdit => {
+                    if *pressed {
+                        self.dial_edit_confirm(out);
+                    }
+                }
                 Focus::Page => self.primary_action(*pressed),
             },
             InputCommand::Cancel => match focus {
@@ -70,6 +77,8 @@ impl App {
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu_close(),
                 Focus::Hints => self.ui.hints_hide(),
+                // B in the editor returns to the start page.
+                Focus::DialEdit => self.ui.close_pins_editor(),
                 // B on the start page goes back like a normal page.
                 Focus::Home | Focus::Page => self
                     .browser
@@ -79,6 +88,11 @@ impl App {
                 if focus == Focus::Menu {
                     // X deletes the highlighted entry (closes a tab in the Tabs section).
                     self.delete_menu_selection();
+                } else if focus == Focus::DialEdit {
+                    // X deletes the focused pin tile (no-op on the field / Add).
+                    if let Some(i) = self.ui.dial_edit_tile() {
+                        self.ui.dial_remove_at(i);
+                    }
                 } else {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints_hide();
@@ -118,6 +132,7 @@ impl App {
                 }
                 Focus::Hints => self.ui.hints_move((*dx, *dy)),
                 Focus::Home => self.ui.home_move(*dx, *dy),
+                Focus::DialEdit => self.ui.dial_edit_move(*dx, *dy),
                 Focus::Page => {}
             },
             // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
@@ -133,7 +148,7 @@ impl App {
                         self.ui.dial_toggle(&url);
                     }
                 }
-                Focus::Osk | Focus::Prompt => {}
+                Focus::Osk | Focus::Prompt | Focus::DialEdit => {}
                 Focus::Hints => self.ui.hints_hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();

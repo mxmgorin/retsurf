@@ -12,6 +12,7 @@ use crate::browser::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
+use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::ui::AppUi;
@@ -227,13 +228,10 @@ impl App {
             MenuAction::Clear => self.ui.menu_clear(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
             MenuAction::ToggleBookmark(url) => self.ui.toggle_bookmark(url),
-            MenuAction::AddPin => {
-                // Mouse click on the "+ Add" tile: pin the typed text, or focus
-                // the field to type into when it's empty (no OSK on the mouse path).
-                if !self.add_pin_from_input() {
-                    self.ui.home_focus_search();
-                }
-            }
+            MenuAction::DialEdit => self.ui.open_pins_editor(),
+            MenuAction::DialClose => self.ui.close_pins_editor(),
+            MenuAction::DialAdd(url) => self.dial_add(url),
+            MenuAction::DialRemoveAt(index) => self.ui.dial_remove_at(*index),
             MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
@@ -332,16 +330,12 @@ impl App {
         }
     }
 
-    /// A on the start page: open the focused speed-dial tile, pin the search
-    /// text on the "+ Add" tile, or — when the search field is focused (or the
-    /// "+ Add" tile with an empty field) — open the OSK to type into it.
+    /// A on the start page: open the focused speed-dial tile, open the speed-dial
+    /// editor on the "Edit" tile, or — when the search field is focused — open
+    /// the OSK to type into it.
     fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.home_tile_is_add() {
-            // Pin the typed text; if the field is empty, prompt for it instead.
-            if !self.add_pin_from_input() {
-                self.ui.home_focus_search();
-                self.ui.osk(OskCommand::Show, &self.browser, out);
-            }
+        if self.ui.home_tile_is_edit() {
+            self.ui.open_pins_editor();
         } else if let Some(url) = self.ui.home_selected_url() {
             self.open_url(url);
         } else {
@@ -349,20 +343,31 @@ impl App {
         }
     }
 
-    /// Pin the start-page search field's text to the speed dial, normalized to a
-    /// URL the same way navigation is. Returns `false` if the field was empty
-    /// (nothing pinned) so the caller can prompt for input instead.
-    fn add_pin_from_input(&mut self) -> bool {
-        let text = self.ui.home_search_text();
-        if text.trim().is_empty() {
-            return false;
+    /// A in the speed-dial editor: open the OSK on the field, pin via the Add
+    /// button, or nothing on a tile (tiles are edit-only here).
+    fn dial_edit_confirm(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.dial_edit_item() {
+            EditItem::Field => {
+                self.ui.dial_edit_focus_field();
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+            EditItem::Add => {
+                let text = self.ui.dial_edit_input();
+                self.dial_add(&text);
+            }
+            EditItem::Tile(_) => {}
         }
+    }
+
+    /// Pin the speed-dial editor's field text to the dial, normalized to a URL
+    /// the same way navigation is, then clear the field (it stays open to add
+    /// more).
+    fn dial_add(&mut self, text: &str) {
         if let Some(url) = crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
         {
             self.ui.dial_pin(url.as_str());
         }
-        self.ui.home_clear_input();
-        true
+        self.ui.dial_edit_clear_input();
     }
 
     /// Load `url` in the focused tab and close the menu.

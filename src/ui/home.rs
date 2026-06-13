@@ -17,10 +17,10 @@ const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
 const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
 
-/// Tile footprint (logical px) and grid spacing.
-const TILE_W: f32 = 96.0;
-const TILE_H: f32 = 84.0;
-const GAP: f32 = 12.0;
+/// Tile footprint (logical px) and grid spacing. Shared with the dial editor.
+pub(super) const TILE_W: f32 = 96.0;
+pub(super) const TILE_H: f32 = 84.0;
+pub(super) const GAP: f32 = 12.0;
 
 /// Draw the start-page overlay over the (blank) web view — below the toolbar
 /// (`webview_top`), so the address bar and toolbar buttons stay usable. Any
@@ -176,7 +176,7 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32) {
 }
 
 /// The speed-dial grid: one tile per pinned shortcut (the brand initial over its
-/// name), followed by a trailing "+ Add" tile that pins the search field's text.
+/// name), followed by a trailing "Edit" tile that opens the speed-dial editor.
 fn add_dial(
     ui: &mut egui::Ui,
     home: &Home,
@@ -185,7 +185,7 @@ fn add_dial(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    let tiles = pins.len() + 1; // + the trailing "+ Add" tile
+    let tiles = pins.len() + 1; // + the trailing "Edit" tile
     // Center the grid within the field width.
     ui.allocate_ui_with_layout(
         egui::vec2(width, 0.0),
@@ -212,10 +212,10 @@ fn add_dial(
                                         )));
                                     }
                                 }
-                                // i == pins.len(): the trailing "+ Add" tile.
+                                // i == pins.len(): the trailing "Edit" tile.
                                 None => {
-                                    if add_add_tile(ui, selected).clicked() {
-                                        commands.push(AppCommand::Menu(MenuAction::AddPin));
+                                    if add_edit_tile(ui, selected).clicked() {
+                                        commands.push(AppCommand::Menu(MenuAction::DialEdit));
                                     }
                                 }
                             }
@@ -229,7 +229,7 @@ fn add_dial(
 }
 
 /// Glyph-square side length within a tile.
-const GLYPH: f32 = 52.0;
+pub(super) const GLYPH: f32 = 52.0;
 
 /// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
 /// the brand name beneath it — accent-ringed and brightened when selected or
@@ -237,9 +237,14 @@ const GLYPH: f32 = 52.0;
 /// click response.
 fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    let active = selected || resp.hovered();
-    let painter = ui.painter();
+    paint_tile(ui.painter(), rect, url, selected || resp.hovered());
+    resp
+}
 
+/// Paint a speed-dial tile's visuals (glyph square + brand initial + name) into
+/// `rect`. Shared by the start page and the dial editor ([`super::dial_edit`]);
+/// the caller owns the click region (and any extra overlays like a ✖ badge).
+pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, active: bool) {
     // Glyph square, centered near the top of the tile.
     let glyph = egui::Rect::from_center_size(
         egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
@@ -278,13 +283,12 @@ fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
         egui::FontId::proportional(12.0),
         if active { INK } else { MUTED },
     );
-    resp
 }
 
-/// The trailing "+ Add" tile: an empty (fill-less) glyph square holding a "+",
-/// with "Add" beneath — accent-ringed and brightened when selected or hovered,
-/// like a real tile but unfilled so it reads as an "add a shortcut" slot.
-fn add_add_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
+/// The trailing "Edit" tile: an empty (fill-less) glyph square holding a ✏, with
+/// "Edit" beneath — accent-ringed and brightened when selected or hovered, like a
+/// real tile but unfilled so it reads as an action slot. Opens the dial editor.
+fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     let active = selected || resp.hovered();
     let painter = ui.painter();
@@ -302,18 +306,17 @@ fn add_add_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
         ),
         egui::StrokeKind::Inside,
     );
-    // Draw the "+" as two centered strokes rather than a glyph: a text "+" is
-    // positioned on the font's math axis (above the line-box centre), so
-    // `CENTER_CENTER` would render it visibly high.
-    let c = glyph.center();
-    let arm = 11.0; // half-length of each stroke
-    let plus = egui::Stroke::new(2.5, if active { ACCENT } else { MUTED });
-    painter.line_segment([egui::pos2(c.x - arm, c.y), egui::pos2(c.x + arm, c.y)], plus);
-    painter.line_segment([egui::pos2(c.x, c.y - arm), egui::pos2(c.x, c.y + arm)], plus);
+    painter.text(
+        glyph.center(),
+        egui::Align2::CENTER_CENTER,
+        "✏",
+        egui::FontId::proportional(24.0),
+        if active { ACCENT } else { MUTED },
+    );
     painter.text(
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
-        "Add",
+        "Edit",
         egui::FontId::proportional(12.0),
         if active { INK } else { MUTED },
     );

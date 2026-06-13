@@ -26,6 +26,9 @@ pub enum OskTarget<'a> {
     /// The start page's search field (see [`crate::overlay::home`]); Enter
     /// submits it as a navigation in the active tab.
     Home(&'a mut String),
+    /// The speed-dial editor's URL field (see [`crate::overlay::dial_edit`]);
+    /// Enter pins it to the dial rather than navigating.
+    DialEdit(&'a mut String),
     Page,
 }
 
@@ -364,7 +367,9 @@ impl Osk {
     fn backspace(&self, target: OskTarget, browser: &AppBrowser) {
         match target {
             OskTarget::AddressBar => _ = browser.get_state_mut().get_location_mut().pop(),
-            OskTarget::Prompt(buf) | OskTarget::Home(buf) => _ = buf.pop(),
+            OskTarget::Prompt(buf) | OskTarget::Home(buf) | OskTarget::DialEdit(buf) => {
+                _ = buf.pop()
+            }
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
     }
@@ -383,6 +388,13 @@ impl Osk {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
                 }
             }
+            // The editor's field pins to the speed dial instead of navigating.
+            OskTarget::DialEdit(buf) => {
+                let text = buf.trim();
+                if !text.is_empty() {
+                    commands.push(AppCommand::Menu(MenuAction::DialAdd(text.to_string())));
+                }
+            }
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
         }
         self.visible = false;
@@ -392,7 +404,7 @@ impl Osk {
 fn input_char(target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
     match target {
         OskTarget::AddressBar => browser.get_state_mut().get_location_mut().push(c),
-        OskTarget::Prompt(buf) | OskTarget::Home(buf) => buf.push(c),
+        OskTarget::Prompt(buf) | OskTarget::Home(buf) | OskTarget::DialEdit(buf) => buf.push(c),
         OskTarget::Page => {
             browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
                 c, shift, true,
