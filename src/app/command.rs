@@ -48,6 +48,9 @@ pub enum SettingsAction {
     Activate,
     /// Step the focused field by a direction (◀ = -1, ▶ = +1).
     Adjust(i32),
+    /// Follow a link on the read-only About tab: save & close the overlay, then
+    /// navigate the focused tab to `url` (clicking a link row).
+    OpenLink(String),
 }
 
 /// Actions on the modal page-prompt overlay. The gamepad and keyboard push
@@ -97,6 +100,9 @@ pub enum MenuAction {
     DialAdd(String),
     /// Remove the pin at `index` in the speed-dial editor (clicking its ✖).
     DialRemoveAt(usize),
+    /// Toggle the ⚙ settings shortcut on/off the dial (the editor's "Pin
+    /// settings" button); keeps the editor open.
+    DialToggleSettings,
     /// Remove the entry at `index` in the active section (clicking its ✖).
     RemoveAt(usize),
     /// Switch to the tab at `index` and close the menu (clicking a tab row).

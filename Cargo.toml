@@ -3,6 +3,7 @@ name = "retsurf"
 version = "0.1.0"
 edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
+license = "GPL-3.0"
 
 [features]
 default = ["webgl"]

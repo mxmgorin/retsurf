@@ -557,20 +557,60 @@ impl AppUi {
     /// Move the editor's selection by one dominant-axis step.
     #[inline]
     pub fn dial_edit_move(&mut self, dx: i32, dy: i32) {
-        let count = self.menu.dial.urls().len();
-        self.dial_edit.move_sel(dx, dy, count);
+        self.dial_edit.move_sel(dx, dy, self.dial_edit_slots());
     }
 
-    /// The editor's focused pin index, if a tile (not the field / Add) is focused.
+    /// The editor's focused pin index, if a tile (not the field) is focused.
     #[inline]
     pub fn dial_edit_tile(&self) -> Option<usize> {
         self.dial_edit.tile()
     }
 
-    /// Remove the pin at `index` from the speed dial (editor ✖ / X).
+    /// Dial indices of the editor's regular (non-settings) pin tiles, in order.
+    /// The editor hides the ⚙ settings sentinel from the normal pins and shows
+    /// it as a dedicated trailing toggle tile, so its grid slots are these pins
+    /// followed by that one tile.
+    fn dial_edit_pin_indices(&self) -> Vec<usize> {
+        self.menu
+            .dial
+            .urls()
+            .iter()
+            .enumerate()
+            .filter(|(_, u)| u.as_str() != crate::data::dial::SETTINGS_PIN)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Number of editor grid slots: the regular pins plus the always-present ⚙
+    /// settings toggle tile at the end.
+    #[inline]
+    fn dial_edit_slots(&self) -> usize {
+        self.dial_edit_pin_indices().len() + 1
+    }
+
+    /// Whether the focused grid tile is the trailing ⚙ settings toggle (its slot
+    /// is the one past the regular pins) — drives the **A** action in the editor.
+    pub fn dial_edit_settings_selected(&self) -> bool {
+        self.dial_edit.tile() == Some(self.dial_edit_pin_indices().len())
+    }
+
+    /// Remove the pin at `index` from the speed dial (editor ✖ click, which
+    /// carries the real dial index).
     #[inline]
     pub fn dial_remove_at(&mut self, index: usize) {
         self.menu.dial.remove(index);
+    }
+
+    /// Delete the editor's focused tile (gamepad/keyboard X): a regular pin is
+    /// removed by its mapped dial index; the ⚙ settings toggle tile is left
+    /// alone (it pins/unpins with A, not delete).
+    pub fn dial_edit_remove_selected(&mut self) {
+        if let Some(slot) = self.dial_edit.tile() {
+            let indices = self.dial_edit_pin_indices();
+            if let Some(&dial_index) = indices.get(slot) {
+                self.menu.dial.remove(dial_index);
+            }
+        }
     }
 
     /// Whether a start-page tile (not the search field) is focused.
@@ -745,7 +785,10 @@ impl AppUi {
                 self.home.clamp(pin_count + 1);
             }
             if self.dial_edit.visible() {
-                self.dial_edit.clamp(pin_count);
+                // The editor's grid is its non-settings pins plus the trailing
+                // ⚙ toggle tile, so a selection up to that tile stays valid.
+                let slots = self.dial_edit_slots();
+                self.dial_edit.clamp(slots);
             }
             self.menu.dial.urls().to_vec()
         } else {

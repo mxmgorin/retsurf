@@ -5,13 +5,14 @@
 //! dial itself lives in the menu's store, the central router drives the actions,
 //! and [`crate::ui::dial_edit`] renders it.
 
-/// The focused item in the editor: a pin tile (deletable), the URL field, or
-/// the Add button below it.
+/// The focused item in the editor: a grid tile or the URL field. The grid's
+/// trailing tile is the always-present ⚙ settings toggle (like the start page's
+/// trailing Edit tile), so it's just the last `Tile` index — see
+/// [`crate::ui::AppUi::dial_edit_settings_selected`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum EditItem {
     Tile(usize),
     Field,
-    Add,
 }
 
 pub struct DialEdit {
@@ -93,7 +94,7 @@ impl DialEdit {
     }
 
     /// Move the selection by a dominant-axis step across the `count`-tile grid
-    /// (on top), the URL field, and the Add button (stacked below it).
+    /// (its last tile is the ⚙ settings toggle) and the URL field below it.
     pub fn move_sel(&mut self, dx: i32, dy: i32, count: usize) {
         let cols = self.cols.max(1);
         match self.item {
@@ -117,19 +118,11 @@ impl DialEdit {
                     self.item = EditItem::Tile(i + 1);
                 }
             }
+            // The field sits below the grid (which always has at least the ⚙
+            // settings tile): ▲ goes up into it, nothing lives below.
             EditItem::Field => {
-                if dy < 0 {
-                    // Up into the grid: the last tile (none → stay).
-                    if count > 0 {
-                        self.item = EditItem::Tile(count - 1);
-                    }
-                } else if dy > 0 {
-                    self.item = EditItem::Add;
-                }
-            }
-            EditItem::Add => {
-                if dy < 0 {
-                    self.item = EditItem::Field;
+                if dy < 0 && count > 0 {
+                    self.item = EditItem::Tile(count - 1);
                 }
             }
         }

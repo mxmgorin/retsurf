@@ -8,6 +8,7 @@
 
 use super::theme::ACCENT;
 use crate::app::{AppCommand, MenuAction};
+use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
 use egui_sdl2::egui;
 
@@ -274,16 +275,23 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
         egui::StrokeKind::Inside,
     );
 
-    let label = brand_label(url);
-    let initial = label
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_default();
+    // The settings sentinel isn't a real address: show a ⚙ glyph and "Settings"
+    // rather than the garbage `brand_label` would derive from `retsurf:settings`.
+    let (glyph_text, name) = if url == SETTINGS_PIN {
+        ("⚙".to_string(), "Settings".to_string())
+    } else {
+        let label = brand_label(url);
+        let initial = label
+            .chars()
+            .next()
+            .map(|c| c.to_uppercase().to_string())
+            .unwrap_or_default();
+        (initial, label)
+    };
     painter.text(
         glyph.center(),
         egui::Align2::CENTER_CENTER,
-        initial,
+        glyph_text,
         egui::FontId::proportional(22.0),
         INK,
     );
@@ -292,7 +300,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
     painter.text(
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
-        truncate(&label, 12),
+        truncate(&name, 12),
         egui::FontId::proportional(12.0),
         if active { INK } else { MUTED },
     );

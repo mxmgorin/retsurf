@@ -195,7 +195,8 @@ impl Keyboard {
 
         // The speed-dial editor: arrows move the selection and Enter activates,
         // mirroring the start page. Its URL field, while it holds egui focus,
-        // keeps typing/caret to the editor; Down leaves it for Add, Enter pins.
+        // keeps typing/caret to the editor; Up/Down leave it (grid / Pin
+        // settings), Enter pins.
         if ui.focus() == Focus::DialEdit {
             if matches!(key.kc, Keycode::Escape) {
                 commands.push(AppCommand::Input(InputCommand::Cancel));
@@ -203,7 +204,8 @@ impl Keyboard {
             }
             if ui.dial_edit_field_editing() {
                 // Up/Down leave the single-line field for the grid above / the
-                // Add button below (left/right stay as caret movement in egui).
+                // Pin-settings button below (left/right stay as caret movement
+                // in egui). Enter pins the field's text.
                 if matches!(key.kc, Keycode::Up) {
                     commands.push(AppCommand::Input(InputCommand::Nav(0, -1)));
                     return;

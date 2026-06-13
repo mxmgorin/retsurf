@@ -233,6 +233,9 @@ impl App {
             MenuAction::DialClose => self.ui.close_pins_editor(),
             MenuAction::DialAdd(url) => self.dial_add(url),
             MenuAction::DialRemoveAt(index) => self.ui.dial_remove_at(*index),
+            MenuAction::DialToggleSettings => {
+                self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN)
+            }
             MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
@@ -351,6 +354,12 @@ impl App {
             SettingsAction::Select(index) => self.ui.settings_select(*index),
             SettingsAction::Activate => self.settings_confirm(out),
             SettingsAction::Adjust(dx) => self.ui.settings_adjust(*dx),
+            // A link on the About tab: save & close like a normal exit, then load
+            // it in the focused tab (open_url also tidies the menu, harmless here).
+            SettingsAction::OpenLink(url) => {
+                self.settings_close();
+                self.open_url(url.clone());
+            }
         }
     }
 
@@ -406,11 +415,13 @@ impl App {
                 self.ui.dial_edit_focus_field();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
-            EditItem::Add => {
-                let text = self.ui.dial_edit_input();
-                self.dial_add(&text);
+            // A on the trailing ⚙ tile toggles the settings shortcut on/off the
+            // dial; the regular pin tiles are edit-only (delete with X).
+            EditItem::Tile(_) => {
+                if self.ui.dial_edit_settings_selected() {
+                    self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN);
+                }
             }
-            EditItem::Tile(_) => {}
         }
     }
 
@@ -426,8 +437,15 @@ impl App {
         self.ui.dial_edit_clear_input();
     }
 
-    /// Load `url` in the focused tab and close the menu.
+    /// Load `url` in the focused tab and close the menu. The settings pin is a
+    /// sentinel, not a real address: it opens the settings overlay instead of
+    /// navigating (so a ⚙ speed-dial tile / menu row behaves like the toolbar's).
     fn open_url(&mut self, url: String) {
+        if url == crate::data::dial::SETTINGS_PIN {
+            self.ui.menu_close();
+            self.ui.settings_open(&self.config);
+            return;
+        }
         *self.browser.get_state_mut().get_location_mut() = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);

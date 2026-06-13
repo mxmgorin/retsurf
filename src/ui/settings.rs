@@ -60,6 +60,106 @@ fn step_button(
     )
 }
 
+/// One read-only `label : value` line on the About tab — label in white, value
+/// in the accent, pushed to the trailing edge so the values line up like the
+/// field rows do (but without the selectable button chrome).
+fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(label).color(egui::Color32::WHITE).size(ROW_FONT));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(value).color(ACCENT).size(ROW_FONT));
+        });
+    });
+}
+
+/// A clickable link row: `label` in white with the URL (scheme stripped) in the
+/// accent, underlined to read as a link. Clicking pushes [`SettingsAction::OpenLink`]
+/// — the app saves & closes the overlay and loads it in the focused tab. Works
+/// with the gamepad cursor as well as touch/mouse.
+fn link_row(ui: &mut egui::Ui, label: &str, url: &str, commands: &mut Vec<AppCommand>) {
+    let shown = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(label).color(egui::Color32::WHITE).size(ROW_FONT));
+        let link = egui::Button::new(
+            egui::RichText::new(shown).color(ACCENT).underline().size(ROW_FONT),
+        )
+        .frame(false);
+        if ui.add(link).clicked() {
+            commands.push(AppCommand::Settings(SettingsAction::OpenLink(url.to_string())));
+        }
+    });
+}
+
+/// Render the read-only About tab (pulls its facts from
+/// [`crate::overlay::settings::about_info`]): the build identity, a table of
+/// resolved component versions, the attribution block, and clickable links.
+fn add_about(
+    ui: &mut egui::Ui,
+    screen: egui::Rect,
+    dim: egui::Color32,
+    commands: &mut Vec<AppCommand>,
+) {
+    let info = crate::overlay::settings::about_info();
+    let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false; 2])
+        .max_height(max_h)
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = ROW_GAP;
+
+            ui.label(
+                egui::RichText::new(format!("retsurf {}", info.version))
+                    .color(egui::Color32::WHITE)
+                    .strong()
+                    .size(20.0),
+            );
+            ui.label(
+                egui::RichText::new("Modern web browser for retro handhelds")
+                    .color(dim)
+                    .size(13.0),
+            );
+            ui.add_space(10.0);
+
+            info_row(ui, "Build", info.git_hash);
+            info_row(ui, "Date", info.build_date);
+
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new("Components")
+                    .color(ACCENT)
+                    .strong()
+                    .size(13.0),
+            );
+            for (name, version) in info.components {
+                info_row(ui, name, version);
+            }
+
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new("Credits")
+                    .color(ACCENT)
+                    .strong()
+                    .size(13.0),
+            );
+            for line in info.credits {
+                ui.label(egui::RichText::new(*line).color(dim).size(13.0));
+            }
+
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new("Links")
+                    .color(ACCENT)
+                    .strong()
+                    .size(13.0),
+            );
+            for (label, url) in info.links {
+                link_row(ui, label, url, commands);
+            }
+        });
+}
+
 /// Draw the full-screen settings overlay: a dark panel with the section bar, the
 /// close ✖, a one-line control hint, and the active section's field list. See
 /// the module docs for the controls.
@@ -113,13 +213,20 @@ pub(super) fn add_settings(
                             }
                         }
                     });
-                    ui.label(
-                        egui::RichText::new(
-                            "L1/R1 section   ⏶⏷ move   ⏴⏵ adjust   A edit   B save & close      * needs restart",
-                        )
-                        .color(dim),
-                    );
+                    let hint = if settings.is_info_section() {
+                        "L1/R1 section   B close"
+                    } else {
+                        "L1/R1 section   ⏶⏷ move   ⏴⏵ adjust   A edit   B save & close      * needs restart"
+                    };
+                    ui.label(egui::RichText::new(hint).color(dim));
                     ui.add_space(8.0);
+
+                    // The About tab is read-only info, not a field list — render
+                    // it and stop (it has no FIELDS to iterate).
+                    if settings.is_info_section() {
+                        add_about(ui, screen, dim, commands);
+                        return;
+                    }
 
                     // The active section's rows. A sub-header (the field's `cat`)
                     // is shown only in sections that fold several config groups

@@ -23,16 +23,19 @@ pub enum SettingsSection {
     Gamepad,
     Privacy,
     Advanced,
+    /// Read-only "about this build" tab — no editable fields; see [`about_info`].
+    About,
 }
 
 impl SettingsSection {
     /// Left-to-right order of the section bar.
-    pub const ALL: [SettingsSection; 5] = [
+    pub const ALL: [SettingsSection; 6] = [
         SettingsSection::Browser,
         SettingsSection::Display,
         SettingsSection::Gamepad,
         SettingsSection::Privacy,
         SettingsSection::Advanced,
+        SettingsSection::About,
     ];
 
     pub fn label(self) -> &'static str {
@@ -42,6 +45,7 @@ impl SettingsSection {
             SettingsSection::Gamepad => "Gamepad",
             SettingsSection::Privacy => "Privacy",
             SettingsSection::Advanced => "Advanced",
+            SettingsSection::About => "About",
         }
     }
 
@@ -287,9 +291,17 @@ impl Settings {
             .collect()
     }
 
-    /// Whether the focused row holds free text (A opens the OSK on it).
+    /// Whether the active section is the read-only [`SettingsSection::About`]
+    /// page: it has no [`FIELDS`], so A / ◀▶ are no-ops on it (and `selected`
+    /// still points at some other section's row, which must not be touched).
+    pub fn is_info_section(&self) -> bool {
+        matches!(self.section, SettingsSection::About)
+    }
+
+    /// Whether the focused row holds free text (A opens the OSK on it). Always
+    /// false on the About tab — there's nothing to type into.
     pub fn selected_is_text(&self) -> bool {
-        matches!(FIELDS[self.selected].kind, Kind::Text)
+        !self.is_info_section() && matches!(FIELDS[self.selected].kind, Kind::Text)
     }
 
     /// Whether row `i` is numeric (the renderer shows ◀▶ step buttons for it).
@@ -314,6 +326,9 @@ impl Settings {
     /// Adjust the focused field by `dx` (◀ = -1, ▶ = +1): toggle a bool, cycle a
     /// choice, or step a number within its bounds. Text rows ignore it.
     pub fn adjust(&mut self, dx: i32) {
+        if self.is_info_section() {
+            return;
+        }
         let i = self.selected;
         let id = FIELDS[i].id;
         match &FIELDS[i].kind {
@@ -458,5 +473,48 @@ impl Settings {
         if id == FieldId::UserAgent {
             self.draft.browser.user_agent = v.to_string();
         }
+    }
+}
+
+/// The read-only facts shown on the [`SettingsSection::About`] tab. Everything is
+/// baked in at compile time by `build.rs` (see its docs): `version` is the crate
+/// version, `git_hash`/`build_date` pin the source, and `components` are the
+/// resolved versions of the headline dependencies. [`crate::ui::settings`] lays
+/// it out; `credits` is the attribution block rendered below the table.
+pub struct AboutInfo {
+    pub version: &'static str,
+    pub git_hash: &'static str,
+    pub build_date: &'static str,
+    /// `(display label, resolved version)`, in display order.
+    pub components: &'static [(&'static str, &'static str)],
+    /// Attribution / licensing lines, shown one per row under the table.
+    pub credits: &'static [&'static str],
+    /// Clickable `(label, url)` links shown below the credits; selecting one
+    /// saves & closes the overlay and loads the URL (see
+    /// [`crate::app::SettingsAction::OpenLink`]).
+    pub links: &'static [(&'static str, &'static str)],
+}
+
+/// Build the About tab's content from the `RETSURF_*` env vars `build.rs` emits.
+pub fn about_info() -> AboutInfo {
+    AboutInfo {
+        version: env!("CARGO_PKG_VERSION"),
+        git_hash: env!("RETSURF_GIT_HASH"),
+        build_date: env!("RETSURF_BUILD_DATE"),
+        components: &[
+            ("Servo engine", env!("RETSURF_VER_SERVO")),
+            ("egui", env!("RETSURF_VER_EGUI")),
+            ("surfman", env!("RETSURF_VER_SURFMAN")),
+            ("SDL2", env!("RETSURF_VER_SDL2")),
+        ],
+        credits: &[
+            "Web rendering by the Servo project, under MPL-2.0.",
+            "UI by egui; windowing & input by SDL2.",
+            "retsurf is licensed under GPL-3.0.",
+        ],
+        links: &[
+            ("Servo project", "https://servo.org"),
+            ("Source code", "https://github.com/mxmgorin/retsurf"),
+        ],
     }
 }

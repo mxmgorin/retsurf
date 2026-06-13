@@ -9,11 +9,20 @@
 use crate::config;
 use serde::{Deserialize, Serialize};
 
+/// A special speed-dial entry that opens the settings overlay instead of
+/// navigating to a URL. Stored in the dial like any pin, but recognized on
+/// activation (see [`crate::app`]) and drawn as a ⚙ tile (see
+/// [`crate::ui::home::paint_tile`]). Added / removed from the speed-dial
+/// editor's "Pin settings" button.
+pub const SETTINGS_PIN: &str = "retsurf:settings";
+
 /// Shipped on first run so the start page isn't empty before anything is pinned.
 const DEFAULTS: &[&str] = &[
-    "https://duckduckgo.com",
+    "https://google.com",
     "https://en.wikipedia.org",
     "https://github.com",
+    "https://reddit.com",
+    SETTINGS_PIN,
 ];
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).

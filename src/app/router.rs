@@ -98,10 +98,9 @@ impl App {
                     // X deletes the highlighted entry (closes a tab in the Tabs section).
                     self.delete_menu_selection();
                 } else if focus == Focus::DialEdit {
-                    // X deletes the focused pin tile (no-op on the field / Add).
-                    if let Some(i) = self.ui.dial_edit_tile() {
-                        self.ui.dial_remove_at(i);
-                    }
+                    // X deletes the focused pin tile (no-op on the field or the
+                    // trailing ⚙ settings toggle, which pins/unpins with A).
+                    self.ui.dial_edit_remove_selected();
                 } else if focus == Focus::Settings {
                     // X is unused in settings (rows edit with A and ◀▶).
                 } else {
