@@ -175,6 +175,7 @@ fn fetch_list(url: &str) -> Result<String, String> {
     ureq::get(url)
         .call()
         .map_err(|e| e.to_string())?
+        .into_body()
         .into_reader()
         .read_to_string(&mut text)
         .map_err(|e| e.to_string())?;

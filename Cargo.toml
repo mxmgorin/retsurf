@@ -47,7 +47,7 @@ http = "1"
 # Downloads are fetched by the embedder itself (Servo 0.2 has no download API).
 # ureq is blocking (one thread per download) and bundles webpki roots, so TLS
 # works on handhelds without a system CA store.
-ureq = { version = "2.12", default-features = false, features = ["tls"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 # Ad blocking: Brave's engine (EasyList syntax), driven from Servo's
 # load_web_resource hook. content-security-policy is already in Servo's tree —
 # we only need its Destination enum to classify intercepted requests.

@@ -62,12 +62,14 @@ fn run(url: String, path: String, shared: Arc<Shared>, sender: UserEventSender) 
 fn fetch(url: &str, part: &str, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
     let response = ureq::get(url).call().map_err(|e| e.to_string())?;
     if let Some(total) = response
-        .header("Content-Length")
+        .headers()
+        .get("Content-Length")
+        .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
     {
         shared.total.store(total, Ordering::Relaxed);
     }
-    let mut reader = response.into_reader();
+    let mut reader = response.into_body().into_reader();
     let mut file = std::fs::File::create(part).map_err(|e| e.to_string())?;
     let mut buf = [0u8; 64 * 1024];
     let mut received = 0u64;
