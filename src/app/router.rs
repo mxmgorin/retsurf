@@ -156,13 +156,16 @@ impl App {
             // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
             // In the menu it depends on the section — Bookmarks pins (or unpins)
             // the selected entry to the speed dial, while History and Tabs toggle
-            // a bookmark on the selected entry / tab. On the bare page it toggles
-            // link hints (collection is asynchronous — badges appear once the page
-            // reports its elements). The start page ignores it: pins are managed
-            // from the speed-dial editor, not unpinned by a stray Y on a tile.
+            // a bookmark on the selected entry / tab. With the keyboard open it
+            // types a space (its dedicated OSK shortcut — see [`crate::overlay::osk`]).
+            // On the bare page it toggles link hints (collection is asynchronous —
+            // badges appear once the page reports its elements). The start page
+            // ignores it: pins are managed from the speed-dial editor, not unpinned
+            // by a stray Y on a tile.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
-                Focus::Home | Focus::Osk | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
+                Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
+                Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
                 Focus::Hints => self.ui.hints_hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();

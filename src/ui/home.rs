@@ -31,6 +31,7 @@ pub(super) fn add_home(
     home: &mut Home,
     pins: &[String],
     webview_top: f32,
+    osk_caret: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -70,7 +71,7 @@ pub(super) fn add_home(
                         ui.add_space(top);
                         add_wordmark(ui);
                         ui.add_space(GAP_TOP);
-                        add_search(ui, home, field_w);
+                        add_search(ui, home, field_w, osk_caret);
                         ui.add_space(GAP_MID);
                         add_dial(ui, home, pins, field_w, cols, commands);
                     });
@@ -149,8 +150,14 @@ fn add_wordmark(ui: &mut egui::Ui) {
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
 /// handheld the OSK writes into the same buffer. Enter submits it (handled in
 /// the keyboard/router layer).
-fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32) {
+fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: bool) {
     let selected = home.search_focused();
+    let edit_id = egui::Id::new("home_search");
+    // While the OSK types here, keep egui's caret at the buffer end (it won't
+    // follow the external edit on its own); desktop editing is left untouched.
+    if osk_caret {
+        super::park_caret_end(ui.ctx(), edit_id, home.input().chars().count());
+    }
     let frame = egui::Frame::default()
         .fill(SURFACE)
         .inner_margin(egui::Margin::symmetric(12, 10))
@@ -162,7 +169,7 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32) {
     frame.show(ui, |ui| {
         ui.set_width(width);
         let edit = egui::TextEdit::singleline(home.input_mut())
-            .id(egui::Id::new("home_search"))
+            .id(edit_id)
             .hint_text("Search or enter address")
             .frame(egui::Frame::NONE)
             .background_color(egui::Color32::TRANSPARENT)

@@ -24,6 +24,7 @@ pub(super) fn add_dial_edit(
     ctx: &egui::Context,
     edit: &mut DialEdit,
     pins: &[String],
+    osk_caret: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -60,7 +61,7 @@ pub(super) fn add_dial_edit(
                         // pin on Enter (keyboard) / OSK Enter (gamepad).
                         add_grid(ui, edit, pins, field_w, cols, commands);
                         ui.add_space(24.0);
-                        add_field(ui, edit, field_w);
+                        add_field(ui, edit, field_w, osk_caret);
                     });
                     add_hint_bar(ui, screen);
                 });
@@ -207,8 +208,14 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
 /// The URL entry field: an egui text field (its `dial_edit_url` id keeps egui
 /// keyboard focus in sync with the selection); the OSK types into the same
 /// buffer on the handheld.
-fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32) {
+fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: bool) {
     let selected = edit.field_focused();
+    let edit_id = egui::Id::new("dial_edit_url");
+    // While the OSK types here, keep egui's caret at the buffer end (it won't
+    // follow the external edit on its own); desktop editing is left untouched.
+    if osk_caret {
+        super::park_caret_end(ui.ctx(), edit_id, edit.input().chars().count());
+    }
     let frame = egui::Frame::default()
         .fill(SURFACE)
         .inner_margin(egui::Margin::symmetric(12, 10))
@@ -220,7 +227,7 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32) {
     frame.show(ui, |ui| {
         ui.set_width(width);
         let edit_widget = egui::TextEdit::singleline(edit.input_mut())
-            .id(egui::Id::new("dial_edit_url"))
+            .id(edit_id)
             .hint_text("Type or paste a URL")
             .frame(egui::Frame::NONE)
             .background_color(egui::Color32::TRANSPARENT)

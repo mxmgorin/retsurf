@@ -72,6 +72,7 @@ fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn add_toolbar(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
@@ -83,6 +84,9 @@ pub(super) fn add_toolbar(
     active_downloads: usize,
     // Active tab's page zoom percent when off the config default (chip hidden at it).
     zoom_pct: Option<u16>,
+    // The OSK is typing into the address bar — park egui's caret at its end so it
+    // tracks the appended text (it won't follow the external edit on its own).
+    osk_caret: bool,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -185,6 +189,13 @@ pub(super) fn add_toolbar(
                             // most other reader-ish glyphs are tofu).
                             if ui.add(new_toolbar_button("🖹")).clicked() {
                                 commands.push(AppCommand::Browser(BrowserCommand::Reader));
+                            }
+                            if osk_caret {
+                                super::park_caret_end(
+                                    ui.ctx(),
+                                    egui::Id::new("location"),
+                                    state.get_location().chars().count(),
+                                );
                             }
                             let location = ui.add_sized(
                                 ui.available_size(),

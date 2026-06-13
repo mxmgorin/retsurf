@@ -31,6 +31,33 @@ use egui_sdl2::egui;
 use egui_sdl2::EguiGlow;
 use std::time::{Duration, Instant};
 
+/// The text field the OSK currently types into, so its renderer can park egui's
+/// caret at the buffer end. The OSK only appends / backspaces, but egui keeps its
+/// own caret keyed by widget id and won't follow an external edit — left alone it
+/// sticks at the start and typed text scrolls out of view. `None` when the OSK is
+/// hidden or types somewhere without an egui caret (the page, or a settings row,
+/// whose value is painted text not a `TextEdit`).
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub(super) enum OskField {
+    None,
+    AddressBar,
+    DialEdit,
+    Prompt,
+    Home,
+}
+
+/// Park egui's caret at the end of an externally-edited single-line `TextEdit`
+/// (see [`OskField`]). Call it *before* the field renders so the caret lands
+/// this frame; egui reloads the state we store here when it draws.
+pub(super) fn park_caret_end(ctx: &egui::Context, id: egui::Id, char_count: usize) {
+    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    let end = egui::text::CCursor::new(char_count);
+    state
+        .cursor
+        .set_char_range(Some(egui::text::CCursorRange::one(end)));
+    egui::TextEdit::store_state(ctx, id, state);
+}
+
 /// Gamepad cursor overlay: circle radius and outline width (logical px).
 const CURSOR_RADIUS: f32 = 5.0;
 const CURSOR_STROKE: f32 = 1.5;
@@ -698,6 +725,26 @@ impl AppUi {
             .memory(|m| m.has_focus(egui::Id::new("location")))
     }
 
+    /// Which egui text field the OSK is currently typing into — mirrors the
+    /// target priority in [`AppUi::osk`], collapsing the no-egui-caret cases
+    /// (Page, settings rows) to `None`. Used to park that field's caret at the
+    /// buffer end while the OSK is up (see [`OskField`]).
+    fn osk_target_field(&self) -> OskField {
+        if !self.osk.visible {
+            OskField::None
+        } else if self.prompt.visible() && self.prompt.has_text_field() {
+            OskField::Prompt
+        } else if self.dial_edit.visible() {
+            OskField::DialEdit
+        } else if self.home_active {
+            OskField::Home
+        } else if self.address_bar_focused() {
+            OskField::AddressBar
+        } else {
+            OskField::None
+        }
+    }
+
     /// Whether the start page's search field holds egui keyboard focus (a desktop
     /// click into it). While it does, arrow keys edit text rather than moving the
     /// start-page selection, and plain-key shortcuts are muted.
@@ -797,6 +844,10 @@ impl AppUi {
 
         {
             let mut state = browser.get_state_mut();
+            // Which field (if any) the OSK types into — computed here, before the
+            // closure borrows `self.egui` via `run`, since the lookup borrows all
+            // of `self` (the closure itself only captures disjoint fields).
+            let osk_field = self.osk_target_field();
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -816,6 +867,7 @@ impl AppUi {
                     tab_pos,
                     active_downloads,
                     zoom_pct,
+                    osk_field == OskField::AddressBar,
                 );
 
                 let frame = egui::Frame::default().inner_margin(0.0);
@@ -846,13 +898,22 @@ impl AppUi {
                 // reached from the start page) fully covers it, so skip the start
                 // page underneath while the editor is up.
                 if self.home_active && !self.dial_edit.visible() {
-                    home::add_home(ctx, &mut self.home, &pins, self.webview_top, commands);
+                    let home_caret = osk_field == OskField::Home;
+                    home::add_home(
+                        ctx,
+                        &mut self.home,
+                        &pins,
+                        self.webview_top,
+                        home_caret,
+                        commands,
+                    );
                 }
 
                 // The speed-dial editor: a full-screen overlay above the start
                 // page; the OSK (below) can still open on top to type a URL.
                 if self.dial_edit.visible() {
-                    dial_edit::add_dial_edit(ctx, &mut self.dial_edit, &pins, commands);
+                    let dial_caret = osk_field == OskField::DialEdit;
+                    dial_edit::add_dial_edit(ctx, &mut self.dial_edit, &pins, dial_caret, commands);
                 }
 
                 // The settings overlay: a full-screen panel like the menu. Drawn
@@ -866,7 +927,8 @@ impl AppUi {
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
-                    prompt::add_prompt(ctx, &mut self.prompt, commands);
+                    let prompt_caret = osk_field == OskField::Prompt;
+                    prompt::add_prompt(ctx, &mut self.prompt, prompt_caret, commands);
                 }
 
                 if self.menu.visible {

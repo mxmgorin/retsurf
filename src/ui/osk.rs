@@ -5,6 +5,20 @@ use super::theme::ACCENT;
 use crate::overlay::osk::{Key, Osk};
 use egui_sdl2::egui;
 
+/// The gamepad button that directly triggers a key, shown as a corner badge so
+/// the shortcuts are discoverable. Mirrors the bindings in [`crate::overlay::osk`]
+/// (and the router); keys without a dedicated button use D-pad + **A**.
+fn button_hint(key: &Key) -> Option<&'static str> {
+    match key {
+        Key::Backspace => Some("X"),
+        Key::Space => Some("Y"),
+        Key::Shift => Some("L2"),
+        Key::Enter => Some("R2"),
+        Key::Hide => Some("B"),
+        _ => None,
+    }
+}
+
 /// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
 /// to the bottom, with the selected key (and active Shift/Caps) highlighted.
 pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
@@ -12,6 +26,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
     let shift = osk.shift();
     let highlight = ACCENT;
     let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
+    let hint = egui::Color32::from_gray(150);
     // Char keys are 36 wide with 4px gaps, so the 14-key top rows span 574px
     // (≈598 with the frame margin, inside the 640px window). Enter and Shift are
     // sized to make their (shorter) rows fill that same width.
@@ -63,9 +78,20 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
                                             egui::Align2::RIGHT_TOP,
                                             alt,
                                             egui::FontId::proportional(10.0),
-                                            egui::Color32::from_gray(150),
+                                            hint,
                                         );
                                     }
+                                }
+                                // The keys with a direct gamepad shortcut wear it
+                                // as a small badge in the top-left corner.
+                                if let Some(btn) = button_hint(key) {
+                                    ui.painter().text(
+                                        response.rect.left_top() + egui::vec2(4.0, 2.0),
+                                        egui::Align2::LEFT_TOP,
+                                        btn,
+                                        egui::FontId::proportional(10.0),
+                                        hint,
+                                    );
                                 }
                             }
                         });

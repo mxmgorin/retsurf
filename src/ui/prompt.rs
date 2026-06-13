@@ -14,7 +14,12 @@ const ROW_H: f32 = 26.0;
 /// Draw the front pending control as a modal: a dimmed backdrop and a centered
 /// panel. Gamepad/keyboard: ▲▼ move, A/Enter activate, B/Esc dismiss; the
 /// mouse clicks rows and buttons directly.
-pub(super) fn add_prompt(ctx: &egui::Context, prompt: &mut Prompt, commands: &mut Vec<AppCommand>) {
+pub(super) fn add_prompt(
+    ctx: &egui::Context,
+    prompt: &mut Prompt,
+    osk_caret: bool,
+    commands: &mut Vec<AppCommand>,
+) {
     let screen = ctx.content_rect();
     // Dim what's behind so the modal reads as blocking.
     ctx.layer_painter(egui::LayerId::new(
@@ -52,7 +57,8 @@ pub(super) fn add_prompt(ctx: &egui::Context, prompt: &mut Prompt, commands: &mu
                     ui.set_max_width((screen.width() - 64.0).min(480.0));
                     if let Some((message, has_input, has_cancel)) = dialog {
                         add_dialog(
-                            ui, screen, prompt, &message, has_input, has_cancel, commands,
+                            ui, screen, prompt, &message, has_input, has_cancel, osk_caret,
+                            commands,
                         );
                     } else if let Some(EmbedderControl::SelectElement(select)) = prompt.front() {
                         add_select(ui, screen, prompt, select, commands);
@@ -188,6 +194,7 @@ fn add_option_row(
 
 /// A simple dialog: the page's message (scrollable when long), the `prompt()`
 /// text field, and the OK / Cancel buttons (slots 0 / 1).
+#[allow(clippy::too_many_arguments)]
 fn add_dialog(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -195,6 +202,7 @@ fn add_dialog(
     message: &str,
     has_input: bool,
     has_cancel: bool,
+    osk_caret: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = egui::Color32::from_gray(0x99);
@@ -212,10 +220,17 @@ fn add_dialog(
     if has_input {
         // The gamepad types into this buffer through the on-screen keyboard
         // (X opens it); a physical keyboard can click and type directly.
+        let edit_id = egui::Id::new("prompt_input");
+        // While the OSK types here, keep egui's caret at the buffer end (it
+        // won't follow the external edit on its own); desktop editing is left
+        // untouched.
+        if osk_caret {
+            super::park_caret_end(ui.ctx(), edit_id, prompt.input_mut().chars().count());
+        }
         ui.add(
             egui::TextEdit::singleline(prompt.input_mut())
                 .desired_width(f32::INFINITY)
-                .id(egui::Id::new("prompt_input")),
+                .id(edit_id),
         );
         ui.add_space(8.0);
     }
