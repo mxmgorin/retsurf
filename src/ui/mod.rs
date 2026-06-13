@@ -4,6 +4,7 @@
 //! submodules: [`toolbar`], [`menu`] (the full-screen overlay), and [`osk`].
 
 mod hints;
+mod home;
 mod menu;
 mod osk;
 mod prompt;
@@ -15,6 +16,7 @@ use crate::{
     config::{DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
     event::user::UserEventSender,
     overlay::hints::{Hint, Hints},
+    overlay::home::Home,
     overlay::menu::{Menu, Section},
     overlay::osk::{Osk, OskCommand, OskTarget},
     overlay::prompt::Prompt,
@@ -48,6 +50,8 @@ pub enum Focus {
     Menu,
     /// Link-hint navigation.
     Hints,
+    /// The built-in start page overlay (active tab is on `retsurf:home`).
+    Home,
     /// No overlay: input goes to the page or the toolbar.
     Page,
 }
@@ -76,6 +80,11 @@ pub struct AppUi {
     osk: Osk,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
     menu: Menu,
+    /// The built-in start page overlay's selection / search-field state.
+    home: Home,
+    /// Whether the active tab is on the start page (mirrored each frame from
+    /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
+    home_active: bool,
     /// Link-hint navigation state (L3); the rects come from the browser.
     hints: Hints,
     /// Modal page prompts: queued `<select>` pickers and JS dialogs. Public —
@@ -116,6 +125,8 @@ impl AppUi {
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
+            home: Home::new(),
+            home_active: false,
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
@@ -214,6 +225,8 @@ impl AppUi {
             Focus::Menu
         } else if self.hints.visible {
             Focus::Hints
+        } else if self.home_active {
+            Focus::Home
         } else {
             Focus::Page
         }
@@ -226,6 +239,10 @@ impl AppUi {
         let to_address_bar = self.address_bar_focused();
         let target = if self.prompt.visible() && self.prompt.has_text_field() {
             OskTarget::Prompt(self.prompt.input_mut())
+        } else if self.home_active {
+            // On the start page, typed text goes to its own search field, not
+            // the address bar (which only ever shows `retsurf:home` there).
+            OskTarget::Home(self.home.input_mut())
         } else if to_address_bar {
             OskTarget::AddressBar
         } else {
@@ -339,6 +356,43 @@ impl AppUi {
         self.menu.toggle_bookmark(url);
     }
 
+    /// Mirror whether the active tab is on the start page (called each frame
+    /// from the main loop). Resets the overlay's state on entry so it always
+    /// opens focused on an empty search field.
+    #[inline]
+    pub fn set_home_active(&mut self, active: bool) {
+        if active && !self.home_active {
+            self.home.reset();
+        }
+        self.home_active = active;
+    }
+
+    /// Focus the start page's search field (when the OSK opens to type).
+    #[inline]
+    pub fn home_focus_search(&mut self) {
+        self.home.focus_search();
+    }
+
+    /// The start-page search field's current text (for submitting it from the
+    /// keyboard's Enter).
+    #[inline]
+    pub fn home_search_text(&self) -> String {
+        self.home.input().to_string()
+    }
+
+    /// Move the start-page selection by one dominant-axis step.
+    #[inline]
+    pub fn home_move(&mut self, dx: i32, dy: i32) {
+        let count = self.menu.bookmark_urls().len();
+        self.home.move_sel(dx, dy, count);
+    }
+
+    /// The focused tile's bookmark URL, if a tile (not the search field) is selected.
+    #[inline]
+    pub fn home_selected_url(&self) -> Option<String> {
+        self.home.tile().and_then(|i| self.menu.bookmark_urls().get(i).cloned())
+    }
+
     /// Whether link-hint navigation is currently shown.
     #[inline]
     pub fn hints_visible(&self) -> bool {
@@ -411,6 +465,15 @@ impl AppUi {
             .memory(|m| m.has_focus(egui::Id::new("location")))
     }
 
+    /// Whether the start page's search field holds egui keyboard focus (a desktop
+    /// click into it). While it does, arrow keys edit text rather than moving the
+    /// start-page selection, and plain-key shortcuts are muted.
+    pub fn home_field_editing(&self) -> bool {
+        self.egui
+            .ctx
+            .memory(|m| m.has_focus(egui::Id::new("home_search")))
+    }
+
     #[inline]
     pub fn into_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         (x, y - self.webview_top)
@@ -471,6 +534,15 @@ impl AppUi {
         } else {
             Vec::new()
         };
+        // Snapshot the bookmark list for the start-page speed dial (kept in
+        // sync with the menu's live store), and keep its selection in range.
+        let home_bookmarks = if self.home_active {
+            let count = self.menu.bookmark_urls().len();
+            self.home.clamp(count);
+            self.menu.bookmark_urls().to_vec()
+        } else {
+            Vec::new()
+        };
 
         {
             let mut state = browser.get_state_mut();
@@ -516,6 +588,13 @@ impl AppUi {
                         ui.painter()
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
+
+                // The start-page overlay is a backdrop over the (blank) web
+                // view — drawn below the foreground overlays (menu / OSK / etc.)
+                // so they can still open on top of it.
+                if self.home_active {
+                    home::add_home(ctx, &mut self.home, &home_bookmarks, self.webview_top, commands);
+                }
 
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).

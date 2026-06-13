@@ -19,6 +19,54 @@ fn new_text_edit<'a>(text: &'a mut String, id: &str) -> egui::TextEdit<'a> {
     egui::TextEdit::singleline(text).id(egui::Id::new(id))
 }
 
+/// A frameless toolbar button painting a house *silhouette* (egui's fonts have
+/// no monochrome house glyph). Solid shapes — a filled roof triangle and body
+/// with the door cut back out in the toolbar's background — read crisply at icon
+/// size, where thin outlines look broken. Brightens on hover; returns its click
+/// response.
+fn add_home_button(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 22.0, y: 20.0 }, egui::Sense::click());
+    let color = ui.style().interact(&resp).fg_stroke.color;
+    let bg = ui.style().visuals.window_fill;
+    let painter = ui.painter();
+
+    // Snap the center onto a half-pixel: every offset below is a half (±5.5
+    // body, ±1.5 door), so a half-pixel center lands all those edges on whole
+    // pixels — crisp and symmetric. (Rounding the center to a whole pixel did
+    // the opposite, feathering the door's narrow cut and reading as off-center.)
+    let c = rect.center().floor() + egui::vec2(0.5, 0.5);
+    let half = 5.5; // house half-width / half-height
+    let (left, right) = (c.x - half, c.x + half);
+    let (top, bottom) = (c.y - half, c.y + half);
+    let eaves = c.y - half * 0.30; // where the roof meets the walls
+
+    // The whole house as one filled polygon (apex → eaves → base), so the roof
+    // and body share no seam between them.
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            egui::pos2(c.x, top),
+            egui::pos2(right, eaves),
+            egui::pos2(right, bottom),
+            egui::pos2(left, bottom),
+            egui::pos2(left, eaves),
+        ],
+        color,
+        egui::Stroke::NONE,
+    ));
+    // Door: cut back out in the background color.
+    let dw = 3.0;
+    painter.rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(c.x - dw / 2.0, bottom - 4.0),
+            egui::pos2(c.x + dw / 2.0, bottom),
+        ),
+        0.0,
+        bg,
+    );
+    resp
+}
+
+
 #[inline]
 fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
     response.lost_focus() && ui.input(|i| i.key_pressed(key))
@@ -60,6 +108,13 @@ pub(super) fn add_toolbar(
                         if ui.add(new_toolbar_button("↻")).clicked() {
                             commands.push(AppCommand::Browser(BrowserCommand::Reload));
                         }
+                    }
+
+                    // Navigate the active tab to the built-in start page.
+                    if add_home_button(ui).clicked() {
+                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(
+                            crate::browser::HOME_URL.to_string(),
+                        )));
                     }
 
                     ui.add_space(2.0);

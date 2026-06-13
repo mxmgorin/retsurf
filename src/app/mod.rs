@@ -13,6 +13,7 @@ use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::overlay::menu::Section;
+use crate::overlay::osk::OskCommand;
 use crate::ui::AppUi;
 use crate::{config::AppConfig, platform::window::AppWindow};
 use sdl2::Sdl;
@@ -98,6 +99,11 @@ impl App {
             for url in self.browser.take_visited() {
                 self.ui.menu_record_history(&url);
             }
+
+            // Mirror whether the active tab is on the start page, so the UI's
+            // focus precedence and the input router both see `Focus::Home` this
+            // frame (set before input is handled in `wait`).
+            self.ui.set_home_active(self.browser.on_home_page());
 
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
@@ -280,6 +286,16 @@ impl App {
             }
         } else {
             self.ui.menu_remove_selected();
+        }
+    }
+
+    /// A on the start page: open the focused speed-dial tile in the active tab,
+    /// or — when the search field is focused — open the OSK to type into it.
+    fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
+        if let Some(url) = self.ui.home_selected_url() {
+            self.open_url(url);
+        } else {
+            self.ui.osk(OskCommand::Show, &self.browser, out);
         }
     }
 

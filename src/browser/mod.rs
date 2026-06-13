@@ -10,6 +10,7 @@ mod home;
 mod reader;
 mod url;
 
+pub use home::HOME_URL;
 pub use url::try_into_url;
 
 use crate::{
@@ -31,6 +32,8 @@ pub enum BrowserCommand {
     Foward,
     Reload,
     Load,
+    /// Navigate the active tab to the configured home page (`home_page`).
+    Home,
     /// Toggle reader mode on the active page (see [`reader`]).
     Reader,
     /// Step the active tab's page zoom along [`ZOOM_LADDER`] (+1 in, -1 out);
@@ -144,9 +147,6 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
-    /// `[browser] search_page`: the search-URL template (with `%s`) the built-in
-    /// start page's search box submits to (see [`home`]).
-    search_page: String,
 }
 
 impl AppBrowserInner {
@@ -157,7 +157,6 @@ impl AppBrowserInner {
         download_exts: Vec<String>,
         adblock: Adblock,
         default_zoom: f32,
-        search_page: String,
     ) -> Self {
         Self {
             tabs: RefCell::new(vec![]),
@@ -178,7 +177,6 @@ impl AppBrowserInner {
             embedder_controls: RefCell::new(vec![]),
             dismissed_controls: RefCell::new(vec![]),
             default_zoom,
-            search_page,
         }
     }
 
@@ -227,7 +225,6 @@ impl AppBrowser {
             download_exts,
             adblock,
             default_zoom,
-            config.search_page.clone(),
         );
 
         Ok(Self {
@@ -564,6 +561,16 @@ impl AppBrowser {
                 };
                 let webview = tab.webview.clone();
                 drop(tabs);
+                webview.load(url);
+            }
+            BrowserCommand::Home => {
+                let Some(webview) = self.inner.active_webview() else {
+                    return;
+                };
+                let Some(url) = try_into_url(&config.home_page, &config.search_page) else {
+                    log::warn!("failed to parse home_page `{}`", config.home_page);
+                    return;
+                };
                 webview.load(url);
             }
         }

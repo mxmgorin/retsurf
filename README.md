@@ -49,9 +49,9 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - Fully configurable: toggle it off, change the lists, or change the refresh interval
 
 **Start page**
-- A built-in start page at `retsurf:home` (the default `home_page`): a search box plus a grid of your saved bookmarks
-- Rendered locally and served to the engine — no network round-trip; the bookmarks grid reflects your current list every time
-- Point `home_page` at any URL instead if you'd rather open a real site
+- A built-in start page (the default `home_page`, `retsurf:home`): a search/URL field over a speed-dial grid of your saved bookmarks
+- Drawn natively with egui, so it's fully controller-navigable — D-pad/stick move the selection, A opens a tile or the keyboard to type, just like the other overlays
+- The grid reflects your current bookmarks every time; point `home_page` at any URL instead if you'd rather open a real site
 
 **Rendering**
 - Real web rendering via the **Servo** engine (WebRender)

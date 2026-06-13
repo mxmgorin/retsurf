@@ -9,7 +9,7 @@
 //! through them in that order. Each layout defines only the four character
 //! rows — the frame (Tab, Caps, Enter, Shift, Space, arrows) is fixed.
 
-use crate::app::{AppCommand, PromptAction};
+use crate::app::{AppCommand, MenuAction, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
@@ -23,6 +23,9 @@ use std::collections::HashMap;
 pub enum OskTarget<'a> {
     AddressBar,
     Prompt(&'a mut String),
+    /// The start page's search field (see [`crate::overlay::home`]); Enter
+    /// submits it as a navigation in the active tab.
+    Home(&'a mut String),
     Page,
 }
 
@@ -361,7 +364,7 @@ impl Osk {
     fn backspace(&self, target: OskTarget, browser: &AppBrowser) {
         match target {
             OskTarget::AddressBar => _ = browser.get_state_mut().get_location_mut().pop(),
-            OskTarget::Prompt(buf) => _ = buf.pop(),
+            OskTarget::Prompt(buf) | OskTarget::Home(buf) => _ = buf.pop(),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
     }
@@ -372,6 +375,14 @@ impl Osk {
         match target {
             OskTarget::AddressBar => commands.push(AppCommand::Browser(BrowserCommand::Load)),
             OskTarget::Prompt(_) => commands.push(AppCommand::Prompt(PromptAction::ClickSlot(0))),
+            // Submit the start-page search as a navigation in the active tab —
+            // the same path a tile uses; a non-URL falls back to a web search.
+            OskTarget::Home(buf) => {
+                let text = buf.trim();
+                if !text.is_empty() {
+                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
+                }
+            }
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
         }
         self.visible = false;
@@ -381,7 +392,7 @@ impl Osk {
 fn input_char(target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
     match target {
         OskTarget::AddressBar => browser.get_state_mut().get_location_mut().push(c),
-        OskTarget::Prompt(buf) => buf.push(c),
+        OskTarget::Prompt(buf) | OskTarget::Home(buf) => buf.push(c),
         OskTarget::Page => {
             browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
                 c, shift, true,

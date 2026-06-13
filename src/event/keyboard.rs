@@ -136,8 +136,47 @@ impl Keyboard {
             }
         }
 
+        // The start page: arrows move the selection and Enter activates — the
+        // same intents the gamepad routes. While its search field holds keyboard
+        // focus, typing/caret/Enter belong to the text editor; only Down leaves
+        // the field for the grid below.
+        if ui.focus() == Focus::Home {
+            if ui.home_field_editing() {
+                // In the field: Down leaves it for the grid; Enter submits its
+                // text as a navigation; everything else edits the text (egui).
+                if matches!(key.kc, Keycode::Down) {
+                    commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
+                    return;
+                }
+                if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+                    let text = ui.home_search_text();
+                    if !text.trim().is_empty() {
+                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(text)));
+                    }
+                    return;
+                }
+            } else {
+                let nav = match key.kc {
+                    Keycode::Up => Some((0, -1)),
+                    Keycode::Down => Some((0, 1)),
+                    Keycode::Left => Some((-1, 0)),
+                    Keycode::Right => Some((1, 0)),
+                    _ => None,
+                };
+                if let Some((dx, dy)) = nav {
+                    commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+                    return;
+                }
+                if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+                    commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+                    return;
+                }
+            }
+        }
+
         let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints);
-        let typing = browser.text_input_focused() || ui.address_bar_focused();
+        let typing =
+            browser.text_input_focused() || ui.address_bar_focused() || ui.home_field_editing();
         if let Some(action) = self.lookup(key, overlay, typing) {
             action.push_tap(commands);
             return;

@@ -88,6 +88,11 @@ impl Menu {
         &self.bookmarks
     }
 
+    /// The saved bookmark URLs (for the start page's speed dial).
+    pub fn bookmark_urls(&self) -> &[String] {
+        self.bookmarks.urls()
+    }
+
     pub fn history(&self) -> &History {
         &self.history
     }

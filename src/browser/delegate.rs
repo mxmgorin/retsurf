@@ -112,7 +112,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let block = !is_home && self.adblock.should_block(req);
 
         if is_home {
-            let html = super::home::render(&self.search_page).into_bytes();
+            let html = super::home::render().into_bytes();
             let mut headers = http::HeaderMap::new();
             headers.insert(
                 http::header::CONTENT_TYPE,

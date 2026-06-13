@@ -52,6 +52,8 @@ pub enum Action {
     Hints,
     /// Bookmark the current page.
     Bookmark,
+    /// Navigate the active tab to the configured home page.
+    Home,
     /// Toggle reader mode on the current page.
     Reader,
     /// Open / close the full-screen menu.
@@ -81,7 +83,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 21] = [
+    const ALL: [Action; 22] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -90,6 +92,7 @@ impl Action {
         Action::Next,
         Action::Hints,
         Action::Bookmark,
+        Action::Home,
         Action::Reader,
         Action::Menu,
         Action::TabNext,
@@ -127,6 +130,7 @@ impl Action {
             Action::Next => "next",
             Action::Hints => "hints",
             Action::Bookmark => "bookmark",
+            Action::Home => "home",
             Action::Reader => "reader",
             Action::Menu => "menu",
             Action::TabNext => "tab_next",
@@ -171,6 +175,7 @@ impl Action {
             Action::Next => AppCommand::Input(InputCommand::Shoulder(1)),
             Action::Hints => AppCommand::Input(InputCommand::Hints),
             Action::Bookmark => AppCommand::ToggleBookmark,
+            Action::Home => AppCommand::Browser(BrowserCommand::Home),
             Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
@@ -240,6 +245,9 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         ("hold:x", Action::Reader),
         ("hold:y", Action::Scroll),
         ("select", Action::Menu),
+        // Tap Select opens the menu; holding it jumps home (its tap defers to
+        // release, like the shoulders' — opening the menu on release is fine).
+        ("hold:select", Action::Home),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -253,6 +261,7 @@ fn default_keyboard_bindings() -> BTreeMap<String, String> {
     [
         ("ctrl+r", Action::Reload),
         ("ctrl+b", Action::Bookmark),
+        ("ctrl+h", Action::Home),
         ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
         ("ctrl+left", Action::Prev),

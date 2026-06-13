@@ -5,6 +5,7 @@
 //! central router ([`crate::app`]) decides which overlay owns the input.
 
 pub mod hints;
+pub mod home;
 pub mod menu;
 pub mod osk;
 pub mod prompt;
