@@ -287,6 +287,7 @@ impl DownloadsConfig {
 /// The user's download folder per xdg-user-dirs (`XDG_DOWNLOAD_DIR` in
 /// `user-dirs.dirs`), falling back to `~/Downloads`. `None` when it doesn't
 /// exist — handhelds typically have neither, desktops behave like a browser.
+#[cfg(not(target_os = "android"))]
 fn system_download_dir() -> Option<String> {
     let home = std::env::var("HOME").ok().filter(|h| !h.is_empty())?;
     let config_home = std::env::var("XDG_CONFIG_HOME")
@@ -307,6 +308,25 @@ fn system_download_dir() -> Option<String> {
     std::path::Path::new(&dir)
         .is_dir()
         .then(|| format!("{}/", dir.trim_end_matches('/')))
+}
+
+/// Android has no XDG/`$HOME`; scoped storage means the writable, no-permission
+/// location is the app-specific external dir. `RetsurfActivity` passes it (from
+/// `getExternalFilesDir(DIRECTORY_DOWNLOADS)`) via `RETSURF_DOWNLOAD_DIR` — using
+/// the Java API avoids `SDL_AndroidGetExternalStoragePath`, which isn't in
+/// sdl2-sys's pregenerated bindings. `None` falls back to `downloads/` in the
+/// internal data dir. (Files here are uninstall-scoped and not in the system
+/// Downloads app; MediaStore/SAF visibility is a future enhancement.)
+#[cfg(target_os = "android")]
+fn system_download_dir() -> Option<String> {
+    let dir = std::env::var("RETSURF_DOWNLOAD_DIR")
+        .ok()
+        .filter(|d| !d.is_empty())?;
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::warn!("could not create RETSURF_DOWNLOAD_DIR `{dir}`: {e}");
+        return None;
+    }
+    Some(format!("{}/", dir.trim_end_matches('/')))
 }
 
 /// On-screen-keyboard settings (`[osk]` in the config): which of the built-in

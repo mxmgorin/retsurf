@@ -5,6 +5,14 @@ edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
 license = "GPL-3.0"
 
+# `cdylib` is what SDL's Android shell loads at runtime as `libretsurf.so` (listed
+# in RetsurfActivity.getLibraries()); `lib` keeps the crate linkable by the desktop
+# `src/main.rs` binary and integration tests. Desktop builds are unaffected — the
+# cdylib is just an extra artifact.
+[lib]
+name = "retsurf"
+crate-type = ["lib", "cdylib"]
+
 [features]
 default = ["webgl"]
 # WebGL/WebGPU via a surfman connection. Disabled (`--no-default-features`) for the
@@ -56,6 +64,13 @@ content-security-policy = "0.8"
 keyboard-types = "0.8.1"
 egui-sdl2 = { version = "0.3.1", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
+
+# Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the
+# C ABI int/char types from libc); logs go to logcat via android_logger since
+# there is no stderr to mirror to a file.
+[target.'cfg(target_os = "android")'.dependencies]
+libc = "0.2"
+android_logger = "0.14"
 
 # Vendored servo-paint with the surfman connection made optional, so Servo runs
 # on EGL 1.4 devices (Mali) where surfman can't create a connection. See

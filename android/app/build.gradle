@@ -1,0 +1,53 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.retsurf'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.retsurf"
+        minSdk 29              // Android 10: reliable JIT exec mappings + GLES 3.x
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+        // We ship a single 64-bit ABI. The Rust cdylib + libSDL2.so + libc++_shared.so
+        // are built/placed under src/main/jniLibs/arm64-v8a by cargo-ndk and the
+        // SDL-bundling step (see docs/ANDROID_PORT.md); there is NO Gradle-driven
+        // native build here.
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    // CI generates a debug keystore and assembles release signed with it (the
+    // artifact is for sideloading/handhelds, not Play). Replace with a real
+    // upload key for store distribution. See docs/ANDROID_PORT.md.
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("RETSURF_KEYSTORE") ?: "debug.keystore")
+            storePassword System.getenv("RETSURF_KEYSTORE_PASS") ?: "android"
+            keyAlias System.getenv("RETSURF_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword System.getenv("RETSURF_KEY_PASS") ?: "android"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// No app dependencies: the SDL Java glue is compiled from src/main/java/org/libsdl/app.
+dependencies {}
