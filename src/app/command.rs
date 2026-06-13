@@ -7,6 +7,7 @@
 use crate::browser::BrowserCommand;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
+use crate::overlay::settings::SettingsSection;
 
 #[derive(Clone)]
 pub enum AppCommand {
@@ -23,6 +24,30 @@ pub enum AppCommand {
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
+    /// An action on the settings overlay (see [`crate::overlay::settings`]).
+    Settings(SettingsAction),
+}
+
+/// Actions on the settings overlay. The mouse pushes `Select` then `Activate` /
+/// `Adjust`; the gamepad and keyboard push `Activate` / `Adjust` (from the
+/// router's contextual mapping) against the already-focused row.
+#[derive(Clone)]
+pub enum SettingsAction {
+    /// Open the overlay (the ⚙ toolbar button), seeding the draft from the live
+    /// config.
+    Open,
+    /// Save the draft to disk, re-apply what can change live, and close (B / ✖).
+    Close,
+    /// Jump to a section (clicking its tab in the bar). Relative section
+    /// switching (L1/R1) comes through [`InputCommand::Shoulder`] instead.
+    SetSection(SettingsSection),
+    /// Focus row `index` (clicking it).
+    Select(usize),
+    /// Act on the focused row: toggle a bool, cycle a choice, step a number, or
+    /// open the on-screen keyboard on a text row (A / Enter / clicking a row).
+    Activate,
+    /// Step the focused field by a direction (◀ = -1, ▶ = +1).
+    Adjust(i32),
 }
 
 /// Actions on the modal page-prompt overlay. The gamepad and keyboard push

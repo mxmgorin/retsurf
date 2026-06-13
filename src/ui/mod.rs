@@ -9,13 +9,14 @@ mod home;
 mod menu;
 mod osk;
 mod prompt;
+mod settings;
 mod theme;
 mod toolbar;
 
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::{DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
+    config::{AppConfig, DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, Hints},
@@ -23,6 +24,7 @@ use crate::{
     overlay::menu::{Menu, Section},
     overlay::osk::{Osk, OskCommand, OskTarget},
     overlay::prompt::Prompt,
+    overlay::settings::{Settings, SettingsSection},
     platform::window::AppWindow,
 };
 use egui_sdl2::egui;
@@ -51,6 +53,9 @@ pub enum Focus {
     Prompt,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
     Menu,
+    /// The full-screen settings overlay (the on-screen keyboard can open over it
+    /// to type into a text field, hence it ranks below `Osk`).
+    Settings,
     /// Link-hint navigation.
     Hints,
     /// The standalone speed-dial editor (opened from the start page).
@@ -85,6 +90,8 @@ pub struct AppUi {
     osk: Osk,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
     menu: Menu,
+    /// The full-screen settings overlay (edits a draft of the config).
+    settings: Settings,
     /// The built-in start page overlay's selection / search-field state.
     home: Home,
     /// The standalone speed-dial editor overlay (opened from the start page).
@@ -135,6 +142,7 @@ impl AppUi {
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
+            settings: Settings::new(),
             home: Home::new(),
             dial_edit: DialEdit::new(),
             home_active: false,
@@ -234,6 +242,8 @@ impl AppUi {
             Focus::Prompt
         } else if self.menu.visible {
             Focus::Menu
+        } else if self.settings.visible() {
+            Focus::Settings
         } else if self.hints.visible {
             Focus::Hints
         } else if self.dial_edit.visible() {
@@ -252,6 +262,10 @@ impl AppUi {
         let to_address_bar = self.address_bar_focused();
         let target = if self.prompt.visible() && self.prompt.has_text_field() {
             OskTarget::Prompt(self.prompt.input_mut())
+        } else if self.settings.visible() && self.settings.selected_is_text() {
+            // The settings overlay's focused text row: typing lands in the draft
+            // (the OSK only opens over a text row — see `App::settings_confirm`).
+            OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
         } else if self.dial_edit.visible() {
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             OskTarget::DialEdit(self.dial_edit.input_mut())
@@ -285,6 +299,76 @@ impl AppUi {
     #[inline]
     pub fn menu_close(&mut self) {
         self.menu.close();
+    }
+
+    /// Whether the settings overlay is shown.
+    #[inline]
+    pub fn settings_visible(&self) -> bool {
+        self.settings.visible()
+    }
+
+    /// Open the settings overlay, seeding its draft from the live config. Like
+    /// the menu it takes over the stick and A, so the other user overlays close.
+    #[inline]
+    pub fn settings_open(&mut self, config: &AppConfig) {
+        self.osk.visible = false;
+        self.hints.hide();
+        self.menu.close();
+        self.settings.open(config);
+    }
+
+    /// Close the settings overlay, handing back its edited draft so the app can
+    /// save it and re-apply what changes live.
+    #[inline]
+    pub fn settings_close(&mut self) -> AppConfig {
+        let draft = self.settings.draft();
+        self.settings.close();
+        draft
+    }
+
+    /// Focus settings row `index` (clicking it).
+    #[inline]
+    pub fn settings_select(&mut self, index: usize) {
+        self.settings.set_selected(index);
+    }
+
+    /// Switch the active settings section by `delta` (L1/R1 / Tab / Ctrl+◀▶).
+    #[inline]
+    pub fn settings_switch(&mut self, delta: i32) {
+        self.settings.switch_section(delta);
+    }
+
+    /// Jump to a settings section (clicking its tab).
+    #[inline]
+    pub fn settings_set_section(&mut self, section: SettingsSection) {
+        self.settings.set_section(section);
+    }
+
+    /// Move the settings selection by `dy` rows.
+    #[inline]
+    pub fn settings_move(&mut self, dy: i32) {
+        self.settings.move_sel(dy);
+    }
+
+    /// Step the focused settings field by `dx` (◀ -1 / ▶ +1): toggle / cycle /
+    /// nudge a number.
+    #[inline]
+    pub fn settings_adjust(&mut self, dx: i32) {
+        self.settings.adjust(dx);
+    }
+
+    /// Whether the focused settings row is a text field (A opens the OSK on it
+    /// rather than toggling/stepping).
+    #[inline]
+    pub fn settings_selected_is_text(&self) -> bool {
+        self.settings.selected_is_text()
+    }
+
+    /// Set how long the gamepad cursor lingers after a move (the app calls this
+    /// when the interface config changes live via the settings overlay).
+    #[inline]
+    pub fn set_cursor_linger(&mut self, ms: u64) {
+        self.cursor_linger = Duration::from_millis(ms);
     }
 
     /// Switch the active section by `delta` (◀▶).
@@ -726,6 +810,14 @@ impl AppUi {
                 // page; the OSK (below) can still open on top to type a URL.
                 if self.dial_edit.visible() {
                     dial_edit::add_dial_edit(ctx, &mut self.dial_edit, &pins, commands);
+                }
+
+                // The settings overlay: a full-screen panel like the menu. Drawn
+                // before the menu/OSK chain below so the OSK can open on top to
+                // type into a text field (focus is `Osk` then, painting it here
+                // would put it under the keyboard).
+                if self.settings.visible() {
+                    settings::add_settings(ctx, &self.settings, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its

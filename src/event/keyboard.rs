@@ -98,6 +98,16 @@ impl Keyboard {
             return;
         }
         match key.kc {
+            // Tab / Shift+Tab switch section (the Shoulder intent L1/R1 emit),
+            // mirroring the settings overlay; one section per press.
+            Keycode::Tab if !key.repeat => {
+                let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+                commands.push(AppCommand::Input(InputCommand::Shoulder(if shift {
+                    -1
+                } else {
+                    1
+                })));
+            }
             Keycode::Escape => commands.push(AppCommand::Menu(MenuAction::Close)),
             Keycode::Return | Keycode::KpEnter => {
                 commands.push(AppCommand::Menu(MenuAction::OpenSelected))
@@ -232,6 +242,47 @@ impl Keyboard {
                     commands.push(AppCommand::Input(InputCommand::ToggleOsk));
                     return;
                 }
+            }
+        }
+
+        // The settings overlay: plain arrows move the selection (▲▼) and adjust
+        // the focused value (◀▶); Tab / Shift+Tab switch section (the Shoulder
+        // intent L1/R1 emit); Enter activates (toggle / cycle / edit text); Esc
+        // saves and closes. Ctrl+◀▶ also switch section. No text field can hold
+        // egui focus here (typing goes through the OSK), so arrows are never caret
+        // moves.
+        if ui.focus() == Focus::Settings {
+            if matches!(key.kc, Keycode::Tab) {
+                if !key.repeat {
+                    let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+                    let delta = if shift { -1 } else { 1 };
+                    commands.push(AppCommand::Input(InputCommand::Shoulder(delta)));
+                }
+                return;
+            }
+            let ctrl = key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
+            let nav = if ctrl {
+                None
+            } else {
+                match key.kc {
+                    Keycode::Up => Some((0, -1)),
+                    Keycode::Down => Some((0, 1)),
+                    Keycode::Left => Some((-1, 0)),
+                    Keycode::Right => Some((1, 0)),
+                    _ => None,
+                }
+            };
+            if let Some((dx, dy)) = nav {
+                commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+                return;
+            }
+            if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+                commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+                return;
+            }
+            if matches!(key.kc, Keycode::Escape) {
+                commands.push(AppCommand::Input(InputCommand::Cancel));
+                return;
             }
         }
 

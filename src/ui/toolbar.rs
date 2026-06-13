@@ -1,7 +1,7 @@
 //! The top toolbar: navigation buttons, the address bar, bookmark toggle, and
 //! the chips that jump into menu sections (tab position, active downloads).
 
-use crate::app::{AppCommand, MenuAction};
+use crate::app::{AppCommand, MenuAction, SettingsAction};
 use crate::browser::{BrowserCommand, BrowserState};
 use crate::overlay::menu::Section;
 use egui_sdl2::egui::{self, Vec2};
@@ -94,19 +94,29 @@ pub(super) fn add_toolbar(
                 ui.available_size(),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
-                    if ui.add(new_toolbar_button("⏴")).clicked() {
+                    if ui.add(new_toolbar_button("←")).clicked() {
                         commands.push(AppCommand::Browser(BrowserCommand::Back));
                     }
-                    if ui.add(new_toolbar_button("⏵")).clicked() {
+                    if ui.add(new_toolbar_button("→")).clicked() {
                         commands.push(AppCommand::Browser(BrowserCommand::Foward));
                     }
 
-                    if state.is_loading() {
-                        ui.add(new_toolbar_button("X"));
-                    } else {
-                        if ui.add(new_toolbar_button("↻")).clicked() {
-                            commands.push(AppCommand::Browser(BrowserCommand::Reload));
-                        }
+                    // Reload, disabled (greyed, non-interactive) while loading —
+                    // servo's WebView exposes no stop()/cancel, so there's nothing
+                    // to click mid-load. Always the SAME Button widget: toggling
+                    // enabledness keeps egui's widget id stable for this slot, where
+                    // swapping to a different widget kind churned the id between
+                    // passes and tripped the red id-clash outline. Static on purpose
+                    // — an animated spinner would force continuous repaints, which we
+                    // avoid on handheld hardware.
+                    // ↻ rendered a touch below the 13.0 default so it reads lighter
+                    // than the arrows; the button keeps the 20×20 footprint so the
+                    // slot (and its widget id) is unchanged.
+                    let reload = egui::Button::new(egui::RichText::new("↻").size(11.0))
+                        .frame(false)
+                        .min_size(Vec2 { x: 20.0, y: 20.0 });
+                    if ui.add_enabled(!state.is_loading(), reload).clicked() {
+                        commands.push(AppCommand::Browser(BrowserCommand::Reload));
                     }
 
                     // Navigate the active tab to the built-in start page.
@@ -126,6 +136,11 @@ pub(super) fn add_toolbar(
                         |ui| {
                             if ui.add(new_toolbar_button("☰")).clicked() {
                                 commands.push(AppCommand::Menu(MenuAction::Open));
+                            }
+                            // ⚙ U+2699 (in egui's emoji-icon-font, like ☰) opens
+                            // the settings overlay.
+                            if ui.add(new_toolbar_button("⚙")).clicked() {
+                                commands.push(AppCommand::Settings(SettingsAction::Open));
                             }
                             // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
                             // plain arrow, only the emoji one renders.

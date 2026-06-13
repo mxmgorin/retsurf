@@ -41,6 +41,13 @@ impl AppEventHandler {
         })
     }
 
+    /// Push updated gamepad tunables (dead zone, trigger/hold thresholds) into
+    /// the controller state machine — used when the settings overlay changes them
+    /// live (see [`crate::app::App::apply_config`]).
+    pub fn set_gamepad_config(&mut self, cfg: GamepadConfig) {
+        self.gamepad.set_config(cfg);
+    }
+
     pub fn wait(
         &mut self,
         window: &AppWindow,

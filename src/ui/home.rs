@@ -1,7 +1,7 @@
 //! Rendering of the built-in start page overlay (state lives in
 //! [`crate::overlay::home`]): a wordmark, a search / URL field, a speed-dial grid
 //! of the pinned shortcuts ([`crate::data::dial`]), and a bottom control-hint
-//! bar. Gamepad/keyboard navigation (move the selection, activate, pin/unpin) is
+//! bar. Gamepad/keyboard navigation (move the selection, activate a tile) is
 //! routed by [`crate::app`]; the mouse can click the field or a tile directly.
 //! Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in the active tab)
 //! — the same path the menu's lists use.
@@ -54,11 +54,11 @@ pub(super) fn add_home(
                     // Vertically center the whole block (wordmark + field + grid),
                     // like the original page did, by padding the top by half the
                     // slack. Heights below are the laid-out sizes plus the gaps.
-                    const WORDMARK_H: f32 = 18.0;
+                    const WORDMARK_H: f32 = 34.0;
                     const FIELD_H: f32 = 44.0;
                     const GAP_TOP: f32 = 28.0; // wordmark → field
                     const GAP_MID: f32 = 36.0; // field → grid
-                    // One tile per pin plus the trailing "+ Add" tile.
+                                               // One tile per pin plus the trailing "+ Add" tile.
                     let tiles = pins.len() + 1;
                     let rows = tiles.div_ceil(cols);
                     let grid_h = rows as f32 * TILE_H + (rows.saturating_sub(1)) as f32 * GAP;
@@ -67,12 +67,7 @@ pub(super) fn add_home(
 
                     ui.vertical_centered(|ui| {
                         ui.add_space(top);
-                        ui.label(
-                            egui::RichText::new("RETSURF")
-                                .color(MUTED)
-                                .size(14.0)
-                                .strong(),
-                        );
+                        add_wordmark(ui);
                         ui.add_space(GAP_TOP);
                         add_search(ui, home, field_w);
                         ui.add_space(GAP_MID);
@@ -88,7 +83,7 @@ pub(super) fn add_home(
 /// stays pinned to the bottom regardless of how many tiles there are. Plain
 /// ASCII letters in pills sidestep egui's gappy gamepad-glyph coverage.
 fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
-    const HINTS: &[(&str, &str)] = &[("A", "Open"), ("Y", "Unpin"), ("☰", "Menu")];
+    const HINTS: &[(&str, &str)] = &[("A", "Open"), ("☰", "Menu")];
     const PILL_H: f32 = 18.0;
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
     const GAP_KL: f32 = 6.0; // key pill → its label
@@ -130,6 +125,24 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
         );
         x += seg_w + GAP_SEG;
     }
+}
+
+/// The brand wordmark: a large two-tone "RET·SURF" logotype — the "RET" in ink,
+/// "SURF" in the accent — so the start page reads as branded rather than blank.
+/// Built as one `LayoutJob` so both colors stay on a single centered line, with
+/// wide letter-spacing for a logo feel.
+fn add_wordmark(ui: &mut egui::Ui) {
+    const SIZE: f32 = 30.0;
+    let mut job = egui::text::LayoutJob::default();
+    let fmt = |color: egui::Color32| egui::TextFormat {
+        font_id: egui::FontId::proportional(SIZE),
+        color,
+        extra_letter_spacing: 3.0,
+        ..Default::default()
+    };
+    job.append("RET", 0.0, fmt(INK));
+    job.append("SURF", 0.0, fmt(ACCENT));
+    ui.label(job);
 }
 
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
@@ -186,7 +199,7 @@ fn add_dial(
     commands: &mut Vec<AppCommand>,
 ) {
     let tiles = pins.len() + 1; // + the trailing "Edit" tile
-    // Center the grid within the field width.
+                                // Center the grid within the field width.
     ui.allocate_ui_with_layout(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),

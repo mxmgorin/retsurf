@@ -10,3 +10,4 @@ pub mod home;
 pub mod menu;
 pub mod osk;
 pub mod prompt;
+pub mod settings;

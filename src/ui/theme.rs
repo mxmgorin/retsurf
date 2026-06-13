@@ -13,6 +13,17 @@ pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x3f, 0xb8, 0xa0);
 /// selected widgets (so white text stays readable over the dark panels) ringed
 /// by the solid accent, plus accent-colored links and text caret.
 pub fn apply(ctx: &egui::Context) {
+    // egui's default Proportional family is Ubuntu → NotoEmoji → emoji-icon and
+    // never consults Hack (the Monospace face). Some toolbar glyphs — the plain
+    // arrows ← → among them — live *only* in Hack, so without this they render as
+    // tofu. Append Hack as a last-resort fallback: Ubuntu is still tried first, so
+    // ordinary text is unchanged; Hack only fills glyphs the others lack.
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+        prop.push("Hack".to_owned());
+    }
+    ctx.set_fonts(fonts);
+
     let mut visuals = egui::Visuals::dark();
     // Selected `selectable` widgets and highlighted text: a low-alpha accent
     // wash tints the row without swamping the foreground text, ringed crisply.
@@ -34,8 +45,16 @@ pub const CLOSE_SIZE: f32 = 28.0;
 pub fn close_button(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
     let resp = ui.interact(rect, id, egui::Sense::click());
     let hot = resp.hovered();
-    let line = if hot { ACCENT } else { egui::Color32::from_gray(0x44) };
-    let ink = if hot { ACCENT } else { egui::Color32::from_gray(0xe0) };
+    let line = if hot {
+        ACCENT
+    } else {
+        egui::Color32::from_gray(0x44)
+    };
+    let ink = if hot {
+        ACCENT
+    } else {
+        egui::Color32::from_gray(0xe0)
+    };
     let painter = ui.painter();
     painter.rect_stroke(
         rect,

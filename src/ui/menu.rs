@@ -71,6 +71,19 @@ fn row_button(
     )
 }
 
+/// A section's vertical scroll area, capped to the room left down to the screen
+/// bottom. The menu panel's `Area` auto-sizes to its content, so an unbounded
+/// `ScrollArea` would just grow past the screen and clip instead of scrolling;
+/// the explicit `max_height` + `auto_shrink` off make it scroll (and show a bar).
+/// The caller pairs this with `scroll_to_me` on the selected row so the
+/// gamepad-driven selection stays in view (there's no cursor to drag the bar).
+fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollArea {
+    let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false; 2])
+        .max_height(max_h)
+}
+
 /// Draw the full-screen menu overlay: a dark panel with a top section bar
 /// (Tabs · Bookmarks · History · Downloads) over the active section's content,
 /// plus a one-line control hint. Gamepad/keyboard: ◀▶ switch section, ▲▼ move,
@@ -135,10 +148,8 @@ pub(super) fn add_menu(
                         // Width from `screen`, not `available_width()` (which runs
                         // past the visible edge); reserve the corner ✖'s footprint
                         // so the clear action sits to its left, not under it.
-                        let remaining = screen.width()
-                            - SIDES
-                            - ui.min_rect().width()
-                            - (CLOSE_SIZE + 8.0);
+                        let remaining =
+                            screen.width() - SIDES - ui.min_rect().width() - (CLOSE_SIZE + 8.0);
                         ui.allocate_ui_with_layout(
                             egui::vec2(remaining.max(1.0), 28.0),
                             egui::Layout::right_to_left(egui::Align::Center),
@@ -211,19 +222,21 @@ fn add_tabs_section(
     // Width left for the title before the trailing ★ and ✖ buttons (each DEL_W,
     // plus the spacing before each).
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // "+ New tab" action at the top (selection index 0): a plain full-width
         // row, same height/indent as the tab rows below, marked by the selectable
         // highlight when it's the cursor row (no fill of its own).
-        if row_button(
+        let new_tab = row_button(
             ui,
             screen.width() - SIDES,
             selected == 0,
             egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
-        )
-        .clicked()
-        {
+        );
+        if selected == 0 {
+            new_tab.scroll_to_me(Some(egui::Align::Center));
+        }
+        if new_tab.clicked() {
             commands.push(AppCommand::Menu(MenuAction::NewTab));
         }
 
@@ -238,7 +251,11 @@ fn add_tabs_section(
                 } else {
                     egui::RichText::new(&tab.title).color(egui::Color32::WHITE)
                 };
-                if row_button(ui, row_w, sel, text).clicked() {
+                let resp = row_button(ui, row_w, sel, text);
+                if sel {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
                 }
                 // Trailing actions: ★/☆ bookmark (disabled until the tab has a
@@ -246,7 +263,9 @@ fn add_tabs_section(
                 let can_bookmark = !tab.url.is_empty();
                 let marked = can_bookmark && menu.is_bookmarked(&tab.url);
                 if bookmark_button(ui, marked, dim).clicked() && can_bookmark {
-                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(tab.url.clone())));
+                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
+                        tab.url.clone(),
+                    )));
                 }
                 if delete_button(ui, sel, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
@@ -273,7 +292,7 @@ fn add_bookmarks_section(
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
     let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, url) in bookmarks.urls().iter().enumerate() {
             let selected = i == bookmarks.selected();
@@ -288,7 +307,11 @@ fn add_bookmarks_section(
             // uses the stick + A/X.
             ui.horizontal(|ui| {
                 let text = egui::RichText::new(label).color(egui::Color32::WHITE);
-                if row_button(ui, row_w, selected, text).clicked() {
+                let resp = row_button(ui, row_w, selected, text);
+                if selected {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
                 }
                 if delete_button(ui, selected, dim).clicked() {
@@ -319,19 +342,21 @@ fn add_downloads_section(
 
     let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, item) in downloads.items().iter().enumerate() {
             let selected = i == downloads.selected();
             ui.horizontal(|ui| {
-                if row_button(
+                let resp = row_button(
                     ui,
                     row_w,
                     selected,
                     egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
-                )
-                .clicked()
-                {
+                );
+                if selected {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if resp.clicked() {
                     if let Some(url) = downloads.open_url(i) {
                         commands.push(AppCommand::Menu(MenuAction::OpenUrl(url)));
                     }
@@ -364,28 +389,34 @@ fn add_history_section(
     }
 
     let date_w = 118.0; // fits "YYYY-MM-DD HH:MM"
-    // Width left for the URL after the leading ✖ and ★ buttons and the date.
+                        // Width left for the URL after the leading ✖ and ★ buttons and the date.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - date_w - 18.0;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // "Clear all" as the top row (cursor index 0, mirroring Tabs' "+ New
         // tab"): drops every entry, by mouse or A. Dim, to read as a secondary/
         // destructive action set apart from the URL rows.
-        if row_button(
+        let clear = row_button(
             ui,
             screen.width() - SIDES,
             hist.selected() == 0,
             egui::RichText::new("Clear all").color(dim),
-        )
-        .clicked()
-        {
+        );
+        if hist.selected() == 0 {
+            clear.scroll_to_me(Some(egui::Align::Center));
+        }
+        if clear.clicked() {
             commands.push(AppCommand::Menu(MenuAction::Clear));
         }
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
                 let text = egui::RichText::new(&entry.url).color(egui::Color32::WHITE);
-                if row_button(ui, row_w, selected, text).clicked() {
+                let resp = row_button(ui, row_w, selected, text);
+                if selected {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));
                 }
                 ui.add_sized(
@@ -398,8 +429,9 @@ fn add_history_section(
                 // Trailing actions: ★/☆ bookmark (same as Y), then ✖ delete.
                 let marked = menu.is_bookmarked(&entry.url);
                 if bookmark_button(ui, marked, dim).clicked() {
-                    commands
-                        .push(AppCommand::Menu(MenuAction::ToggleBookmark(entry.url.clone())));
+                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
+                        entry.url.clone(),
+                    )));
                 }
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));

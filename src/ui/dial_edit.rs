@@ -187,15 +187,12 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32) {
 
 /// The full-width "Add" button beneath the field: accent-filled when focused;
 /// pins the field's text on click.
-fn add_add_button(
-    ui: &mut egui::Ui,
-    edit: &DialEdit,
-    width: f32,
-    commands: &mut Vec<AppCommand>,
-) {
+fn add_add_button(ui: &mut egui::Ui, edit: &DialEdit, width: f32, commands: &mut Vec<AppCommand>) {
     let focused = edit.item() == EditItem::Add;
     let mut btn = egui::Button::new(
-        egui::RichText::new("Add").color(egui::Color32::WHITE).size(15.0),
+        egui::RichText::new("Add")
+            .color(egui::Color32::WHITE)
+            .size(15.0),
     )
     .corner_radius(8.0)
     .min_size(egui::vec2(width, FIELD_H - 8.0));
@@ -205,7 +202,9 @@ fn add_add_button(
             .stroke(egui::Stroke::new(1.0, ACCENT));
     }
     if ui.add(btn).clicked() {
-        commands.push(AppCommand::Menu(MenuAction::DialAdd(edit.input().to_string())));
+        commands.push(AppCommand::Menu(MenuAction::DialAdd(
+            edit.input().to_string(),
+        )));
     }
 }
 

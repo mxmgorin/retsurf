@@ -21,7 +21,7 @@
 //! plain keys (`"f"`, Vimium-style) are suppressed whenever a text input — on
 //! the page or the address bar — holds focus, so typing stays intact.
 
-use crate::app::{AppCommand, InputCommand, MenuAction};
+use crate::app::{AppCommand, InputCommand, MenuAction, SettingsAction};
 use crate::browser::BrowserCommand;
 use crate::config;
 use crate::overlay::osk::OskCommand;
@@ -58,6 +58,12 @@ pub enum Action {
     Reader,
     /// Open / close the full-screen menu.
     Menu,
+    /// Open the settings overlay (see [`crate::overlay::settings`]).
+    Settings,
+    /// Quit the app immediately. Not bound by default — the stock layout exits
+    /// via a second Select+Start while settings is open (see
+    /// [`default_gamepad_bindings`]) — but available to bind directly.
+    Quit,
     /// Switch to the next open tab (wraps around).
     TabNext,
     /// Switch to the previous open tab (wraps around).
@@ -83,7 +89,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 22] = [
+    const ALL: [Action; 24] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -95,6 +101,8 @@ impl Action {
         Action::Home,
         Action::Reader,
         Action::Menu,
+        Action::Settings,
+        Action::Quit,
         Action::TabNext,
         Action::TabPrev,
         Action::ZoomIn,
@@ -133,6 +141,8 @@ impl Action {
             Action::Home => "home",
             Action::Reader => "reader",
             Action::Menu => "menu",
+            Action::Settings => "settings",
+            Action::Quit => "quit",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
             Action::ZoomIn => "zoom_in",
@@ -178,6 +188,8 @@ impl Action {
             Action::Home => AppCommand::Browser(BrowserCommand::Home),
             Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
             Action::Menu => AppCommand::Menu(MenuAction::Open),
+            Action::Settings => AppCommand::Settings(SettingsAction::Open),
+            Action::Quit => AppCommand::Shutdown,
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::ZoomIn => AppCommand::Browser(BrowserCommand::Zoom(1)),
@@ -228,6 +240,10 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
     [
         ("a", Action::Confirm),
         ("b", Action::Cancel),
+        // Holding B jumps home; its tap (cancel/back) defers to release as a
+        // result — a small cost on a frequent button, but the only free hold
+        // slot that isn't a stickless-unfriendly stick-click.
+        ("hold:b", Action::Home),
         ("x", Action::Osk),
         ("y", Action::Hints),
         ("l1", Action::Prev),
@@ -237,17 +253,25 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         ("hold:l1", Action::ZoomOut),
         ("hold:r1", Action::ZoomIn),
         ("l3", Action::Hints),
-        ("r3", Action::Reader),
+        // R3 opens settings: a one-press route in on stick-equipped pads (the ⚙
+        // toolbar button and Ctrl+, cover the rest). Reader moves fully onto
+        // hold:X below — R3 was only ever a duplicate of it.
+        ("r3", Action::Settings),
         ("start", Action::Reload),
         ("hold:start", Action::Bookmark),
-        // Reader also lives on a hold so stickless devices (no R3) have it out
-        // of the box; the OSK tap moves to X's release as a side effect.
+        // Reader lives on a hold so stickless devices (no R3) have it out of the
+        // box; the OSK tap moves to X's release as a side effect.
         ("hold:x", Action::Reader),
         ("hold:y", Action::Scroll),
         ("select", Action::Menu),
-        // Tap Select opens the menu; holding it jumps home (its tap defers to
-        // release, like the shoulders' — opening the menu on release is fine).
-        ("hold:select", Action::Home),
+        // Tap Select opens the menu; holding it opens settings (its tap defers
+        // to release, like the shoulders' — opening the menu on release is fine).
+        ("hold:select", Action::Settings),
+        // Select+Start opens settings; pressing the chord again while settings
+        // is open quits retsurf (the second press is the confirm) — the only
+        // gamepad exit on a handheld. Both buttons are already deferred, so the
+        // chord is free. Bind `quit` directly for a one-press exit instead.
+        ("select+start", Action::Settings),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -264,6 +288,7 @@ fn default_keyboard_bindings() -> BTreeMap<String, String> {
         ("ctrl+h", Action::Home),
         ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
+        ("ctrl+,", Action::Settings),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
         ("ctrl+f", Action::Hints),

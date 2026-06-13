@@ -34,6 +34,13 @@ impl App {
                         self.menu_open_selected();
                     }
                 }
+                // The settings overlay: A toggles / cycles / steps the focused
+                // field, or opens the OSK on a text row (see `settings_confirm`).
+                Focus::Settings => {
+                    if *pressed {
+                        self.settings_confirm(out);
+                    }
+                }
                 Focus::Hints => {
                     // Tap vs hold on the selected hint: the press just starts the
                     // clock (so the click lands on release, where the duration is
@@ -76,6 +83,8 @@ impl App {
                 Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu_close(),
+                // B saves the draft and closes (same as the ✖ button).
+                Focus::Settings => self.settings_close(),
                 Focus::Hints => self.ui.hints_hide(),
                 // B in the editor returns to the start page.
                 Focus::DialEdit => self.ui.close_pins_editor(),
@@ -93,6 +102,8 @@ impl App {
                     if let Some(i) = self.ui.dial_edit_tile() {
                         self.ui.dial_remove_at(i);
                     }
+                } else if focus == Focus::Settings {
+                    // X is unused in settings (rows edit with A and ◀▶).
                 } else {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints_hide();
@@ -112,7 +123,7 @@ impl App {
             // Tab switching is parked while a modal prompt is up — it belongs
             // to the page that opened it.
             InputCommand::CycleTab(delta) => {
-                if !self.ui.prompt.visible() {
+                if !self.ui.prompt.visible() && focus != Focus::Settings {
                     self.browser.cycle_tab(*delta);
                 }
             }
@@ -130,6 +141,14 @@ impl App {
                         self.ui.menu_move(*dy);
                     }
                 }
+                // ▲▼ moves between rows, ◀▶ adjusts the focused value.
+                Focus::Settings => {
+                    if *dy != 0 {
+                        self.ui.settings_move(*dy);
+                    } else if *dx != 0 {
+                        self.ui.settings_adjust(*dx);
+                    }
+                }
                 Focus::Hints => self.ui.hints_move((*dx, *dy)),
                 Focus::Home => self.ui.home_move(*dx, *dy),
                 Focus::DialEdit => self.ui.dial_edit_move(*dx, *dy),
@@ -138,17 +157,13 @@ impl App {
             // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
             // In the menu it depends on the section — Bookmarks pins (or unpins)
             // the selected entry to the speed dial, while History and Tabs toggle
-            // a bookmark on the selected entry / tab. On a start-page tile it
-            // unpins that tile; on the bare page it toggles link hints (collection
-            // is asynchronous — badges appear once the page reports its elements).
+            // a bookmark on the selected entry / tab. On the bare page it toggles
+            // link hints (collection is asynchronous — badges appear once the page
+            // reports its elements). The start page ignores it: pins are managed
+            // from the speed-dial editor, not unpinned by a stray Y on a tile.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
-                Focus::Home => {
-                    if let Some(url) = self.ui.home_selected_url() {
-                        self.ui.dial_toggle(&url);
-                    }
-                }
-                Focus::Osk | Focus::Prompt | Focus::DialEdit => {}
+                Focus::Home | Focus::Osk | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
                 Focus::Hints => self.ui.hints_hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();
@@ -157,6 +172,8 @@ impl App {
             },
             InputCommand::Shoulder(delta) => match focus {
                 Focus::Menu => self.ui.menu_switch(*delta),
+                // L1/R1 switch the settings section (◀▶ is taken by value editing).
+                Focus::Settings => self.ui.settings_switch(*delta),
                 // Page navigation is parked while the modal prompt is up (it
                 // may sit under the keyboard), like tab switching.
                 _ if self.ui.prompt.visible() => {}
@@ -179,7 +196,7 @@ impl App {
                     } else {
                         self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
-                } else if *pressed && !self.ui.prompt.visible() {
+                } else if *pressed && !self.ui.prompt.visible() && focus != Focus::Settings {
                     // Quick tab switch: L2 previous, R2 next (wraps).
                     self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
@@ -189,7 +206,7 @@ impl App {
             InputCommand::Osk(cmd) => {
                 if focus == Focus::Osk {
                     self.ui.osk(*cmd, &self.browser, out);
-                } else if matches!(cmd, OskCommand::Space) {
+                } else if matches!(cmd, OskCommand::Space) && focus != Focus::Settings {
                     self.browser
                         .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }

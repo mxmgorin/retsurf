@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub browser: BrowserConfig,
@@ -45,12 +45,24 @@ impl AppConfig {
     /// Best-effort write of the default config so the user has a file to edit.
     /// Failures (e.g. a read-only filesystem on the handheld) are non-fatal.
     fn write_template(&self, path: &str) {
+        self.write_to(path, "default config");
+    }
+
+    /// Persist the current config to the config file — the GUI settings screen
+    /// (see [`crate::overlay::settings`]) writes through here when it closes.
+    /// Best-effort like [`Self::write_template`]: a failure is logged, not fatal,
+    /// so the handheld's read-only-SD case degrades to in-memory-only changes.
+    pub fn save(&self) {
+        self.write_to(&config_path(), "config");
+    }
+
+    fn write_to(&self, path: &str, what: &str) {
         match toml::to_string_pretty(self) {
             Ok(text) => match std::fs::write(path, text) {
-                Ok(()) => log::info!("wrote default config to `{path}`"),
-                Err(e) => log::warn!("could not write default config `{path}`: {e}"),
+                Ok(()) => log::info!("wrote {what} to `{path}`"),
+                Err(e) => log::warn!("could not write {what} `{path}`: {e}"),
             },
-            Err(e) => log::warn!("could not serialize default config: {e}"),
+            Err(e) => log::warn!("could not serialize {what}: {e}"),
         }
     }
 }
@@ -113,7 +125,7 @@ fn config_path() -> String {
     format!("{}config.toml", data_dir())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserConfig {
     pub home_page: String,
@@ -149,7 +161,7 @@ impl Default for BrowserConfig {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InterfaceConfig {
     pub width: u32,
@@ -176,7 +188,7 @@ impl Default for InterfaceConfig {
 
 /// Visit-history settings. Recording can be turned off entirely, and the cap on
 /// how many entries are kept is configurable, both via `[history]` in the config.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HistoryConfig {
     /// Whether visited pages are recorded. When false, any existing history is
@@ -197,7 +209,7 @@ impl Default for HistoryConfig {
 
 /// Ad-blocker settings (`[adblock]` in the config): network-level filtering via
 /// Brave's adblock-rust engine — see [`crate::browser::adblock`].
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdblockConfig {
     /// Master switch. When off, no lists are fetched and nothing is filtered.
@@ -225,7 +237,7 @@ impl Default for AdblockConfig {
 /// File-download settings (`[downloads]` in the config). Servo has no download
 /// support, so retsurf intercepts navigations to file-like URLs and fetches them
 /// itself — see [`crate::data::downloads`].
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DownloadsConfig {
     /// Where downloaded files are saved. Empty (the default) picks the system
@@ -299,7 +311,7 @@ fn system_download_dir() -> Option<String> {
 
 /// On-screen-keyboard settings (`[osk]` in the config): which of the built-in
 /// layouts are enabled — see [`crate::overlay::osk`] for the layout data itself.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OskConfig {
     /// Enabled layouts, in the order the keyboard's Lang key cycles them.
@@ -321,7 +333,7 @@ impl Default for OskConfig {
 /// handheld that oversubscribes the cores, with the pools competing against
 /// layout, script, and WebRender itself. `0` everywhere (the default) sizes
 /// them from the machine's core count instead.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PerformanceConfig {
     /// Stylo/layout threads. `0` = auto: cores − 2 (clamped to 1..=4), leaving

@@ -73,6 +73,14 @@ impl Gamepad {
         }
     }
 
+    /// Replace the tunables (dead zone, trigger threshold, hold gesture) — the
+    /// settings overlay editing them live. The derived `hold` duration is
+    /// recomputed; device state and pending gestures are untouched.
+    pub fn set_config(&mut self, cfg: GamepadConfig) {
+        self.hold = Duration::from_millis(cfg.hold_ms);
+        self.cfg = cfg;
+    }
+
     /// Combined aim vector (left stick + D-pad), clamped to -1..=1.
     fn aim(&self) -> (f32, f32) {
         (

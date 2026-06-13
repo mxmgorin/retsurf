@@ -8,7 +8,7 @@
 
 A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
-It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**) on Mali-class GPUs, as well as regular Linux desktops.
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops.
 
 > 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
@@ -24,9 +24,9 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab)
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
-- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections — switch / open / close tabs, and open, delete, or clear saved entries
+- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = reader mode · Start = reload (hold: bookmark) · Select = menu
+- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = reload (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
 
 **Page zoom**
 - Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
@@ -211,7 +211,8 @@ zoom in/out/reset · arrows = overlay navigation.
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
 `hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
-`tab_next` / `tab_prev` ·
+`settings` (settings overlay; pressed again while it's open, quits) · `home`
+(go to the home page) · `quit` (quit the app) · `tab_next` / `tab_prev` ·
 `zoom_in` / `zoom_out` / `zoom_reset` (page zoom along a Firefox-style 50–300%
 ladder / back to the config default) ·
 `nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay

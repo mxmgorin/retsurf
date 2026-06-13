@@ -6,7 +6,7 @@
 mod command;
 mod router;
 
-pub use command::{AppCommand, InputCommand, MenuAction, PromptAction};
+pub use command::{AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
 
 use crate::browser::adblock::Adblock;
 use crate::browser::{AppBrowser, BrowserCommand};
@@ -192,6 +192,7 @@ impl App {
                     self.ui.prompt.activate();
                 }
             },
+            AppCommand::Settings(action) => self.settings_action(action, out),
         };
 
         // Commands are drained after `ui.update` already built this frame, so a
@@ -330,6 +331,60 @@ impl App {
         }
     }
 
+    /// Apply a settings-overlay action (see [`crate::overlay::settings`]).
+    fn settings_action(&mut self, action: &SettingsAction, out: &mut Vec<AppCommand>) {
+        match action {
+            // Re-triggering the settings gesture while it's already open is the
+            // two-step quit (open settings, press Select+Start again to confirm):
+            // save the draft like a normal close, then shut down. A first press
+            // just opens, seeding the draft from the live config.
+            SettingsAction::Open => {
+                if self.ui.settings_visible() {
+                    self.settings_close();
+                    self.shutdown();
+                } else {
+                    self.ui.settings_open(&self.config);
+                }
+            }
+            SettingsAction::Close => self.settings_close(),
+            SettingsAction::SetSection(section) => self.ui.settings_set_section(*section),
+            SettingsAction::Select(index) => self.ui.settings_select(*index),
+            SettingsAction::Activate => self.settings_confirm(out),
+            SettingsAction::Adjust(dx) => self.ui.settings_adjust(*dx),
+        }
+    }
+
+    /// A / Enter on the focused settings row: open the on-screen keyboard to type
+    /// into a text field, or step every other kind forward (◀▶ does the rest).
+    fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
+        if self.ui.settings_selected_is_text() {
+            self.ui.osk(OskCommand::Show, &self.browser, out);
+        } else {
+            self.ui.settings_adjust(1);
+        }
+    }
+
+    /// Close the settings overlay (B / ✖): take its edited draft and adopt it.
+    fn settings_close(&mut self) {
+        let draft = self.ui.settings_close();
+        self.apply_config(draft);
+    }
+
+    /// Adopt an edited config from the settings overlay: persist it to disk, then
+    /// re-apply the parts the running app can change without a restart. The rest
+    /// (window size, GL backend, engine threads, ad-block lists, persisted site
+    /// data) take effect on the next launch — those rows are flagged with `*`.
+    fn apply_config(&mut self, config: AppConfig) {
+        self.config = config;
+        self.config.save();
+        // The router reads cursor/scroll speeds from the config each frame, but
+        // the gamepad state machine and the UI cache a few values to push in.
+        self.event_handler
+            .set_gamepad_config(self.config.gamepad.clone());
+        self.ui
+            .set_cursor_linger(self.config.interface.cursor_linger_ms);
+    }
+
     /// A on the start page: open the focused speed-dial tile, open the speed-dial
     /// editor on the "Edit" tile, or — when the search field is focused — open
     /// the OSK to type into it.
@@ -363,7 +418,8 @@ impl App {
     /// the same way navigation is, then clear the field (it stays open to add
     /// more).
     fn dial_add(&mut self, text: &str) {
-        if let Some(url) = crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
+        if let Some(url) =
+            crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
         {
             self.ui.dial_pin(url.as_str());
         }
