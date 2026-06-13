@@ -672,6 +672,16 @@ impl AppUi {
                 browser.resize(size.0, size.1);
             }
         }
+
+        // Fold in egui's own repaint timing. A freshly shown anchored `Area`
+        // (the menu / OSK) sizes itself invisibly on its first frame and asks
+        // egui for an immediate follow-up to paint it positioned — without this
+        // the loop blocks on input and the overlay only appears after the next
+        // keypress. `MAX` means egui is idle, so it never shortens our wait.
+        let egui_delay = self.egui.repaint_delay();
+        if egui_delay < Duration::MAX {
+            self.repaint_delay = Some(self.repaint_delay.map_or(egui_delay, |d| d.min(egui_delay)));
+        }
     }
 
     /// Paints the UI (toolbar + browser texture) and presents to the window.
