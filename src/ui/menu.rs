@@ -2,15 +2,12 @@
 //! the section bar with the ✖ close and contextual clear actions, and the four
 //! section lists (Tabs / Bookmarks / History / Downloads).
 
+use super::theme::ACCENT;
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
 use crate::overlay::menu::{Menu, Section};
 use egui_sdl2::egui;
-
-/// Accent tint for a Bookmarks / History row whose URL is pinned to the speed
-/// dial — a glyph-free "pinned" indicator (toggled with Y).
-const PINNED: egui::Color32 = egui::Color32::from_rgb(0x3f, 0xb8, 0xa0);
 
 /// Draw the full-screen menu overlay: a dark panel with a top section bar
 /// (Tabs · Bookmarks · History · Downloads) over the active section's content,
@@ -146,9 +143,7 @@ fn add_tabs_section(
                 // the cursor's row uses the selectable highlight, so the two are
                 // distinguishable even on the same row.
                 let text = if tab.active {
-                    egui::RichText::new(&tab.title)
-                        .color(egui::Color32::from_rgb(0x2f, 0x81, 0xf7))
-                        .strong()
+                    egui::RichText::new(&tab.title).color(ACCENT).strong()
                 } else {
                     egui::RichText::new(&tab.title).color(egui::Color32::WHITE)
                 };
@@ -197,7 +192,11 @@ fn add_bookmarks_section(
         for (i, url) in bookmarks.urls().iter().enumerate() {
             let selected = i == bookmarks.selected();
             // Pinned rows are tinted; Y toggles the pin (see the legend).
-            let color = if menu.dial.contains(url) { PINNED } else { egui::Color32::WHITE };
+            let color = if menu.dial.contains(url) {
+                ACCENT
+            } else {
+                egui::Color32::WHITE
+            };
             // ✖ deletes, the row opens (mouse); the gamepad uses the stick + A/X.
             ui.horizontal(|ui| {
                 if ui
@@ -293,7 +292,11 @@ fn add_history_section(
     egui::ScrollArea::vertical().show(ui, |ui| {
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = i == hist.selected();
-            let color = if menu.dial.contains(&entry.url) { PINNED } else { egui::Color32::WHITE };
+            let color = if menu.dial.contains(&entry.url) {
+                ACCENT
+            } else {
+                egui::Color32::WHITE
+            };
             ui.horizontal(|ui| {
                 if ui
                     .add_sized([del_w, 26.0], egui::Button::new("✖"))
@@ -303,8 +306,11 @@ fn add_history_section(
                 }
                 let row = ui.add_sized(
                     [row_w, 26.0],
-                    egui::Button::selectable(selected, egui::RichText::new(&entry.url).color(color))
-                        .truncate(),
+                    egui::Button::selectable(
+                        selected,
+                        egui::RichText::new(&entry.url).color(color),
+                    )
+                    .truncate(),
                 );
                 if row.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));

@@ -1,6 +1,7 @@
 //! Rendering of the on-screen keyboard (state and input handling live in
 //! [`crate::overlay::osk`]).
 
+use super::theme::ACCENT;
 use crate::overlay::osk::{Key, Osk};
 use egui_sdl2::egui;
 
@@ -9,7 +10,7 @@ use egui_sdl2::egui;
 pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
     let selected = osk.selected();
     let shift = osk.shift();
-    let highlight = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
+    let highlight = ACCENT;
     let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
     // Char keys are 36 wide with 4px gaps, so the 14-key top rows span 574px
     // (≈598 with the frame margin, inside the 640px window). Enter and Shift are

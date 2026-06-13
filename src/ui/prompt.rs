@@ -3,13 +3,13 @@
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
+use super::theme::ACCENT;
 use crate::app::{AppCommand, PromptAction};
 use crate::overlay::prompt::Prompt;
 use egui_sdl2::egui;
 use servo::{EmbedderControl, SelectElement, SelectElementOption, SimpleDialog};
 
 const ROW_H: f32 = 26.0;
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
 
 /// Draw the front pending control as a modal: a dimmed backdrop and a centered
 /// panel. Gamepad/keyboard: ▲▼ move, A/Enter activate, B/Esc dismiss; the

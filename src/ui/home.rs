@@ -6,6 +6,7 @@
 //! Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in the active tab)
 //! — the same path the menu's lists use.
 
+use super::theme::ACCENT;
 use crate::app::{AppCommand, MenuAction};
 use crate::overlay::home::Home;
 use egui_sdl2::egui;
@@ -15,7 +16,6 @@ const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
 const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
 const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x3f, 0xb8, 0xa0);
 
 /// Tile footprint (logical px) and grid spacing.
 const TILE_W: f32 = 96.0;
@@ -33,10 +33,7 @@ pub(super) fn add_home(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let area = egui::Rect::from_min_max(
-        egui::pos2(screen.left(), webview_top),
-        screen.max,
-    );
+    let area = egui::Rect::from_min_max(egui::pos2(screen.left(), webview_top), screen.max);
     egui::Area::new(egui::Id::new("home"))
         .order(egui::Order::Middle)
         .fixed_pos(area.min)
@@ -122,12 +119,15 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     let cy = area.bottom() - 18.0;
     let mut x = area.center().x - total / 2.0;
     for (kg, lg, pill_w, seg_w) in segs {
-        let pill = egui::Rect::from_min_size(
-            egui::pos2(x, cy - PILL_H / 2.0),
-            egui::vec2(pill_w, PILL_H),
-        );
+        let pill =
+            egui::Rect::from_min_size(egui::pos2(x, cy - PILL_H / 2.0), egui::vec2(pill_w, PILL_H));
         painter.rect_filled(pill, 5.0, SURFACE);
-        painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.0, BORDER), egui::StrokeKind::Inside);
+        painter.rect_stroke(
+            pill,
+            5.0,
+            egui::Stroke::new(1.0, BORDER),
+            egui::StrokeKind::Inside,
+        );
         painter.galley(pill.center() - kg.size() / 2.0, kg, INK);
         painter.galley(
             egui::pos2(x + pill_w + GAP_KL, cy - lg.size().y / 2.0),
@@ -193,8 +193,10 @@ fn add_dial(
 ) {
     if pins.is_empty() {
         ui.label(
-            egui::RichText::new("Nothing pinned — press Y on a bookmark or history entry to pin it.")
-                .color(MUTED),
+            egui::RichText::new(
+                "Nothing pinned — press Y on a bookmark or history entry to pin it.",
+            )
+            .color(MUTED),
         );
         return;
     }
@@ -239,7 +241,10 @@ fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
     painter.rect_stroke(
         glyph,
         12.0,
-        egui::Stroke::new(if active { 2.0 } else { 1.0 }, if active { ACCENT } else { BORDER }),
+        egui::Stroke::new(
+            if active { 2.0 } else { 1.0 },
+            if active { ACCENT } else { BORDER },
+        ),
         egui::StrokeKind::Inside,
     );
 

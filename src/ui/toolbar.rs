@@ -66,7 +66,6 @@ fn add_home_button(ui: &mut egui::Ui) -> egui::Response {
     resp
 }
 
-
 #[inline]
 fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
     response.lost_focus() && ui.input(|i| i.key_pressed(key))

@@ -8,6 +8,7 @@ mod home;
 mod menu;
 mod osk;
 mod prompt;
+mod theme;
 mod toolbar;
 
 use crate::{
@@ -104,6 +105,9 @@ impl AppUi {
         osk: &OskConfig,
     ) -> Self {
         let mut egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
+        // Install the shared accent theme so every selectable widget, text
+        // selection, and link picks up the brand green (see [`theme`]).
+        theme::apply(&egui.ctx);
         // Register the FBO color texture once; its GL name is stable across
         // resizes, so this TextureId stays valid for the program's lifetime.
         let browser_tex_id = egui
@@ -390,7 +394,9 @@ impl AppUi {
     /// The focused tile's pinned URL, if a tile (not the search field) is selected.
     #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
-        self.home.tile().and_then(|i| self.menu.dial.urls().get(i).cloned())
+        self.home
+            .tile()
+            .and_then(|i| self.menu.dial.urls().get(i).cloned())
     }
 
     /// Whether a start-page tile (not the search field) is focused.

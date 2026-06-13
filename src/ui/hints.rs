@@ -2,6 +2,7 @@
 //! accent frame on every clickable element, with the selected one filled and
 //! outlined brighter.
 
+use super::theme::ACCENT;
 use crate::overlay::hints::Hints;
 use egui_sdl2::egui;
 
@@ -10,9 +11,10 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview_top: f32) {
         egui::Order::Foreground,
         egui::Id::new("hints"),
     ));
-    let accent = egui::Color32::from_rgb(0x2f, 0x81, 0xf7);
-    let frame = egui::Color32::from_rgba_unmultiplied(0x2f, 0x81, 0xf7, 110);
-    let selected_fill = egui::Color32::from_rgba_unmultiplied(0x2f, 0x81, 0xf7, 45);
+    let accent = ACCENT;
+    let frame = egui::Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 110);
+    let selected_fill =
+        egui::Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 45);
 
     for (i, hint) in hints.hints().iter().enumerate() {
         // Rects are viewport-relative; shift below the toolbar.
