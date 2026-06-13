@@ -148,6 +148,14 @@ impl AppUi {
         // Install the shared accent theme so every selectable widget, text
         // selection, and link picks up the brand green (see [`theme`]).
         theme::apply(&egui.ctx);
+        // Scale the whole UI for high-DPI displays. egui-sdl2 derives pixels-per-
+        // point from the drawable/window ratio (1.0 on Android), then multiplies by
+        // this zoom factor — so on a phone the toolbar/overlays render at a readable
+        // size instead of 1:1 pixels. Desktop scale is 1.0 (no change).
+        let scale = crate::config::device_scale();
+        if scale != 1.0 {
+            egui.ctx.set_zoom_factor(scale);
+        }
         // Register the FBO color texture once; its GL name is stable across
         // resizes, so this TextureId stays valid for the program's lifetime.
         let browser_tex_id = egui
@@ -177,6 +185,13 @@ impl AppUi {
             prompt: Prompt::new(),
             scroll_mode: false,
         }
+    }
+
+    /// Whether an egui widget (e.g. the address bar) currently wants keyboard
+    /// input. Used on Android to show/hide the system soft keyboard.
+    #[allow(dead_code)] // only called on Android
+    pub fn wants_keyboard(&self) -> bool {
+        self.egui.ctx.egui_wants_keyboard_input()
     }
 
     #[inline]

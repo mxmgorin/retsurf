@@ -405,7 +405,10 @@ impl AppBrowser {
         let webview =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
                 .url(url)
-                .hidpi_scale_factor(euclid::Scale::new(1.0))
+                // Device pixel ratio: 1.0 on desktop, the display density on
+                // Android (see config::device_scale), so the page lays out for a
+                // logical viewport and renders crisply rather than tiny.
+                .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
                 .delegate(self.inner.clone())
                 .build();
         if self.inner.default_zoom != 1.0 {

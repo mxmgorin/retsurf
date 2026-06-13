@@ -142,3 +142,18 @@ impl AppWindow {
         self.window.drawable_size()
     }
 }
+
+/// Match SDL's text-input state to `active`, idempotently. On Android starting
+/// text input raises the system soft keyboard and begins delivering
+/// `SDL_TEXTINPUT` events (which egui-sdl2 routes to the focused field); stopping
+/// it hides the keyboard. The sdl2 crate doesn't wrap these, so we call the raw
+/// FFI. Desktop keeps SDL's default (text input always on) and never calls this.
+#[allow(dead_code)] // only called on Android; still type-checked on desktop
+pub fn set_text_input(active: bool) {
+    let cur = unsafe { sdl2::sys::SDL_IsTextInputActive() } == sdl2::sys::SDL_bool::SDL_TRUE;
+    if active && !cur {
+        unsafe { sdl2::sys::SDL_StartTextInput() };
+    } else if !active && cur {
+        unsafe { sdl2::sys::SDL_StopTextInput() };
+    }
+}

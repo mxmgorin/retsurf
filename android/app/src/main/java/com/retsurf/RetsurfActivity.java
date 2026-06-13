@@ -35,6 +35,11 @@ public class RetsurfActivity extends SDLActivity {
             setEnv("RETSURF_DOWNLOAD_DIR", dl.getAbsolutePath());
         }
 
+        // Phones are high-DPI; without this the UI + page render at 1:1 pixels and
+        // look tiny. density is ~1.0 (mdpi) .. ~3.5 (xxxhdpi). Applied to egui's
+        // zoom factor and Servo's hidpi scale (see config::device_scale).
+        setEnv("RETSURF_SCALE", String.valueOf(getResources().getDisplayMetrics().density));
+
         // No stderr on Android — keep a panic log alongside our data.
         setEnv("RETSURF_PANIC_FILE", new File(getFilesDir(), "retsurf-panic.log").getAbsolutePath());
 

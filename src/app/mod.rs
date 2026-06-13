@@ -142,6 +142,16 @@ impl App {
 
             self.ui.update(&mut self.browser, &mut commands);
 
+            // Android: raise/hide the system soft keyboard to match focus. The
+            // address bar (egui) and page text fields (Servo) are the two sinks;
+            // egui-sdl2 delivers the resulting SDL_TEXTINPUT to the focused field.
+            // Desktop leaves SDL's always-on text input alone and uses the OSK.
+            #[cfg(target_os = "android")]
+            {
+                let want = self.ui.wants_keyboard() || self.browser.text_input_focused();
+                crate::platform::window::set_text_input(want);
+            }
+
             // A prompt change needs a follow-up frame like commands below do
             // (egui sizes a fresh overlay invisibly on its first pass, and
             // `update` just rebuilt the idle wait) — request it after `update`
