@@ -21,7 +21,7 @@ const DEFAULTS: &[&str] = &[
     "https://google.com",
     "https://en.wikipedia.org",
     "https://github.com",
-    "https://reddit.com",
+    "https://servo.org",
     SETTINGS_PIN,
 ];
 

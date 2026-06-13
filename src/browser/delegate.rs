@@ -109,7 +109,11 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let req = load.request();
         let url = req.url.clone();
         let is_home = req.is_for_main_frame && super::home::is_home(&url);
-        let block = !is_home && self.adblock.should_block(req);
+        // Block ads and any lightweight-mode content categories (images / media
+        // / fonts). Never the main document itself — only its subresources.
+        let block = !is_home
+            && !req.is_for_main_frame
+            && (self.adblock.should_block(req) || self.content_filter.get().blocks(req.destination));
 
         if is_home {
             let html = super::home::render().into_bytes();

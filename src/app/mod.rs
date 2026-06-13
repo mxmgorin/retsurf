@@ -392,6 +392,11 @@ impl App {
             .set_gamepad_config(self.config.gamepad.clone());
         self.ui
             .set_cursor_linger(self.config.interface.cursor_linger_ms);
+        // Lightweight-mode block flags take effect on the next subresource load,
+        // no restart needed (unlike the engine-thread counts beside them).
+        self.browser.set_content_filter(
+            crate::browser::content_filter::ContentFilter::from_config(&self.config.performance),
+        );
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

@@ -343,6 +343,15 @@ pub struct PerformanceConfig {
     /// storage, WebRender workers). `0` = auto: half the cores (at least 2),
     /// never raising a pool above its own default.
     pub worker_pool_max: u32,
+    /// Lightweight mode: skip image subresource loads (`<img>`, CSS
+    /// backgrounds, favicons) to save bandwidth and memory. Blocked at the
+    /// network level like the ad blocker, so images fail soft. Applies live.
+    pub block_images: bool,
+    /// Lightweight mode: skip audio/video/track media loads. Applies live.
+    pub block_media: bool,
+    /// Lightweight mode: skip web-font downloads — pages fall back to the
+    /// bundled system fonts. Applies live.
+    pub block_fonts: bool,
 }
 
 /// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,

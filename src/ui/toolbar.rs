@@ -107,19 +107,23 @@ pub(super) fn add_toolbar(
 
                     // Reload, disabled (greyed, non-interactive) while loading —
                     // servo's WebView exposes no stop()/cancel, so there's nothing
-                    // to click mid-load. Always the SAME Button widget: toggling
-                    // enabledness keeps egui's widget id stable for this slot, where
-                    // swapping to a different widget kind churned the id between
-                    // passes and tripped the red id-clash outline. Static on purpose
-                    // — an animated spinner would force continuous repaints, which we
-                    // avoid on handheld hardware.
-                    // ↻ rendered a touch below the 13.0 default so it reads lighter
-                    // than the arrows; the button keeps the 20×20 footprint so the
-                    // slot (and its widget id) is unchanged.
-                    let reload = egui::Button::new(egui::RichText::new("↻").size(11.0))
+                    // to click mid-load. While loading it also swaps to a ✖ (muted by
+                    // the disabled state) to read as "can't reload yet" rather than a
+                    // live reload affordance. Always the SAME Button widget, only its
+                    // label changes: toggling enabledness/text keeps egui's widget id
+                    // stable for this slot, where swapping to a different widget kind
+                    // churned the id between passes and tripped the red id-clash
+                    // outline. Static on purpose — an animated spinner would force
+                    // continuous repaints, which we avoid on handheld hardware.
+                    // The glyph renders a touch below the 13.0 default so it reads
+                    // lighter than the arrows; the button keeps the 20×20 footprint so
+                    // the slot (and its widget id) is unchanged.
+                    let loading = state.is_loading();
+                    let glyph = if loading { "✖" } else { "↻" };
+                    let reload = egui::Button::new(egui::RichText::new(glyph).size(11.0))
                         .frame(false)
                         .min_size(Vec2 { x: 20.0, y: 20.0 });
-                    if ui.add_enabled(!state.is_loading(), reload).clicked() {
+                    if ui.add_enabled(!loading, reload).clicked() {
                         commands.push(AppCommand::Browser(BrowserCommand::Reload));
                     }
 

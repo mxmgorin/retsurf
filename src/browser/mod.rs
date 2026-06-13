@@ -4,6 +4,7 @@
 //! interpretation in [`url`].
 
 pub mod adblock;
+pub mod content_filter;
 
 mod delegate;
 mod home;
@@ -14,7 +15,7 @@ pub use home::HOME_URL;
 pub use url::try_into_url;
 
 use crate::{
-    browser::adblock::Adblock,
+    browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{BrowserConfig, PerformanceConfig},
     event::user::{UserEvent, UserEventSender},
     overlay::hints::Hint,
@@ -134,6 +135,10 @@ struct AppBrowserInner {
     download_exts: Vec<String>,
     /// Network-level ad blocking, consulted for every resource load.
     adblock: Adblock,
+    /// Lightweight-mode content filter (block images/media/fonts), consulted
+    /// for every resource load alongside the ad blocker. Behind a `Cell` so a
+    /// settings save can swap in new flags live (see [`AppBrowser::set_content_filter`]).
+    content_filter: Cell<ContentFilter>,
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
     hint_rects: RefCell<Option<Vec<Hint>>>,
@@ -159,6 +164,7 @@ impl AppBrowserInner {
         event_sender: UserEventSender,
         download_exts: Vec<String>,
         adblock: Adblock,
+        content_filter: ContentFilter,
         default_zoom: f32,
     ) -> Self {
         Self {
@@ -175,6 +181,7 @@ impl AppBrowserInner {
                 .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
                 .collect(),
             adblock,
+            content_filter: Cell::new(content_filter),
             hint_rects: RefCell::new(None),
             ime_control: Cell::new(None),
             embedder_controls: RefCell::new(vec![]),
@@ -227,6 +234,7 @@ impl AppBrowser {
             event_sender.clone(),
             download_exts,
             adblock,
+            ContentFilter::from_config(perf),
             default_zoom,
         );
 
@@ -274,6 +282,14 @@ impl AppBrowser {
     #[inline]
     pub fn take_download_requests(&self) -> Vec<String> {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
+    }
+
+    /// Replace the lightweight-mode content filter (called when the settings
+    /// overlay saves new `block_*` flags, so they take effect without a
+    /// restart). Already-loaded resources stay; only subsequent loads see it.
+    #[inline]
+    pub fn set_content_filter(&self, filter: ContentFilter) {
+        self.inner.content_filter.set(filter);
     }
 
     /// Ask the active page for its visible clickable elements (hint mode). The

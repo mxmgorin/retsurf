@@ -76,12 +76,40 @@ jobs:
           name: retsurf-linux-aarch64
           path: dist/retsurf
 
+      # Assemble a PortMaster port: the launcher at the top level beside the
+      # `retsurf/` gamedir, with the (stripped) binary dropped in as
+      # `retsurf.aarch64` — the name Retsurf.sh execs.
+      - name: Package for PortMaster
+        run: |
+          set -eux
+          pm=portmaster-dist
+          rm -rf "$pm"
+          mkdir -p "$pm/retsurf"
+          cp portmaster/Retsurf.sh "$pm/"
+          # Bring over any bundled gamedir assets, minus the .gitkeep placeholder.
+          cp -r portmaster/retsurf/. "$pm/retsurf/"
+          rm -f "$pm/retsurf/.gitkeep"
+          cp dist/retsurf "$pm/retsurf/retsurf.aarch64"
+          chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.aarch64"
+          ls -laR "$pm"
+
+      - name: Upload PortMaster artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-portmaster
+          path: portmaster-dist
+
       - name: Zip for release
         if: github.event_name == 'release'
-        run: cd dist && zip -r ../retsurf-linux-aarch64.zip .
+        run: |
+          set -eux
+          cd dist && zip -r ../retsurf-linux-aarch64.zip .
+          cd ../portmaster-dist && zip -r ../retsurf-portmaster.zip .
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: retsurf-linux-aarch64.zip
+          files: |
+            retsurf-linux-aarch64.zip
+            retsurf-portmaster.zip

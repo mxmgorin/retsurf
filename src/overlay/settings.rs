@@ -22,6 +22,9 @@ pub enum SettingsSection {
     Display,
     Gamepad,
     Privacy,
+    /// Lightweight mode: skip whole content categories (images / media / fonts)
+    /// to save bandwidth and memory. See [`crate::browser::content_filter`].
+    DataSaving,
     Advanced,
     /// Read-only "about this build" tab — no editable fields; see [`about_info`].
     About,
@@ -29,11 +32,12 @@ pub enum SettingsSection {
 
 impl SettingsSection {
     /// Left-to-right order of the section bar.
-    pub const ALL: [SettingsSection; 6] = [
+    pub const ALL: [SettingsSection; 7] = [
         SettingsSection::Browser,
         SettingsSection::Display,
         SettingsSection::Gamepad,
         SettingsSection::Privacy,
+        SettingsSection::DataSaving,
         SettingsSection::Advanced,
         SettingsSection::About,
     ];
@@ -44,6 +48,7 @@ impl SettingsSection {
             SettingsSection::Display => "Display",
             SettingsSection::Gamepad => "Gamepad",
             SettingsSection::Privacy => "Privacy",
+            SettingsSection::DataSaving => "Data saving",
             SettingsSection::Advanced => "Advanced",
             SettingsSection::About => "About",
         }
@@ -81,6 +86,9 @@ enum FieldId {
     AdblockUpdateDays,
     LayoutThreads,
     WorkerPoolMax,
+    BlockImages,
+    BlockMedia,
+    BlockFonts,
     DownloadDir,
 }
 
@@ -180,6 +188,10 @@ static FIELDS: &[Field] = &[
     f(S::Privacy,  "History",     "Max entries",            F::HistoryMax,         Kind::Int { min: 0, max: 1000, step: 5 }, false),
     f(S::Privacy,  "Ad blocker",  "Enabled",                F::AdblockEnabled,     Kind::Bool, true),
     f(S::Privacy,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  Kind::Int { min: 0, max: 90, step: 1 }, false),
+
+    f(S::DataSaving, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
+    f(S::DataSaving, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
+    f(S::DataSaving, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
 
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
@@ -437,6 +449,9 @@ impl Settings {
             FieldId::UseGles => c.interface.use_gles,
             FieldId::HistoryEnabled => c.history.enabled,
             FieldId::AdblockEnabled => c.adblock.enabled,
+            FieldId::BlockImages => c.performance.block_images,
+            FieldId::BlockMedia => c.performance.block_media,
+            FieldId::BlockFonts => c.performance.block_fonts,
             _ => false,
         }
     }
@@ -448,6 +463,9 @@ impl Settings {
             FieldId::UseGles => c.interface.use_gles = b,
             FieldId::HistoryEnabled => c.history.enabled = b,
             FieldId::AdblockEnabled => c.adblock.enabled = b,
+            FieldId::BlockImages => c.performance.block_images = b,
+            FieldId::BlockMedia => c.performance.block_media = b,
+            FieldId::BlockFonts => c.performance.block_fonts = b,
             _ => {}
         }
     }
