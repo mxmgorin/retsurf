@@ -509,6 +509,9 @@ impl AppUi {
     /// opens focused on an empty search field.
     #[inline]
     pub fn set_home_active(&mut self, active: bool) {
+        if active != self.home_active {
+            log::info!("home overlay active = {active}");
+        }
         if active && !self.home_active {
             self.home.reset();
         }

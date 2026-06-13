@@ -33,6 +33,10 @@ pub fn run_app() {
     #[cfg(target_os = "android")]
     {
         app_config.interface.use_gles = true;
+        // Don't let SDL synthesize mouse events from touch: we handle finger
+        // events ourselves (drag→scroll, tap→click in `event::touch`), and the
+        // synthesized clicks would otherwise fire at the end of every scroll.
+        std::env::set_var("SDL_TOUCH_MOUSE_EVENTS", "0");
     }
 
     if app_config.interface.use_gles {
