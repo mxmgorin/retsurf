@@ -19,12 +19,36 @@ Cargo entries, so the Linux/macOS/Windows/handheld builds are unchanged.
 | Gradle/SDL APK shell (`android/`) | done |
 | CI (`.github/workflows/build-android.yml`) | done |
 | WebGL (feature ON; surfman `hardware_buffer` backend) | enabled, needs on-device verify |
-| App lifecycle / GL surface recreation on background | **TODO** (needs a device) |
-| Touch input + system IME (phones/tablets) | **TODO** (needs a device) |
+| HiDPI scaling (egui zoom + Servo hidpi from `RETSURF_SCALE`) | done — confirmed bigger on device |
+| Touch drag→scroll + tap→click (`src/event/touch.rs`) | done — **needs on-device verify** |
+| System soft keyboard for the address bar (`SDL_StartTextInput`) | done — needs on-device verify |
+| Empty start page on device | **investigating** — see below |
+| System IME → in-page text fields (route `TextInput` to Servo) | **TODO** |
+| App lifecycle / GL surface recreation on background/resume | **TODO** (needs a device) |
 
-The lifecycle and touch work is deferred until a build boots on a device, since
-both require on-device iteration (surface-loss behavior and finger-event mapping
-can't be validated on the desktop or reliably on emulators).
+### Verified on device so far
+Runs on a phone; UI/page scale correctly after the HiDPI fix. Outstanding:
+
+- **Empty start page.** `retsurf:home` shows a blank dark screen. egui works (the
+  toolbar scaled), so the suspect is `home_active` being false on device — i.e.
+  the tab isn't reporting `retsurf:home` (custom-scheme load), so the egui
+  start-page overlay never draws and you see the dark blank Servo page. A
+  diagnostic `log::info!("home overlay active = {active}")` was added in
+  `AppUi::set_home_active`. **Next step:** capture `adb logcat | grep -i "retsurf|home overlay"`
+  at launch — `active=false`/absent ⇒ load/scheme problem; `active=true` but blank
+  ⇒ overlay render/layering bug.
+- **Touch scroll/tap and the address-bar keyboard** are implemented but not yet
+  confirmed on device (does disabling SDL touch-mouse synthesis still leave egui
+  toolbar taps working via egui's own `on_touch`?).
+
+### Still TODO
+- Route system-keyboard `TextInput` to focused **in-page** Servo fields (egui
+  currently consumes it; only the address bar works).
+- **Lifecycle / GL surface recreation** on background→foreground (Phase 5 of the
+  plan): Android destroys the EGLSurface; on resume the FBO/color-texture/egui
+  texture-registration GL names are stale and must be regenerated + re-registered
+  or the page goes black. Will hit this the moment you switch apps and return.
+- On-device WebGL verification (a shader demo) + background/resume cycle.
 
 ## Toolchain
 
