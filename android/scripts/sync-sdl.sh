@@ -48,8 +48,8 @@ cp "$sdl_proj"/app/src/main/java/org/libsdl/app/*.java "$glue_dst/"
 
 # 1b. Launcher icons. The res/mipmap-* dirs are generated (git-ignored), so lay
 #     down SDL's placeholder for every density first (keeps @mipmap/ic_launcher
-#     resolving), then overlay retsurf's branded waves from android/icon/mipmap-*
-#     (the committed source; rendered from android/icon/ic_launcher.svg).
+#     resolving), then overlay retsurf's branded icon from android/icon/mipmap-*
+#     (the committed source, scaled from the android/icon/ic_launcher.png master).
 for d in "$sdl_proj"/app/src/main/res/mipmap-*; do
     [ -d "$d" ] || continue
     dst="$here/app/src/main/res/$(basename "$d")"
