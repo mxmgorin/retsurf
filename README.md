@@ -2,17 +2,26 @@
 [![Windows](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml)
 [![macOS](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml)
 [![Linux](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml)
+[![Android](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
 
 # 🌊 retsurf
 
 A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
-It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops.
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops. It also runs on **Android** (touch + system keyboard) — see [Android notes](docs/ANDROID_PORT.md).
 
 > 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
-<!-- TODO: a short demo GIF/video -->
+## Gallery
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/retsurf-trimui-smart-pro.jpg" alt="retsurf on a TrimUI Smart Pro" width="260"></td>
+    <td align="center"><img src="docs/images/retsurf-rgb30.jpg" alt="retsurf on a Powkiddy RGB30" width="260"></td>
+    <td align="center"><img src="docs/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
+  </tr>
+</table>
 
 ## Why?
 
@@ -26,7 +35,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = reload (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
+- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: reload) · L1/R1 = back / forward (hold: zoom out / in; both together: reset zoom) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = D-pad scroll toggle (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
 
 **Page zoom**
 - Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
@@ -84,6 +93,7 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
 | `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) — created on demand; useful for portable installs or separate profiles |
+| `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
 | `RETSURF_LOG_FILE` | — | Write logs to this file |
@@ -92,6 +102,23 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.
+
+### Android
+
+retsurf builds an APK: SDL2 loads the Rust code as a cdylib and the existing
+GLES/FBO render path carries over, with touch input and the system soft keyboard.
+With the Android SDK/NDK installed, one command cross-compiles and assembles it:
+
+```sh
+rustup target add aarch64-linux-android
+cargo install cargo-ndk --locked
+./android/scripts/build.sh release   # -> android/app/build/outputs/apk/release/app-release.apk
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
+Use a **release** build on device (a debug cdylib doesn't drive the initial page
+load). See [Android notes](docs/ANDROID_PORT.md) for the toolchain, how the pieces
+fit, and current status.
 
 ## Configuration (`config.toml`)
 
@@ -121,11 +148,11 @@ persist_site_data = true
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.
 page_zoom = 1.0
 
-[interface]
+[display]
 width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
-cursor_linger_ms = 1500    # how long the gamepad cursor stays visible after moving
+cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
@@ -163,15 +190,16 @@ lists = [                  # filter lists (EasyList syntax) compiled into the en
 ]
 update_days = 7            # re-download lists when the cached engine is older; 0 = never
 
-[gamepad]
+[input]
 deadzone = 0.25            # stick deflection below this is treated as centered
-cursor_speed = 750.0       # cursor speed at full deflection (logical px/s)
+cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
 scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
 trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
 osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
 osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
+cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
 ```
 
 ## Bindings (`bindings.toml`)
@@ -227,4 +255,5 @@ check the log if a binding doesn't respond.
 ## References
 
 - [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
+- [Android notes](docs/ANDROID_PORT.md) — build/packaging, storage, touch, lifecycle, status
 - [The Servo Book](https://book.servo.org/title-page.html)

@@ -5,6 +5,14 @@ edition = "2021"
 authors = ["troidem <mxmgorin@gmail.com>"]
 license = "GPL-3.0"
 
+# `cdylib` is what SDL's Android shell loads at runtime as `libretsurf.so` (listed
+# in RetsurfActivity.getLibraries()); `lib` keeps the crate linkable by the desktop
+# `src/main.rs` binary and integration tests. Desktop builds are unaffected — the
+# cdylib is just an extra artifact.
+[lib]
+name = "retsurf"
+crate-type = ["lib", "cdylib"]
+
 [features]
 default = ["webgl"]
 # WebGL/WebGPU via a surfman connection. Disabled (`--no-default-features`) for the
@@ -15,14 +23,14 @@ webgl = []
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
-# Release tuned for the handhelds: thin LTO across the (huge) Servo dependency
-# graph plus a single codegen unit — most of fat LTO's win at a fraction of its
-# link time/memory, which matters on the 4-core CI runner. `panic` stays at
-# `unwind`: src/render.rs relies on catch_unwind to probe surfman on EGL 1.4
-# devices, and `abort` would turn that probe into a process abort.
+# Local release builds stay cheap to compile — Cargo's release defaults (no LTO,
+# 16 codegen units) — so iterating with `cargo build --release` is fast. The
+# slow, fully-optimized settings are CI-only, applied via CARGO_PROFILE_RELEASE_*
+# env vars in .github/workflows/* (fat LTO + codegen-units = 1 everywhere, plus
+# panic=abort for the webgl-off handheld build). To reproduce a CI-grade binary
+# locally, export those same vars. Kept out of this shared profile so it doesn't
+# also slow the desktop/Android/local builds.
 [profile.release]
-lto = "thin"
-codegen-units = 1
 
 [dependencies]
 rust-embed="8.7.2"
@@ -54,8 +62,15 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 adblock = "0.12"
 content-security-policy = "0.8"
 keyboard-types = "0.8.1"
-egui-sdl2 = { version = "0.3.1", default-features = false, features = ["glow-backend"] }
+egui-sdl2 = { version = "0.3.2", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
+
+# Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the
+# C ABI int/char types from libc); logs go to logcat via android_logger since
+# there is no stderr to mirror to a file.
+[target.'cfg(target_os = "android")'.dependencies]
+libc = "0.2"
+android_logger = "0.14"
 
 # Vendored servo-paint with the surfman connection made optional, so Servo runs
 # on EGL 1.4 devices (Mali) where surfman can't create a connection. See

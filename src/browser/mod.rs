@@ -16,7 +16,7 @@ pub use url::try_into_url;
 
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{BrowserConfig, PerformanceConfig},
+    config::{BrowserConfig, DataSavingConfig, PerformanceConfig},
     event::user::{UserEvent, UserEventSender},
     overlay::hints::Hint,
 };
@@ -210,6 +210,7 @@ impl AppBrowser {
         event_sender: UserEventSender,
         config: &BrowserConfig,
         perf: &PerformanceConfig,
+        data_saving: &DataSavingConfig,
         download_exts: Vec<String>,
         adblock: Adblock,
     ) -> Result<Self, String> {
@@ -234,7 +235,7 @@ impl AppBrowser {
             event_sender.clone(),
             download_exts,
             adblock,
-            ContentFilter::from_config(perf),
+            ContentFilter::from_config(data_saving),
             default_zoom,
         );
 
@@ -405,7 +406,10 @@ impl AppBrowser {
         let webview =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
                 .url(url)
-                .hidpi_scale_factor(euclid::Scale::new(1.0))
+                // Device pixel ratio: 1.0 on desktop, the display density on
+                // Android (see config::device_scale), so the page lays out for a
+                // logical viewport and renders crisply rather than tiny.
+                .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
                 .delegate(self.inner.clone())
                 .build();
         if self.inner.default_zoom != 1.0 {

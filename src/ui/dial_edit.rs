@@ -24,7 +24,7 @@ pub(super) fn add_dial_edit(
     ctx: &egui::Context,
     edit: &mut DialEdit,
     pins: &[String],
-    osk_caret: bool,
+    osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -208,13 +208,13 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
 /// The URL entry field: an egui text field (its `dial_edit_url` id keeps egui
 /// keyboard focus in sync with the selection); the OSK types into the same
 /// buffer on the handheld.
-fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: bool) {
+fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<usize>) {
     let selected = edit.field_focused();
     let edit_id = egui::Id::new("dial_edit_url");
-    // While the OSK types here, keep egui's caret at the buffer end (it won't
-    // follow the external edit on its own); desktop editing is left untouched.
-    if osk_caret {
-        super::park_caret_end(ui.ctx(), edit_id, edit.input().chars().count());
+    // While the OSK types here, mirror its caret (egui won't follow the external
+    // edit on its own); desktop editing is left untouched.
+    if let Some(pos) = osk_caret {
+        super::park_caret(ui.ctx(), edit_id, pos, edit.input().chars().count());
     }
     let frame = egui::Frame::default()
         .fill(SURFACE)

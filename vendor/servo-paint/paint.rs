@@ -239,11 +239,17 @@ impl Paint {
         // so treat it as optional instead of `.expect()`-ing. WebGL is disabled
         // when absent; everything else renders normally.
         if let Some(connection) = rendering_context.connection() {
-            if let Ok(adapter) = connection.create_adapter() {
-                self.painter_surfman_details_map.insert(
-                    painter.painter_id,
-                    PainterSurfmanDetails { connection, adapter },
-                );
+            match connection.create_adapter() {
+                Ok(adapter) => {
+                    self.painter_surfman_details_map.insert(
+                        painter.painter_id,
+                        PainterSurfmanDetails { connection, adapter },
+                    );
+                }
+                // Connection succeeded but no usable adapter — WebGL stays off and
+                // the page still renders. Seen on some Android GPUs; log so a
+                // connects-but-can't-adapt device is diagnosable.
+                Err(e) => warn!("surfman connection has no adapter; WebGL disabled: {e:?}"),
             }
         }
 

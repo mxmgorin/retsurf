@@ -4,7 +4,7 @@
 //! ad-block hook over every resource load (see [`crate::browser::adblock`]). New
 //! delegate hooks (favicons, dialogs, notifications, …) belong in this file.
 
-use super::AppBrowserInner;
+use super::{AppBrowserInner, BrowserState, Tab};
 use crate::event::user::UserEvent;
 use servo::WebView;
 use url::Url;
@@ -97,6 +97,41 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // …) — ids we never queued are harmless to push, the drain ignores them.
         self.dismissed_controls.borrow_mut().push(id);
         self.event_sender.send(UserEvent::ControlPending);
+    }
+
+    /// A page asked to open a new webview — a `target="_blank"` link or
+    /// `window.open`. Build it (reusing this webview's delegate and our shared
+    /// rendering context) and adopt it as a new foreground tab. Servo destroys
+    /// the new webview immediately unless we keep a live handle, so it must go
+    /// into `tabs`. The new webview drives its own navigation, so we don't set a
+    /// URL — mirroring [`super::AppBrowser::build_tab`] otherwise.
+    fn request_create_new(&self, parent_webview: WebView, request: servo::CreateNewWebViewRequest) {
+        let webview = request
+            .builder(self.rendering_ctx.clone())
+            .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
+            .delegate(parent_webview.delegate())
+            .build();
+        if self.default_zoom != 1.0 {
+            webview.set_page_zoom(self.default_zoom);
+        }
+
+        // Only one tab may be shown (all share one rendering context), so hide
+        // the current one before showing the new tab — matching `open_tab`.
+        if let Some(cur) = self.active_webview() {
+            cur.hide();
+        }
+        webview.show();
+        webview.focus();
+
+        let mut tabs = self.tabs.borrow_mut();
+        tabs.push(Tab {
+            webview,
+            state: BrowserState::default(),
+        });
+        self.active.set(tabs.len() - 1);
+        drop(tabs);
+        self.repaint_pending.set(true);
+        self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
     /// Intercept resource loads. A top-level navigation to the built-in start

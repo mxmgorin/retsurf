@@ -1,4 +1,4 @@
-use crate::config::InterfaceConfig;
+use crate::config::DisplayConfig;
 use crate::platform::render::SdlRenderingContext;
 use gleam::gl::Gl;
 use sdl2::video::{GLContext, GLProfile};
@@ -23,7 +23,7 @@ pub struct AppWindow {
 }
 
 impl AppWindow {
-    pub fn new(sdl: &Sdl, config: &InterfaceConfig) -> Result<Self, String> {
+    pub fn new(sdl: &Sdl, config: &DisplayConfig) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
 
         {
@@ -140,5 +140,20 @@ impl AppWindow {
     /// browser's rendering context are sized in.
     pub fn drawable_size(&self) -> (u32, u32) {
         self.window.drawable_size()
+    }
+}
+
+/// Match SDL's text-input state to `active`, idempotently. On Android starting
+/// text input raises the system soft keyboard and begins delivering
+/// `SDL_TEXTINPUT` events (which egui-sdl2 routes to the focused field); stopping
+/// it hides the keyboard. The sdl2 crate doesn't wrap these, so we call the raw
+/// FFI. Desktop keeps SDL's default (text input always on) and never calls this.
+#[allow(dead_code)] // only called on Android; still type-checked on desktop
+pub fn set_text_input(active: bool) {
+    let cur = unsafe { sdl2::sys::SDL_IsTextInputActive() } == sdl2::sys::SDL_bool::SDL_TRUE;
+    if active && !cur {
+        unsafe { sdl2::sys::SDL_StartTextInput() };
+    } else if !active && cur {
+        unsafe { sdl2::sys::SDL_StopTextInput() };
     }
 }

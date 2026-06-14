@@ -17,7 +17,7 @@ const ROW_H: f32 = 26.0;
 pub(super) fn add_prompt(
     ctx: &egui::Context,
     prompt: &mut Prompt,
-    osk_caret: bool,
+    osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -202,7 +202,7 @@ fn add_dialog(
     message: &str,
     has_input: bool,
     has_cancel: bool,
-    osk_caret: bool,
+    osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = egui::Color32::from_gray(0x99);
@@ -221,11 +221,10 @@ fn add_dialog(
         // The gamepad types into this buffer through the on-screen keyboard
         // (X opens it); a physical keyboard can click and type directly.
         let edit_id = egui::Id::new("prompt_input");
-        // While the OSK types here, keep egui's caret at the buffer end (it
-        // won't follow the external edit on its own); desktop editing is left
-        // untouched.
-        if osk_caret {
-            super::park_caret_end(ui.ctx(), edit_id, prompt.input_mut().chars().count());
+        // While the OSK types here, mirror its caret (egui won't follow the
+        // external edit on its own); desktop editing is left untouched.
+        if let Some(pos) = osk_caret {
+            super::park_caret(ui.ctx(), edit_id, pos, prompt.input_mut().chars().count());
         }
         ui.add(
             egui::TextEdit::singleline(prompt.input_mut())

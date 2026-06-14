@@ -16,7 +16,7 @@
 //! page scrolling — the fallback for devices without a right analog stick.
 
 use crate::app::{AppCommand, InputCommand};
-use crate::config::GamepadConfig;
+use crate::config::InputConfig;
 use crate::event::bindings::{Action, Bindings};
 use sdl2::controller::{Axis, Button};
 use std::time::{Duration, Instant};
@@ -35,7 +35,7 @@ pub struct Gamepad {
     l2_down: bool,
     r2_down: bool,
     /// Tunables (dead zones, trigger threshold) loaded from the config file.
-    cfg: GamepadConfig,
+    cfg: InputConfig,
     /// Gesture → action tables loaded from `bindings.toml`.
     bindings: Bindings,
     /// The `hold:` gesture threshold.
@@ -58,7 +58,7 @@ struct Held {
 }
 
 impl Gamepad {
-    pub fn new(cfg: GamepadConfig) -> Self {
+    pub fn new(cfg: InputConfig) -> Self {
         Self {
             left: (0.0, 0.0),
             dpad: (0.0, 0.0),
@@ -67,7 +67,7 @@ impl Gamepad {
             r2_down: false,
             bindings: Bindings::load(),
             hold: Duration::from_millis(cfg.hold_ms),
-            scroll_mode: false,
+            scroll_mode: cfg.starts_in_scroll_mode(),
             held: vec![],
             cfg,
         }
@@ -76,7 +76,7 @@ impl Gamepad {
     /// Replace the tunables (dead zone, trigger threshold, hold gesture) — the
     /// settings overlay editing them live. The derived `hold` duration is
     /// recomputed; device state and pending gestures are untouched.
-    pub fn set_config(&mut self, cfg: GamepadConfig) {
+    pub fn set_config(&mut self, cfg: InputConfig) {
         self.hold = Duration::from_millis(cfg.hold_ms);
         self.cfg = cfg;
     }

@@ -84,9 +84,9 @@ pub(super) fn add_toolbar(
     active_downloads: usize,
     // Active tab's page zoom percent when off the config default (chip hidden at it).
     zoom_pct: Option<u16>,
-    // The OSK is typing into the address bar — park egui's caret at its end so it
-    // tracks the appended text (it won't follow the external edit on its own).
-    osk_caret: bool,
+    // When the OSK types into the address bar, its caret position — park egui's
+    // caret here so it tracks the external edit (it won't follow on its own).
+    osk_caret: Option<usize>,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -194,10 +194,11 @@ pub(super) fn add_toolbar(
                             if ui.add(new_toolbar_button("🖹")).clicked() {
                                 commands.push(AppCommand::Browser(BrowserCommand::Reader));
                             }
-                            if osk_caret {
-                                super::park_caret_end(
+                            if let Some(pos) = osk_caret {
+                                super::park_caret(
                                     ui.ctx(),
                                     egui::Id::new("location"),
+                                    pos,
                                     state.get_location().chars().count(),
                                 );
                             }

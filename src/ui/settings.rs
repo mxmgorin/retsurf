@@ -1,6 +1,6 @@
 //! Rendering of the full-screen settings overlay (state lives in
-//! [`crate::overlay::settings`]): a section bar (Browser · Display · Gamepad ·
-//! Privacy · Advanced) like the menu's, over the active section's field rows —
+//! [`crate::overlay::settings`]): a section bar (Browser · Display · Input ·
+//! Content · Advanced) like the menu's, over the active section's field rows —
 //! each showing its label and current value. Gamepad / keyboard: L1/R1 switch
 //! section, ▲▼ move, ◀▶ adjust the focused value, A toggle / cycle / edit text,
 //! B save & close; the mouse can click a tab, a row, its ◀▶ step buttons, or
@@ -115,11 +115,9 @@ fn add_about(
                     .strong()
                     .size(20.0),
             );
-            ui.label(
-                egui::RichText::new("Modern web browser for retro handhelds")
-                    .color(dim)
-                    .size(13.0),
-            );
+            for line in info.description {
+                ui.label(egui::RichText::new(*line).color(dim).size(13.0));
+            }
             ui.add_space(10.0);
 
             info_row(ui, "Build", info.git_hash);
@@ -230,7 +228,7 @@ pub(super) fn add_settings(
 
                     // The active section's rows. A sub-header (the field's `cat`)
                     // is shown only in sections that fold several config groups
-                    // together — Privacy, Advanced — where the tab name alone
+                    // together — Content, Advanced — where the tab name alone
                     // wouldn't say which group a row belongs to.
                     let rows: Vec<(usize, &_)> = Settings::fields()
                         .iter()
@@ -245,7 +243,7 @@ pub(super) fn add_settings(
                     // The Area auto-sizes to its content, so the scroll area has no
                     // bounded height of its own — cap it to the space left down to
                     // the screen's bottom margin and disable auto-shrink so a long
-                    // section (Gamepad) actually scrolls.
+                    // section (Input) actually scrolls.
                     let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])

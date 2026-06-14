@@ -39,6 +39,10 @@ jobs:
         run: cargo build --release --features sdl2-bundled,sdl2-static-link
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          # CI performance build (see Cargo.toml [profile.release] note); kept out
+          # of Cargo.toml so local release builds stay fast to compile.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
 
       # A bare Mach-O in a zip is a poor citizen on macOS: Finder can't launch
       # it, and artifact zips drop the execute bit anyway. Ship a minimal .app

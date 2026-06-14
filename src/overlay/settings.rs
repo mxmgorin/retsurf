@@ -10,21 +10,22 @@
 //! and closes — all reachable without an analog stick. [`crate::ui::settings`]
 //! renders it.
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, CursorMode};
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
-/// bar stays narrow (Privacy = history + ad-block, Advanced = performance +
-/// downloads); within those the field's `cat` is shown as a sub-header.
+/// bar stays narrow (Content = history + ad-block + data saving, Advanced =
+/// performance + downloads); within those the field's `cat` is shown as a
+/// sub-header.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     Browser,
     Display,
-    Gamepad,
-    Privacy,
-    /// Lightweight mode: skip whole content categories (images / media / fonts)
-    /// to save bandwidth and memory. See [`crate::browser::content_filter`].
-    DataSaving,
+    Input,
+    /// History recording, the ad blocker, and data-saving content blocking,
+    /// presented under one tab — they remain separate config sections
+    /// (`[history]`, `[adblock]`, `[data_saving]`), shown here as sub-groups.
+    Content,
     Advanced,
     /// Read-only "about this build" tab — no editable fields; see [`about_info`].
     About,
@@ -32,12 +33,11 @@ pub enum SettingsSection {
 
 impl SettingsSection {
     /// Left-to-right order of the section bar.
-    pub const ALL: [SettingsSection; 7] = [
+    pub const ALL: [SettingsSection; 6] = [
         SettingsSection::Browser,
         SettingsSection::Display,
-        SettingsSection::Gamepad,
-        SettingsSection::Privacy,
-        SettingsSection::DataSaving,
+        SettingsSection::Input,
+        SettingsSection::Content,
         SettingsSection::Advanced,
         SettingsSection::About,
     ];
@@ -46,9 +46,8 @@ impl SettingsSection {
         match self {
             SettingsSection::Browser => "Browser",
             SettingsSection::Display => "Display",
-            SettingsSection::Gamepad => "Gamepad",
-            SettingsSection::Privacy => "Privacy",
-            SettingsSection::DataSaving => "Data saving",
+            SettingsSection::Input => "Input",
+            SettingsSection::Content => "Content",
             SettingsSection::Advanced => "Advanced",
             SettingsSection::About => "About",
         }
@@ -80,6 +79,7 @@ enum FieldId {
     OskNavInitialDelay,
     OskNavRepeat,
     HoldMs,
+    CursorMode,
     HistoryEnabled,
     HistoryMax,
     AdblockEnabled,
@@ -136,6 +136,10 @@ const UA_CHOICES: &[(&str, &str)] = &[
     ("iOS", "ios"),
 ];
 
+/// Default D-pad/stick mode — the `(label, stored value)` pairs map to
+/// [`crate::config::CursorMode`].
+const CURSOR_MODE_CHOICES: &[(&str, &str)] = &[("Mouse", "mouse"), ("Scroll", "scroll")];
+
 /// Compact constructor for the [`FIELDS`] table — without it `rustfmt` explodes
 /// each `Field` literal across six lines and drowns the table.
 const fn f(
@@ -175,23 +179,24 @@ static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
     f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       Kind::Int { min: 0, max: 10000, step: 100 }, false),
 
-    f(S::Gamepad,  "Gamepad",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Gamepad,  "Gamepad",     "Cursor speed",           F::CursorSpeed,        Kind::Float { min: 100.0, max: 3000.0, step: 50.0, decimals: 0 }, false),
-    f(S::Gamepad,  "Gamepad",     "Scroll speed",           F::ScrollSpeed,        Kind::Float { min: 100.0, max: 5000.0, step: 100.0, decimals: 0 }, false),
-    f(S::Gamepad,  "Gamepad",     "Trigger threshold",      F::TriggerThreshold,   Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Gamepad,  "Gamepad",     "OSK stick threshold",    F::OskNavThreshold,    Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Gamepad,  "Gamepad",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, Kind::Int { min: 50, max: 1000, step: 50 }, false),
-    f(S::Gamepad,  "Gamepad",     "OSK repeat rate (ms)",   F::OskNavRepeat,       Kind::Int { min: 20, max: 500, step: 10 }, false),
-    f(S::Gamepad,  "Gamepad",     "Hold gesture (ms)",      F::HoldMs,             Kind::Int { min: 100, max: 2000, step: 50 }, false),
+    f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
+    f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        Kind::Float { min: 100.0, max: 3000.0, step: 50.0, decimals: 0 }, false),
+    f(S::Input,  "Input",     "Scroll speed",           F::ScrollSpeed,        Kind::Float { min: 100.0, max: 5000.0, step: 100.0, decimals: 0 }, false),
+    f(S::Input,  "Input",     "Trigger threshold",      F::TriggerThreshold,   Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
+    f(S::Input,  "Input",     "OSK stick threshold",    F::OskNavThreshold,    Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
+    f(S::Input,  "Input",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, Kind::Int { min: 50, max: 1000, step: 50 }, false),
+    f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       Kind::Int { min: 20, max: 500, step: 10 }, false),
+    f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             Kind::Int { min: 100, max: 2000, step: 50 }, false),
+    f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CURSOR_MODE_CHOICES), true),
 
-    f(S::Privacy,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
-    f(S::Privacy,  "History",     "Max entries",            F::HistoryMax,         Kind::Int { min: 0, max: 1000, step: 5 }, false),
-    f(S::Privacy,  "Ad blocker",  "Enabled",                F::AdblockEnabled,     Kind::Bool, true),
-    f(S::Privacy,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  Kind::Int { min: 0, max: 90, step: 1 }, false),
+    f(S::Content,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
+    f(S::Content,  "History",     "Max entries",            F::HistoryMax,         Kind::Int { min: 0, max: 1000, step: 5 }, false),
+    f(S::Content,  "Ad blocker",  "Enabled",                F::AdblockEnabled,     Kind::Bool, true),
+    f(S::Content,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  Kind::Int { min: 0, max: 90, step: 1 }, false),
 
-    f(S::DataSaving, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
-    f(S::DataSaving, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
-    f(S::DataSaving, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
+    f(S::Content, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
+    f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
+    f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
 
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
@@ -400,17 +405,17 @@ impl Settings {
         let c = &self.draft;
         match id {
             FieldId::PageZoom => c.browser.page_zoom as f64,
-            FieldId::Width => c.interface.width as f64,
-            FieldId::Height => c.interface.height as f64,
-            FieldId::CursorLinger => c.interface.cursor_linger_ms as f64,
-            FieldId::Deadzone => c.gamepad.deadzone as f64,
-            FieldId::CursorSpeed => c.gamepad.cursor_speed as f64,
-            FieldId::ScrollSpeed => c.gamepad.scroll_speed as f64,
-            FieldId::TriggerThreshold => c.gamepad.trigger_threshold as f64,
-            FieldId::OskNavThreshold => c.gamepad.osk_nav_threshold as f64,
-            FieldId::OskNavInitialDelay => c.gamepad.osk_nav_initial_delay_ms as f64,
-            FieldId::OskNavRepeat => c.gamepad.osk_nav_repeat_ms as f64,
-            FieldId::HoldMs => c.gamepad.hold_ms as f64,
+            FieldId::Width => c.display.width as f64,
+            FieldId::Height => c.display.height as f64,
+            FieldId::CursorLinger => c.display.cursor_linger_ms as f64,
+            FieldId::Deadzone => c.input.deadzone as f64,
+            FieldId::CursorSpeed => c.input.cursor_speed as f64,
+            FieldId::ScrollSpeed => c.input.scroll_speed as f64,
+            FieldId::TriggerThreshold => c.input.trigger_threshold as f64,
+            FieldId::OskNavThreshold => c.input.osk_nav_threshold as f64,
+            FieldId::OskNavInitialDelay => c.input.osk_nav_initial_delay_ms as f64,
+            FieldId::OskNavRepeat => c.input.osk_nav_repeat_ms as f64,
+            FieldId::HoldMs => c.input.hold_ms as f64,
             FieldId::HistoryMax => c.history.max_entries as f64,
             FieldId::AdblockUpdateDays => c.adblock.update_days as f64,
             FieldId::LayoutThreads => c.performance.layout_threads as f64,
@@ -423,17 +428,17 @@ impl Settings {
         let c = &mut self.draft;
         match id {
             FieldId::PageZoom => c.browser.page_zoom = v as f32,
-            FieldId::Width => c.interface.width = v as u32,
-            FieldId::Height => c.interface.height = v as u32,
-            FieldId::CursorLinger => c.interface.cursor_linger_ms = v as u64,
-            FieldId::Deadzone => c.gamepad.deadzone = v as f32,
-            FieldId::CursorSpeed => c.gamepad.cursor_speed = v as f32,
-            FieldId::ScrollSpeed => c.gamepad.scroll_speed = v as f32,
-            FieldId::TriggerThreshold => c.gamepad.trigger_threshold = v as f32,
-            FieldId::OskNavThreshold => c.gamepad.osk_nav_threshold = v as f32,
-            FieldId::OskNavInitialDelay => c.gamepad.osk_nav_initial_delay_ms = v as u64,
-            FieldId::OskNavRepeat => c.gamepad.osk_nav_repeat_ms = v as u64,
-            FieldId::HoldMs => c.gamepad.hold_ms = v as u64,
+            FieldId::Width => c.display.width = v as u32,
+            FieldId::Height => c.display.height = v as u32,
+            FieldId::CursorLinger => c.display.cursor_linger_ms = v as u64,
+            FieldId::Deadzone => c.input.deadzone = v as f32,
+            FieldId::CursorSpeed => c.input.cursor_speed = v as f32,
+            FieldId::ScrollSpeed => c.input.scroll_speed = v as f32,
+            FieldId::TriggerThreshold => c.input.trigger_threshold = v as f32,
+            FieldId::OskNavThreshold => c.input.osk_nav_threshold = v as f32,
+            FieldId::OskNavInitialDelay => c.input.osk_nav_initial_delay_ms = v as u64,
+            FieldId::OskNavRepeat => c.input.osk_nav_repeat_ms = v as u64,
+            FieldId::HoldMs => c.input.hold_ms = v as u64,
             FieldId::HistoryMax => c.history.max_entries = v as usize,
             FieldId::AdblockUpdateDays => c.adblock.update_days = v as u64,
             FieldId::LayoutThreads => c.performance.layout_threads = v as u32,
@@ -446,12 +451,12 @@ impl Settings {
         let c = &self.draft;
         match id {
             FieldId::PersistSiteData => c.browser.persist_site_data,
-            FieldId::UseGles => c.interface.use_gles,
+            FieldId::UseGles => c.display.use_gles,
             FieldId::HistoryEnabled => c.history.enabled,
             FieldId::AdblockEnabled => c.adblock.enabled,
-            FieldId::BlockImages => c.performance.block_images,
-            FieldId::BlockMedia => c.performance.block_media,
-            FieldId::BlockFonts => c.performance.block_fonts,
+            FieldId::BlockImages => c.data_saving.block_images,
+            FieldId::BlockMedia => c.data_saving.block_media,
+            FieldId::BlockFonts => c.data_saving.block_fonts,
             _ => false,
         }
     }
@@ -460,12 +465,12 @@ impl Settings {
         let c = &mut self.draft;
         match id {
             FieldId::PersistSiteData => c.browser.persist_site_data = b,
-            FieldId::UseGles => c.interface.use_gles = b,
+            FieldId::UseGles => c.display.use_gles = b,
             FieldId::HistoryEnabled => c.history.enabled = b,
             FieldId::AdblockEnabled => c.adblock.enabled = b,
-            FieldId::BlockImages => c.performance.block_images = b,
-            FieldId::BlockMedia => c.performance.block_media = b,
-            FieldId::BlockFonts => c.performance.block_fonts = b,
+            FieldId::BlockImages => c.data_saving.block_images = b,
+            FieldId::BlockMedia => c.data_saving.block_media = b,
+            FieldId::BlockFonts => c.data_saving.block_fonts = b,
             _ => {}
         }
     }
@@ -483,13 +488,16 @@ impl Settings {
     fn get_choice(&self, id: FieldId) -> &str {
         match id {
             FieldId::UserAgent => &self.draft.browser.user_agent,
+            FieldId::CursorMode => self.draft.input.cursor_mode.as_str(),
             _ => "",
         }
     }
 
     fn set_choice(&mut self, id: FieldId, v: &str) {
-        if id == FieldId::UserAgent {
-            self.draft.browser.user_agent = v.to_string();
+        match id {
+            FieldId::UserAgent => self.draft.browser.user_agent = v.to_string(),
+            FieldId::CursorMode => self.draft.input.cursor_mode = CursorMode::from_value(v),
+            _ => {}
         }
     }
 }
@@ -503,6 +511,9 @@ pub struct AboutInfo {
     pub version: &'static str,
     pub git_hash: &'static str,
     pub build_date: &'static str,
+    /// Short blurb under the title — what retsurf is and how you drive it —
+    /// rendered one dim line per entry.
+    pub description: &'static [&'static str],
     /// `(display label, resolved version)`, in display order.
     pub components: &'static [(&'static str, &'static str)],
     /// Attribution / licensing lines, shown one per row under the table.
@@ -519,6 +530,11 @@ pub fn about_info() -> AboutInfo {
         version: env!("CARGO_PKG_VERSION"),
         git_hash: env!("RETSURF_GIT_HASH"),
         build_date: env!("RETSURF_BUILD_DATE"),
+        description: &[
+            "Lightweight web browser powered by the Servo engine.",
+            "Full gamepad control: virtual cursor, link hints, on-screen keyboard.",
+            "Keyboard, mouse, and touch too — runs on handhelds, desktop, and Android.",
+        ],
         components: &[
             ("Servo engine", env!("RETSURF_VER_SERVO")),
             ("egui", env!("RETSURF_VER_EGUI")),
@@ -526,12 +542,15 @@ pub fn about_info() -> AboutInfo {
             ("SDL2", env!("RETSURF_VER_SDL2")),
         ],
         credits: &[
-            "Web rendering by the Servo project, under MPL-2.0.",
-            "UI by egui; windowing & input by SDL2.",
+            "Web rendering by the Servo project (MPL-2.0).",
+            "UI by egui (MIT OR Apache-2.0).",
+            "Windowing & input by SDL2 (zlib).",
             "retsurf is licensed under GPL-3.0.",
         ],
         links: &[
-            ("Servo project", "https://servo.org"),
+            ("Servo", "https://servo.org"),
+            ("egui", "https://egui.rs"),
+            ("SDL", "https://libsdl.org"),
             ("Source code", "https://github.com/mxmgorin/retsurf"),
         ],
     }

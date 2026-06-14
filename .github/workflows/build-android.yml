@@ -1,0 +1,140 @@
+name: Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  NDK_VERSION: "27.2.12479018"   # r27c
+  ANDROID_API: "29"
+  ABI: "arm64-v8a"
+  RUST_TARGET: "aarch64-linux-android"
+
+jobs:
+  build-android:
+    # x86_64 host cross-compiling to arm64 Android (free runner with NDK support).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Host tools for Servo's build scripts + SDL's CMake build (NOT the target
+      # toolchain — that comes from the NDK below).
+      - name: Install host build dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake curl git gperf pkg-config \
+            python3 python3-pip ca-certificates ninja-build zip
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK + platform + build-tools
+        run: |
+          set -eux
+          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Rust toolchain (+ android target)
+        run: |
+          set -eux
+          # rust-toolchain.toml pins the channel; rustup (preinstalled) honors it.
+          rustup show
+          rustup target add "${RUST_TARGET}"
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # SpiderMonkey compiles from C++ source for Android (no prebuilt) and
+      # dominates the first build; cache target/ keyed on the lockfile + NDK.
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      # Make the sdl2-sys source available so sync-sdl.sh can copy the matching
+      # Java glue + build libSDL2.so.
+      - name: Fetch crates
+        run: cargo fetch
+
+      - name: Sync SDL glue + build libSDL2.so
+        run: bash android/scripts/sync-sdl.sh
+
+      - name: Build Rust cdylib (cargo-ndk)
+        env:
+          # mozjs_sys's makefile.cargo reads these directly (cargo-ndk doesn't set
+          # them). The toolchain dir/clang are the host-prebuilt NDK toolchain.
+          ANDROID_NDK: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_NDK_VERSION: ${{ env.NDK_VERSION }}
+          ANDROID_VERSION: ${{ env.ANDROID_API }}
+        run: |
+          set -eux
+          tc="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64"
+          export ANDROID_TOOLCHAIN_DIR="$tc"
+          export ANDROID_CLANG="$tc/bin/${RUST_TARGET}${ANDROID_API}-clang"
+          # bindgen (mozjs_sys, mozangle, sdl2-sys) must use the NDK's libclang —
+          # host clang-15+ dropped builtins these need (same trap as the desktop
+          # LIBCLANG llvm-14 pin). In NDK r27 libclang.so is under musl/lib.
+          export LIBCLANG_PATH="$(dirname "$(find "$tc" -maxdepth 3 -name libclang.so | grep -v clang_rt | head -1)")"
+          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$tc/sysroot"
+          # NDK r23+ dropped libgcc but rustc still emits -lgcc; stub it to libunwind.
+          # The -L search paths (this stub + jniLibs for libSDL2.so) are in
+          # .cargo/config.toml under [target.aarch64-linux-android].
+          mkdir -p target/ndk-libgcc-stub
+          echo "INPUT(-lunwind)" > target/ndk-libgcc-stub/libgcc.a
+          # CI performance build (see Cargo.toml [profile.release] note); kept out
+          # of Cargo.toml so local release builds stay fast. No panic=abort: webgl
+          # is on here, so the surfman catch_unwind probe is compiled.
+          export CARGO_PROFILE_RELEASE_LTO="fat"
+          export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
+          # WebGL ON for Android (surfman's hardware_buffer backend works on EGL 1.5);
+          # do NOT pass --no-default-features here.
+          cargo ndk -t "${ABI}" -P "${ANDROID_API}" \
+            -o android/app/src/main/jniLibs build --release
+
+      - name: Generate debug signing key
+        run: |
+          set -eux
+          keytool -genkeypair -v -keystore android/app/debug.keystore \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=retsurf,O=retsurf,C=US"
+
+      - name: Assemble release APK
+        run: |
+          set -eux
+          cd android
+          ./gradlew --no-daemon assembleRelease
+          ls -la app/build/outputs/apk/release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-android-arm64
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        run: |
+          set -eux
+          cp android/app/build/outputs/apk/release/app-release.apk retsurf-android-arm64.apk
+        # then attach
+      - name: Attach APK to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: retsurf-android-arm64.apk

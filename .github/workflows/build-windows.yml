@@ -38,6 +38,10 @@ jobs:
         run: cargo build --release --features sdl2-bundled,sdl2-static-link
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          # CI performance build (see Cargo.toml [profile.release] note); kept out
+          # of Cargo.toml so local release builds stay fast to compile.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
 
       - name: Stage binary
         shell: bash

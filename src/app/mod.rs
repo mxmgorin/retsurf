@@ -50,7 +50,7 @@ pub struct App {
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
-        let window = AppWindow::new(sdl, &config.interface)?;
+        let window = AppWindow::new(sdl, &config.display)?;
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(
@@ -58,14 +58,15 @@ impl App {
             event_sender.clone(),
             &config.browser,
             &config.performance,
+            &config.data_saving,
             config.downloads.extensions.clone(),
             Adblock::new(&config.adblock),
         )?;
         log::info!("init: browser ready; creating event handler + ui");
-        let event_handler = AppEventHandler::new(sdl, config.gamepad.clone())?;
+        let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(
             &window,
-            &config.interface,
+            &config.display,
             &config.history,
             &config.downloads,
             &config.osk,
@@ -95,6 +96,13 @@ impl App {
         while self.state == AppState::Running {
             self.browser.pump_event_loop();
 
+            // Android can resize the surface on rotation without delivering an
+            // SDL size-changed event, leaving egui laid out for the previous
+            // orientation. Refresh egui's cached size from the live window each
+            // frame so the layout follows the actual surface.
+            #[cfg(target_os = "android")]
+            self.ui.sync_window_size(&self.window);
+
             // Record any pages the focused webview navigated to this frame. Sourced
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
@@ -104,7 +112,7 @@ impl App {
             // Mirror whether the active tab is on the start page, so the UI's
             // focus precedence and the input router both see `Focus::Home` this
             // frame (set before input is handled in `wait`).
-            self.ui.set_home_active(self.browser.on_home_page());
+            let home_changed = self.ui.set_home_active(self.browser.on_home_page());
 
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
@@ -142,11 +150,21 @@ impl App {
 
             self.ui.update(&mut self.browser, &mut commands);
 
+            // Android: raise/hide the system soft keyboard to match focus. The
+            // address bar (egui) and page text fields (Servo) are the two sinks;
+            // egui-sdl2 delivers the resulting SDL_TEXTINPUT to the focused field.
+            // Desktop leaves SDL's always-on text input alone and uses the OSK.
+            #[cfg(target_os = "android")]
+            {
+                let want = self.ui.wants_keyboard() || self.browser.text_input_focused();
+                crate::platform::window::set_text_input(want);
+            }
+
             // A prompt change needs a follow-up frame like commands below do
             // (egui sizes a fresh overlay invisibly on its first pass, and
             // `update` just rebuilt the idle wait) — request it after `update`
             // so it isn't clobbered.
-            if prompt_changed {
+            if prompt_changed || home_changed {
                 self.ui.request_repaint();
             }
 
@@ -389,13 +407,13 @@ impl App {
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler
-            .set_gamepad_config(self.config.gamepad.clone());
+            .set_gamepad_config(self.config.input.clone());
         self.ui
-            .set_cursor_linger(self.config.interface.cursor_linger_ms);
+            .set_cursor_linger(self.config.display.cursor_linger_ms);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(
-            crate::browser::content_filter::ContentFilter::from_config(&self.config.performance),
+            crate::browser::content_filter::ContentFilter::from_config(&self.config.data_saving),
         );
     }
 

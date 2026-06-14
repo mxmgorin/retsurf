@@ -3,7 +3,7 @@ use super::keyboard::{KeyEvent, Keyboard};
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::GamepadConfig,
+    config::InputConfig,
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,
     ui::AppUi,
@@ -18,10 +18,12 @@ pub struct AppEventHandler {
     gamepad: Gamepad,
     /// Keyboard-side counterpart of [`Gamepad`]: shortcuts + overlay keys.
     keyboard: Keyboard,
+    /// Single-finger touch gestures (drag→scroll, tap→click) over the web view.
+    touch: super::touch::TouchState,
 }
 
 impl AppEventHandler {
-    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: GamepadConfig) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
 
@@ -38,13 +40,14 @@ impl AppEventHandler {
             game_controller_subsystem,
             gamepad: Gamepad::new(gamepad_cfg),
             keyboard: Keyboard::new(),
+            touch: super::touch::TouchState::new(),
         })
     }
 
     /// Push updated gamepad tunables (dead zone, trigger/hold thresholds) into
     /// the controller state machine — used when the settings overlay changes them
     /// live (see [`crate::app::App::apply_config`]).
-    pub fn set_gamepad_config(&mut self, cfg: GamepadConfig) {
+    pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
         self.gamepad.set_config(cfg);
     }
 
@@ -148,6 +151,55 @@ impl AppEventHandler {
                 // when scrolling up; Servo's positive `dy` reveals lower content.
                 const WHEEL_PX: f32 = 60.0;
                 browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
+            }
+            // Touch: SDL finger coords are normalized to the window; scale to the
+            // pixel space mouse events use. These only reach here for the web-view
+            // area (egui consumes touch over the toolbar). A drag scrolls, a tap
+            // clicks. See [`super::touch`].
+            Event::FingerDown {
+                finger_id, x, y, ..
+            } => {
+                let (w, h) = window.size();
+                let (px, py) = (x * w as f32, y * h as f32);
+                // Only the web view scrolls/taps from touch; toolbar touches are
+                // egui's (it synthesizes pointer events from them). Starting a
+                // gesture for a toolbar touch would leak (its up is consumed by
+                // egui, so it never resolves) and could click the page underneath.
+                if ui.point_over_webview(py) {
+                    self.touch.down(finger_id, px, py);
+                }
+            }
+            Event::FingerMotion {
+                finger_id, x, y, ..
+            } => {
+                let (w, h) = window.size();
+                let (px, py) = (x * w as f32, y * h as f32);
+                if let Some((dx, dy)) = self.touch.motion(finger_id, px, py) {
+                    let (bx, by) = ui.to_browser_rel_pos(px, py);
+                    // Content follows the finger: dragging down reveals upper
+                    // content, and Servo's positive dy reveals lower content, so
+                    // negate the deltas.
+                    browser.scroll(-dx, -dy, bx, by);
+                }
+            }
+            Event::FingerUp { finger_id, .. } => {
+                if let super::touch::TouchEnd::Tap(px, py) = self.touch.up(finger_id) {
+                    let (bx, by) = ui.to_browser_rel_pos(px, py);
+                    let down = super::sdl2_servo::into_mouse_button_event(
+                        sdl2::mouse::MouseButton::Left,
+                        bx,
+                        by,
+                        true,
+                    );
+                    browser.handle_input(servo::InputEvent::MouseButton(down));
+                    let up = super::sdl2_servo::into_mouse_button_event(
+                        sdl2::mouse::MouseButton::Left,
+                        bx,
+                        by,
+                        false,
+                    );
+                    browser.handle_input(servo::InputEvent::MouseButton(up));
+                }
             }
             Event::KeyDown {
                 keycode: Some(kc),
