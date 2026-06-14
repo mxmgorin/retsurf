@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct AppConfig {
     pub browser: BrowserConfig,
-    pub interface: InterfaceConfig,
-    pub gamepad: GamepadConfig,
+    pub display: DisplayConfig,
+    pub input: InputConfig,
     pub history: HistoryConfig,
     pub downloads: DownloadsConfig,
     pub adblock: AdblockConfig,
     pub performance: PerformanceConfig,
+    pub data_saving: DataSavingConfig,
     pub osk: OskConfig,
 }
 
@@ -20,12 +21,13 @@ impl AppConfig {
     /// A missing file yields defaults (and a template is written so it can be
     /// edited); a malformed file is logged and falls back to defaults.
     /// Unknown/omitted fields fall back to their defaults too, so a partial file
-    /// (e.g. just `[gamepad]`) is valid.
+    /// (e.g. just `[input]`) is valid.
     pub fn load() -> Self {
         let path = config_path();
         match std::fs::read_to_string(&path) {
-            Ok(text) => match toml::from_str(&text) {
-                Ok(config) => {
+            Ok(text) => match toml::from_str::<Self>(&text) {
+                Ok(mut config) => {
+                    config.sanitize();
                     log::info!("loaded config from `{path}`");
                     config
                 }
@@ -64,6 +66,56 @@ impl AppConfig {
             },
             Err(e) => log::warn!("could not serialize {what}: {e}"),
         }
+    }
+
+    /// Clamp hand-editable values to the same ranges the Settings GUI enforces
+    /// (see [`crate::overlay::settings`]); a hand-edited file otherwise bypasses
+    /// them, and an out-of-range value (e.g. `page_zoom = 0`, `width = 0`, a
+    /// negative speed, or a NaN) can break rendering or input. Logs corrections.
+    fn sanitize(&mut self) {
+        fix_f32("browser.page_zoom", &mut self.browser.page_zoom, 0.3, 3.0, 1.0);
+
+        fix_ord("display.width", &mut self.display.width, 160, 3840);
+        fix_ord("display.height", &mut self.display.height, 144, 2160);
+        fix_ord("display.cursor_linger_ms", &mut self.display.cursor_linger_ms, 0, 10_000);
+
+        let i = &mut self.input;
+        fix_f32("input.deadzone", &mut i.deadzone, 0.0, 0.9, 0.25);
+        fix_f32("input.cursor_speed", &mut i.cursor_speed, 100.0, 3000.0, 600.0);
+        fix_f32("input.scroll_speed", &mut i.scroll_speed, 100.0, 5000.0, 1600.0);
+        fix_f32("input.trigger_threshold", &mut i.trigger_threshold, 0.1, 0.9, 0.5);
+        fix_f32("input.osk_nav_threshold", &mut i.osk_nav_threshold, 0.1, 0.9, 0.5);
+        fix_ord("input.osk_nav_initial_delay_ms", &mut i.osk_nav_initial_delay_ms, 50, 1000);
+        fix_ord("input.osk_nav_repeat_ms", &mut i.osk_nav_repeat_ms, 20, 500);
+        fix_ord("input.hold_ms", &mut i.hold_ms, 100, 2000);
+
+        fix_ord("history.max_entries", &mut self.history.max_entries, 0, 1000);
+        fix_ord("adblock.update_days", &mut self.adblock.update_days, 0, 90);
+        fix_ord("performance.layout_threads", &mut self.performance.layout_threads, 0, 8);
+        fix_ord("performance.worker_pool_max", &mut self.performance.worker_pool_max, 0, 16);
+    }
+}
+
+/// Clamp a float field into `[min, max]`, replacing a non-finite value with
+/// `default`. Logs when it changes the stored value.
+fn fix_f32(name: &str, v: &mut f32, min: f32, max: f32, default: f32) {
+    let before = *v;
+    *v = if v.is_finite() { v.clamp(min, max) } else { default };
+    if before.to_bits() != v.to_bits() {
+        log::warn!("config: {name} = {before} out of range; using {}", *v);
+    }
+}
+
+/// Clamp an ordered field into `[min, max]`. Logs when it changes the value.
+fn fix_ord<T: PartialOrd + Copy + std::fmt::Display>(name: &str, v: &mut T, min: T, max: T) {
+    let before = *v;
+    if *v < min {
+        *v = min;
+    } else if *v > max {
+        *v = max;
+    }
+    if *v != before {
+        log::warn!("config: {name} = {before} out of range; using {}", *v);
     }
 }
 
@@ -176,21 +228,23 @@ impl Default for BrowserConfig {
     }
 }
 
+/// Window/display settings (`[display]` in the config): size, GL backend, and
+/// cursor-visibility timing.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct InterfaceConfig {
+pub struct DisplayConfig {
     pub width: u32,
     pub height: u32,
     /// Request an OpenGL ES context (required on Mali handhelds) instead of
     /// desktop GL. Can be overridden at startup via `RETSURF_GLES=0`.
     pub use_gles: bool,
-    /// How long the gamepad cursor stays visible after the last movement, in ms.
+    /// How long the virtual cursor stays visible after the last movement, in ms.
     /// It hides when idle (nothing to hover) but lingers so you can see where it
     /// landed before clicking.
     pub cursor_linger_ms: u64,
 }
 
-impl Default for InterfaceConfig {
+impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             width: 640,
@@ -389,14 +443,20 @@ pub struct PerformanceConfig {
     /// storage, WebRender workers). `0` = auto: half the cores (at least 2),
     /// never raising a pool above its own default.
     pub worker_pool_max: u32,
-    /// Lightweight mode: skip image subresource loads (`<img>`, CSS
-    /// backgrounds, favicons) to save bandwidth and memory. Blocked at the
-    /// network level like the ad blocker, so images fail soft. Applies live.
+}
+
+/// Lightweight "data saving" mode (`[data_saving]` in the config): skip whole
+/// subresource categories to cut bandwidth and memory. Each is blocked at the
+/// network level like the ad blocker, so pages fail soft, and all apply live.
+/// See [`crate::browser::content_filter`].
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DataSavingConfig {
+    /// Skip image subresource loads (`<img>`, CSS backgrounds, favicons).
     pub block_images: bool,
-    /// Lightweight mode: skip audio/video/track media loads. Applies live.
+    /// Skip audio/video/track media loads.
     pub block_media: bool,
-    /// Lightweight mode: skip web-font downloads — pages fall back to the
-    /// bundled system fonts. Applies live.
+    /// Skip web-font downloads — pages fall back to the bundled system fonts.
     pub block_fonts: bool,
 }
 
@@ -404,7 +464,7 @@ pub struct PerformanceConfig {
 /// plus the button bindings (see [`crate::event::bindings`]).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct GamepadConfig {
+pub struct InputConfig {
     /// Stick deflection below this (normalized 0..1) is treated as centered.
     pub deadzone: f32,
     /// Cursor speed at full stick deflection, logical px per second.
@@ -423,19 +483,70 @@ pub struct GamepadConfig {
     /// bindings themselves live in `bindings.toml` — see
     /// [`crate::event::bindings`].
     pub hold_ms: u64,
+    /// Default D-pad/stick mode at startup ([`CursorMode`]). Toggle live with the
+    /// `scroll` action; this only sets the initial mode.
+    pub cursor_mode: CursorMode,
 }
 
-impl Default for GamepadConfig {
+impl Default for InputConfig {
     fn default() -> Self {
         Self {
             deadzone: 0.25,
-            cursor_speed: 750.0,
+            cursor_speed: 600.0,
             scroll_speed: 1600.0,
             trigger_threshold: 0.5,
             osk_nav_threshold: 0.5,
             osk_nav_initial_delay_ms: 350,
             osk_nav_repeat_ms: 140,
             hold_ms: 400,
+            cursor_mode: CursorMode::Mouse,
         }
+    }
+}
+
+impl InputConfig {
+    /// Whether the gamepad should start in scroll mode (vs the default cursor),
+    /// per [`cursor_mode`](Self::cursor_mode).
+    pub fn starts_in_scroll_mode(&self) -> bool {
+        self.cursor_mode == CursorMode::Scroll
+    }
+}
+
+/// The default behavior of the D-pad / left stick before any runtime toggle
+/// (see the `scroll` action). Serializes to `"mouse"` / `"scroll"` in TOML.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CursorMode {
+    /// Move a clickable on-screen cursor (the default).
+    Mouse,
+    /// Scroll the page.
+    Scroll,
+}
+
+impl CursorMode {
+    /// The TOML/UI token for this mode (`"mouse"` / `"scroll"`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CursorMode::Mouse => "mouse",
+            CursorMode::Scroll => "scroll",
+        }
+    }
+
+    /// Parse leniently: anything that isn't `"scroll"` (case-insensitive) is
+    /// `Mouse`, so a typo can't break the config (mirrors `sanitize`'s clamping).
+    pub fn from_value(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("scroll") {
+            CursorMode::Scroll
+        } else {
+            CursorMode::Mouse
+        }
+    }
+}
+
+// Deserialize via a string so an unknown value falls back to `Mouse` instead of
+// failing the whole config parse — the rest of the config degrades gracefully too.
+impl<'de> Deserialize<'de> for CursorMode {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(Self::from_value(&String::deserialize(d)?))
     }
 }

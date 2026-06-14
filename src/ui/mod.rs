@@ -16,7 +16,7 @@ mod toolbar;
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::{AppConfig, DownloadsConfig, HistoryConfig, InterfaceConfig, OskConfig},
+    config::{AppConfig, DownloadsConfig, HistoryConfig, DisplayConfig, OskConfig},
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, Hints},
@@ -140,7 +140,7 @@ pub struct AppUi {
 impl AppUi {
     pub fn new(
         window: &AppWindow,
-        interface: &InterfaceConfig,
+        display: &DisplayConfig,
         history: &HistoryConfig,
         downloads: &DownloadsConfig,
         osk: &OskConfig,
@@ -175,7 +175,7 @@ impl AppUi {
                 (w as f32 / 2.0, h as f32 / 2.0)
             },
             cursor_last_move: None,
-            cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
+            cursor_linger: Duration::from_millis(display.cursor_linger_ms),
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             settings: Settings::new(),
@@ -733,10 +733,23 @@ impl AppUi {
     }
 
     /// Mirror the gamepad's latched D-pad scroll mode (called by the router
-    /// every analog frame) so the indicator tracks it.
+    /// every analog frame) so the indicator tracks it. Entering the mode pings
+    /// the linger timer so the indicator shows up like the cursor would, then
+    /// auto-hides unless scrolling keeps it alive (see [`Self::mark_cursor_active`]).
     #[inline]
     pub fn set_scroll_mode(&mut self, on: bool) {
+        if on && !self.scroll_mode {
+            self.cursor_last_move = Some(Instant::now());
+        }
         self.scroll_mode = on;
+    }
+
+    /// Refresh the linger timer without moving the cursor — used by active page
+    /// scroll so the scroll-mode indicator stays visible while scrolling, then
+    /// lingers and auto-hides exactly like the cursor.
+    #[inline]
+    pub fn mark_cursor_active(&mut self) {
+        self.cursor_last_move = Some(Instant::now());
     }
 
     /// Whether the address-bar text field currently holds keyboard focus (also
@@ -975,7 +988,7 @@ impl AppUi {
                     osk::add_osk(ctx, &self.osk);
                 } else if self.hints.visible {
                     hints::add_hints(ctx, &self.hints, self.webview_top);
-                } else if self.scroll_mode || cursor_visible.is_some() {
+                } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.
                     let painter = ctx.layer_painter(egui::LayerId::new(
@@ -984,9 +997,9 @@ impl AppUi {
                     ));
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
                     if self.scroll_mode {
-                        // Autoscroll-style indicator (dot + up/down arrowheads),
-                        // persistent while the mode is latched so it's never
-                        // ambiguous what the D-pad currently does.
+                        // Autoscroll-style indicator (dot + up/down arrowheads).
+                        // Follows the same linger/auto-hide as the cursor: shown on
+                        // entering scroll mode and while scrolling, then fades out.
                         add_scroll_indicator(&painter, pos);
                     } else {
                         painter.circle_filled(

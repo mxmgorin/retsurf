@@ -50,7 +50,7 @@ pub struct App {
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
-        let window = AppWindow::new(sdl, &config.interface)?;
+        let window = AppWindow::new(sdl, &config.display)?;
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(
@@ -58,14 +58,15 @@ impl App {
             event_sender.clone(),
             &config.browser,
             &config.performance,
+            &config.data_saving,
             config.downloads.extensions.clone(),
             Adblock::new(&config.adblock),
         )?;
         log::info!("init: browser ready; creating event handler + ui");
-        let event_handler = AppEventHandler::new(sdl, config.gamepad.clone())?;
+        let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(
             &window,
-            &config.interface,
+            &config.display,
             &config.history,
             &config.downloads,
             &config.osk,
@@ -406,13 +407,13 @@ impl App {
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler
-            .set_gamepad_config(self.config.gamepad.clone());
+            .set_gamepad_config(self.config.input.clone());
         self.ui
-            .set_cursor_linger(self.config.interface.cursor_linger_ms);
+            .set_cursor_linger(self.config.display.cursor_linger_ms);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(
-            crate::browser::content_filter::ContentFilter::from_config(&self.config.performance),
+            crate::browser::content_filter::ContentFilter::from_config(&self.config.data_saving),
         );
     }
 

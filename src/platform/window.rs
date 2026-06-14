@@ -1,4 +1,4 @@
-use crate::config::InterfaceConfig;
+use crate::config::DisplayConfig;
 use crate::platform::render::SdlRenderingContext;
 use gleam::gl::Gl;
 use sdl2::video::{GLContext, GLProfile};
@@ -23,7 +23,7 @@ pub struct AppWindow {
 }
 
 impl AppWindow {
-    pub fn new(sdl: &Sdl, config: &InterfaceConfig) -> Result<Self, String> {
+    pub fn new(sdl: &Sdl, config: &DisplayConfig) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
 
         {

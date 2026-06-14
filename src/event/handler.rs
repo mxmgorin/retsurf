@@ -3,7 +3,7 @@ use super::keyboard::{KeyEvent, Keyboard};
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::GamepadConfig,
+    config::InputConfig,
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,
     ui::AppUi,
@@ -23,7 +23,7 @@ pub struct AppEventHandler {
 }
 
 impl AppEventHandler {
-    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: GamepadConfig) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
 
@@ -47,7 +47,7 @@ impl AppEventHandler {
     /// Push updated gamepad tunables (dead zone, trigger/hold thresholds) into
     /// the controller state machine — used when the settings overlay changes them
     /// live (see [`crate::app::App::apply_config`]).
-    pub fn set_gamepad_config(&mut self, cfg: GamepadConfig) {
+    pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
         self.gamepad.set_config(cfg);
     }
 

@@ -49,7 +49,7 @@ impl App {
                     if *pressed {
                         self.hint_press_at = Some(Instant::now());
                     } else {
-                        let hold = Duration::from_millis(self.config.gamepad.hold_ms);
+                        let hold = Duration::from_millis(self.config.input.hold_ms);
                         let held_long = self
                             .hint_press_at
                             .take()
@@ -278,7 +278,7 @@ impl App {
         let dt = if dt > 0.1 { 0.0 } else { dt };
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
-        let cfg = &self.config.gamepad;
+        let cfg = &self.config.input;
         let (cursor_speed, scroll_speed, nav_threshold) =
             (cfg.cursor_speed, cfg.scroll_speed, cfg.osk_nav_threshold);
 
@@ -314,6 +314,9 @@ impl App {
                 // from its top edge in that case.
                 let (x, y) = self.ui.cursor_browser_rel();
                 self.browser.scroll(0.0, dy, x, y.max(1.0));
+                // Keep the scroll-mode indicator alive while actively scrolling;
+                // it lingers and auto-hides like the cursor once scrolling stops.
+                self.ui.mark_cursor_active();
             }
             return;
         }
@@ -344,7 +347,7 @@ impl App {
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction
     /// and paces repeats, returning `true` on the frames a step should fire.
     fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
-        let cfg = &self.config.gamepad;
+        let cfg = &self.config.input;
         if dir != self.osk_nav_dir {
             self.osk_nav_dir = dir;
             if dir != (0, 0) {

@@ -46,13 +46,21 @@ glue_dst="$here/app/src/main/java/org/libsdl/app"
 mkdir -p "$glue_dst"
 cp "$sdl_proj"/app/src/main/java/org/libsdl/app/*.java "$glue_dst/"
 
-# 1b. Placeholder launcher icons so @mipmap/ic_launcher resolves (replace with
-#     retsurf branding later; not version-coupled to SDL, just convenient here).
+# 1b. Launcher icons. The res/mipmap-* dirs are generated (git-ignored), so lay
+#     down SDL's placeholder for every density first (keeps @mipmap/ic_launcher
+#     resolving), then overlay retsurf's branded waves from android/icon/mipmap-*
+#     (the committed source; rendered from android/icon/ic_launcher.svg).
 for d in "$sdl_proj"/app/src/main/res/mipmap-*; do
     [ -d "$d" ] || continue
     dst="$here/app/src/main/res/$(basename "$d")"
     mkdir -p "$dst"
     cp "$d"/ic_launcher.png "$dst/" 2>/dev/null || true
+done
+for d in "$here"/icon/mipmap-*; do
+    [ -d "$d" ] || continue
+    dst="$here/app/src/main/res/$(basename "$d")"
+    mkdir -p "$dst"
+    cp "$d"/ic_launcher.png "$dst/"
 done
 
 # 2. Gradle wrapper (jar is forward-compatible; our gradle-wrapper.properties pins 8.7)

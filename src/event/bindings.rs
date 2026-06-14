@@ -252,17 +252,26 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         // ambiguous until then) — back/forward survive that fine.
         ("hold:l1", Action::ZoomOut),
         ("hold:r1", Action::ZoomIn),
+        // Both shoulders together reset zoom — completes the zoom set (out/in on
+        // the holds). The chord is free: l1/r1 already defer their taps, like
+        // select+start. ZoomReset was otherwise gamepad-unreachable (ctrl+0 only).
+        ("l1+r1", Action::ZoomReset),
         ("l3", Action::Hints),
         // R3 opens settings: a one-press route in on stick-equipped pads (the ⚙
         // toolbar button and Ctrl+, cover the rest). Reader moves fully onto
         // hold:X below — R3 was only ever a duplicate of it.
         ("r3", Action::Settings),
-        ("start", Action::Reload),
+        // Start taps toggle the D-pad/stick scroll mode — the main way stickless
+        // devices scroll, now a tap (was hold:Y) so it's easier to reach; holding
+        // Start still bookmarks. Both gestures defer to release.
+        ("start", Action::Scroll),
         ("hold:start", Action::Bookmark),
         // Reader lives on a hold so stickless devices (no R3) have it out of the
         // box; the OSK tap moves to X's release as a side effect.
         ("hold:x", Action::Reader),
-        ("hold:y", Action::Scroll),
+        // Reload moved here from Start so refresh is a face-button hold (Y taps
+        // for hints). Swapped with the scroll toggle that used to live here.
+        ("hold:y", Action::Reload),
         ("select", Action::Menu),
         // Tap Select opens the menu; holding it opens settings (its tap defers
         // to release, like the shoulders' — opening the menu on release is fine).

@@ -4,10 +4,10 @@
 //! `load_web_resource` delegate hook (see [`crate::browser::delegate`]) reports
 //! each load's [`Destination`], so the unwanted ones get the same empty-200
 //! interception the ad blocker uses and fail soft. Driven by the `block_*`
-//! fields of [`PerformanceConfig`]; the running app re-reads them on every
+//! fields of [`DataSavingConfig`]; the running app re-reads them on every
 //! settings save, so it toggles live.
 
-use crate::config::PerformanceConfig;
+use crate::config::DataSavingConfig;
 use content_security_policy::Destination;
 
 /// Which content categories to block. A `Copy` snapshot of the config's
@@ -21,11 +21,11 @@ pub struct ContentFilter {
 }
 
 impl ContentFilter {
-    pub fn from_config(perf: &PerformanceConfig) -> Self {
+    pub fn from_config(cfg: &DataSavingConfig) -> Self {
         Self {
-            images: perf.block_images,
-            media: perf.block_media,
-            fonts: perf.block_fonts,
+            images: cfg.block_images,
+            media: cfg.block_media,
+            fonts: cfg.block_fonts,
         }
     }
 

@@ -27,7 +27,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections
 - **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: D-pad scroll toggle) · L1/R1 = back / forward (hold: zoom out / in) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = reload (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
+- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: reload) · L1/R1 = back / forward (hold: zoom out / in; both together: reset zoom) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = D-pad scroll toggle (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
 
 **Page zoom**
 - Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
@@ -140,11 +140,11 @@ persist_site_data = true
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.
 page_zoom = 1.0
 
-[interface]
+[display]
 width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
-cursor_linger_ms = 1500    # how long the gamepad cursor stays visible after moving
+cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
@@ -182,15 +182,16 @@ lists = [                  # filter lists (EasyList syntax) compiled into the en
 ]
 update_days = 7            # re-download lists when the cached engine is older; 0 = never
 
-[gamepad]
+[input]
 deadzone = 0.25            # stick deflection below this is treated as centered
-cursor_speed = 750.0       # cursor speed at full deflection (logical px/s)
+cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
 scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
 trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
 osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
 osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
+cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
 ```
 
 ## Bindings (`bindings.toml`)

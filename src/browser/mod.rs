@@ -16,7 +16,7 @@ pub use url::try_into_url;
 
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{BrowserConfig, PerformanceConfig},
+    config::{BrowserConfig, DataSavingConfig, PerformanceConfig},
     event::user::{UserEvent, UserEventSender},
     overlay::hints::Hint,
 };
@@ -210,6 +210,7 @@ impl AppBrowser {
         event_sender: UserEventSender,
         config: &BrowserConfig,
         perf: &PerformanceConfig,
+        data_saving: &DataSavingConfig,
         download_exts: Vec<String>,
         adblock: Adblock,
     ) -> Result<Self, String> {
@@ -234,7 +235,7 @@ impl AppBrowser {
             event_sender.clone(),
             download_exts,
             adblock,
-            ContentFilter::from_config(perf),
+            ContentFilter::from_config(data_saving),
             default_zoom,
         );
 
