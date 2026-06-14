@@ -160,7 +160,14 @@ impl AppEventHandler {
                 finger_id, x, y, ..
             } => {
                 let (w, h) = window.size();
-                self.touch.down(finger_id, x * w as f32, y * h as f32);
+                let (px, py) = (x * w as f32, y * h as f32);
+                // Only the web view scrolls/taps from touch; toolbar touches are
+                // egui's (it synthesizes pointer events from them). Starting a
+                // gesture for a toolbar touch would leak (its up is consumed by
+                // egui, so it never resolves) and could click the page underneath.
+                if ui.point_over_webview(py) {
+                    self.touch.down(finger_id, px, py);
+                }
             }
             Event::FingerMotion {
                 finger_id, x, y, ..

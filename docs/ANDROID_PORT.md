@@ -19,31 +19,58 @@ Cargo entries, so the Linux/macOS/Windows/handheld builds are unchanged.
 | Gradle/SDL APK shell (`android/`) | done |
 | CI (`.github/workflows/build-android.yml`) | done |
 | WebGL (feature ON; surfman `hardware_buffer` backend) | enabled, needs on-device verify |
-| HiDPI scaling (egui zoom + Servo hidpi from `RETSURF_SCALE`) | done — confirmed bigger on device |
-| Touch drag→scroll + tap→click (`src/event/touch.rs`) | done — **needs on-device verify** |
-| System soft keyboard for the address bar (`SDL_StartTextInput`) | done — needs on-device verify |
-| Empty start page on device | **investigating** — see below |
-| System IME → in-page text fields (route `TextInput` to Servo) | **TODO** |
+| HiDPI scaling (egui zoom + Servo hidpi from `RETSURF_SCALE`) | done — verified (see screen_rect fix below) |
+| Touch drag→scroll + tap→click (`src/event/touch.rs`) | done — verified on device |
+| System soft keyboard for the address bar (`SDL_StartTextInput`) | done — verified; home search no longer auto-pops the IME |
+| Start page renders on device | done — see below (was a debug-build artifact + HiDPI layout bug) |
+| Orientation / rotation relayout | done — layout follows rotation (see below) |
+| Typing into in-page text fields | done for keycode input (Latin/digits/Enter/Backspace) — see below |
+| Full IME → in-page fields (route SDL `TextInput` to Servo) | **TODO** — composition / non-ASCII / autocorrect |
 | App lifecycle / GL surface recreation on background/resume | **TODO** (needs a device) |
 
-### Verified on device so far
-Runs on a phone; UI/page scale correctly after the HiDPI fix. Outstanding:
+### Verified on device
+Runs on a phone; start page, touch, HiDPI scaling and rotation all work in a
+**release** build. What was fixed (2026-06-14):
 
-- **Empty start page.** `retsurf:home` shows a blank dark screen. egui works (the
-  toolbar scaled), so the suspect is `home_active` being false on device — i.e.
-  the tab isn't reporting `retsurf:home` (custom-scheme load), so the egui
-  start-page overlay never draws and you see the dark blank Servo page. A
-  diagnostic `log::info!("home overlay active = {active}")` was added in
-  `AppUi::set_home_active`. **Next step:** capture `adb logcat | grep -i "retsurf|home overlay"`
-  at launch — `active=false`/absent ⇒ load/scheme problem; `active=true` but blank
-  ⇒ overlay render/layering bug.
-- **Touch scroll/tap and the address-bar keyboard** are implemented but not yet
-  confirmed on device (does disabling SDL touch-mouse synthesis still leave egui
-  toolbar taps working via egui's own `on_touch`?).
+- **Empty/blank start page** had two unrelated causes:
+  1. **Debug builds never initiate the initial load.** In a `--debug` cdylib the
+     `retsurf:home` navigation never reaches the fetch stage (no `load_web_resource`,
+     no `notify_url_changed`), so you get a white page. A **release** build loads
+     it correctly. Use release on device; debug is only good for the build pipeline.
+  2. **HiDPI layout bug (the real one).** egui-sdl2 computed its layout `screen_rect`
+     once at construction with the default zoom (1.0), *before* `set_zoom_factor`
+     (Android `RETSURF_SCALE` ≈ 2.1) was applied, and only refreshed it on a resize
+     event. So egui laid the whole UI out for a screen ~2× too wide: the toolbar's
+     right controls fell off-screen and the centered start-page overlay anchored
+     off the visible area. Fixed upstream in **egui-sdl2 0.3.2** (`take_egui_input`
+     now rebuilds `screen_rect` from the current zoom every frame).
+- **Touch.** With `SDL_TOUCH_MOUSE_EVENTS=0` (set in `run_app` to kill phantom
+  end-of-scroll clicks), egui got no pointer events, so the toolbar/overlays went
+  dead. egui-sdl2 0.3.2 `on_touch` now synthesizes a primary-finger pointer stream
+  (and scales SDL's normalized finger coords to pixels — they previously mapped to
+  ~(0,0)). `handler.rs` only starts a web-view scroll/tap gesture for touches over
+  the web view (`AppUi::point_over_webview`); toolbar touches are egui's.
+- **Rotation.** Two issues: egui's cached size wasn't refreshed without a resize
+  event (`AppUi::sync_window_size`, called per-frame on Android, fixes it), and the
+  start-page `egui::Area` cached its size by id — `set_min_size` only grows it, so a
+  landscape→portrait rotation left it stuck wide. `ui/home.rs` now also caps the
+  size (`set_max_size`) so it shrinks back.
+- **Home keyboard.** The start-page search field no longer auto-focuses on Android
+  (`#[cfg(not(android))]` around its `request_focus`), so the soft keyboard only
+  appears when the user taps the field, not on every home visit.
 
 ### Still TODO
-- Route system-keyboard `TextInput` to focused **in-page** Servo fields (egui
-  currently consumes it; only the address bar works).
+- **Full IME for in-page fields.** Typing into a web field already works for
+  ordinary key input: when a page field is focused and the last touch was over the
+  web view (not the toolbar), `is_pointer_over_toolbar()` is false so egui doesn't
+  consume the key, and `on_key` forwards a Servo `KeyboardEvent` built from the SDL
+  *keycode* (`into_keyboard_event`). That covers Latin letters, digits, Enter,
+  Backspace — an English Google search types fine. What's missing: `handler.rs` has
+  no `TextInput`/`TextEditing` arm, so SDL's IME text events (composition for
+  CJK/etc., accented/non-ASCII characters, and swipe/autocorrect text committed
+  without a per-key `KEYDOWN`) reach only egui, never Servo. The fix is to forward
+  those to Servo as IME/composition input when a page field (not an egui field) is
+  focused.
 - **Lifecycle / GL surface recreation** on background→foreground (Phase 5 of the
   plan): Android destroys the EGLSurface; on resume the FBO/color-texture/egui
   texture-registration GL names are stale and must be regenerated + re-registered

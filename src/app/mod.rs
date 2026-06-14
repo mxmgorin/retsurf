@@ -95,6 +95,13 @@ impl App {
         while self.state == AppState::Running {
             self.browser.pump_event_loop();
 
+            // Android can resize the surface on rotation without delivering an
+            // SDL size-changed event, leaving egui laid out for the previous
+            // orientation. Refresh egui's cached size from the live window each
+            // frame so the layout follows the actual surface.
+            #[cfg(target_os = "android")]
+            self.ui.sync_window_size(&self.window);
+
             // Record any pages the focused webview navigated to this frame. Sourced
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
@@ -104,7 +111,7 @@ impl App {
             // Mirror whether the active tab is on the start page, so the UI's
             // focus precedence and the input router both see `Focus::Home` this
             // frame (set before input is handled in `wait`).
-            self.ui.set_home_active(self.browser.on_home_page());
+            let home_changed = self.ui.set_home_active(self.browser.on_home_page());
 
             self.event_handler
                 .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
@@ -156,7 +163,7 @@ impl App {
             // (egui sizes a fresh overlay invisibly on its first pass, and
             // `update` just rebuilt the idle wait) — request it after `update`
             // so it isn't clobbered.
-            if prompt_changed {
+            if prompt_changed || home_changed {
                 self.ui.request_repaint();
             }
 

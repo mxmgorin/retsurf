@@ -2,13 +2,14 @@
 [![Windows](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml)
 [![macOS](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml)
 [![Linux](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml)
+[![Android](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
 
 # 🌊 retsurf
 
 A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
-It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops.
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops. It also runs on **Android** (touch + system keyboard) — see [Android notes](docs/ANDROID_PORT.md).
 
 > 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
@@ -93,6 +94,23 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.
+
+### Android
+
+retsurf builds an APK: SDL2 loads the Rust code as a cdylib and the existing
+GLES/FBO render path carries over, with touch input and the system soft keyboard.
+With the Android SDK/NDK installed, one command cross-compiles and assembles it:
+
+```sh
+rustup target add aarch64-linux-android
+cargo install cargo-ndk --locked
+./android/scripts/build.sh release   # -> android/app/build/outputs/apk/release/app-release.apk
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
+Use a **release** build on device (a debug cdylib doesn't drive the initial page
+load). See [Android notes](docs/ANDROID_PORT.md) for the toolchain, how the pieces
+fit, and current status.
 
 ## Configuration (`config.toml`)
 
@@ -228,4 +246,5 @@ check the log if a binding doesn't respond.
 ## References
 
 - [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
+- [Android notes](docs/ANDROID_PORT.md) — build/packaging, storage, touch, lifecycle, status
 - [The Servo Book](https://book.servo.org/title-page.html)
