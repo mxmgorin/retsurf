@@ -60,6 +60,13 @@ pub fn run_app() {
         std::env::set_var("SDL_VIDEODRIVER", "wayland");
     }
 
+    // Android delivers the hardware/gesture Back button to the app as an
+    // AC_BACK key event only when this hint is set; otherwise SDL lets Android
+    // background the activity and the app never sees it. We map AC_BACK to the
+    // Back/Cancel intent in src/event/keyboard.rs.
+    #[cfg(target_os = "android")]
+    std::env::set_var("SDL_ANDROID_TRAP_BACK_BUTTON", "1");
+
     let mut sdl = sdl2::init().unwrap();
     let app = App::new(&mut sdl, app_config).unwrap();
 

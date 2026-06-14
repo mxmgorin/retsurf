@@ -42,6 +42,18 @@ impl Keyboard {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // Android's hardware/gesture Back arrives as AC_BACK (the SDL trap-back
+        // hint is set in lib.rs). Map it to the focus-aware Cancel intent — close
+        // the active overlay, or navigate back on the page (see the router) — so
+        // it works in every context. Swallow both edges so the release (and any
+        // repeat) never leaks through to the page.
+        if key.kc == Keycode::AcBack {
+            if key.pressed && !key.repeat {
+                commands.push(AppCommand::Input(InputCommand::Cancel));
+            }
+            return;
+        }
+
         // A modal page prompt (select picker / JS dialog) captures the keyboard
         // first: Enter activates, Esc dismisses, the `nav_*` bindings move the
         // focus, and everything else is muted so a shortcut can't fire under
