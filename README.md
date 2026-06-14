@@ -13,7 +13,15 @@ It is designed to run **without X11 or Wayland** — rendering through **OpenGL 
 
 > 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
-<!-- TODO: a short demo GIF/video -->
+## Gallery
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/retsurf-trimui-smart-pro.jpg" alt="retsurf on a TrimUI Smart Pro" width="260"></td>
+    <td align="center"><img src="docs/images/retsurf-rgb30.jpg" alt="retsurf on a Powkiddy RGB30" width="260"></td>
+    <td align="center"><img src="docs/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
+  </tr>
+</table>
 
 ## Why?
 
