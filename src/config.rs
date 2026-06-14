@@ -299,11 +299,22 @@ impl DownloadsConfig {
     }
 }
 
-/// The user's download folder per xdg-user-dirs (`XDG_DOWNLOAD_DIR` in
-/// `user-dirs.dirs`), falling back to `~/Downloads`. `None` when it doesn't
-/// exist — handhelds typically have neither, desktops behave like a browser.
+/// An explicit `RETSURF_DOWNLOAD_DIR` (e.g. set by the PortMaster launcher),
+/// else the user's download folder per xdg-user-dirs (`XDG_DOWNLOAD_DIR` in
+/// `user-dirs.dirs`), falling back to `~/Downloads`. `None` when none exist —
+/// handhelds typically have no XDG dirs, desktops behave like a browser.
 #[cfg(not(target_os = "android"))]
 fn system_download_dir() -> Option<String> {
+    // Explicit override wins over XDG autodetection; created on demand so a
+    // launcher can point it at a fresh path (mirrors the Android branch).
+    if let Ok(dir) = std::env::var("RETSURF_DOWNLOAD_DIR") {
+        if !dir.is_empty() {
+            match std::fs::create_dir_all(&dir) {
+                Ok(()) => return Some(format!("{}/", dir.trim_end_matches('/'))),
+                Err(e) => log::warn!("could not create RETSURF_DOWNLOAD_DIR `{dir}`: {e}"),
+            }
+        }
+    }
     let home = std::env::var("HOME").ok().filter(|h| !h.is_empty())?;
     let config_home = std::env::var("XDG_CONFIG_HOME")
         .ok()

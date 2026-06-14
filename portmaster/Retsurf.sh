@@ -27,10 +27,11 @@ GAMEDIR=/$directory/ports/retsurf/
 #   0xd05 = Cortex-A55 (RK3566, Allwinner A523)
 #   0xd04 = Cortex-A35 (RK3326)
 #   0xd03 = Cortex-A53 (H700, Allwinner A133 Plus) — and the sane default.
+# ARM "CPU part" id of the first (representative) core, lowercased. Kept as a
+# global so the selection can be logged to log.txt after the redirect below.
+CPU_PART="$(grep -m1 -i 'CPU part' /proc/cpuinfo | grep -oiE '0x[0-9a-f]+' | head -1 | tr 'A-Z' 'a-z')"
 select_binary() {
-  part="$(grep -m1 -i 'CPU part' /proc/cpuinfo | grep -oiE '0x[0-9a-f]+' | head -1)"
-  part="$(echo "$part" | tr 'A-Z' 'a-z')"
-  case "$part" in
+  case "$CPU_PART" in
     0xd05) grep -qw atomics /proc/cpuinfo && echo "retsurf.a55" || echo "retsurf.a53" ;;
     0xd04) echo "retsurf.a35" ;;
     *)     echo "retsurf.a53" ;;   # A53 and any unrecognized CPU
@@ -53,11 +54,16 @@ cd "$GAMEDIR"
 
 > "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
 
+# Record which per-CPU build the launcher picked (CPU part -> binary) so log.txt
+# shows it for support/debugging.
+echo "retsurf: CPU part ${CPU_PART:-unknown}, selected $BINNAME"
+
 export HOME="$GAMEDIR"
 export XDG_DATA_HOME="$GAMEDIR"
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
 
 export RETSURF_DATA_DIR="$GAMEDIR/data"
+export RETSURF_DOWNLOAD_DIR="$GAMEDIR/downloads"
 export RETSURF_PANIC_FILE="$GAMEDIR/retsurf-panic.log"
 #export RETSURF_LOG_FILE="$GAMEDIR/retsurf.log"
 #export RETSURF_LOG_LEVEL=debug

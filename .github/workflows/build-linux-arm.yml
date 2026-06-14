@@ -150,3 +150,72 @@ jobs:
         with:
           files: |
             retsurf-portmaster.zip
+
+  build-universal:
+    # A single generic aarch64 binary for non-PortMaster installs: no -C
+    # target-cpu (runs on any ARMv8.0+ core), default features (webgl ON, like
+    # the desktop builds — the surfman probe falls back gracefully on EGL 1.4),
+    # so panic stays `unwind` (the probe needs catch_unwind). Still a CI
+    # performance build (fat LTO + one codegen unit). A dedicated build, not the
+    # a53 reuse, so it isn't tied to any specific core's tuning. Independent of
+    # the per-core matrix above, so it runs in parallel.
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Servo build dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake curl git gperf pkg-config \
+            python3 python3-pip ca-certificates \
+            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
+            libsdl2-dev zip
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          rustup show
+          rustc --version
+
+      - name: Build
+        env:
+          # CI performance build; no target-cpu so the binary runs on any aarch64.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+        run: |
+          set -eux
+          # Default features (webgl ON) + panic=unwind (the default), so the
+          # surfman probe's catch_unwind works on EGL 1.4 devices.
+          cargo build --release
+          df -h /
+
+      - name: Stage binary
+        run: |
+          set -eux
+          mkdir -p dist
+          cp target/release/retsurf dist/retsurf-linux-aarch64
+          strip dist/retsurf-linux-aarch64 || true
+          ls -la dist/
+
+      - name: Upload universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-linux-aarch64
+          path: dist/retsurf-linux-aarch64
+
+      - name: Zip for release
+        if: github.event_name == 'release'
+        run: |
+          set -eux
+          cd dist && zip ../retsurf-linux-aarch64.zip retsurf-linux-aarch64
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            retsurf-linux-aarch64.zip
