@@ -46,15 +46,16 @@ pub(super) enum OskField {
     Home,
 }
 
-/// Park egui's caret at the end of an externally-edited single-line `TextEdit`
-/// (see [`OskField`]). Call it *before* the field renders so the caret lands
-/// this frame; egui reloads the state we store here when it draws.
-pub(super) fn park_caret_end(ctx: &egui::Context, id: egui::Id, char_count: usize) {
+/// Park egui's caret at char index `pos` (clamped to `char_count`) in an
+/// externally-edited single-line `TextEdit`, so it tracks the OSK's caret (see
+/// [`OskField`]). Call it *before* the field renders so the caret lands this
+/// frame; egui reloads the state we store here when it draws.
+pub(super) fn park_caret(ctx: &egui::Context, id: egui::Id, pos: usize, char_count: usize) {
     let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
-    let end = egui::text::CCursor::new(char_count);
+    let at = egui::text::CCursor::new(pos.min(char_count));
     state
         .cursor
-        .set_char_range(Some(egui::text::CCursorRange::one(end)));
+        .set_char_range(Some(egui::text::CCursorRange::one(at)));
     egui::TextEdit::store_state(ctx, id, state);
 }
 
@@ -506,16 +507,19 @@ impl AppUi {
 
     /// Mirror whether the active tab is on the start page (called each frame
     /// from the main loop). Resets the overlay's state on entry so it always
-    /// opens focused on an empty search field.
+    /// opens focused on an empty search field. Returns whether the state
+    /// changed, so the caller can request a follow-up repaint: the start page
+    /// becomes active when an async navigation completes (not via a command or
+    /// input event), so the blocking idle loop would otherwise size the fresh
+    /// overlay invisibly and never paint its positioned frame.
     #[inline]
-    pub fn set_home_active(&mut self, active: bool) {
-        if active != self.home_active {
-            log::info!("home overlay active = {active}");
-        }
+    pub fn set_home_active(&mut self, active: bool) -> bool {
+        let changed = active != self.home_active;
         if active && !self.home_active {
             self.home.reset();
         }
         self.home_active = active;
+        changed
     }
 
     /// Focus the start page's search field (when the OSK opens to type).
@@ -804,6 +808,15 @@ impl AppUi {
         }
     }
 
+    /// Refresh egui's cached window size from the live window. Called once per
+    /// frame so an orientation change is reflected even when SDL doesn't deliver
+    /// a size-changed event on Android rotation (otherwise the UI keeps laying
+    /// out for the previous orientation — e.g. a landscape home page shown in
+    /// portrait).
+    pub fn sync_window_size(&mut self, window: &AppWindow) {
+        self.egui.state.sync_window_size(window.get_sdl2_window());
+    }
+
     /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = self.egui.state.on_event(window.get_sdl2_window(), event);
@@ -866,6 +879,10 @@ impl AppUi {
             // closure borrows `self.egui` via `run`, since the lookup borrows all
             // of `self` (the closure itself only captures disjoint fields).
             let osk_field = self.osk_target_field();
+            // Where the OSK's caret sits, for the field it types into (if any) —
+            // each `TextEdit` parks its cursor here so it tracks the OSK.
+            let osk_caret = self.osk.caret();
+            let caret_for = |f| (osk_field == f).then_some(osk_caret);
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -885,7 +902,7 @@ impl AppUi {
                     tab_pos,
                     active_downloads,
                     zoom_pct,
-                    osk_field == OskField::AddressBar,
+                    caret_for(OskField::AddressBar),
                 );
 
                 let frame = egui::Frame::default().inner_margin(0.0);
@@ -916,13 +933,12 @@ impl AppUi {
                 // reached from the start page) fully covers it, so skip the start
                 // page underneath while the editor is up.
                 if self.home_active && !self.dial_edit.visible() {
-                    let home_caret = osk_field == OskField::Home;
                     home::add_home(
                         ctx,
                         &mut self.home,
                         &pins,
                         self.webview_top,
-                        home_caret,
+                        caret_for(OskField::Home),
                         commands,
                     );
                 }
@@ -930,8 +946,13 @@ impl AppUi {
                 // The speed-dial editor: a full-screen overlay above the start
                 // page; the OSK (below) can still open on top to type a URL.
                 if self.dial_edit.visible() {
-                    let dial_caret = osk_field == OskField::DialEdit;
-                    dial_edit::add_dial_edit(ctx, &mut self.dial_edit, &pins, dial_caret, commands);
+                    dial_edit::add_dial_edit(
+                        ctx,
+                        &mut self.dial_edit,
+                        &pins,
+                        caret_for(OskField::DialEdit),
+                        commands,
+                    );
                 }
 
                 // The settings overlay: a full-screen panel like the menu. Drawn
@@ -945,8 +966,7 @@ impl AppUi {
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
-                    let prompt_caret = osk_field == OskField::Prompt;
-                    prompt::add_prompt(ctx, &mut self.prompt, prompt_caret, commands);
+                    prompt::add_prompt(ctx, &mut self.prompt, caret_for(OskField::Prompt), commands);
                 }
 
                 if self.menu.visible {
@@ -1024,6 +1044,16 @@ impl AppUi {
         };
 
         pos.y < self.webview_top
+    }
+
+    /// Whether a *pixel*-space y coordinate (as carried by raw SDL finger events)
+    /// lands in the web-view area, below the toolbar. Touches over the toolbar are
+    /// egui's — it synthesizes pointer events from them — so only web-view touches
+    /// should start a page scroll/tap gesture. `webview_top` is in egui points, so
+    /// scale it up to compare against the pixel coordinate.
+    #[inline]
+    pub fn point_over_webview(&self, y_px: f32) -> bool {
+        y_px >= self.webview_top * self.egui.ctx.pixels_per_point()
     }
 }
 

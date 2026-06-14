@@ -96,6 +96,11 @@ jobs:
           # .cargo/config.toml under [target.aarch64-linux-android].
           mkdir -p target/ndk-libgcc-stub
           echo "INPUT(-lunwind)" > target/ndk-libgcc-stub/libgcc.a
+          # CI performance build (see Cargo.toml [profile.release] note); kept out
+          # of Cargo.toml so local release builds stay fast. No panic=abort: webgl
+          # is on here, so the surfman catch_unwind probe is compiled.
+          export CARGO_PROFILE_RELEASE_LTO="fat"
+          export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
           # WebGL ON for Android (surfman's hardware_buffer backend works on EGL 1.5);
           # do NOT pass --no-default-features here.
           cargo ndk -t "${ABI}" -P "${ANDROID_API}" \

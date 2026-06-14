@@ -58,6 +58,10 @@ jobs:
       - name: Build
         env:
           LIBCLANG_PATH: /usr/lib/llvm-14/lib
+          # CI performance build (see Cargo.toml [profile.release] note); kept out
+          # of Cargo.toml so local release builds stay fast to compile.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           set -eux
           cargo build --release

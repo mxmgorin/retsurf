@@ -23,14 +23,14 @@ webgl = []
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
-# Release tuned for the handhelds: thin LTO across the (huge) Servo dependency
-# graph plus a single codegen unit — most of fat LTO's win at a fraction of its
-# link time/memory, which matters on the 4-core CI runner. `panic` stays at
-# `unwind`: src/render.rs relies on catch_unwind to probe surfman on EGL 1.4
-# devices, and `abort` would turn that probe into a process abort.
+# Local release builds stay cheap to compile — Cargo's release defaults (no LTO,
+# 16 codegen units) — so iterating with `cargo build --release` is fast. The
+# slow, fully-optimized settings are CI-only, applied via CARGO_PROFILE_RELEASE_*
+# env vars in .github/workflows/* (fat LTO + codegen-units = 1 everywhere, plus
+# panic=abort for the webgl-off handheld build). To reproduce a CI-grade binary
+# locally, export those same vars. Kept out of this shared profile so it doesn't
+# also slow the desktop/Android/local builds.
 [profile.release]
-lto = "thin"
-codegen-units = 1
 
 [dependencies]
 rust-embed="8.7.2"

@@ -14,7 +14,26 @@ permissions:
 jobs:
   build-arm:
     # Native arm64 runner (free for public repos) — no cross-compile, no qemu.
+    # One job per target core; they run in parallel on separate runners, so the
+    # 3× Servo compile is ~1× wall-clock. A pure codegen flag (RUSTFLAGS) — the
+    # Graviton runner happily emits code for older cores it doesn't itself run.
     runs-on: ubuntu-22.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ARMv8.0-A, in-order. RK3326. Runs on A53 too (same ISA).
+          - cpu: cortex-a35
+            suffix: a35
+          # ARMv8.0-A, in-order, crypto OFF (optional on A53; H700/A133 may lack
+          # it). Safe v8.0 baseline + default fallback. H700, Allwinner A133 Plus.
+          - cpu: cortex-a53
+            suffix: a53
+          # ARMv8.2-A: LSE atomics, fp16, dotprod + crypto (present on these
+          # chips). SIGILLs on the v8.0 cores above — must stay a separate binary.
+          # RK3566, Allwinner A523 (T527 family).
+          - cpu: cortex-a55
+            suffix: a55
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +67,19 @@ jobs:
 
       - name: Build
         env:
-          # Tune for the target handheld cores: Cortex-A35 (RK3326), A53 (H700),
-          # A55 (RK3566). cortex-a53 is the safe common denominator — all three
-          # are ARMv8.0 with fp/neon/crc, and crypto (optional on A53) stays off,
-          # so the binary runs on every target while getting in-order scheduling.
-          RUSTFLAGS: "-C target-cpu=cortex-a53"
+          RUSTFLAGS: "-C target-cpu=${{ matrix.cpu }}"
+          # CI performance build (kept out of Cargo.toml so local `cargo build
+          # --release` stays fast): whole-program fat LTO across the huge Servo
+          # graph + a single codegen unit.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          # panic=abort: webgl is off here (--no-default-features) so the only
+          # catch_unwind in our code (the surfman probe) is gone — drop unwind
+          # tables for a smaller, tighter binary. Trade-off: a panic in a Servo
+          # worker/layout thread now aborts the process instead of unwinding it;
+          # the RETSURF_PANIC_FILE hook (src/lib.rs) still runs first, so it's
+          # logged. Desktop/Android keep unwind (webgl on → probe is compiled).
+          CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux
           # --no-default-features drops `webgl`: surfman can't init on EGL 1.4 Mali
@@ -64,21 +91,31 @@ jobs:
         run: |
           set -eux
           mkdir -p dist
-          cp target/release/retsurf dist/
-          strip dist/retsurf || true
+          cp target/release/retsurf "dist/retsurf.${{ matrix.suffix }}"
+          strip "dist/retsurf.${{ matrix.suffix }}" || true
           ls -la dist/
 
-      # Upload the raw binary; upload-artifact archives it into a single zip.
-      # (Pre-zipping here would produce a zip-inside-a-zip on download.)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: retsurf-linux-aarch64
-          path: dist/retsurf
+          name: retsurf-${{ matrix.suffix }}
+          path: dist/retsurf.${{ matrix.suffix }}
 
-      # Assemble a PortMaster port: the launcher at the top level beside the
-      # `retsurf/` gamedir, with the (stripped) binary dropped in as
-      # `retsurf.aarch64` — the name Retsurf.sh execs.
+  package:
+    # Collect all three per-core binaries into one PortMaster port; Retsurf.sh
+    # picks the right one at runtime from /proc/cpuinfo.
+    needs: build-arm
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download per-core binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: retsurf-a*
+          path: bins
+          merge-multiple: true
+
       - name: Package for PortMaster
         run: |
           set -eux
@@ -89,8 +126,10 @@ jobs:
           # Bring over any bundled gamedir assets, minus the .gitkeep placeholder.
           cp -r portmaster/retsurf/. "$pm/retsurf/"
           rm -f "$pm/retsurf/.gitkeep"
-          cp dist/retsurf "$pm/retsurf/retsurf.aarch64"
-          chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.aarch64"
+          # All three optimized variants; Retsurf.sh execs the matching one.
+          cp bins/retsurf.a35 bins/retsurf.a53 bins/retsurf.a55 "$pm/retsurf/"
+          chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
+            "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
           ls -laR "$pm"
 
       - name: Upload PortMaster artifact
@@ -103,13 +142,11 @@ jobs:
         if: github.event_name == 'release'
         run: |
           set -eux
-          cd dist && zip -r ../retsurf-linux-aarch64.zip .
-          cd ../portmaster-dist && zip -r ../retsurf-portmaster.zip .
+          cd portmaster-dist && zip -r ../retsurf-portmaster.zip .
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            retsurf-linux-aarch64.zip
             retsurf-portmaster.zip

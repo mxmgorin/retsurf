@@ -191,6 +191,10 @@ pub struct Osk {
     /// One-shot Shift from the on-screen Shift key — armed by a tap, consumed by
     /// the next character.
     shift_once: bool,
+    /// Caret as a char index into the editable target's buffer: typed input and
+    /// Backspace act here, `<`/`>` move it. Reset to buffer end on Show, clamped
+    /// on use. Page/Settings ignore it, staying append-only as before.
+    caret: usize,
     row: usize,
     col: usize,
     /// The enabled layouts in Lang-cycle order; never empty.
@@ -224,6 +228,7 @@ impl Osk {
             caps: false,
             shift_held: false,
             shift_once: false,
+            caret: 0,
             row: 0,
             col: 0,
             layouts,
@@ -281,6 +286,8 @@ impl Osk {
                 // release edge, so don't carry a stale held-Shift into a session.
                 self.shift_held = false;
                 self.shift_once = false;
+                // Caret to the buffer end, so typing continues from the text.
+                self.caret = target_char_len(&target, browser);
             }
             OskCommand::Hide => self.visible = false,
             OskCommand::Activate => self.activate(target, browser, commands),
@@ -294,6 +301,12 @@ impl Osk {
 
     pub fn selected(&self) -> (usize, usize) {
         (self.row, self.col)
+    }
+
+    /// Caret position (char index) for the field the OSK types into, so its
+    /// egui `TextEdit` can park its cursor to match.
+    pub fn caret(&self) -> usize {
+        self.caret
     }
 
     fn current(&self) -> Key {
@@ -325,15 +338,21 @@ impl Osk {
             Char(c) => {
                 let shift = self.shift();
                 let ch = self.layout().resolve_char(c, shift, self.caps);
-                input_char(target, ch, shift, browser);
+                self.input_char(target, ch, shift, browser);
                 // Consume the one-shot; the held (L2) modifier stays as-is.
                 self.shift_once = false;
             }
             Space => self.type_space(target, browser),
             Backspace => self.backspace(target, browser),
-            // Tab and the arrow keys are sent to the focused page element only;
-            // the address bar and prompt field are append-only here, so they
-            // do nothing there.
+            // In an editable field `<`/`>` slide the caret; the egui TextEdit
+            // mirrors it (see `ui::park_caret`). Up/Down do nothing on these
+            // single-line fields.
+            Left if caret_field(&target) => self.caret = self.caret.saturating_sub(1),
+            Right if caret_field(&target) => {
+                self.caret = (self.caret + 1).min(target_char_len(&target, browser))
+            }
+            // On the page, the arrow keys (and Tab) are sent to the focused
+            // element as real key events.
             Tab if matches!(target, OskTarget::Page) => {
                 send_named(browser, NamedKey::Tab, Code::Tab)
             }
@@ -349,6 +368,7 @@ impl Osk {
             Down if matches!(target, OskTarget::Page) => {
                 send_named(browser, NamedKey::ArrowDown, Code::ArrowDown)
             }
+            // Settings has no on-screen caret, so its arrows stay inert.
             Tab | Left | Right | Up | Down => {}
             Enter => self.enter(target, browser, commands),
             Lang => {
@@ -362,19 +382,44 @@ impl Osk {
     }
 
     /// Type a space (the **Space** key or **Y**).
-    fn type_space(&self, target: OskTarget, browser: &AppBrowser) {
-        input_char(target, ' ', self.shift(), browser);
+    fn type_space(&mut self, target: OskTarget, browser: &AppBrowser) {
+        let shift = self.shift();
+        self.input_char(target, ' ', shift, browser);
     }
 
     /// Delete the character before the caret (the **Backspace** key or **X**).
-    fn backspace(&self, target: OskTarget, browser: &AppBrowser) {
+    fn backspace(&mut self, target: OskTarget, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => _ = browser.get_state_mut().get_location_mut().pop(),
+            OskTarget::AddressBar => {
+                self.caret = remove_before(browser.get_state_mut().get_location_mut(), self.caret)
+            }
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
-            | OskTarget::Settings(buf) => _ = buf.pop(),
+            | OskTarget::Settings(buf) => self.caret = remove_before(buf, self.caret),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
+        }
+    }
+
+    /// Insert `c` at the caret (advancing it) for an editable field, or send it
+    /// to the page as a key event.
+    fn input_char(&mut self, target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
+        match target {
+            OskTarget::AddressBar => {
+                self.caret = insert_at(browser.get_state_mut().get_location_mut(), self.caret, c)
+            }
+            OskTarget::Prompt(buf)
+            | OskTarget::Home(buf)
+            | OskTarget::DialEdit(buf)
+            | OskTarget::Settings(buf) => self.caret = insert_at(buf, self.caret, c),
+            OskTarget::Page => {
+                browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
+                    c, shift, true,
+                )));
+                browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
+                    c, shift, false,
+                )));
+            }
         }
     }
 
@@ -408,22 +453,50 @@ impl Osk {
     }
 }
 
-fn input_char(target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
+/// Whether `<`/`>` move the caret for this target: the editable fields that
+/// render an egui caret (not Page, not the caret-less Settings rows).
+fn caret_field(target: &OskTarget) -> bool {
+    matches!(
+        target,
+        OskTarget::AddressBar
+            | OskTarget::Prompt(_)
+            | OskTarget::Home(_)
+            | OskTarget::DialEdit(_)
+    )
+}
+
+/// Char length of the target's buffer (0 for the buffer-less `Page`).
+fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
     match target {
-        OskTarget::AddressBar => browser.get_state_mut().get_location_mut().push(c),
+        OskTarget::AddressBar => browser.get_state_mut().get_location().chars().count(),
         OskTarget::Prompt(buf)
         | OskTarget::Home(buf)
         | OskTarget::DialEdit(buf)
-        | OskTarget::Settings(buf) => buf.push(c),
-        OskTarget::Page => {
-            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
-                c, shift, true,
-            )));
-            browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
-                c, shift, false,
-            )));
-        }
+        | OskTarget::Settings(buf) => buf.chars().count(),
+        OskTarget::Page => 0,
     }
+}
+
+/// Byte offset of the `n`-th char, or the string's end if `n` is past it.
+fn byte_at(s: &str, n: usize) -> usize {
+    s.char_indices().nth(n).map(|(b, _)| b).unwrap_or(s.len())
+}
+
+/// Insert `c` at char index `caret` (clamped), returning the caret just past it.
+fn insert_at(buf: &mut String, caret: usize, c: char) -> usize {
+    let caret = caret.min(buf.chars().count());
+    buf.insert(byte_at(buf, caret), c);
+    caret + 1
+}
+
+/// Remove the char before `caret` (clamped), returning the new caret.
+fn remove_before(buf: &mut String, caret: usize) -> usize {
+    let caret = caret.min(buf.chars().count());
+    if caret == 0 {
+        return 0;
+    }
+    buf.remove(byte_at(buf, caret - 1));
+    caret - 1
 }
 
 fn send_named(browser: &AppBrowser, key: NamedKey, code: Code) {

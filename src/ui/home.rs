@@ -31,7 +31,7 @@ pub(super) fn add_home(
     home: &mut Home,
     pins: &[String],
     webview_top: f32,
-    osk_caret: bool,
+    osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -47,7 +47,14 @@ pub(super) fn add_home(
                 .fill(BG)
                 .inner_margin(0.0)
                 .show(ui, |ui| {
+                    // Pin the content region to exactly the current area. `Area`
+                    // caches its size by id across frames, and `set_min_size` only
+                    // ever grows it — so after a landscape→portrait rotation the
+                    // stale (wider) size would persist and `vertical_centered`
+                    // would center against it, shoving the block off the right
+                    // edge. Capping the max as well lets it shrink back.
                     ui.set_min_size(area.size());
+                    ui.set_max_size(area.size());
                     // Field/grid width: the artifact's min(620, 90%).
                     let field_w = (area.width() * 0.9).min(620.0);
                     let cols = (((field_w + GAP) / (TILE_W + GAP)).floor() as usize).max(1);
@@ -150,13 +157,13 @@ fn add_wordmark(ui: &mut egui::Ui) {
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
 /// handheld the OSK writes into the same buffer. Enter submits it (handled in
 /// the keyboard/router layer).
-fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: bool) {
+fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<usize>) {
     let selected = home.search_focused();
     let edit_id = egui::Id::new("home_search");
-    // While the OSK types here, keep egui's caret at the buffer end (it won't
-    // follow the external edit on its own); desktop editing is left untouched.
-    if osk_caret {
-        super::park_caret_end(ui.ctx(), edit_id, home.input().chars().count());
+    // While the OSK types here, mirror its caret (egui won't follow the external
+    // edit on its own); desktop editing is left untouched.
+    if let Some(pos) = osk_caret {
+        super::park_caret(ui.ctx(), edit_id, pos, home.input().chars().count());
     }
     let frame = egui::Frame::default()
         .fill(SURFACE)
@@ -187,6 +194,13 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: bool) {
         // Enter is handled in the keyboard/router layer, not via egui's
         // lost-focus (which this per-frame re-focus would race).
         if home.search_focused() {
+            // On Android, don't force egui focus onto the search field just
+            // because it's the selected item — that pops the system soft keyboard
+            // on every home visit (the user complained it "always opens"). The
+            // field still focuses, and the IME appears, when the user taps it
+            // (the `gained_focus` branch above). Desktop/handheld keep the
+            // type-immediately behavior.
+            #[cfg(not(target_os = "android"))]
             if !resp.has_focus() {
                 resp.request_focus();
             }
