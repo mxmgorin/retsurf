@@ -410,6 +410,8 @@ impl App {
             .set_gamepad_config(self.config.input.clone());
         self.ui
             .set_cursor_linger(self.config.display.cursor_linger_ms);
+        self.ui
+            .set_toolbar_position(self.config.display.toolbar_position);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(

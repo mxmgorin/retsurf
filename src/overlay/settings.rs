@@ -10,7 +10,7 @@
 //! and closes — all reachable without an analog stick. [`crate::ui::settings`]
 //! renders it.
 
-use crate::config::{AppConfig, CursorMode, MemoryProfile};
+use crate::config::{AppConfig, CursorMode, MemoryProfile, ToolbarPosition};
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
@@ -71,6 +71,7 @@ enum FieldId {
     Height,
     UseGles,
     CursorLinger,
+    ToolbarPosition,
     Deadzone,
     CursorSpeed,
     ScrollSpeed,
@@ -141,6 +142,10 @@ const UA_CHOICES: &[(&str, &str)] = &[
 /// [`crate::config::CursorMode`].
 const CURSOR_MODE_CHOICES: &[(&str, &str)] = &[("Mouse", "mouse"), ("Scroll", "scroll")];
 
+/// Toolbar edge — the `(label, stored value)` pairs map to
+/// [`crate::config::ToolbarPosition`].
+const TOOLBAR_POSITION_CHOICES: &[(&str, &str)] = &[("Top", "top"), ("Bottom", "bottom")];
+
 /// Engine memory/performance tiers — the `(label, stored value)` pairs map to
 /// [`crate::config::MemoryProfile`]. `Auto` picks one from the platform + RAM.
 const MEMORY_PROFILE_CHOICES: &[(&str, &str)] = &[
@@ -191,6 +196,7 @@ static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Window height",          F::Height,             Kind::Int { min: 144, max: 2160, step: 16 }, true),
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
     f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       Kind::Int { min: 0, max: 10000, step: 100 }, false),
+    f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(TOOLBAR_POSITION_CHOICES), false),
 
     f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
     f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        Kind::Float { min: 100.0, max: 3000.0, step: 50.0, decimals: 0 }, false),
@@ -504,6 +510,7 @@ impl Settings {
             FieldId::UserAgent => &self.draft.browser.user_agent,
             FieldId::CursorMode => self.draft.input.cursor_mode.as_str(),
             FieldId::MemoryProfile => self.draft.performance.memory_profile.as_str(),
+            FieldId::ToolbarPosition => self.draft.display.toolbar_position.as_str(),
             _ => "",
         }
     }
@@ -514,6 +521,9 @@ impl Settings {
             FieldId::CursorMode => self.draft.input.cursor_mode = CursorMode::from_value(v),
             FieldId::MemoryProfile => {
                 self.draft.performance.memory_profile = MemoryProfile::from_value(v)
+            }
+            FieldId::ToolbarPosition => {
+                self.draft.display.toolbar_position = ToolbarPosition::from_value(v)
             }
             _ => {}
         }

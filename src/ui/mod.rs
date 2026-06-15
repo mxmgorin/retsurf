@@ -16,7 +16,7 @@ mod toolbar;
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::{AppConfig, DownloadsConfig, HistoryConfig, DisplayConfig, OskConfig},
+    config::{AppConfig, DownloadsConfig, HistoryConfig, DisplayConfig, OskConfig, ToolbarPosition},
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, Hints},
@@ -119,6 +119,8 @@ pub struct AppUi {
     cursor_last_move: Option<Instant>,
     /// How long the cursor stays visible after a move (from the interface config).
     cursor_linger: Duration,
+    /// Which edge the toolbar renders on (from the display config). Applied live.
+    toolbar_position: ToolbarPosition,
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
@@ -182,6 +184,7 @@ impl AppUi {
             },
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(display.cursor_linger_ms),
+            toolbar_position: display.toolbar_position,
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             settings: Settings::new(),
@@ -419,6 +422,14 @@ impl AppUi {
     #[inline]
     pub fn set_cursor_linger(&mut self, ms: u64) {
         self.cursor_linger = Duration::from_millis(ms);
+    }
+
+    /// Move the toolbar to a window edge (the app calls this when the display
+    /// config changes live via the settings overlay). The next frame re-lays the
+    /// panel and the web view follows automatically.
+    #[inline]
+    pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {
+        self.toolbar_position = pos;
     }
 
     /// Switch the active section by `delta` (◀▶).
@@ -924,6 +935,7 @@ impl AppUi {
                     active_downloads,
                     zoom_pct,
                     caret_for(OskField::AddressBar),
+                    self.toolbar_position,
                 );
 
                 let frame = egui::Frame::default().inner_margin(0.0);

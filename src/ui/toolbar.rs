@@ -1,8 +1,10 @@
-//! The top toolbar: navigation buttons, the address bar, bookmark toggle, and
-//! the chips that jump into menu sections (tab position, active downloads).
+//! The toolbar (top or bottom, per the display config): navigation buttons, the
+//! address bar, bookmark toggle, and the chips that jump into menu sections (tab
+//! position, active downloads).
 
 use crate::app::{AppCommand, MenuAction, SettingsAction};
 use crate::browser::{BrowserCommand, BrowserState};
+use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;
 use egui_sdl2::egui::{self, Vec2};
 
@@ -123,11 +125,19 @@ pub(super) fn add_toolbar(
     // When the OSK types into the address bar, its caret position — park egui's
     // caret here so it tracks the external edit (it won't follow on its own).
     osk_caret: Option<usize>,
+    // Which window edge the toolbar renders on.
+    position: ToolbarPosition,
 ) {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
         .inner_margin(4.0);
-    egui::Panel::top("toolbar")
+    // Same panel either way (the central panel takes whatever's left), just
+    // anchored to the chosen edge.
+    let panel = match position {
+        ToolbarPosition::Top => egui::Panel::top("toolbar"),
+        ToolbarPosition::Bottom => egui::Panel::bottom("toolbar"),
+    };
+    panel
         .frame(frame)
         .show_inside(ui, |ui| {
             ui.allocate_ui_with_layout(

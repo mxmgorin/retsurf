@@ -39,6 +39,7 @@ width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
+toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
