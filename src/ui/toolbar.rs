@@ -66,6 +66,42 @@ fn add_home_button(ui: &mut egui::Ui) -> egui::Response {
     resp
 }
 
+/// A frameless toolbar button painting a rounded square outline with the tab
+/// count centered inside — like a phone browser's tab counter. Drawn (rather
+/// than a bracketed label) so the square reads as an icon, not a selection.
+/// Brightens on hover; returns its click response.
+fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 22.0, y: 20.0 }, egui::Sense::click());
+    let color = ui.style().interact(&resp).fg_stroke.color;
+    let painter = ui.painter();
+
+    // Snap the center onto a half-pixel so the 1px stroke lands on whole pixels.
+    let c = rect.center().floor() + egui::vec2(0.5, 0.5);
+    let half = 6.5; // square half-size
+    let square = egui::Rect::from_center_size(c, Vec2::splat(half * 2.0));
+    painter.rect_stroke(
+        square,
+        2.0,
+        egui::Stroke::new(1.5, color),
+        egui::StrokeKind::Inside,
+    );
+
+    // Counts past 99 won't fit — cap the label rather than overflow the square.
+    let label = if count > 99 {
+        "99".to_string()
+    } else {
+        count.to_string()
+    };
+    painter.text(
+        c,
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(if count > 9 { 8.0 } else { 10.0 }),
+        color,
+    );
+    resp
+}
+
 #[inline]
 fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
     response.lost_focus() && ui.input(|i| i.key_pressed(key))
@@ -161,18 +197,15 @@ pub(super) fn add_toolbar(
                                     )));
                                 }
                             }
-                            // Active tab position, bracketed (e.g. "[2/3]") beside the
-                            // menu button — a full border would read as a selection.
-                            // Shown only with multiple tabs; clicking it opens the
-                            // menu's Tabs section (like the ⬇ chip for downloads).
-                            if tab_pos.1 > 1 {
-                                let label = format!("[{}/{}]", tab_pos.0, tab_pos.1);
-                                if ui.add(new_toolbar_button(&label)).clicked() {
-                                    commands.push(AppCommand::Menu(MenuAction::Open));
-                                    commands.push(AppCommand::Menu(MenuAction::SetSection(
-                                        Section::Tabs,
-                                    )));
-                                }
+                            // Tab counter: a square icon with the total tab count
+                            // inside, beside the menu button. Always shown (even at
+                            // "1"); clicking it opens the menu's Tabs section (like
+                            // the ⬇ chip for downloads).
+                            if add_tabs_button(ui, tab_pos.1).clicked() {
+                                commands.push(AppCommand::Menu(MenuAction::Open));
+                                commands.push(AppCommand::Menu(MenuAction::SetSection(
+                                    Section::Tabs,
+                                )));
                             }
                             // Page-zoom chip (e.g. "125%"), shown only while the
                             // active tab is off the config default; clicking resets.
@@ -188,26 +221,73 @@ pub(super) fn add_toolbar(
                             {
                                 commands.push(AppCommand::ToggleBookmark);
                             }
-                            // 🖹 "document with text" — the page-with-lines reader
-                            // glyph; lives in egui's emoji-icon-font (cmap-checked;
-                            // most other reader-ish glyphs are tofu).
-                            if ui.add(new_toolbar_button("🖹")).clicked() {
-                                commands.push(AppCommand::Browser(BrowserCommand::Reader));
-                            }
-                            if let Some(pos) = osk_caret {
-                                super::park_caret(
-                                    ui.ctx(),
-                                    egui::Id::new("location"),
-                                    pos,
-                                    state.get_location().chars().count(),
+                            // The address bar fills the remaining width. We draw our
+                            // own field frame (styled like egui's TextEdit) holding a
+                            // frameless text edit plus the reader-mode 📖 toggle at its
+                            // right edge — Firefox/Safari style. The two sit in
+                            // *disjoint* rects (no overlap), so the icon click is
+                            // reliable; an icon overlaid on the text edit raced it for
+                            // the hit-test and clicked unreliably.
+                            let avail = ui.available_size();
+                            let radius = ui.visuals().widgets.inactive.corner_radius;
+                            let field = egui::Frame::new()
+                                .fill(ui.visuals().text_edit_bg_color())
+                                .stroke(ui.visuals().widgets.inactive.bg_stroke)
+                                .corner_radius(radius)
+                                .inner_margin(egui::Margin::symmetric(4, 2))
+                                .show(ui, |ui| {
+                                    // Fill the toolbar's remaining width (minus the
+                                    // frame's own margins) so the bar spans the gap;
+                                    // height stays natural (one text row).
+                                    ui.set_min_width(avail.x - 8.0);
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            // 📖 "open book" reader toggle — its own slot
+                                            // at the field's right edge. Glyph lives in
+                                            // egui's NotoEmoji + emoji-icon-font
+                                            // (cmap-checked; most reader-ish glyphs tofu).
+                                            if ui.add(new_toolbar_button("📖")).clicked() {
+                                                commands.push(AppCommand::Browser(
+                                                    BrowserCommand::Reader,
+                                                ));
+                                            }
+                                            if let Some(pos) = osk_caret {
+                                                super::park_caret(
+                                                    ui.ctx(),
+                                                    egui::Id::new("location"),
+                                                    pos,
+                                                    state.get_location().chars().count(),
+                                                );
+                                            }
+                                            let location = ui.add_sized(
+                                                ui.available_size(),
+                                                new_text_edit(
+                                                    state.get_location_mut(),
+                                                    "location",
+                                                )
+                                                .frame(egui::Frame::new()),
+                                            );
+                                            if is_key_pressed(ui, location.clone(), egui::Key::Enter)
+                                            {
+                                                commands.push(AppCommand::Browser(
+                                                    BrowserCommand::Load,
+                                                ));
+                                            }
+                                            location.has_focus()
+                                        },
+                                    )
+                                    .inner
+                                });
+                            // Repaint the frame's ring in the accent stroke while the
+                            // address bar is focused, matching egui's own TextEdit.
+                            if field.inner {
+                                ui.painter().rect_stroke(
+                                    field.response.rect,
+                                    radius,
+                                    ui.visuals().selection.stroke,
+                                    egui::StrokeKind::Inside,
                                 );
-                            }
-                            let location = ui.add_sized(
-                                ui.available_size(),
-                                new_text_edit(state.get_location_mut(), "location"),
-                            );
-                            if is_key_pressed(ui, location, egui::Key::Enter) {
-                                commands.push(AppCommand::Browser(BrowserCommand::Load));
                             }
                         },
                     );

@@ -1,23 +1,5 @@
 # Backlog
 
-## Home page (speed dial) — designed, ready to build
-
-Internal page on a custom protocol, NOT an egui overlay (chrome = egui,
-content = pages; see the menu discussion).
-
-- Implement `servo::protocol_handler::ProtocolHandler` for `retsurf://`,
-  register via `ServoBuilder::protocol_registry`. servoshell uses the same
-  mechanism for its internal pages.
-- `retsurf://home` serves generated HTML: dark tile grid of bookmarks
-  (+ maybe a recent-history row), inline CSS sized for 640×480.
-- Rendered by Servo itself, so cursor / link hints / clicks / Back work with
-  zero new input code; the address bar shows a clean `retsurf://home`.
-- Handler runs on net threads: read `bookmarks.toml` from the data dir at
-  request time instead of sharing state with the UI — always fresh, no
-  synchronization.
-- Cheap to extend later: `retsurf://history`, error pages, about.
-- Lives in a new `browser/home.rs`.
-
 ## Address bar autocomplete
 
 Suggestions from history + bookmarks while typing — every character not typed

@@ -29,7 +29,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 
 ## Features
 
-**Gamepad support** (no keyboard needed)
+**Gamepad support**
 - Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
 - **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab)
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
@@ -45,7 +45,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 **Reader mode**
 - Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
 - Runs in place — no refetch, so it works on logged-in and dynamic pages; toggling off reloads
-- Toggle via the 🖹 toolbar button, R3 (or hold X on stickless devices), `ctrl+e`, or the bindable `reader` action
+- Toggle via the icon toolbar button, R3 (or hold X on stickless devices), `ctrl+e`, or the bindable `reader` action
 
 **Downloads**
 - Navigating to a file link downloads it in the background instead of rendering it
@@ -58,7 +58,7 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 - Fully configurable: toggle it off, change the lists, or change the refresh interval
 
 **Start page**
-- A built-in start page (the default `home_page`, `retsurf:home`): a search/URL field over a speed-dial grid of your saved bookmarks
+- A built-in start page (the default `home_page`, `retsurf:home`): a search/URL field over a speed-dial grid of your saved pins
 - Drawn natively with egui, so it's fully controller-navigable — D-pad/stick move the selection, A opens a tile or the keyboard to type, just like the other overlays
 
 **Rendering**
@@ -97,7 +97,7 @@ With the Android SDK/NDK installed, one command cross-compiles and assembles it:
 ```sh
 rustup target add aarch64-linux-android
 cargo install cargo-ndk --locked
-./android/scripts/build.sh release   # -> android/app/build/outputs/apk/release/app-release.apk
+./android/scripts/build.sh release   # android/app/build/outputs/apk/release/app-release.apk
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
