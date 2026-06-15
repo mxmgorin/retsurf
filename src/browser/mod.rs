@@ -8,6 +8,7 @@ pub mod content_filter;
 
 mod delegate;
 mod home;
+pub mod memory;
 mod reader;
 mod url;
 
@@ -711,26 +712,42 @@ fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo:
     let cores = std::thread::available_parallelism()
         .map(std::num::NonZeroUsize::get)
         .unwrap_or(4) as i64;
-    let defaults = servo::Preferences::default();
 
-    // Each `*_workers_max` pref caps a pool Servo sizes from the core count.
-    let cap = |default_max: i64| match perf.worker_pool_max {
-        0 => default_max.min((cores / 2).max(2)),
-        n => n as i64,
-    };
-    let mut prefs = servo::Preferences {
-        layout_threads: match perf.layout_threads {
-            0 => (cores - 2).clamp(1, 4),
-            n => n as i64,
-        },
-        threadpools_async_runtime_workers_max: cap(defaults.threadpools_async_runtime_workers_max),
-        threadpools_fallback_worker_num: cap(defaults.threadpools_fallback_worker_num),
-        threadpools_image_cache_workers_max: cap(defaults.threadpools_image_cache_workers_max),
-        threadpools_indexeddb_workers_max: cap(defaults.threadpools_indexeddb_workers_max),
-        threadpools_webstorage_workers_max: cap(defaults.threadpools_webstorage_workers_max),
-        threadpools_webrender_workers_max: cap(defaults.threadpools_webrender_workers_max),
-        ..defaults
-    };
+    // The memory profile is the holistic baseline: JS GC ceilings, back-forward
+    // cache depth, HTTP/canvas caches, which DOM subsystems start, and tier-sized
+    // thread counts. `auto` resolves from the build target + detected RAM.
+    let profile = memory::resolve(perf.memory_profile);
+    let mut prefs = memory::preferences(profile);
+
+    // Tiers hardcode thread counts for their assumed core count (e.g. Generous
+    // assumes an octa-core A527); clamp down so a quad-core board isn't
+    // oversubscribed. Only ever clamps down — never raises the tier's choice.
+    // Desktop is left untouched: it's Servo's own defaults, run as upstream ships.
+    if profile != crate::config::MemoryProfile::Desktop {
+        let clamp = |v: &mut i64| *v = (*v).clamp(1, cores);
+        clamp(&mut prefs.layout_threads);
+        clamp(&mut prefs.threadpools_async_runtime_workers_max);
+        clamp(&mut prefs.threadpools_fallback_worker_num);
+        clamp(&mut prefs.threadpools_image_cache_workers_max);
+        clamp(&mut prefs.threadpools_indexeddb_workers_max);
+        clamp(&mut prefs.threadpools_webstorage_workers_max);
+        clamp(&mut prefs.threadpools_webrender_workers_max);
+    }
+
+    // The explicit [performance] knobs still win when set (non-zero); `0` keeps
+    // the tier's choice.
+    if perf.layout_threads != 0 {
+        prefs.layout_threads = perf.layout_threads as i64;
+    }
+    if perf.worker_pool_max != 0 {
+        let n = perf.worker_pool_max as i64;
+        prefs.threadpools_async_runtime_workers_max = n;
+        prefs.threadpools_fallback_worker_num = n;
+        prefs.threadpools_image_cache_workers_max = n;
+        prefs.threadpools_indexeddb_workers_max = n;
+        prefs.threadpools_webstorage_workers_max = n;
+        prefs.threadpools_webrender_workers_max = n;
+    }
 
     if let Some(ua) = resolve_user_agent(&config.user_agent) {
         log::info!("user agent: {ua}");
@@ -738,9 +755,11 @@ fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo:
     }
 
     log::info!(
-        "servo threads: {cores} cores -> layout={}, pool cap={}",
+        "servo: {cores} cores, memory profile `{}` -> layout={}, webrender pool={}, js_mem_max={}",
+        profile.as_str(),
         prefs.layout_threads,
-        cap(i64::MAX),
+        prefs.threadpools_webrender_workers_max,
+        prefs.js_mem_max,
     );
     prefs
 }

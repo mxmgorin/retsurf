@@ -10,7 +10,7 @@
 //! and closes — all reachable without an analog stick. [`crate::ui::settings`]
 //! renders it.
 
-use crate::config::{AppConfig, CursorMode};
+use crate::config::{AppConfig, CursorMode, MemoryProfile};
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
@@ -84,6 +84,7 @@ enum FieldId {
     HistoryMax,
     AdblockEnabled,
     AdblockUpdateDays,
+    MemoryProfile,
     LayoutThreads,
     WorkerPoolMax,
     BlockImages,
@@ -139,6 +140,18 @@ const UA_CHOICES: &[(&str, &str)] = &[
 /// Default D-pad/stick mode — the `(label, stored value)` pairs map to
 /// [`crate::config::CursorMode`].
 const CURSOR_MODE_CHOICES: &[(&str, &str)] = &[("Mouse", "mouse"), ("Scroll", "scroll")];
+
+/// Engine memory/performance tiers — the `(label, stored value)` pairs map to
+/// [`crate::config::MemoryProfile`]. `Auto` picks one from the platform + RAM.
+const MEMORY_PROFILE_CHOICES: &[(&str, &str)] = &[
+    ("Auto", "auto"),
+    ("Embedded", "embedded"),
+    ("Tight", "tight"),
+    ("Balanced", "balanced"),
+    ("Generous", "generous"),
+    ("Android", "android"),
+    ("Desktop (Servo defaults)", "desktop"),
+];
 
 /// Compact constructor for the [`FIELDS`] table — without it `rustfmt` explodes
 /// each `Field` literal across six lines and drowns the table.
@@ -198,6 +211,7 @@ static FIELDS: &[Field] = &[
     f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
     f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
 
+    f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MEMORY_PROFILE_CHOICES), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
@@ -489,6 +503,7 @@ impl Settings {
         match id {
             FieldId::UserAgent => &self.draft.browser.user_agent,
             FieldId::CursorMode => self.draft.input.cursor_mode.as_str(),
+            FieldId::MemoryProfile => self.draft.performance.memory_profile.as_str(),
             _ => "",
         }
     }
@@ -497,6 +512,9 @@ impl Settings {
         match id {
             FieldId::UserAgent => self.draft.browser.user_agent = v.to_string(),
             FieldId::CursorMode => self.draft.input.cursor_mode = CursorMode::from_value(v),
+            FieldId::MemoryProfile => {
+                self.draft.performance.memory_profile = MemoryProfile::from_value(v)
+            }
             _ => {}
         }
     }
