@@ -34,6 +34,12 @@
 //!   * Android phone/tablet (>3 GB, big cores) -> Android
 //!   * Desktop (8 GB+) -> Desktop (Servo's untouched defaults)
 
+// Each tier builds its `Preferences` by starting from `Default` and mutating the
+// handful of fields that matter (see the module docs), with a comment per field.
+// That's far clearer here than a struct-update literal burying the overrides in a
+// 30-field initializer — and it keeps each field independent across servo bumps.
+#![allow(clippy::field_reassign_with_default)]
+
 use crate::config::MemoryProfile;
 use servo::Preferences;
 
@@ -66,9 +72,10 @@ pub fn preferences(profile: MemoryProfile) -> Preferences {
 fn for_target(ram_mb: u64) -> MemoryProfile {
     if cfg!(target_os = "android") {
         MemoryProfile::Android
-    } else if cfg!(any(target_os = "windows", target_os = "macos")) {
-        MemoryProfile::Desktop
-    } else if cfg!(target_os = "linux") && ram_mb > 6144 {
+    } else if cfg!(any(target_os = "windows", target_os = "macos"))
+        // Desktop OSes always; high-RAM Linux too (>6 GB rules out a handheld).
+        || (cfg!(target_os = "linux") && ram_mb > 6144)
+    {
         MemoryProfile::Desktop
     } else {
         suggest(ram_mb)

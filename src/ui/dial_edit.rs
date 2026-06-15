@@ -103,6 +103,10 @@ fn add_grid(
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
                         ui.spacing_mut().item_spacing.x = GAP;
+                        // `slot` reaches `settings_slot` (== `regular.len()`), the
+                        // trailing ⚙ tile — out of bounds for `regular`, so we can't
+                        // iterate `regular` directly; index it only on the else arm.
+                        #[allow(clippy::needless_range_loop)]
                         for slot in row_start..row_start + n {
                             let selected = edit.tile() == Some(slot);
                             if slot == settings_slot {
