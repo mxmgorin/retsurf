@@ -826,6 +826,7 @@ impl AppUi {
     /// a size-changed event on Android rotation (otherwise the UI keeps laying
     /// out for the previous orientation — e.g. a landscape home page shown in
     /// portrait).
+    #[cfg(target_os = "android")]
     pub fn sync_window_size(&mut self, window: &AppWindow) {
         self.egui.state.sync_window_size(window.get_sdl2_window());
     }
