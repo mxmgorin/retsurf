@@ -60,7 +60,6 @@ On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the mo
 **Start page**
 - A built-in start page (the default `home_page`, `retsurf:home`): a search/URL field over a speed-dial grid of your saved bookmarks
 - Drawn natively with egui, so it's fully controller-navigable — D-pad/stick move the selection, A opens a tile or the keyboard to type, just like the other overlays
-- The grid reflects your current bookmarks every time; point `home_page` at any URL instead if you'd rather open a real site
 
 **Rendering**
 - Real web rendering via the **Servo** engine (WebRender)
@@ -92,7 +91,7 @@ On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES conte
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
-| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) — created on demand; useful for portable installs or separate profiles |
+| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) |
 | `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
 | `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
@@ -161,12 +160,26 @@ cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 layouts = ["en", "ru"]
 
 [performance]
-# Servo thread counts. The defaults (0 = auto) size everything from the CPU core
-# count, which matters on 4-core handhelds where Servo's desktop defaults
-# oversubscribe the cores. Set explicit values to override.
-layout_threads = 0         # Stylo/layout threads; auto = cores - 2, clamped to 1..4
-worker_pool_max = 0        # cap per worker pool (image cache, async runtime, storage,
-                           # WebRender); auto = half the cores, at least 2
+# Memory/performance tier for the Servo engine. Each profile bundles a coordinated
+# set of engine prefs — JS heap/GC ceilings, back-forward-cache depth, HTTP cache,
+# subpixel AA, thread counts, and which DOM subsystems even start — so lower tiers
+# use less RAM at some cost to speed (important on unified-memory handhelds, where
+# the GPU draws from the same pool). One of:
+#   auto      pick a tier from the build target + detected RAM (the default)
+#   embedded  ~512 MB / sub-1 GB boards: baseline JIT only, single-threaded, no caches
+#   tight     ~1 GB boards (RK3326, H700): baseline JIT only, small caches
+#   balanced  ~2 GB boards (RK3566, A527): modest parallelism, full JIT, WebGL2 on
+#   generous  ~4 GB handhelds (A527): higher GC ceiling, deeper history, full JIT
+#   android   Android phones/tablets (>3 GB): full JIT, more threads, eager mem return
+#   desktop   Servo's own defaults, untouched — unlimited JS heap, auto-scaled threads
+# `auto` resolves to: android build -> android; windows/macos -> desktop; Linux with
+# >6 GB -> desktop; otherwise by RAM (from /proc/meminfo). Changing it needs a restart.
+memory_profile = "auto"
+# Servo thread counts. 0 = keep the memory profile's choice; a non-zero value
+# overrides it (handy to fine-tune a tier without switching profiles).
+layout_threads = 0         # Stylo/layout threads
+worker_pool_max = 0        # cap applied to every worker pool (image cache, async
+                           # runtime, storage, WebRender)
 
 [history]
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)
