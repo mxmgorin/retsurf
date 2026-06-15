@@ -1008,7 +1008,13 @@ impl AppUi {
                 if self.menu.visible {
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.osk.visible {
-                    osk::add_osk(ctx, &self.osk);
+                    // Clear a bottom toolbar so its address bar stays visible
+                    // below the keys; a top toolbar needs no inset.
+                    let bottom_inset = match self.toolbar_position {
+                        ToolbarPosition::Bottom => self.toolbar_height,
+                        ToolbarPosition::Top => 0.0,
+                    };
+                    osk::add_osk(ctx, &self.osk, bottom_inset);
                 } else if self.hints.visible {
                     hints::add_hints(ctx, &self.hints, self.webview_rect);
                 } else if cursor_visible.is_some() {

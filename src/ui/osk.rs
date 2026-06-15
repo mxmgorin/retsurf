@@ -21,7 +21,11 @@ fn button_hint(key: &Key) -> Option<&'static str> {
 
 /// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
 /// to the bottom, with the selected key (and active Shift/Caps) highlighted.
-pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
+///
+/// `bottom_inset` lifts the keyboard off the bottom edge by that many points —
+/// used to clear a bottom toolbar so the address bar being typed into stays
+/// visible just below the keys (0 for a top toolbar).
+pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) {
     let selected = osk.selected();
     let shift = osk.shift();
     let highlight = ACCENT;
@@ -40,7 +44,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk) {
 
     egui::Area::new(egui::Id::new("osk"))
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0 - bottom_inset))
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
