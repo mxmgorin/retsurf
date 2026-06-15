@@ -23,24 +23,24 @@ pub(super) const TILE_W: f32 = 96.0;
 pub(super) const TILE_H: f32 = 84.0;
 pub(super) const GAP: f32 = 12.0;
 
-/// Draw the start-page overlay over the (blank) web view — below the toolbar
-/// (`webview_top`), so the address bar and toolbar buttons stay usable. Any
-/// activation is pushed as a command for the app to execute.
+/// Draw the start-page overlay over the (blank) web view — confined to the
+/// `webview` rect (the window minus the toolbar strip), so the address bar and
+/// toolbar buttons stay usable. Any activation is pushed as a command for the
+/// app to execute.
 pub(super) fn add_home(
     ctx: &egui::Context,
     home: &mut Home,
     pins: &[String],
-    webview_top: f32,
+    webview: egui::Rect,
     osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
-    let screen = ctx.content_rect();
-    let area = egui::Rect::from_min_max(egui::pos2(screen.left(), webview_top), screen.max);
+    let area = webview;
     egui::Area::new(egui::Id::new("home"))
         .order(egui::Order::Middle)
         .fixed_pos(area.min)
         // Don't let egui shift the area up to fit the screen — it must stay
-        // pinned below the toolbar (`webview_top`), even if content overflows.
+        // pinned to the web-view rect, even if content overflows.
         .constrain(false)
         .show(ctx, |ui| {
             egui::Frame::default()

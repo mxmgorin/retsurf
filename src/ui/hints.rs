@@ -6,7 +6,7 @@ use super::theme::ACCENT;
 use crate::overlay::hints::Hints;
 use egui_sdl2::egui;
 
-pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview_top: f32) {
+pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("hints"),
@@ -17,9 +17,9 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview_top: f32) {
         egui::Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 45);
 
     for (i, hint) in hints.hints().iter().enumerate() {
-        // Rects are viewport-relative; shift below the toolbar.
+        // Rects are viewport-relative; shift by the web-view origin.
         let rect = egui::Rect::from_min_size(
-            egui::pos2(hint.x, hint.y + webview_top),
+            egui::pos2(hint.x + webview.left(), hint.y + webview.top()),
             egui::vec2(hint.w, hint.h),
         );
         if i == hints.selected() {

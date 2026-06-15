@@ -97,10 +97,15 @@ pub enum Focus {
 pub struct AppUi {
     egui: EguiGlow,
     repaint_delay: Option<Duration>,
-    /// Y of the web view's top edge (logical px) = the real toolbar bottom,
-    /// measured from the central panel each frame. Used to map cursor↔browser
-    /// coordinates and to keep the cursor out of the toolbar.
-    webview_top: f32,
+    /// The web view's rect (logical px), measured from the central panel each
+    /// frame. With a top toolbar it sits below the bar; with a bottom toolbar it
+    /// starts at the window top. Used to map cursor↔browser coordinates, keep
+    /// the cursor/pointer out of the toolbar, and anchor the home/hints overlays.
+    webview_rect: egui::Rect,
+    /// Toolbar thickness (logical px), measured each frame. Stays valid across
+    /// window-size changes (unlike the rect, whose extent moves with the window),
+    /// so the SDL-resize fast path uses it to size the viewport without lag.
+    toolbar_height: f32,
     repaint_pending: bool,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     browser_tex_id: egui::TextureId,
@@ -166,7 +171,8 @@ impl AppUi {
         Self {
             egui,
             repaint_delay: None,
-            webview_top: 0.0,
+            webview_rect: egui::Rect::ZERO,
+            toolbar_height: 0.0,
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
@@ -225,7 +231,8 @@ impl AppUi {
     /// go to the page; clicks above go to the egui toolbar via [`AppUi::click_ui`].
     #[inline]
     pub fn cursor_over_browser(&self) -> bool {
-        self.cursor.1 >= self.webview_top
+        let y = self.cursor.1;
+        y >= self.webview_rect.top() && y < self.webview_rect.bottom()
     }
 
     /// Click the egui UI element under the cursor by feeding the backend a
@@ -800,7 +807,7 @@ impl AppUi {
 
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
-        (x, y - self.webview_top)
+        (x - self.webview_rect.left(), y - self.webview_rect.top())
     }
 
     /// Resize the browser to the central web-view area (the window minus the
@@ -813,7 +820,7 @@ impl AppUi {
         if dw == 0 || dh == 0 {
             return;
         }
-        let toolbar_px = (self.webview_top * self.egui.ctx.pixels_per_point()).round() as u32;
+        let toolbar_px = (self.toolbar_height * self.egui.ctx.pixels_per_point()).round() as u32;
         let size = (dw, dh.saturating_sub(toolbar_px).max(1));
         if size != self.browser_viewport {
             self.browser_viewport = size;
@@ -924,9 +931,12 @@ impl AppUi {
                     .frame(frame)
                     .show_inside(&mut root, |ui| {
                         let rect = ui.max_rect();
-                        // The panel's top edge is the real toolbar bottom (incl.
-                        // frame margins), so map cursor/clicks against it.
-                        self.webview_top = rect.min.y;
+                        // The central panel is exactly the web-view area (the
+                        // window minus the toolbar strip, whichever side it's on),
+                        // so map cursor/clicks against it. The toolbar's thickness
+                        // is whatever the full content rect has that this doesn't.
+                        self.webview_rect = rect;
+                        self.toolbar_height = ctx.content_rect().height() - rect.height();
                         ui.allocate_rect(rect, egui::Sense::hover());
 
                         desired_px = Some((
@@ -951,7 +961,7 @@ impl AppUi {
                         ctx,
                         &mut self.home,
                         &pins,
-                        self.webview_top,
+                        self.webview_rect,
                         caret_for(OskField::Home),
                         commands,
                     );
@@ -988,7 +998,7 @@ impl AppUi {
                 } else if self.osk.visible {
                     osk::add_osk(ctx, &self.osk);
                 } else if self.hints.visible {
-                    hints::add_hints(ctx, &self.hints, self.webview_top);
+                    hints::add_hints(ctx, &self.hints, self.webview_rect);
                 } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.
@@ -1057,17 +1067,20 @@ impl AppUi {
             return false;
         };
 
-        pos.y < self.webview_top
+        // Over the toolbar = outside the web view's vertical span (the toolbar
+        // is the opposite strip, whichever side it's on).
+        pos.y < self.webview_rect.top() || pos.y >= self.webview_rect.bottom()
     }
 
     /// Whether a *pixel*-space y coordinate (as carried by raw SDL finger events)
     /// lands in the web-view area, below the toolbar. Touches over the toolbar are
     /// egui's — it synthesizes pointer events from them — so only web-view touches
-    /// should start a page scroll/tap gesture. `webview_top` is in egui points, so
-    /// scale it up to compare against the pixel coordinate.
+    /// should start a page scroll/tap gesture. The web-view rect is in egui
+    /// points, so scale it up to compare against the pixel coordinate.
     #[inline]
     pub fn point_over_webview(&self, y_px: f32) -> bool {
-        y_px >= self.webview_top * self.egui.ctx.pixels_per_point()
+        let ppp = self.egui.ctx.pixels_per_point();
+        y_px >= self.webview_rect.top() * ppp && y_px < self.webview_rect.bottom() * ppp
     }
 }
 
