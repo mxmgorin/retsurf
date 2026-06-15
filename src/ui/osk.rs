@@ -44,7 +44,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) {
 
     egui::Area::new(egui::Id::new("osk"))
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0 - bottom_inset))
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -bottom_inset))
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
