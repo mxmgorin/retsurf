@@ -724,14 +724,13 @@ fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo:
     // oversubscribed. Only ever clamps down — never raises the tier's choice.
     // Desktop is left untouched: it's Servo's own defaults, run as upstream ships.
     if profile != crate::config::MemoryProfile::Desktop {
-        let clamp = |v: &mut i64| *v = (*v).clamp(1, cores);
-        clamp(&mut prefs.layout_threads);
-        clamp(&mut prefs.threadpools_async_runtime_workers_max);
-        clamp(&mut prefs.threadpools_fallback_worker_num);
-        clamp(&mut prefs.threadpools_image_cache_workers_max);
-        clamp(&mut prefs.threadpools_indexeddb_workers_max);
-        clamp(&mut prefs.threadpools_webstorage_workers_max);
-        clamp(&mut prefs.threadpools_webrender_workers_max);
+        let cores_u = cores as u64;
+        prefs.layout_threads = prefs.layout_threads.clamp(1, cores);
+        let clamp = |v: &mut u64| *v = (*v).clamp(1, cores_u);
+        clamp(&mut prefs.thread_pool_async_runtime_workers_max);
+        clamp(&mut prefs.thread_pool_fallback_workers);
+        clamp(&mut prefs.thread_pool_workers_max);
+        clamp(&mut prefs.thread_pool_webrender_workers_max);
     }
 
     // The explicit [performance] knobs still win when set (non-zero); `0` keeps
@@ -740,13 +739,11 @@ fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo:
         prefs.layout_threads = perf.layout_threads as i64;
     }
     if perf.worker_pool_max != 0 {
-        let n = perf.worker_pool_max as i64;
-        prefs.threadpools_async_runtime_workers_max = n;
-        prefs.threadpools_fallback_worker_num = n;
-        prefs.threadpools_image_cache_workers_max = n;
-        prefs.threadpools_indexeddb_workers_max = n;
-        prefs.threadpools_webstorage_workers_max = n;
-        prefs.threadpools_webrender_workers_max = n;
+        let n = perf.worker_pool_max as u64;
+        prefs.thread_pool_async_runtime_workers_max = n;
+        prefs.thread_pool_fallback_workers = n;
+        prefs.thread_pool_workers_max = n;
+        prefs.thread_pool_webrender_workers_max = n;
     }
 
     if let Some(ua) = resolve_user_agent(&config.user_agent) {
@@ -758,7 +755,7 @@ fn build_preferences(config: &BrowserConfig, perf: &PerformanceConfig) -> servo:
         "servo: {cores} cores, memory profile `{}` -> layout={}, webrender pool={}, js_mem_max={}",
         profile.as_str(),
         prefs.layout_threads,
-        prefs.threadpools_webrender_workers_max,
+        prefs.thread_pool_webrender_workers_max,
         prefs.js_mem_max,
     );
     prefs

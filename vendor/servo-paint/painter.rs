@@ -208,8 +208,8 @@ impl Painter {
         };
         let worker_threads = std::thread::available_parallelism()
             .map(|i| i.get())
-            .unwrap_or(pref!(threadpools_fallback_worker_num) as usize)
-            .min(pref!(threadpools_webrender_workers_max).max(1) as usize);
+            .unwrap_or(pref!(thread_pool_fallback_workers) as usize)
+            .min(pref!(thread_pool_webrender_workers_max).max(1) as usize);
         let workers = Some(Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(worker_threads)
@@ -1046,7 +1046,7 @@ impl Painter {
     ) -> ImageData {
         match data {
             SerializableImageData::Raw(shared_memory) => {
-                let data = Arc::new(shared_memory.to_vec());
+                let data = shared_memory.into_arc_vec();
                 if is_animated_image {
                     self.animation_image_cache.insert(key, Arc::clone(&data));
                 }

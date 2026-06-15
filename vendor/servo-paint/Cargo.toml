@@ -11,9 +11,9 @@
 
 [package]
 edition = "2024"
-rust-version = "1.86.0"
+rust-version = "1.88.0"
 name = "servo-paint"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["The Servo Project Developers"]
 build = false
 publish = true
@@ -51,7 +51,7 @@ version = "0.5"
 version = "0.1"
 
 [dependencies.embedder_traits]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-embedder-traits"
 
 [dependencies.euclid]
@@ -64,36 +64,36 @@ version = "0.15"
 version = "0.25"
 features = [
     "avif",
-    "rayon",
     "bmp",
     "gif",
     "ico",
     "jpeg",
     "png",
+    "rayon",
     "webp",
 ]
 default-features = false
 
 [dependencies.ipc-channel]
-version = "0.21"
+version = "0.22"
 
 [dependencies.log]
-version = "0.4.29"
+version = "0.4.30"
 
 [dependencies.malloc_size_of]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-malloc-size-of"
 
 [dependencies.media]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-media-thread"
 
 [dependencies.paint_api]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-paint-api"
 
 [dependencies.profile_traits]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-profile-traits"
 
 [dependencies.rayon]
@@ -103,25 +103,25 @@ version = "1"
 version = "2.1.2"
 
 [dependencies.servo-allocator]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-base]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-canvas-traits]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-config]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-constellation-traits]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-geometry]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.servo-tracing]
-version = "0.2.0"
+version = "=0.3.0"
 
 [dependencies.smallvec]
 version = "1.15"
@@ -131,14 +131,14 @@ features = [
 ]
 
 [dependencies.stylo_traits]
-version = "=0.16.1-servo-0.2"
+version = "0.18.0"
 
 [dependencies.surfman]
-version = "0.12.0"
+version = "0.12.1"
 features = ["chains"]
 
 [dependencies.timers]
-version = "0.2.0"
+version = "=0.3.0"
 package = "servo-timers"
 
 [dependencies.tracing]
@@ -146,12 +146,12 @@ version = "0.1.44"
 optional = true
 
 [dependencies.webgl]
-version = "0.2.0"
+version = "=0.3.0"
 default-features = false
 package = "servo-webgl"
 
 [dependencies.webgpu]
-version = "0.2.0"
+version = "=0.3.0"
 optional = true
 package = "servo-webgpu"
 
@@ -163,12 +163,12 @@ features = ["capture"]
 version = "0.68"
 
 [dependencies.webxr]
-version = "0.2.0"
+version = "=0.3.0"
 optional = true
 package = "servo-webxr"
 
 [dependencies.webxr-api]
-version = "0.2.0"
+version = "=0.3.0"
 optional = true
 package = "servo-webxr-api"
 
@@ -176,7 +176,7 @@ package = "servo-webxr-api"
 version = "0.2.2"
 
 [dev-dependencies.surfman]
-version = "0.12.0"
+version = "0.12.1"
 features = ["chains"]
 
 [lints.clippy]

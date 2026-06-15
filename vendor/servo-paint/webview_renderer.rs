@@ -657,13 +657,12 @@ impl WebViewRenderer {
                         touch_id,
                         TouchIdMoveTracking::Remove,
                     );
-                    if let Some(info) = self.touch_handler.get_touch_sequence_mut(sequence_id) {
-                        if info.prevent_move == TouchMoveAllowed::Pending {
-                            info.prevent_move = TouchMoveAllowed::Allowed;
-                            if let TouchSequenceState::PendingFling { velocity, point } = info.state
-                            {
-                                info.state = TouchSequenceState::Flinging { velocity, point }
-                            }
+                    if let Some(info) = self.touch_handler.get_touch_sequence_mut(sequence_id) &&
+                        info.prevent_move == TouchMoveAllowed::Pending
+                    {
+                        info.prevent_move = TouchMoveAllowed::Allowed;
+                        if let TouchSequenceState::PendingFling { velocity, point } = info.state {
+                            info.state = TouchSequenceState::Flinging { velocity, point }
                         }
                     }
                 },
@@ -1046,13 +1045,16 @@ impl WebViewRenderer {
         // The device pixel ratio used by the style system should include the scale from page pixels
         // to device pixels, but not including any pinch zoom.
         let device_pixel_ratio = self.device_pixels_per_page_pixel_not_including_pinch_zoom();
-        let initial_viewport = self.rect.size().to_f32() / device_pixel_ratio;
+        // From <https://www.w3.org/TR/css-viewport-1/#actual-viewport>:
+        // This is the viewport you get after processing the viewport <meta> tag.
+        let layout_viewport = self.rect.size().to_f32() /
+            (device_pixel_ratio * Scale::new(self.viewport_description.initial_scale.get()));
         let _ = self.embedder_to_constellation_sender.send(
             EmbedderToConstellationMessage::ChangeViewportDetails(
                 self.id,
                 ViewportDetails {
                     hidpi_scale_factor: device_pixel_ratio,
-                    size: initial_viewport,
+                    size: layout_viewport,
                 },
                 WindowSizeType::Resize,
             ),
@@ -1085,8 +1087,12 @@ impl WebViewRenderer {
     }
 
     pub fn set_viewport_description(&mut self, viewport_description: ViewportDescription) {
-        self.set_page_zoom(viewport_description.initial_scale);
         self.viewport_description = viewport_description;
+        self.send_window_size_message();
+        self.adjust_pinch_zoom(
+            self.viewport_description.initial_scale.get(),
+            DevicePoint::origin(),
+        );
     }
 
     pub(crate) fn scroll_trees_memory_usage(
@@ -1117,13 +1123,13 @@ impl WebViewRenderer {
                 );
         }
 
-        if let Some(wheel_event) = self.pending_wheel_events.remove(&id) {
-            if !result.contains(InputEventResult::DefaultPrevented) {
-                // A scroll delta for a wheel event is the inverse of the wheel delta.
-                let scroll_delta =
-                    DeviceVector2D::new(-wheel_event.delta.x as f32, -wheel_event.delta.y as f32);
-                self.notify_scroll_event(Scroll::Delta(scroll_delta.into()), wheel_event.point);
-            }
+        if let Some(wheel_event) = self.pending_wheel_events.remove(&id) &&
+            !result.contains(InputEventResult::DefaultPrevented)
+        {
+            // A scroll delta for a wheel event is the inverse of the wheel delta.
+            let scroll_delta =
+                DeviceVector2D::new(-wheel_event.delta.x as f32, -wheel_event.delta.y as f32);
+            self.notify_scroll_event(Scroll::Delta(scroll_delta.into()), wheel_event.point);
         }
     }
 }

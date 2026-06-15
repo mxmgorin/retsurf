@@ -2,7 +2,7 @@
 //! [`MemoryProfile`] bundles memory-oriented Servo prefs tuned for a class of
 //! hardware; lower tiers use less memory at some cost to performance.
 //!
-//! Field names match `servo_config` 0.2.0's `Preferences` (re-exported from the
+//! Field names match `servo_config` 0.3.0's `Preferences` (re-exported from the
 //! `servo` crate). All fields are public, so each tier starts from `Default` and
 //! overrides only what matters. The thread counts here are *baselines* —
 //! [`crate::browser::build_preferences`] clamps them down to the machine's core
@@ -104,15 +104,6 @@ fn detect_ram_mb() -> u64 {
     FALLBACK_MB
 }
 
-/// Set the three "general" worker pools (image cache, IndexedDB, web storage) to
-/// one cap. `servo_config` 0.2.0 sizes these separately rather than from a
-/// single `thread_pool_workers_max`, so we fan one number out across them.
-fn set_general_workers(p: &mut Preferences, n: i64) {
-    p.threadpools_image_cache_workers_max = n;
-    p.threadpools_indexeddb_workers_max = n;
-    p.threadpools_webstorage_workers_max = n;
-}
-
 /// ~512 MB (sub-1 GB boards): the floor. Baseline JIT kept (Ion off) because the
 /// target cores are weak and in-order; single-threaded layout and pools; tiniest
 /// GC ceiling; no caches. Slowest tier, but JS remains usable.
@@ -120,10 +111,10 @@ fn embedded() -> Preferences {
     let mut p = Preferences::default();
 
     // Single worker everywhere — minimize per-thread stack/arena overhead.
-    set_general_workers(&mut p, 1);
-    p.threadpools_webrender_workers_max = 1;
-    p.threadpools_async_runtime_workers_max = 1;
-    p.threadpools_fallback_worker_num = 1;
+    p.thread_pool_workers_max = 1;
+    p.thread_pool_webrender_workers_max = 1;
+    p.thread_pool_async_runtime_workers_max = 1;
+    p.thread_pool_fallback_workers = 1;
     p.layout_threads = 1;
 
     // Keep the BASELINE JIT (weak in-order cores need it); drop only the
@@ -173,10 +164,10 @@ fn embedded() -> Preferences {
 fn tight() -> Preferences {
     let mut p = Preferences::default();
 
-    set_general_workers(&mut p, 2);
-    p.threadpools_webrender_workers_max = 1;
-    p.threadpools_async_runtime_workers_max = 1;
-    p.threadpools_fallback_worker_num = 1;
+    p.thread_pool_workers_max = 2;
+    p.thread_pool_webrender_workers_max = 1;
+    p.thread_pool_async_runtime_workers_max = 1;
+    p.thread_pool_fallback_workers = 1;
     p.layout_threads = 1;
 
     // SpiderMonkey GC: collect early and often, keep the ceiling low.
@@ -224,10 +215,10 @@ fn tight() -> Preferences {
 fn balanced() -> Preferences {
     let mut p = Preferences::default();
 
-    set_general_workers(&mut p, 4);
-    p.threadpools_webrender_workers_max = 2;
-    p.threadpools_async_runtime_workers_max = 2;
-    p.threadpools_fallback_worker_num = 2;
+    p.thread_pool_workers_max = 4;
+    p.thread_pool_webrender_workers_max = 2;
+    p.thread_pool_async_runtime_workers_max = 2;
+    p.thread_pool_fallback_workers = 2;
     p.layout_threads = 2;
 
     p.js_mem_max = 256; // MB
@@ -261,10 +252,10 @@ fn balanced() -> Preferences {
 fn generous() -> Preferences {
     let mut p = Preferences::default();
 
-    set_general_workers(&mut p, 6);
-    p.threadpools_webrender_workers_max = 2; // bandwidth-bound; 2 is plenty
-    p.threadpools_async_runtime_workers_max = 3;
-    p.threadpools_fallback_worker_num = 2;
+    p.thread_pool_workers_max = 6;
+    p.thread_pool_webrender_workers_max = 2; // bandwidth-bound; 2 is plenty
+    p.thread_pool_async_runtime_workers_max = 3;
+    p.thread_pool_fallback_workers = 2;
     p.layout_threads = 3;
 
     p.js_mem_max = -1; // unlimited
@@ -293,10 +284,10 @@ fn generous() -> Preferences {
 fn android() -> Preferences {
     let mut p = Preferences::default();
 
-    set_general_workers(&mut p, 6);
-    p.threadpools_webrender_workers_max = 3;
-    p.threadpools_async_runtime_workers_max = 3;
-    p.threadpools_fallback_worker_num = 2;
+    p.thread_pool_workers_max = 6;
+    p.thread_pool_webrender_workers_max = 3;
+    p.thread_pool_async_runtime_workers_max = 3;
+    p.thread_pool_fallback_workers = 2;
     p.layout_threads = 4;
 
     // Higher ceiling than handheld, but keep empty chunks at 0 so freed memory

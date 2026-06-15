@@ -44,7 +44,7 @@ glow = "0.17"
 surfman = "0.12"
 log = "0.4.28"
 env_logger = "0.11.8"
-servo = { version = "0.2", default-features = false, features = ["clipboard", "js_jit"] }
+servo = { version = "0.3", default-features = false, features = ["clipboard", "js_jit"] }
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
@@ -70,7 +70,7 @@ sdl2-keyboard-types = "0.1.0"
 # there is no stderr to mirror to a file.
 [target.'cfg(target_os = "android")'.dependencies]
 libc = "0.2"
-android_logger = "0.14"
+android_logger = "0.15"
 
 # Vendored servo-paint with the surfman connection made optional, so Servo runs
 # on EGL 1.4 devices (Mali) where surfman can't create a connection. See
