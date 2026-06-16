@@ -458,10 +458,7 @@ impl Osk {
 fn caret_field(target: &OskTarget) -> bool {
     matches!(
         target,
-        OskTarget::AddressBar
-            | OskTarget::Prompt(_)
-            | OskTarget::Home(_)
-            | OskTarget::DialEdit(_)
+        OskTarget::AddressBar | OskTarget::Prompt(_) | OskTarget::Home(_) | OskTarget::DialEdit(_)
     )
 }
 

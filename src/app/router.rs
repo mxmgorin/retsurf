@@ -274,8 +274,14 @@ impl App {
         // The loop blocks on input while idle, so the first frame after a press
         // sees the whole idle gap as `dt`. Integrating that teleports the cursor
         // (a D-pad tap jumps ~`cursor_speed * dt`), so treat any over-long frame
-        // as a fresh start: no motion this frame, normal motion from the next.
-        let dt = if dt > 0.1 { 0.0 } else { dt };
+        // as a fresh start: no motion this frame. Otherwise scale motion by the
+        // *actual* elapsed time — motion is `speed * dt`, so on-screen speed only
+        // stays steady when `dt` tracks real frame time — capped at a few frames so
+        // a one-off hitch (e.g. a top bar's reflow as it hides, a GC) can't lurch
+        // the page. Low-passing `dt` instead, as before, drifted from elapsed time
+        // whenever frame times varied and made the dt-scaled gamepad scroll stutter
+        // (the fixed-delta mouse wheel never scaled by `dt`, so it stayed smooth).
+        let dt = if dt > 0.1 { 0.0 } else { dt.min(0.05) };
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
         let cfg = &self.config.input;
@@ -300,6 +306,7 @@ impl App {
                     .hints_selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
                 self.browser.scroll(0.0, dy, x, y);
+                self.ui.notify_page_scroll(dy);
                 self.ui.hints_mark_stale();
             }
             return;
@@ -314,6 +321,7 @@ impl App {
                 // from its top edge in that case.
                 let (x, y) = self.ui.cursor_browser_rel();
                 self.browser.scroll(0.0, dy, x, y.max(1.0));
+                self.ui.notify_page_scroll(dy);
                 // Keep the scroll-mode indicator alive while actively scrolling;
                 // it lingers and auto-hides like the cursor once scrolling stops.
                 self.ui.mark_cursor_active();
@@ -341,6 +349,7 @@ impl App {
             let dy = scroll * scroll_speed * dt;
             let (x, y) = self.ui.cursor_browser_rel();
             self.browser.scroll(0.0, dy, x, y);
+            self.ui.notify_page_scroll(dy);
         }
     }
 

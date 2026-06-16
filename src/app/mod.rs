@@ -251,9 +251,7 @@ impl App {
             MenuAction::DialClose => self.ui.close_pins_editor(),
             MenuAction::DialAdd(url) => self.dial_add(url),
             MenuAction::DialRemoveAt(index) => self.ui.dial_remove_at(*index),
-            MenuAction::DialToggleSettings => {
-                self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN)
-            }
+            MenuAction::DialToggleSettings => self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN),
             MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
@@ -412,6 +410,8 @@ impl App {
             .set_cursor_linger(self.config.display.cursor_linger_ms);
         self.ui
             .set_toolbar_position(self.config.display.toolbar_position);
+        self.ui
+            .set_toolbar_autohide(self.config.display.toolbar_autohide);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(

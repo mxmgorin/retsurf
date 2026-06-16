@@ -150,7 +150,9 @@ impl AppEventHandler {
                 // ...then perform the actual native scroll. SDL `y` is positive
                 // when scrolling up; Servo's positive `dy` reveals lower content.
                 const WHEEL_PX: f32 = 60.0;
-                browser.scroll(-x as f32 * WHEEL_PX, -y as f32 * WHEEL_PX, mx, my);
+                let dy = -y as f32 * WHEEL_PX;
+                browser.scroll(-x as f32 * WHEEL_PX, dy, mx, my);
+                ui.notify_page_scroll(dy);
             }
             // Touch: SDL finger coords are normalized to the window; scale to the
             // pixel space mouse events use. These only reach here for the web-view
@@ -180,6 +182,7 @@ impl AppEventHandler {
                     // content, and Servo's positive dy reveals lower content, so
                     // negate the deltas.
                     browser.scroll(-dx, -dy, bx, by);
+                    ui.notify_page_scroll(-dy);
                 }
             }
             Event::FingerUp { finger_id, .. } => {

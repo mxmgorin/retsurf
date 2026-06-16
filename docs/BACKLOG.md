@@ -13,22 +13,26 @@ Reopen the previous run's tabs on startup. Persistence pattern is already
 established (history/bookmarks TOML in the data dir); save tab URLs on clean
 shutdown, restore instead of `home_page` when present.
 
-## Auto-hide toolbar on scroll
+## Toolbar auto-hide: gamepad scroll smoothness (open)
 
-Slide the toolbar out of the way while scrolling down, bring it back on scroll
-up — like mobile Chrome/Safari. Scroll direction is already available (every
-scroll funnels through `browser.scroll(dx, dy, …)`; `dy` sign = direction), so
-detection + a small threshold/accumulator is cheap.
+Auto-hide on scroll works (`display.toolbar_autohide`; top reflows, bottom
+overlays). Open issue: **gamepad scrolling downward (while the bar hides) is
+less smooth than with auto-hide off** — touch/wheel are fine. Tried, issue
+persists:
 
-The real work is *not* reflowing the page on every show/hide. Collapsing the
-top panel changes the `CentralPanel` height → `browser.resize` → full reflow
-(janky on Mali). Instead keep the Servo viewport at full window height and draw
-the toolbar as a floating overlay that slides in/out over the page. That means
-reworking `webview_top` from a hardcoded layout offset into an overlay offset,
-and re-checking the input-mapping / overlay-anchor call sites (`ui/mod.rs`
-cursor hit-test + click mapping, `hints.rs`, `home.rs`). Shares its root cause
-with a configurable top/bottom bar position — both want `webview_top`
-generalized into a proper webview rect.
+- Skip rendering the bottom overlay `Area` while hidden (no per-frame
+  tessellation) — `ui/mod.rs`, the `if toolbar_shown` guard.
+- Made the hide **instant** (no slide animation) — kept, but did *not* fix the
+  choppiness, so the slide wasn't the cause.
+- Low-pass the gamepad `dt` (`App::scroll_dt` EMA in `app/router.rs`) so a
+  hitched frame doesn't jump the `speed * dt` scroll. Gamepad is dt-scaled;
+  touch/wheel move by raw delta, hence gamepad-only.
+
+Since instant hide didn't help, the jitter isn't the bar's transition — it's
+something per-frame in the scroll/render path while the bar is hidden (or the
+servo reflow if testing the top path). Next: confirm which `toolbar_position`
+reproduces it; bisect by stubbing out `notify_page_scroll`; profile the frame
+during a downward gamepad scroll to see what actually spikes.
 
 ## Smaller items
 

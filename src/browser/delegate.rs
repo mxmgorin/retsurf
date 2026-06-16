@@ -148,7 +148,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // / fonts). Never the main document itself — only its subresources.
         let block = !is_home
             && !req.is_for_main_frame
-            && (self.adblock.should_block(req) || self.content_filter.get().blocks(req.destination));
+            && (self.adblock.should_block(req)
+                || self.content_filter.get().blocks(req.destination));
 
         if is_home {
             let html = super::home::render().into_bytes();

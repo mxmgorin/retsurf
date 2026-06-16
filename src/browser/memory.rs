@@ -103,7 +103,11 @@ fn detect_ram_mb() -> u64 {
     };
     for line in text.lines() {
         if let Some(rest) = line.strip_prefix("MemTotal:") {
-            if let Some(kb) = rest.split_whitespace().next().and_then(|n| n.parse::<u64>().ok()) {
+            if let Some(kb) = rest
+                .split_whitespace()
+                .next()
+                .and_then(|n| n.parse::<u64>().ok())
+            {
                 return kb / 1024;
             }
         }

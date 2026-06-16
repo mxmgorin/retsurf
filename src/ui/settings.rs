@@ -65,7 +65,11 @@ fn step_button(
 /// field rows do (but without the selectable button chrome).
 fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).color(egui::Color32::WHITE).size(ROW_FONT));
+        ui.label(
+            egui::RichText::new(label)
+                .color(egui::Color32::WHITE)
+                .size(ROW_FONT),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(egui::RichText::new(value).color(ACCENT).size(ROW_FONT));
         });
@@ -81,13 +85,22 @@ fn link_row(ui: &mut egui::Ui, label: &str, url: &str, commands: &mut Vec<AppCom
         .trim_start_matches("https://")
         .trim_start_matches("http://");
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).color(egui::Color32::WHITE).size(ROW_FONT));
+        ui.label(
+            egui::RichText::new(label)
+                .color(egui::Color32::WHITE)
+                .size(ROW_FONT),
+        );
         let link = egui::Button::new(
-            egui::RichText::new(shown).color(ACCENT).underline().size(ROW_FONT),
+            egui::RichText::new(shown)
+                .color(ACCENT)
+                .underline()
+                .size(ROW_FONT),
         )
         .frame(false);
         if ui.add(link).clicked() {
-            commands.push(AppCommand::Settings(SettingsAction::OpenLink(url.to_string())));
+            commands.push(AppCommand::Settings(SettingsAction::OpenLink(
+                url.to_string(),
+            )));
         }
     });
 }

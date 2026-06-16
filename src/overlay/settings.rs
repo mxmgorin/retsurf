@@ -72,6 +72,7 @@ enum FieldId {
     UseGles,
     CursorLinger,
     ToolbarPosition,
+    ToolbarAutohide,
     Deadzone,
     CursorSpeed,
     ScrollSpeed,
@@ -197,6 +198,7 @@ static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
     f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       Kind::Int { min: 0, max: 10000, step: 100 }, false),
     f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(TOOLBAR_POSITION_CHOICES), false),
+    f(S::Display,  "Display",     "Auto-hide toolbar",      F::ToolbarAutohide,    Kind::Bool, false),
 
     f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
     f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        Kind::Float { min: 100.0, max: 3000.0, step: 50.0, decimals: 0 }, false),
@@ -477,6 +479,7 @@ impl Settings {
             FieldId::BlockImages => c.data_saving.block_images,
             FieldId::BlockMedia => c.data_saving.block_media,
             FieldId::BlockFonts => c.data_saving.block_fonts,
+            FieldId::ToolbarAutohide => c.display.toolbar_autohide,
             _ => false,
         }
     }
@@ -491,6 +494,7 @@ impl Settings {
             FieldId::BlockImages => c.data_saving.block_images = b,
             FieldId::BlockMedia => c.data_saving.block_media = b,
             FieldId::BlockFonts => c.data_saving.block_fonts = b,
+            FieldId::ToolbarAutohide => c.display.toolbar_autohide = b,
             _ => {}
         }
     }

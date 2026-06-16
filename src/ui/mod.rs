@@ -16,7 +16,9 @@ mod toolbar;
 use crate::{
     app::AppCommand,
     browser::AppBrowser,
-    config::{AppConfig, DownloadsConfig, HistoryConfig, DisplayConfig, OskConfig, ToolbarPosition},
+    config::{
+        AppConfig, DisplayConfig, DownloadsConfig, HistoryConfig, OskConfig, ToolbarPosition,
+    },
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, Hints},
@@ -106,6 +108,10 @@ pub struct AppUi {
     /// window-size changes (unlike the rect, whose extent moves with the window),
     /// so the SDL-resize fast path uses it to size the viewport without lag.
     toolbar_height: f32,
+    /// The toolbar's current on-screen rect (logical px) — the panel strip, or
+    /// the auto-hide overlay's slid position (off-screen when hidden). Used by the
+    /// hit-tests to tell "this points at the chrome" from "this points at the page".
+    toolbar_rect: egui::Rect,
     repaint_pending: bool,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     browser_tex_id: egui::TextureId,
@@ -121,6 +127,15 @@ pub struct AppUi {
     cursor_linger: Duration,
     /// Which edge the toolbar renders on (from the display config). Applied live.
     toolbar_position: ToolbarPosition,
+    /// Whether the toolbar hides on scroll-down / reveals on scroll-up (config).
+    toolbar_autohide: bool,
+    /// Auto-hide target visibility: shown after a scroll up, hidden after a scroll
+    /// down. Ignored unless `toolbar_autohide`; forced shown while a field is being
+    /// typed into (so the address bar is reachable).
+    toolbar_shown: bool,
+    /// Signed scroll distance accumulated since the last direction flip; the
+    /// toolbar flips visibility once it crosses a threshold (debounces jitter).
+    scroll_accum: f32,
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
@@ -175,6 +190,7 @@ impl AppUi {
             repaint_delay: None,
             webview_rect: egui::Rect::ZERO,
             toolbar_height: 0.0,
+            toolbar_rect: egui::Rect::NOTHING,
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
@@ -185,6 +201,9 @@ impl AppUi {
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(display.cursor_linger_ms),
             toolbar_position: display.toolbar_position,
+            toolbar_autohide: display.toolbar_autohide,
+            toolbar_shown: true,
+            scroll_accum: 0.0,
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             settings: Settings::new(),
@@ -234,8 +253,12 @@ impl AppUi {
     /// go to the page; clicks above go to the egui toolbar via [`AppUi::click_ui`].
     #[inline]
     pub fn cursor_over_browser(&self) -> bool {
-        let y = self.cursor.1;
-        y >= self.webview_rect.top() && y < self.webview_rect.bottom()
+        // Anywhere not on the toolbar chrome is the page (the web view fills the
+        // rest). When the toolbar is hidden, its rect is off-screen, so the whole
+        // window is the page.
+        !self
+            .toolbar_rect
+            .contains(egui::pos2(self.cursor.0, self.cursor.1))
     }
 
     /// Click the egui UI element under the cursor by feeding the backend a
@@ -430,6 +453,41 @@ impl AppUi {
     #[inline]
     pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {
         self.toolbar_position = pos;
+    }
+
+    /// Enable/disable scroll-driven auto-hide (the app calls this on a live config
+    /// change). Re-showing the toolbar when turned off avoids leaving it stuck
+    /// hidden from a prior scroll.
+    #[inline]
+    pub fn set_toolbar_autohide(&mut self, on: bool) {
+        self.toolbar_autohide = on;
+        if !on {
+            self.toolbar_shown = true;
+        }
+    }
+
+    /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:
+    /// positive reveals lower content) so the toolbar can hide on scroll-down and
+    /// reveal on scroll-up. Accumulates until a threshold to debounce jitter; a
+    /// no-op unless auto-hide is on.
+    pub fn notify_page_scroll(&mut self, dy: f32) {
+        if !self.toolbar_autohide || dy == 0.0 {
+            return;
+        }
+        // Reset the accumulator on a direction change so a flick the other way
+        // responds immediately instead of cancelling out a long prior drag.
+        if (dy > 0.0) != (self.scroll_accum > 0.0) {
+            self.scroll_accum = 0.0;
+        }
+        self.scroll_accum += dy;
+        const THRESHOLD: f32 = 48.0;
+        if self.scroll_accum > THRESHOLD {
+            self.toolbar_shown = false;
+            self.scroll_accum = 0.0;
+        } else if self.scroll_accum < -THRESHOLD {
+            self.toolbar_shown = true;
+            self.scroll_accum = 0.0;
+        }
     }
 
     /// Switch the active section by `delta` (◀▶).
@@ -831,7 +889,15 @@ impl AppUi {
         if dw == 0 || dh == 0 {
             return;
         }
-        let toolbar_px = (self.toolbar_height * self.egui.ctx.pixels_per_point()).round() as u32;
+        // A bottom auto-hide bar floats as an overlay, so the web view is
+        // full-height; every other case reserves a strip (and the measured height
+        // is already 0 when a top auto-hide bar is hidden away).
+        let overlay = self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom;
+        let toolbar_px = if overlay {
+            0
+        } else {
+            (self.toolbar_height * self.egui.ctx.pixels_per_point()).round() as u32
+        };
         let size = (dw, dh.saturating_sub(toolbar_px).max(1));
         if size != self.browser_viewport {
             self.browser_viewport = size;
@@ -915,6 +981,16 @@ impl AppUi {
             // each `TextEdit` parks its cursor here so it tracks the OSK.
             let osk_caret = self.osk.caret();
             let caret_for = |f| (osk_field == f).then_some(osk_caret);
+            // Toolbar layout, decided before the closure (these reads — esp.
+            // `focus()` — borrow all of `self`, which can't overlap `egui.run`).
+            // Auto-hide forces the bar visible while typing so the address bar is
+            // reachable. A top bar reserves space (the page reflows below it, so the
+            // bar never covers content); a bottom bar floats as an overlay and
+            // slides off (no reflow). Without auto-hide the bar is always a panel.
+            let position = self.toolbar_position;
+            let typing = self.focus() != Focus::Page;
+            let toolbar_shown = !self.toolbar_autohide || self.toolbar_shown || typing;
+            let toolbar_overlay = self.toolbar_autohide && position == ToolbarPosition::Bottom;
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -926,29 +1002,40 @@ impl AppUi {
 
                 let bookmarked = self.menu.is_bookmarked(state.get_location());
                 let active_downloads = self.menu.downloads.active_count();
-                toolbar::add_toolbar(
-                    &mut root,
-                    &mut state,
-                    commands,
-                    bookmarked,
-                    tab_pos,
-                    active_downloads,
-                    zoom_pct,
-                    caret_for(OskField::AddressBar),
-                    self.toolbar_position,
-                );
 
+                // 1) Reserved-space toolbar: the panel reserves its strip and the
+                //    page reflows below it. Drawn unless we're in overlay mode (a
+                //    bottom auto-hide bar) or a top auto-hide bar has hidden away —
+                //    skipping it lets the central panel grow full-height.
+                if !toolbar_overlay && toolbar_shown {
+                    self.toolbar_rect = toolbar::add_toolbar(
+                        &mut root,
+                        &mut state,
+                        commands,
+                        bookmarked,
+                        tab_pos,
+                        active_downloads,
+                        zoom_pct,
+                        caret_for(OskField::AddressBar),
+                        position,
+                    );
+                } else {
+                    self.toolbar_rect = egui::Rect::NOTHING;
+                }
+
+                // 2) Web view fills whatever's left — the full window when no panel
+                //    was reserved. Its size is the viewport we send to Servo.
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
                     .frame(frame)
                     .show_inside(&mut root, |ui| {
                         let rect = ui.max_rect();
-                        // The central panel is exactly the web-view area (the
-                        // window minus the toolbar strip, whichever side it's on),
-                        // so map cursor/clicks against it. The toolbar's thickness
-                        // is whatever the full content rect has that this doesn't.
                         self.webview_rect = rect;
-                        self.toolbar_height = ctx.content_rect().height() - rect.height();
+                        // Panel mode: toolbar thickness is whatever the full content
+                        // rect has that this doesn't. The overlay measures its own.
+                        if !toolbar_overlay {
+                            self.toolbar_height = ctx.content_rect().height() - rect.height();
+                        }
                         ui.allocate_rect(rect, egui::Sense::hover());
 
                         desired_px = Some((
@@ -962,6 +1049,32 @@ impl AppUi {
                         ui.painter()
                             .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
                     });
+
+                // 3) Floating overlay toolbar (bottom auto-hide): slides over the
+                //    full-height web view, so toggling it never resizes the
+                //    viewport. Animated; `toolbar_height` feeds next frame's slide.
+                if toolbar_overlay {
+                    // Instant show/hide: draw the bar only while shown, and skip it
+                    // entirely while hidden — a foreground `Area` costs a
+                    // tessellation pass every frame even off-screen.
+                    if toolbar_shown {
+                        self.toolbar_rect = toolbar::add_toolbar_overlay(
+                            ctx,
+                            ctx.content_rect().width(),
+                            &mut state,
+                            commands,
+                            bookmarked,
+                            tab_pos,
+                            active_downloads,
+                            zoom_pct,
+                            caret_for(OskField::AddressBar),
+                            position,
+                        );
+                        self.toolbar_height = self.toolbar_rect.height();
+                    } else {
+                        self.toolbar_rect = egui::Rect::NOTHING;
+                    }
+                }
 
                 // The start-page overlay is a backdrop over the (blank) web
                 // view — drawn below the foreground overlays (menu / OSK / etc.)
@@ -1002,7 +1115,12 @@ impl AppUi {
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
-                    prompt::add_prompt(ctx, &mut self.prompt, caret_for(OskField::Prompt), commands);
+                    prompt::add_prompt(
+                        ctx,
+                        &mut self.prompt,
+                        caret_for(OskField::Prompt),
+                        commands,
+                    );
                 }
 
                 if self.menu.visible {
@@ -1084,10 +1202,7 @@ impl AppUi {
         let Some(pos) = self.egui.state.get_pointer_pos_in_points() else {
             return false;
         };
-
-        // Over the toolbar = outside the web view's vertical span (the toolbar
-        // is the opposite strip, whichever side it's on).
-        pos.y < self.webview_rect.top() || pos.y >= self.webview_rect.bottom()
+        self.toolbar_rect.contains(pos)
     }
 
     /// Whether a *pixel*-space y coordinate (as carried by raw SDL finger events)
@@ -1097,8 +1212,8 @@ impl AppUi {
     /// points, so scale it up to compare against the pixel coordinate.
     #[inline]
     pub fn point_over_webview(&self, y_px: f32) -> bool {
-        let ppp = self.egui.ctx.pixels_per_point();
-        y_px >= self.webview_rect.top() * ppp && y_px < self.webview_rect.bottom() * ppp
+        let y = y_px / self.egui.ctx.pixels_per_point();
+        !self.toolbar_rect.y_range().contains(y)
     }
 }
 
