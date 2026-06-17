@@ -18,6 +18,14 @@ const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
 const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
 
+/// Typeface for every start-page string. egui bundles only two real text faces —
+/// `Ubuntu-Light` (via [`egui::FontId::proportional`]) and `Hack` (via
+/// [`egui::FontId::monospace`]); swap the call below to flip the whole home
+/// screen between them at once.
+fn font(size: f32) -> egui::FontId {
+    egui::FontId::monospace(size)
+}
+
 /// Tile footprint (logical px) and grid spacing. Shared with the dial editor.
 pub(super) const TILE_W: f32 = 96.0;
 pub(super) const TILE_H: f32 = 84.0;
@@ -97,8 +105,8 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
     const GAP_KL: f32 = 6.0; // key pill → its label
     const GAP_SEG: f32 = 18.0; // between hint segments
-    let key_font = egui::FontId::proportional(12.0);
-    let label_font = egui::FontId::proportional(12.0);
+    let key_font = font(12.0);
+    let label_font = font(12.0);
     let painter = ui.painter();
 
     // Lay out every glyph first so the row can be centered as a whole.
@@ -144,13 +152,13 @@ fn add_wordmark(ui: &mut egui::Ui) {
     const SIZE: f32 = 30.0;
     let mut job = egui::text::LayoutJob::default();
     let fmt = |color: egui::Color32| egui::TextFormat {
-        font_id: egui::FontId::proportional(SIZE),
+        font_id: font(SIZE),
         color,
         extra_letter_spacing: 3.0,
         ..Default::default()
     };
-    job.append("RET", 0.0, fmt(INK));
-    job.append("SURF", 0.0, fmt(ACCENT));
+    job.append("ret", 0.0, fmt(INK));
+    job.append("surf", 0.0, fmt(ACCENT));
     ui.label(job);
 }
 
@@ -181,7 +189,7 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
             .frame(egui::Frame::NONE)
             .background_color(egui::Color32::TRANSPARENT)
             .desired_width(f32::INFINITY)
-            .font(egui::FontId::proportional(20.0))
+            .font(font(20.0))
             .text_color(INK);
         let resp = ui.add(edit);
         // Clicking the field selects it (so the highlight follows the mouse).
@@ -313,7 +321,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
         glyph.center(),
         egui::Align2::CENTER_CENTER,
         glyph_text,
-        egui::FontId::proportional(22.0),
+        font(22.0),
         INK,
     );
 
@@ -322,7 +330,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
         truncate(&name, 12),
-        egui::FontId::proportional(12.0),
+        font(12.0),
         if active { INK } else { MUTED },
     );
 }
@@ -352,14 +360,14 @@ fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
         glyph.center(),
         egui::Align2::CENTER_CENTER,
         "✏",
-        egui::FontId::proportional(24.0),
+        font(24.0),
         if active { ACCENT } else { MUTED },
     );
     painter.text(
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
         "Edit",
-        egui::FontId::proportional(12.0),
+        font(12.0),
         if active { INK } else { MUTED },
     );
     resp

@@ -5,11 +5,11 @@
 [![Android](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml)
 [![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
 
-# 🌊 retsurf
+## retsurf
 
 A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
-It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops. It also runs on **Android** (touch + system keyboard) — see [Android notes](docs/ANDROID_PORT.md).
+It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops. It also runs on **Android** (touch + system keyboard).
 
 > 🛠️ **Work in progress.** Early development — experimental and bugs are expected.
 
@@ -25,7 +25,7 @@ It is designed to run **without X11 or Wayland** — rendering through **OpenGL 
 
 ## Why?
 
-On Knulli / muOS / ROCKNIX handhelds there's effectively no way to browse the modern web. Your options are text-era browsers that break on real sites, or full desktop browsers that need a compositor and a keyboard+mouse. retsurf is built for the gap in between: a modern engine, gamepad support, and no desktop required.
+Handheld Linux distros (Knulli, muOS, ROCKNIX) lack a usable browser. Lightweight options can't render modern JS-heavy sites; desktop browsers assume a windowing setup and pointer input these devices don't have. `retsurf` targets that gap with a modern rendering engine, native gamepad navigation, and no compositor dependency.
 
 ## Features
 
