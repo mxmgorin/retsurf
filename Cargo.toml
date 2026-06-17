@@ -30,7 +30,19 @@ sdl2-static-link = ["sdl2/static-link"]
 # panic=abort for the webgl-off handheld build). To reproduce a CI-grade binary
 # locally, export those same vars. Kept out of this shared profile so it doesn't
 # also slow the desktop/Android/local builds.
+#
+# `panic = "abort"` is deliberately NOT here: it makes `catch_unwind` inert and
+# would break the surfman EGL-1.4 probe (`platform/render.rs`) on webgl builds.
+# The handheld CI build (webgl off) sets it via env var, where it's safe.
 [profile.release]
+# Cheap, build-uniform hardening (none of these slow compilation). `strip` is the
+# real win: CI strips the Linux binary but local builds and the Android APK have
+# no strip step, so the `.so`/binary ships with symbols → larger mmap, slower cold
+# start. The other two are already the release defaults; pinning them explicitly
+# keeps every build (local/CI/Android) identical.
+strip = true
+debug-assertions = false
+overflow-checks = false
 
 [dependencies]
 rust-embed="8.7.2"
@@ -62,7 +74,7 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 adblock = "0.12"
 content-security-policy = "0.8"
 keyboard-types = "0.8.1"
-egui-sdl2 = { version = "0.3.2", default-features = false, features = ["glow-backend"] }
+egui-sdl2 = { version = "0.4.0", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
 
 # Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the

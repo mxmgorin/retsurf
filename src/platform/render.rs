@@ -70,7 +70,6 @@ pub struct SdlRenderingContext {
     connection: Option<surfman::Connection>,
     fbo: Cell<gl::GLuint>,
     color_tex: Cell<gl::GLuint>,
-    depth_rbo: Cell<gl::GLuint>,
     size: Cell<PhysicalSize<u32>>,
 }
 
@@ -78,7 +77,6 @@ impl SdlRenderingContext {
     pub fn new(gl: Rc<dyn Gl>, glow: Arc<glow::Context>, size: PhysicalSize<u32>) -> Rc<Self> {
         let fbo = gl.gen_framebuffers(1)[0];
         let color_tex = gl.gen_textures(1)[0];
-        let depth_rbo = gl.gen_renderbuffers(1)[0];
         let connection = create_surfman_connection();
         let ctx = Rc::new(Self {
             gl,
@@ -86,16 +84,49 @@ impl SdlRenderingContext {
             connection,
             fbo: Cell::new(fbo),
             color_tex: Cell::new(color_tex),
-            depth_rbo: Cell::new(depth_rbo),
             size: Cell::new(size),
         });
+        ctx.setup_texture_params();
         ctx.allocate(size);
         ctx
     }
 
-    /// (Re)allocate the color texture and depth renderbuffer at `size`. The GL
+    /// Set the color texture's sampling/wrap params once, at creation. They
+    /// persist across the `tex_image_2d` reallocations in [`Self::allocate`], so
+    /// there's no need to re-set them on every resize. NEAREST is correct because
+    /// the composite is 1:1 (no scaling, see `ui/mod.rs`), so LINEAR would only
+    /// burn texture bandwidth without changing the output.
+    fn setup_texture_params(&self) {
+        let gl = &self.gl;
+        gl.bind_texture(gl::TEXTURE_2D, self.color_tex.get());
+        gl.tex_parameter_i(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_MAG_FILTER,
+            gl::NEAREST as gl::GLint,
+        );
+        gl.tex_parameter_i(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_MIN_FILTER,
+            gl::NEAREST as gl::GLint,
+        );
+        gl.tex_parameter_i(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_S,
+            gl::CLAMP_TO_EDGE as gl::GLint,
+        );
+        gl.tex_parameter_i(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_T,
+            gl::CLAMP_TO_EDGE as gl::GLint,
+        );
+        gl.bind_texture(gl::TEXTURE_2D, 0);
+    }
+
+    /// (Re)allocate the color texture at `size` and attach it to the FBO. The GL
     /// object names are kept stable, so any egui texture registration of the
-    /// color texture stays valid across resizes.
+    /// color texture stays valid across resizes. No depth/stencil attachment:
+    /// WebRender draws flat 2D tiles with the depth test never enabled, so
+    /// `COLOR_ATTACHMENT0` alone makes the FBO complete.
     fn allocate(&self, size: PhysicalSize<u32>) {
         let w = size.width.max(1) as gl::GLsizei;
         let h = size.height.max(1) as gl::GLsizei;
@@ -115,26 +146,6 @@ impl SdlRenderingContext {
             gl::UNSIGNED_BYTE,
             None,
         );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_MAG_FILTER,
-            gl::LINEAR as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_MIN_FILTER,
-            gl::LINEAR as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_WRAP_S,
-            gl::CLAMP_TO_EDGE as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_WRAP_T,
-            gl::CLAMP_TO_EDGE as gl::GLint,
-        );
         gl.framebuffer_texture_2d(
             gl::FRAMEBUFFER,
             gl::COLOR_ATTACHMENT0,
@@ -143,17 +154,7 @@ impl SdlRenderingContext {
             0,
         );
 
-        gl.bind_renderbuffer(gl::RENDERBUFFER, self.depth_rbo.get());
-        gl.renderbuffer_storage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT24, w, h);
-        gl.framebuffer_renderbuffer(
-            gl::FRAMEBUFFER,
-            gl::DEPTH_ATTACHMENT,
-            gl::RENDERBUFFER,
-            self.depth_rbo.get(),
-        );
-
         gl.bind_texture(gl::TEXTURE_2D, 0);
-        gl.bind_renderbuffer(gl::RENDERBUFFER, 0);
         gl.bind_framebuffer(gl::FRAMEBUFFER, 0);
     }
 
@@ -188,13 +189,18 @@ impl RenderingContext for SdlRenderingContext {
             gl::UNSIGNED_BYTE,
         );
 
-        // Flip vertically: GL returns rows bottom-up.
+        // Flip vertically: GL returns rows bottom-up. Swap row pairs through a
+        // single stride-sized scratch buffer instead of cloning the whole frame
+        // (an odd middle row is already in place, so the half loop skips it).
         let stride = w as usize * 4;
-        let orig = pixels.clone();
-        for row in 0..h as usize {
-            let dst = row * stride;
-            let src = (h as usize - row - 1) * stride;
-            pixels[dst..dst + stride].copy_from_slice(&orig[src..src + stride]);
+        let h = h as usize;
+        let mut tmp = vec![0u8; stride];
+        for row in 0..h / 2 {
+            let top = row * stride;
+            let bot = (h - row - 1) * stride;
+            tmp.copy_from_slice(&pixels[top..top + stride]);
+            pixels.copy_within(bot..bot + stride, top);
+            pixels[bot..bot + stride].copy_from_slice(&tmp);
         }
 
         RgbaImage::from_raw(w as u32, h as u32, pixels)
