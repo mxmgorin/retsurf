@@ -146,6 +146,10 @@ fn embedded() -> Preferences {
     p.js_mem_gc_empty_chunk_count_min = 0; // hand empty chunks straight back to the OS
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
+    p.js_mem_gc_incremental_slice_ms = 3; // ms — keep a GC step well under a frame
+    // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
+    p.js_mem_gc_per_zone_enabled = false; // collect all zones together
+    p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
     // Keep only the current page; no back-forward cache to speak of.
     p.session_history_max_length = 1;
@@ -191,6 +195,10 @@ fn tight() -> Preferences {
     p.js_mem_gc_empty_chunk_count_min = 0; // return empty chunks to the OS
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
+    p.js_mem_gc_incremental_slice_ms = 4; // ms — keep a GC step well under a frame
+    // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
+    p.js_mem_gc_per_zone_enabled = false; // collect all zones together
+    p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
     // Drop the heavy optimizing JIT; keep baseline JIT. Also drop wasm Ion to
     // cut compile-time CPU/memory.
@@ -241,6 +249,10 @@ fn balanced() -> Preferences {
     p.js_mem_gc_empty_chunk_count_min = 0;
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
+    p.js_mem_gc_incremental_slice_ms = 6; // ms — desktop default is 10
+    // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
+    p.js_mem_gc_per_zone_enabled = false; // collect all zones together
+    p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
     p.session_history_max_length = 6;
 
@@ -278,6 +290,10 @@ fn generous() -> Preferences {
     p.js_mem_gc_empty_chunk_count_min = 1;
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
+    p.js_mem_gc_incremental_slice_ms = 8; // ms — desktop default is 10
+    // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
+    p.js_mem_gc_per_zone_enabled = false; // collect all zones together
+    p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
     p.session_history_max_length = 20;
 
@@ -312,6 +328,10 @@ fn android() -> Preferences {
     p.js_mem_gc_empty_chunk_count_min = 0; // hand memory back for onTrimMemory
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
+    p.js_mem_gc_incremental_slice_ms = 5; // ms — OoO cores, but stay battery-friendly
+    // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
+    p.js_mem_gc_per_zone_enabled = false; // collect all zones together
+    p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
     p.session_history_max_length = 10;
 

@@ -952,24 +952,21 @@ impl AppUi {
         } else {
             Vec::new()
         };
-        // Snapshot the pinned speed-dial list for the start page / editor (kept
-        // in sync with the menu's live store), and keep their selections in range.
+        // Keep the start-page / editor selections in range before they render.
+        // The pin list itself isn't snapshotted here — the overlays borrow it
+        // straight from the live store at their call sites below, so there's no
+        // per-frame clone of the (kept-in-sync) speed-dial Vec.
         let pin_count = self.menu.dial.urls().len();
-        let pins = if self.home_active || self.dial_edit.visible() {
-            if self.home_active {
-                // +1 for the trailing "Edit" tile, so its selection isn't clamped off.
-                self.home.clamp(pin_count + 1);
-            }
-            if self.dial_edit.visible() {
-                // The editor's grid is its non-settings pins plus the trailing
-                // ⚙ toggle tile, so a selection up to that tile stays valid.
-                let slots = self.dial_edit_slots();
-                self.dial_edit.clamp(slots);
-            }
-            self.menu.dial.urls().to_vec()
-        } else {
-            Vec::new()
-        };
+        if self.home_active {
+            // +1 for the trailing "Edit" tile, so its selection isn't clamped off.
+            self.home.clamp(pin_count + 1);
+        }
+        if self.dial_edit.visible() {
+            // The editor's grid is its non-settings pins plus the trailing
+            // ⚙ toggle tile, so a selection up to that tile stays valid.
+            let slots = self.dial_edit_slots();
+            self.dial_edit.clamp(slots);
+        }
 
         {
             let mut state = browser.get_state_mut();
@@ -1085,7 +1082,7 @@ impl AppUi {
                     home::add_home(
                         ctx,
                         &mut self.home,
-                        &pins,
+                        self.menu.dial.urls(),
                         self.webview_rect,
                         caret_for(OskField::Home),
                         commands,
@@ -1098,7 +1095,7 @@ impl AppUi {
                     dial_edit::add_dial_edit(
                         ctx,
                         &mut self.dial_edit,
-                        &pins,
+                        self.menu.dial.urls(),
                         caret_for(OskField::DialEdit),
                         commands,
                     );

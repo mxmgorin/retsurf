@@ -11,6 +11,8 @@ use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
 use egui_sdl2::egui;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 const BG: egui::Color32 = egui::Color32::from_rgb(0x16, 0x17, 0x1a);
 const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
@@ -382,10 +384,30 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+thread_local! {
+    /// Memoizes [`brand_label`] per URL. `paint_tile` derives a label for every
+    /// visible speed-dial tile on each home repaint, and the derivation parses a
+    /// `Url`; the pin set changes rarely, so caching keeps this map tiny and
+    /// skips the per-frame parse. Single-threaded — egui runs on the main thread.
+    static BRAND_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+}
+
+/// A short label for a tile (memoized wrapper over [`compute_brand_label`]).
+fn brand_label(url: &str) -> String {
+    BRAND_LABELS.with(|cache| {
+        if let Some(label) = cache.borrow().get(url) {
+            return label.clone();
+        }
+        let label = compute_brand_label(url);
+        cache.borrow_mut().insert(url.to_owned(), label.clone());
+        label
+    })
+}
+
 /// A short label for a tile: the registrable domain name (`duckduckgo.com` →
 /// `duckduckgo`, `en.wikipedia.org` → `wikipedia`, `bbc.co.uk` → `bbc`), falling
 /// back to the host, then the raw string.
-fn brand_label(url: &str) -> String {
+fn compute_brand_label(url: &str) -> String {
     let Some(host) = url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_string))
