@@ -20,12 +20,13 @@ const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
 const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
 
-/// Typeface for every start-page string. egui bundles only two real text faces —
-/// `Ubuntu-Light` (via [`egui::FontId::proportional`]) and `Hack` (via
-/// [`egui::FontId::monospace`]); swap the call below to flip the whole home
-/// screen between them at once.
+/// Typeface for the start-page body text (search field, tiles, hints). egui
+/// bundles only two real text faces — `Ubuntu-Light` (via
+/// [`egui::FontId::proportional`]) and `Hack` (via [`egui::FontId::monospace`]);
+/// swap the call below to flip the body between them. The wordmark deliberately
+/// stays on Hack via [`add_wordmark`] regardless of this choice.
 fn font(size: f32) -> egui::FontId {
-    egui::FontId::monospace(size)
+    egui::FontId::proportional(size)
 }
 
 /// Tile footprint (logical px) and grid spacing. Shared with the dial editor.
@@ -153,8 +154,10 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
 fn add_wordmark(ui: &mut egui::Ui) {
     const SIZE: f32 = 30.0;
     let mut job = egui::text::LayoutJob::default();
+    // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
+    // body `font()` (Ubuntu-Light).
     let fmt = |color: egui::Color32| egui::TextFormat {
-        font_id: font(SIZE),
+        font_id: egui::FontId::monospace(SIZE),
         color,
         extra_letter_spacing: 3.0,
         ..Default::default()
