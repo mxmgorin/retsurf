@@ -86,6 +86,15 @@ impl Menu {
 
     pub fn close(&mut self) {
         self.visible = false;
+        // History recording defers its disk write; persist on close so a quick
+        // browse-then-quit still saves (see [`crate::data::history::History::flush`]).
+        self.history.flush();
+    }
+
+    /// Persist any deferred history changes. Used by the app's periodic throttle
+    /// and the shutdown path (where `Drop` doesn't run — see [`crate::app`]).
+    pub fn flush_history(&mut self) {
+        self.history.flush();
     }
 
     pub fn section(&self) -> Section {

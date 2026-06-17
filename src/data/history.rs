@@ -33,6 +33,11 @@ pub struct History {
     max_entries: usize,
     /// Highlighted row in the menu's History section.
     selected: usize,
+    /// Set when `entries` has unsaved changes from [`Self::record`]; cleared by a
+    /// successful [`Self::save`]. Lets per-navigation recording defer the disk
+    /// write (coalesced via [`Self::flush`]) instead of rewriting the whole file
+    /// on every page load.
+    dirty: bool,
 }
 
 impl History {
@@ -50,6 +55,7 @@ impl History {
             enabled: cfg.enabled,
             max_entries: cfg.max_entries,
             selected: 0,
+            dirty: false,
         }
     }
 
@@ -57,18 +63,28 @@ impl History {
         format!("{}history.toml", config::data_dir())
     }
 
-    /// Best-effort persist; failures are logged, not fatal.
-    fn save(&self) {
+    /// Best-effort persist; failures are logged, not fatal. Clears `dirty` only
+    /// on a successful write, so a transient failure is retried by the next
+    /// [`Self::flush`].
+    fn save(&mut self) {
         let store = Store {
             entries: self.entries.clone(),
         };
         match toml::to_string_pretty(&store) {
-            Ok(text) => {
-                if let Err(e) = std::fs::write(Self::path(), text) {
-                    log::warn!("could not write history: {e}");
-                }
-            }
+            Ok(text) => match std::fs::write(Self::path(), text) {
+                Ok(()) => self.dirty = false,
+                Err(e) => log::warn!("could not write history: {e}"),
+            },
             Err(e) => log::warn!("could not serialize history: {e}"),
+        }
+    }
+
+    /// Write pending changes to disk if any. Called on menu close, on a periodic
+    /// throttle while the loop is already awake, and at shutdown (see
+    /// [`crate::app`]) — `record` itself only marks `dirty`.
+    pub fn flush(&mut self) {
+        if self.dirty {
+            self.save();
         }
     }
 
@@ -90,13 +106,14 @@ impl History {
 
     /// Record a visit: most-recent-first, de-duplicated (a revisit moves to the
     /// top and re-stamps its time), capped at `max_entries`. No-op when recording
-    /// is disabled or the URL is empty. Persists on change.
+    /// is disabled or the URL is empty. Marks the store dirty (the disk write is
+    /// deferred — see [`Self::flush`]) rather than rewriting the file per visit.
     pub fn record(&mut self, url: &str) {
         if !self.enabled || url.is_empty() {
             return;
         }
-        // Already on top → just keep the existing entry (avoids rewriting the file
-        // every frame for the page we're currently on).
+        // Already on top → just keep the existing entry (avoids reordering the
+        // list for the page we're currently on).
         if self.entries.first().is_some_and(|e| e.url == url) {
             return;
         }
@@ -112,7 +129,7 @@ impl History {
         );
         self.entries.truncate(self.max_entries);
         self.clamp_selected();
-        self.save();
+        self.dirty = true;
     }
 
     /// Reset the highlight when the menu opens: land on the first entry (index

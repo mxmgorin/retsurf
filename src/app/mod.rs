@@ -18,7 +18,7 @@ use crate::overlay::osk::OskCommand;
 use crate::ui::AppUi;
 use crate::{config::AppConfig, platform::window::AppWindow};
 use sdl2::Sdl;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(PartialEq)]
 pub enum AppState {
@@ -45,7 +45,16 @@ pub struct App {
     /// the hint, hold opens its link in a background tab). `None` when no press
     /// is in flight over a hint.
     hint_press_at: Option<Instant>,
+    /// Last time deferred history was flushed to disk. Bounds buffered-history
+    /// loss to [`HISTORY_FLUSH_INTERVAL`] while browsing, without ever waking the
+    /// idle loop — the flush only fires on frames the loop is already running.
+    last_history_flush: Instant,
 }
+
+/// How often the main loop opportunistically flushes deferred history (only on
+/// frames it's already awake for — navigation, paint, input). Coalesces the
+/// per-navigation writes that used to rewrite `history.toml` on every page load.
+const HISTORY_FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
@@ -85,6 +94,7 @@ impl App {
             osk_nav_dir: (0, 0),
             osk_nav_next: Instant::now(),
             hint_press_at: None,
+            last_history_flush: Instant::now(),
         })
     }
 
@@ -107,6 +117,16 @@ impl App {
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
                 self.ui.menu_record_history(&url);
+            }
+
+            // Recording only marks history dirty; flush it on a throttle so a busy
+            // browsing burst collapses to one write per interval. This piggybacks
+            // on frames the loop is already awake for — it never schedules an idle
+            // wake (the blocking wait stays battery-efficient). A clean exit and
+            // menu close flush the remainder.
+            if self.last_history_flush.elapsed() >= HISTORY_FLUSH_INTERVAL {
+                self.ui.flush_history();
+                self.last_history_flush = Instant::now();
             }
 
             // Mirror whether the active tab is on the start page, so the UI's
@@ -178,6 +198,9 @@ impl App {
             self.draw();
         }
 
+        // Persist history buffered since the last throttle tick — `Drop` won't
+        // run (we `process::exit` below), so this must be explicit.
+        self.ui.flush_history();
         self.ui.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage

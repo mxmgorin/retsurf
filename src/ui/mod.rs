@@ -556,10 +556,18 @@ impl AppUi {
         self.menu.clear();
     }
 
-    /// Record a visited URL in history (no-op if history is disabled).
+    /// Record a visited URL in history (no-op if history is disabled). Only marks
+    /// the store dirty; the disk write is deferred (see [`AppUi::flush_history`]).
     #[inline]
     pub fn menu_record_history(&mut self, url: &str) {
         self.menu.record_history(url);
+    }
+
+    /// Persist any history buffered since the last write. Called on a periodic
+    /// throttle while the loop is awake and at shutdown (see [`crate::app`]).
+    #[inline]
+    pub fn flush_history(&mut self) {
+        self.menu.flush_history();
     }
 
     /// Pull progress from download worker threads into the menu's Downloads list
