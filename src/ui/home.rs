@@ -153,17 +153,20 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
 /// wide letter-spacing for a logo feel.
 fn add_wordmark(ui: &mut egui::Ui) {
     const SIZE: f32 = 30.0;
+    const TRACKING: f32 = 3.0;
     let mut job = egui::text::LayoutJob::default();
     // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
     // body `font()` (Ubuntu-Light).
     let fmt = |color: egui::Color32| egui::TextFormat {
         font_id: egui::FontId::monospace(SIZE),
         color,
-        extra_letter_spacing: 3.0,
+        extra_letter_spacing: TRACKING,
         ..Default::default()
     };
     job.append("ret", 0.0, fmt(INK));
-    job.append("surf", 0.0, fmt(ACCENT));
+    // Leading space: epaint skips extra_letter_spacing on a section's first glyph,
+    // so the ret/surf joint needs it added back to match the other gaps.
+    job.append("surf", TRACKING, fmt(ACCENT));
     ui.label(job);
 }
 
