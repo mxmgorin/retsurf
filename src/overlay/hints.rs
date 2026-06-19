@@ -4,7 +4,9 @@
 //! hops the selection spatially (nearest element in the pressed direction)
 //! instead of typing hint letters. A clicks the selected element, B exits.
 //! Scrolling keeps working and schedules a re-collect once it settles, since
-//! the rects are viewport-relative and go stale as the page moves.
+//! the rects are viewport-relative and go stale as the page moves. Pushing the
+//! selection past the last hint at a vertical edge scrolls a chunk and
+//! re-collects, so one stick reaches the whole document (see the router).
 
 use std::time::{Duration, Instant};
 
@@ -39,6 +41,10 @@ pub struct Hints {
     collecting: bool,
     /// When the post-scroll re-collect comes due.
     refresh_at: Option<Instant>,
+    /// Where the selection should land after the next re-collect, overriding the
+    /// caller's default. Set by an edge auto-scroll so the selection snaps to a
+    /// freshly-revealed hint at the leading edge, not the now-stale old center.
+    next_near: Option<(f32, f32)>,
 }
 
 impl Hints {
@@ -49,6 +55,7 @@ impl Hints {
             selected: 0,
             collecting: false,
             refresh_at: None,
+            next_near: None,
         }
     }
 
@@ -70,6 +77,7 @@ impl Hints {
             self.hide();
             return;
         }
+        let near = self.next_near.take().unwrap_or(near);
         self.selected = nearest_to(&hints, near);
         self.hints = hints;
         self.visible = true;
@@ -79,6 +87,7 @@ impl Hints {
         self.visible = false;
         self.collecting = false;
         self.refresh_at = None;
+        self.next_near = None;
         self.hints.clear();
         self.selected = 0;
     }
@@ -101,10 +110,12 @@ impl Hints {
     }
 
     /// Hop the selection to the nearest hint in direction `dir` (a dominant-axis
-    /// step from the router, e.g. `(0, -1)` = up). Stays put at the edge.
-    pub fn move_sel(&mut self, dir: (i32, i32)) {
+    /// step from the router, e.g. `(0, -1)` = up). Returns whether it moved;
+    /// `false` means the edge (no hint further that way) — the router turns a
+    /// vertical edge into a page scroll.
+    pub fn move_sel(&mut self, dir: (i32, i32)) -> bool {
         let Some(from) = self.selected_center() else {
-            return;
+            return false;
         };
         let d = (dir.0 as f32, dir.1 as f32);
         let mut best: Option<(f32, usize)> = None;
@@ -129,7 +140,9 @@ impl Hints {
         }
         if let Some((_, i)) = best {
             self.selected = i;
+            return true;
         }
+        false
     }
 
     /// Scrolling shifts the page under the badges: schedule a re-collect for
@@ -137,6 +150,16 @@ impl Hints {
     pub fn mark_stale(&mut self) {
         if self.visible {
             self.refresh_at = Some(Instant::now() + REFRESH_DEBOUNCE);
+        }
+    }
+
+    /// Like [`Self::mark_stale`], but pins where the selection lands once the
+    /// re-collect arrives — an edge auto-scroll points it at the leading edge so
+    /// the selection snaps onto a newly-revealed hint there.
+    pub fn mark_stale_at(&mut self, near: (f32, f32)) {
+        if self.visible {
+            self.refresh_at = Some(Instant::now() + REFRESH_DEBOUNCE);
+            self.next_near = Some(near);
         }
     }
 

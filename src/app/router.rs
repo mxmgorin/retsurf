@@ -10,6 +10,10 @@ use crate::overlay::osk::OskCommand;
 use crate::ui::Focus;
 use std::time::{Duration, Instant};
 
+/// How much of the viewport a hint-mode edge auto-scroll covers — a chunk shy of
+/// a full screen, so a strip of the old hints stays on-screen for continuity.
+const HINT_EDGE_SCROLL_FRACTION: f32 = 0.8;
+
 impl App {
     /// Route one contextual input intent against the current input owner —
     /// see [`Focus`] for the overlay precedence (the on-screen keyboard stays
@@ -148,7 +152,7 @@ impl App {
                         self.ui.settings_adjust(*dx);
                     }
                 }
-                Focus::Hints => self.ui.hints_move((*dx, *dy)),
+                Focus::Hints => self.hints_nav(*dx, *dy),
                 Focus::Home => self.ui.home_move(*dx, *dy),
                 Focus::DialEdit => self.ui.dial_edit_move(*dx, *dy),
                 Focus::Page => {}
@@ -219,6 +223,34 @@ impl App {
                 scroll_mode,
             } => self.route_analog(*aim, *scroll, *scroll_mode, out),
         }
+    }
+
+    /// Hint-mode directional input: hop the selection, or — when it is already
+    /// at a vertical edge with no hint further that way — scroll the page a
+    /// screen-ward chunk to reveal more, then re-collect (the selection lands on
+    /// a freshly-revealed hint at that edge). Horizontal edges stay put: pages
+    /// rarely scroll sideways, and an accidental sideways nudge shouldn't move it.
+    fn hints_nav(&mut self, dx: i32, dy: i32) {
+        if self.ui.hints_move((dx, dy)) || dy == 0 {
+            return;
+        }
+        let height = self.ui.browser_area_height();
+        if height <= 0.0 {
+            return;
+        }
+        // Scroll from the selected hint (the active scroller it lives in); fall
+        // back to the cursor if the selection somehow went away.
+        let (sx, sy) = self
+            .ui
+            .hints_selected_center()
+            .unwrap_or_else(|| self.ui.cursor_browser_rel());
+        // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
+        // the selection to the bottom edge; up is the mirror.
+        let chunk = dy as f32 * height * HINT_EDGE_SCROLL_FRACTION;
+        self.browser.scroll(0.0, chunk, sx, sy);
+        self.ui.notify_page_scroll(chunk);
+        let edge_y = if dy > 0 { height } else { 0.0 };
+        self.ui.hints_mark_stale_at((sx, edge_y));
     }
 
     /// Click the selected hint: a synthetic mouse move + press + release at its

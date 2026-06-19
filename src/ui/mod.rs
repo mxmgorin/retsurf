@@ -787,9 +787,16 @@ impl AppUi {
     }
 
     /// Hop the hint selection in `dir` (a dominant-axis step from the router).
+    /// Returns whether it moved; `false` is the edge (no hint further that way).
     #[inline]
-    pub fn hints_move(&mut self, dir: (i32, i32)) {
-        self.hints.move_sel(dir);
+    pub fn hints_move(&mut self, dir: (i32, i32)) -> bool {
+        self.hints.move_sel(dir)
+    }
+
+    /// Height of the browser viewport (logical px) — for screen-relative scrolls.
+    #[inline]
+    pub fn browser_area_height(&self) -> f32 {
+        self.webview_rect.height()
     }
 
     /// Center of the selected hint in browser-relative coordinates.
@@ -808,6 +815,13 @@ impl AppUi {
     #[inline]
     pub fn hints_mark_stale(&mut self) {
         self.hints.mark_stale();
+    }
+
+    /// An edge auto-scroll moved the page: re-collect and land the selection on
+    /// the newly-revealed hint nearest `near` (the leading edge).
+    #[inline]
+    pub fn hints_mark_stale_at(&mut self, near: (f32, f32)) {
+        self.hints.mark_stale_at(near);
     }
 
     /// Whether the post-scroll re-collect is due (cleared on read).
