@@ -83,10 +83,12 @@ cargo ndk "${ndk_flags[@]}"
 # --- assemble APK -------------------------------------------------------------
 echo "==> assembling APK ($profile)"
 cd "$here"
+# Both build types sign with this one keystore (see app/build.gradle) so reinstalls
+# update in place instead of failing on a signature mismatch. Generate it if missing.
+[ -f app/debug.keystore ] || keytool -genkeypair -v -keystore app/debug.keystore \
+    -storepass android -keypass android -alias androiddebugkey \
+    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=retsurf,O=retsurf,C=US"
 if [ "$profile" = "release" ]; then
-    [ -f app/debug.keystore ] || keytool -genkeypair -v -keystore app/debug.keystore \
-        -storepass android -keypass android -alias androiddebugkey \
-        -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=retsurf,O=retsurf,C=US"
     ./gradlew --no-daemon assembleRelease
     echo "APK: android/app/build/outputs/apk/release/app-release.apk"
 else

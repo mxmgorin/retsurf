@@ -106,15 +106,32 @@ jobs:
           cargo ndk -t "${ABI}" -P "${ANDROID_API}" \
             -o android/app/src/main/jniLibs build --release
 
-      - name: Generate debug signing key
+      # Restore a STABLE signing key from a repo secret so every release APK is
+      # signed with the same key and `adb install -r` updates in place. Without the
+      # secret (e.g. a fork) fall back to an ephemeral key so the build still runs.
+      # No `set -x` here: keep the base64 secret out of the logs.
+      - name: Restore signing keystore
+        env:
+          KS_B64: ${{ secrets.RETSURF_KEYSTORE_BASE64 }}
         run: |
-          set -eux
-          keytool -genkeypair -v -keystore android/app/debug.keystore \
-            -storepass android -keypass android -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=retsurf,O=retsurf,C=US"
+          set -eu
+          if [ -n "${KS_B64:-}" ]; then
+            echo "$KS_B64" | base64 -d > android/app/release.keystore
+            echo "Using keystore from RETSURF_KEYSTORE_BASE64 (stable signature)."
+          else
+            keytool -genkeypair -v -keystore android/app/release.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=retsurf,O=retsurf,C=US"
+            echo "::warning::RETSURF_KEYSTORE_BASE64 not set; using an ephemeral key (APKs won't update in place)."
+          fi
 
       - name: Assemble release APK
+        env:
+          RETSURF_KEYSTORE: release.keystore
+          RETSURF_KEYSTORE_PASS: ${{ secrets.RETSURF_KEYSTORE_PASS || 'android' }}
+          RETSURF_KEY_ALIAS: ${{ secrets.RETSURF_KEY_ALIAS || 'androiddebugkey' }}
+          RETSURF_KEY_PASS: ${{ secrets.RETSURF_KEY_PASS || 'android' }}
         run: |
           set -eux
           cd android

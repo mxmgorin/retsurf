@@ -120,6 +120,9 @@ It auto-detects the SDK and the newest installed NDK (override with
 from C++ source (~30–60 min); later builds are incremental.
 
 Install to a connected device: `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`.
+Debug and release sign with the same `app/debug.keystore`, so `-r` updates in place —
+no uninstall needed. (The first install after adopting this change may still need one
+uninstall if the device holds an APK signed with an older/different key.)
 
 ### In Android Studio
 
@@ -193,6 +196,18 @@ Java glue, the runtime `.so`, and the Rust bindings all match. The synced files
    Servo's WebGL thread with no embedder handle; rely on lazy recreation, worst
    case recreate the WebView. The `create_surfman_connection()` `catch_unwind`
    probe keeps WebGL failures non-fatal (page still renders).
-5. **Signing** — CI signs `assembleRelease` with a generated debug keystore for
-   sideloading. Play distribution needs a real upload key (set `RETSURF_KEYSTORE`
-   and friends, consumed by `app/build.gradle`).
+5. **Signing** — both build types sign with one keystore (`app/debug.keystore`
+   locally) so `adb install -r` updates in place instead of forcing a reinstall.
+   CI restores a **stable** key from the `RETSURF_KEYSTORE_BASE64` secret (decoded
+   to `app/release.keystore`, passed via `RETSURF_KEYSTORE`); without the secret it
+   falls back to an ephemeral key (with a warning) so forks still build. One-time
+   setup of the secret:
+   ```sh
+   keytool -genkeypair -keystore release.keystore -storepass android -keypass android \
+     -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+     -dname "CN=retsurf,O=retsurf,C=US"
+   base64 -w0 release.keystore   # save output as repo secret RETSURF_KEYSTORE_BASE64
+   ```
+   (If you use a non-default password/alias, also set the `RETSURF_KEYSTORE_PASS` /
+   `RETSURF_KEY_ALIAS` / `RETSURF_KEY_PASS` secrets.) Play distribution needs a real
+   upload key via the same env, consumed by `app/build.gradle`.

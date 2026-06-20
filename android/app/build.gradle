@@ -32,6 +32,14 @@ android {
     }
 
     buildTypes {
+        // Sign debug with the SAME keystore as release. AGP otherwise signs debug
+        // with its own ~/.android/debug.keystore, whose key differs from release's
+        // app/debug.keystore — a signature mismatch that makes `adb install -r`
+        // fail (INSTALL_FAILED_UPDATE_INCOMPATIBLE) and forces an uninstall every
+        // time you switch profiles. One key = installs update in place.
+        debug {
+            signingConfig signingConfigs.release
+        }
         release {
             minifyEnabled false
             signingConfig signingConfigs.release
