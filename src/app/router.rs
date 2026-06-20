@@ -238,12 +238,21 @@ impl App {
         if height <= 0.0 {
             return;
         }
-        // Scroll from the selected hint (the active scroller it lives in); fall
-        // back to the cursor if the selection somehow went away.
-        let (sx, sy) = self
+        // The scroll is hit-tested at a point to pick the scroller. Use the hint's
+        // column but mid-viewport height, NOT the edge hint's own position: the
+        // top/bottom edge hint often sits in a sticky header/footer (e.g.
+        // DuckDuckGo's search bar) that doesn't scroll the document, so scrolling
+        // there moves nothing — that's why scroll-up failed there. Mid-height
+        // lands on the main content; keeping the column still scrolls a nested
+        // side-container the hints live in. Fall back to the cursor's column if
+        // the selection somehow went away.
+        let (sx, _) = self
             .ui
             .hints_selected_center()
             .unwrap_or_else(|| self.ui.cursor_browser_rel());
+        let width = self.ui.browser_area_width();
+        let sx = sx.clamp(1.0, (width - 1.0).max(1.0));
+        let sy = height / 2.0;
         // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
         // the selection to the bottom edge; up is the mirror.
         let chunk = dy as f32 * height * HINT_EDGE_SCROLL_FRACTION;

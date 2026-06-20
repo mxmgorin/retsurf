@@ -799,6 +799,13 @@ impl AppUi {
         self.webview_rect.height()
     }
 
+    /// Width of the browser viewport (logical px) — to keep scroll hit-test
+    /// points inside the visible area.
+    #[inline]
+    pub fn browser_area_width(&self) -> f32 {
+        self.webview_rect.width()
+    }
+
     /// Center of the selected hint in browser-relative coordinates.
     #[inline]
     pub fn hints_selected_center(&self) -> Option<(f32, f32)> {
