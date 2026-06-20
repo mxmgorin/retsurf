@@ -26,6 +26,11 @@ pub struct InputConfig {
     /// Default D-pad/stick mode at startup ([`CursorMode`]). Toggle live with the
     /// `scroll` action; this only sets the initial mode.
     pub cursor_mode: CursorMode,
+    /// Whether link-hint mode shows typed combo badges and routes the gamepad
+    /// buttons as combo symbols. Off restores plain spatial hopping: the D-pad
+    /// (and stick) hop the selection again and the buttons keep their normal
+    /// meaning. See [`crate::overlay::hints`].
+    pub hint_badges: bool,
 }
 
 impl Default for InputConfig {
@@ -40,6 +45,7 @@ impl Default for InputConfig {
             osk_nav_repeat_ms: 140,
             hold_ms: 400,
             cursor_mode: CursorMode::Mouse,
+            hint_badges: true,
         }
     }
 }

@@ -17,11 +17,12 @@ use crate::{
     app::AppCommand,
     browser::AppBrowser,
     config::{
-        AppConfig, DisplayConfig, DownloadsConfig, HistoryConfig, OskConfig, ToolbarPosition,
+        AppConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
+        ToolbarPosition,
     },
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
-    overlay::hints::{Hint, Hints},
+    overlay::hints::{Hint, HintInput, Hints, Sym},
     overlay::home::Home,
     overlay::menu::{Menu, Section},
     overlay::osk::{Osk, OskCommand, OskTarget},
@@ -157,6 +158,9 @@ pub struct AppUi {
     /// The gamepad's latched D-pad scroll mode, mirrored each frame by the
     /// router; drawn as an autoscroll-style indicator in place of the cursor.
     scroll_mode: bool,
+    /// Whether hint mode draws combo badges (cached from the input config; the
+    /// router gates symbol routing on the same flag). Off = plain spatial hops.
+    hint_badges: bool,
 }
 
 impl AppUi {
@@ -166,6 +170,7 @@ impl AppUi {
         history: &HistoryConfig,
         downloads: &DownloadsConfig,
         osk: &OskConfig,
+        input: &InputConfig,
     ) -> Self {
         let mut egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
         // Install the shared accent theme so every selectable widget, text
@@ -213,6 +218,7 @@ impl AppUi {
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
+            hint_badges: input.hint_badges,
         }
     }
 
@@ -464,6 +470,13 @@ impl AppUi {
         if !on {
             self.toolbar_shown = true;
         }
+    }
+
+    /// Whether hint mode draws combo badges (the app calls this on a live config
+    /// change). When off, hint mode is plain spatial hopping.
+    #[inline]
+    pub fn set_hint_badges(&mut self, on: bool) {
+        self.hint_badges = on;
     }
 
     /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:
@@ -778,7 +791,10 @@ impl AppUi {
             .hints
             .selected_center()
             .unwrap_or_else(|| self.cursor_browser_rel());
-        self.hints.show(rects, near);
+        // Combo codes are ordered from the viewport top-center (browser-relative),
+        // so the nearest-to-top hints get the shortest codes.
+        let top_center = (self.webview_rect.width() / 2.0, 0.0);
+        self.hints.show(rects, near, top_center);
     }
 
     #[inline]
@@ -791,6 +807,30 @@ impl AppUi {
     #[inline]
     pub fn hints_move(&mut self, dir: (i32, i32)) -> bool {
         self.hints.move_sel(dir)
+    }
+
+    /// Feed one combo symbol into hint mode (see [`HintInput`]).
+    #[inline]
+    pub fn hints_push_sym(&mut self, s: Sym) -> HintInput {
+        self.hints.push_sym(s)
+    }
+
+    /// Point the hint selection at `idx` (a resolved combo) for the click path.
+    #[inline]
+    pub fn hints_select(&mut self, idx: usize) {
+        self.hints.select(idx);
+    }
+
+    /// Whether a partial combo is buffered (B clears it before exiting).
+    #[inline]
+    pub fn hints_has_typed(&self) -> bool {
+        self.hints.has_typed()
+    }
+
+    /// Drop a partially-typed combo (B with a non-empty buffer).
+    #[inline]
+    pub fn hints_clear_typed(&mut self) {
+        self.hints.clear_typed();
     }
 
     /// Height of the browser viewport (logical px) — for screen-relative scrolls.
@@ -1160,7 +1200,7 @@ impl AppUi {
                     };
                     osk::add_osk(ctx, &self.osk, bottom_inset);
                 } else if self.hints.visible {
-                    hints::add_hints(ctx, &self.hints, self.webview_rect);
+                    hints::add_hints(ctx, &self.hints, self.webview_rect, self.hint_badges);
                 } else if cursor_visible.is_some() {
                     // Gamepad cursor overlay, always on top. `cursor` is in logical
                     // px which equals egui points at the handheld's 1.0 scale factor.

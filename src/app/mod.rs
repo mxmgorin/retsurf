@@ -79,6 +79,7 @@ impl App {
             &config.history,
             &config.downloads,
             &config.osk,
+            &config.input,
         );
         log::info!("init: app constructed");
 
@@ -435,6 +436,7 @@ impl App {
             .set_toolbar_position(self.config.display.toolbar_position);
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
+        self.ui.set_hint_badges(self.config.input.hint_badges);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(

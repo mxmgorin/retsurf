@@ -145,14 +145,21 @@ pub enum InputCommand {
     /// stick shaped by the router's threshold + auto-repeat. Acts on whichever
     /// overlay is open (menu / OSK / hints); a no-op with none.
     Nav(i32, i32),
-    /// Per-frame analog state: aim vector (left stick + D-pad) and scroll (right
-    /// stick Y), each normalized to -1..=1. Drives the cursor, keyboard grid
-    /// navigation, or page scroll depending on context. `scroll_mode` is the
-    /// gamepad's latched toggle (the `scroll` action): overlays keep using the
-    /// raw aim for navigation, but on the bare page the aim scrolls instead of
-    /// moving the cursor.
+    /// A discrete D-pad press edge (dominant direction, -1/0/1 per axis), in
+    /// addition to the D-pad's contribution to the aim vector. Only hint mode
+    /// consumes it (as a combo symbol); other contexts already navigate off the
+    /// merged aim and ignore it.
+    DpadPress(i32, i32),
+    /// Per-frame analog state. `aim` is the left stick + D-pad merged (drives the
+    /// cursor and most overlay navigation); `stick` is the left stick alone, so
+    /// hint mode can hop on the stick while the D-pad types combo symbols.
+    /// `scroll` is the right stick Y. All normalized to -1..=1. `scroll_mode` is
+    /// the gamepad's latched toggle (the `scroll` action): overlays keep using
+    /// the raw aim for navigation, but on the bare page the aim scrolls instead
+    /// of moving the cursor.
     Analog {
         aim: (f32, f32),
+        stick: (f32, f32),
         scroll: f32,
         scroll_mode: bool,
     },

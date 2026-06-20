@@ -6,6 +6,7 @@
 use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
 use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
+use crate::overlay::hints::{HintInput, Sym};
 use crate::overlay::osk::OskCommand;
 use crate::ui::Focus;
 use std::time::{Duration, Instant};
@@ -89,7 +90,14 @@ impl App {
                 Focus::Menu => self.ui.menu_close(),
                 // B saves the draft and closes (same as the ✖ button).
                 Focus::Settings => self.settings_close(),
-                Focus::Hints => self.ui.hints_hide(),
+                // B drops a half-typed combo first, then exits hint mode.
+                Focus::Hints => {
+                    if self.ui.hints_has_typed() {
+                        self.ui.hints_clear_typed();
+                    } else {
+                        self.ui.hints_hide();
+                    }
+                }
                 // B in the editor returns to the start page.
                 Focus::DialEdit => self.ui.close_pins_editor(),
                 // B on the start page goes back like a normal page.
@@ -107,6 +115,10 @@ impl App {
                     self.ui.dial_edit_remove_selected();
                 } else if focus == Focus::Settings {
                     // X is unused in settings (rows edit with A and ◀▶).
+                } else if focus == Focus::Hints && self.config.input.hint_badges {
+                    // In hint mode X is a combo symbol, not the OSK toggle (unless
+                    // combos are disabled, when it falls through to the OSK below).
+                    self.hint_sym(Sym::X);
                 } else {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints_hide();
@@ -157,6 +169,15 @@ impl App {
                 Focus::DialEdit => self.ui.dial_edit_move(*dx, *dy),
                 Focus::Page => {}
             },
+            // Discrete D-pad press: in hint mode it types a combo symbol;
+            // everywhere else the D-pad already moves via the aim vector.
+            InputCommand::DpadPress(dx, dy) => {
+                if focus == Focus::Hints && self.config.input.hint_badges {
+                    if let Some(sym) = dpad_sym(*dx, *dy) {
+                        self.hint_sym(sym);
+                    }
+                }
+            }
             // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
             // In the menu it depends on the section — Bookmarks pins (or unpins)
             // the selected entry to the speed dial, while History and Tabs toggle
@@ -170,6 +191,9 @@ impl App {
                 Focus::Menu => self.menu_y_action(),
                 Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
+                // In hint mode Y is a combo symbol (B exits instead); with combos
+                // off it keeps its old meaning of hiding the hints.
+                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
                 Focus::Hints => self.ui.hints_hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();
@@ -180,6 +204,11 @@ impl App {
                 Focus::Menu => self.ui.menu_switch(*delta),
                 // L1/R1 switch the settings section (◀▶ is taken by value editing).
                 Focus::Settings => self.ui.settings_switch(*delta),
+                // In hint mode L1/R1 are combo symbols; with combos off they fall
+                // through to the page back/forward below.
+                Focus::Hints if self.config.input.hint_badges => {
+                    self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
+                }
                 // Page navigation is parked while the modal prompt is up (it
                 // may sit under the keyboard), like tab switching.
                 _ if self.ui.prompt.visible() => {}
@@ -219,9 +248,10 @@ impl App {
             }
             InputCommand::Analog {
                 aim,
+                stick,
                 scroll,
                 scroll_mode,
-            } => self.route_analog(*aim, *scroll, *scroll_mode, out),
+            } => self.route_analog(*aim, *stick, *scroll, *scroll_mode, out),
         }
     }
 
@@ -260,6 +290,17 @@ impl App {
         self.ui.notify_page_scroll(chunk);
         let edge_y = if dy > 0 { height } else { 0.0 };
         self.ui.hints_mark_stale_at((sx, edge_y));
+    }
+
+    /// Feed a combo symbol to hint mode and, when it resolves to one hint, click
+    /// it (via the shared `activate_hint` path). A dead-end or completed-but-unused
+    /// combo (`NoMatch`) just clears the buffer inside `push_sym` — the faded
+    /// badges already show it went nowhere — and a `Pending` combo waits for more.
+    fn hint_sym(&mut self, sym: Sym) {
+        if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
+            self.ui.hints_select(idx);
+            self.activate_hint();
+        }
     }
 
     /// Click the selected hint: a synthetic mouse move + press + release at its
@@ -302,6 +343,7 @@ impl App {
     fn route_analog(
         &mut self,
         aim: (f32, f32),
+        stick: (f32, f32),
         scroll: f32,
         scroll_mode: bool,
         out: &mut Vec<AppCommand>,
@@ -326,15 +368,28 @@ impl App {
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
         let cfg = &self.config.input;
-        let (cursor_speed, scroll_speed, nav_threshold) =
-            (cfg.cursor_speed, cfg.scroll_speed, cfg.osk_nav_threshold);
+        let (cursor_speed, scroll_speed, nav_threshold, hint_badges) = (
+            cfg.cursor_speed,
+            cfg.scroll_speed,
+            cfg.osk_nav_threshold,
+            cfg.hint_badges,
+        );
 
         // Overlays (menu / OSK / hints / prompt): the stick becomes discrete
         // navigation, shaped (dead zone + auto-repeat) into the same `Nav` steps
         // the keyboard arrows emit — one execution path for both devices. The menu
         // takes the dominant axis only, so a diagonal nudge does just one thing.
         if self.ui.focus() != Focus::Page {
-            let dir = osk_nav_dir(aim, nav_threshold);
+            // Hint mode with combos on hops on the stick alone — the D-pad is
+            // reserved for combo symbols (a discrete `DpadPress`), so it must not
+            // also drive a hop. With combos off, or any other overlay, the merged
+            // aim (stick + D-pad) drives navigation as usual.
+            let nav_vec = if self.ui.focus() == Focus::Hints && hint_badges {
+                stick
+            } else {
+                aim
+            };
+            let dir = osk_nav_dir(nav_vec, nav_threshold);
             if self.nav_repeat(dir, now) && dir != (0, 0) {
                 out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));
             }
@@ -412,6 +467,17 @@ impl App {
         }
         false
     }
+}
+
+/// Map a discrete D-pad press direction to its combo symbol (hint mode).
+fn dpad_sym(dx: i32, dy: i32) -> Option<Sym> {
+    Some(match (dx, dy) {
+        (0, -1) => Sym::Up,
+        (0, 1) => Sym::Down,
+        (-1, 0) => Sym::Left,
+        (1, 0) => Sym::Right,
+        _ => return None,
+    })
 }
 
 /// Reduce a stick vector to a single discrete grid step along its dominant axis,

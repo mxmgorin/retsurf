@@ -82,6 +82,7 @@ enum FieldId {
     OskNavRepeat,
     HoldMs,
     CursorMode,
+    HintBadges,
     HistoryEnabled,
     HistoryMax,
     AdblockEnabled,
@@ -209,6 +210,7 @@ static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       Kind::Int { min: 20, max: 500, step: 10 }, false),
     f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             Kind::Int { min: 100, max: 2000, step: 50 }, false),
     f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CURSOR_MODE_CHOICES), true),
+    f(S::Input,  "Input",     "Hint badges",            F::HintBadges,         Kind::Bool, false),
 
     f(S::Content,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
     f(S::Content,  "History",     "Max entries",            F::HistoryMax,         Kind::Int { min: 0, max: 1000, step: 5 }, false),
@@ -480,6 +482,7 @@ impl Settings {
             FieldId::BlockMedia => c.data_saving.block_media,
             FieldId::BlockFonts => c.data_saving.block_fonts,
             FieldId::ToolbarAutohide => c.display.toolbar_autohide,
+            FieldId::HintBadges => c.input.hint_badges,
             _ => false,
         }
     }
@@ -495,6 +498,7 @@ impl Settings {
             FieldId::BlockMedia => c.data_saving.block_media = b,
             FieldId::BlockFonts => c.data_saving.block_fonts = b,
             FieldId::ToolbarAutohide => c.display.toolbar_autohide = b,
+            FieldId::HintBadges => c.input.hint_badges = b,
             _ => {}
         }
     }

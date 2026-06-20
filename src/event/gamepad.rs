@@ -151,13 +151,26 @@ impl Gamepad {
     /// Resolve a button edge against the binding tables (see the module docs
     /// for the tap / hold / chord rules).
     pub fn on_button(&mut self, button: Button, pressed: bool, commands: &mut Vec<AppCommand>) {
-        match button {
-            // The D-pad contributes to the aim vector on both edges.
-            Button::DPadLeft => return self.dpad.0 = if pressed { -1.0 } else { 0.0 },
-            Button::DPadRight => return self.dpad.0 = if pressed { 1.0 } else { 0.0 },
-            Button::DPadUp => return self.dpad.1 = if pressed { -1.0 } else { 0.0 },
-            Button::DPadDown => return self.dpad.1 = if pressed { 1.0 } else { 0.0 },
-            _ => {}
+        // The D-pad contributes to the aim vector on both edges (per axis, so a
+        // held diagonal keeps both), and emits a discrete press edge for hint
+        // mode's combo symbols (ignored elsewhere).
+        let dpad_dir = match button {
+            Button::DPadLeft => Some((-1, 0)),
+            Button::DPadRight => Some((1, 0)),
+            Button::DPadUp => Some((0, -1)),
+            Button::DPadDown => Some((0, 1)),
+            _ => None,
+        };
+        if let Some((dx, dy)) = dpad_dir {
+            if dx != 0 {
+                self.dpad.0 = if pressed { dx as f32 } else { 0.0 };
+            } else {
+                self.dpad.1 = if pressed { dy as f32 } else { 0.0 };
+            }
+            if pressed {
+                commands.push(AppCommand::Input(InputCommand::DpadPress(dx, dy)));
+            }
+            return;
         }
 
         if pressed {
@@ -254,6 +267,7 @@ impl Gamepad {
 
         commands.push(AppCommand::Input(InputCommand::Analog {
             aim: self.aim(),
+            stick: self.left,
             scroll: self.right.1,
             scroll_mode: self.scroll_mode,
         }));
