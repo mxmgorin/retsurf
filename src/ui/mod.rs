@@ -22,7 +22,7 @@ use crate::{
     },
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
-    overlay::hints::{Hint, HintInput, Hints, Sym},
+    overlay::hints::{Hint, HintInput, HintLabels, Hints, Label, Sym},
     overlay::home::Home,
     overlay::menu::{Menu, Section},
     overlay::osk::{Osk, OskCommand, OskTarget},
@@ -161,6 +161,10 @@ pub struct AppUi {
     /// Whether hint mode draws combo badges (cached from the input config; the
     /// router gates symbol routing on the same flag). Off = plain spatial hops.
     hint_badges: bool,
+    /// Whether the most recent input came from the keyboard (vs a gamepad), noted
+    /// by the event handler. Read when hint mode opens to pick the badge alphabet:
+    /// typed letters for the keyboard, button combos for the pad.
+    last_input_keyboard: bool,
 }
 
 impl AppUi {
@@ -219,6 +223,7 @@ impl AppUi {
             prompt: Prompt::new(),
             scroll_mode: false,
             hint_badges: input.hint_badges,
+            last_input_keyboard: false,
         }
     }
 
@@ -510,6 +515,21 @@ impl AppUi {
     #[inline]
     pub fn set_hint_badges(&mut self, on: bool) {
         self.hint_badges = on;
+    }
+
+    /// Whether hint-mode combo badges are enabled (the router gates typed input
+    /// on the same flag).
+    #[inline]
+    pub fn hint_badges(&self) -> bool {
+        self.hint_badges
+    }
+
+    /// The event handler notes which device produced the latest input, so hint
+    /// mode can pick its badge alphabet (typed letters vs gamepad combos) when it
+    /// opens. `true` = keyboard.
+    #[inline]
+    pub fn note_input_keyboard(&mut self, keyboard: bool) {
+        self.last_input_keyboard = keyboard;
     }
 
     /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:
@@ -811,10 +831,24 @@ impl AppUi {
         self.hints.visible
     }
 
-    /// L3 pressed: a hint-collection round was started in the browser.
+    /// Hint mode opened: a collection round was started in the browser. The badge
+    /// alphabet follows the device that triggered it (typed letters from the
+    /// keyboard, button combos from the pad) — fixed for the whole session.
     #[inline]
     pub fn hints_begin_collect(&mut self) {
-        self.hints.begin_collect();
+        let labels = if self.last_input_keyboard {
+            HintLabels::Keyboard
+        } else {
+            HintLabels::Gamepad
+        };
+        self.hints.begin_collect(labels);
+    }
+
+    /// Whether the open hint round is typed on the keyboard (vs gamepad combos) —
+    /// the keyboard handler routes letter keys into the buffer only then.
+    #[inline]
+    pub fn hints_keyboard(&self) -> bool {
+        self.hints.is_keyboard()
     }
 
     /// Fresh clickable rects from the page. Selection lands near the previous
@@ -842,10 +876,16 @@ impl AppUi {
         self.hints.move_sel(dir)
     }
 
-    /// Feed one combo symbol into hint mode (see [`HintInput`]).
+    /// Feed one gamepad combo symbol into hint mode (see [`HintInput`]).
     #[inline]
     pub fn hints_push_sym(&mut self, s: Sym) -> HintInput {
-        self.hints.push_sym(s)
+        self.hints.push_label(Label::Sym(s))
+    }
+
+    /// Feed one typed keyboard letter into hint mode (see [`HintInput`]).
+    #[inline]
+    pub fn hints_push_key(&mut self, c: char) -> HintInput {
+        self.hints.push_label(Label::Key(c))
     }
 
     /// Point the hint selection at `idx` (a resolved combo) for the click path.

@@ -60,6 +60,40 @@ impl Sym {
     ];
 }
 
+/// One cell of a hint code: a gamepad button symbol (controller combos) or a
+/// keyboard key (typed letters). Which alphabet a round uses is fixed by the
+/// input that opened hint mode — see [`HintLabels`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Label {
+    Sym(Sym),
+    Key(char),
+}
+
+/// The alphabet a hint round draws its codes from, chosen from whatever opened
+/// the mode: a controller types button combos, a keyboard types letters.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HintLabels {
+    Gamepad,
+    Keyboard,
+}
+
+/// Keyboard label letters, home-row-first so the common (short) codes sit under
+/// the fingers — the Vimium default set. 14 letters keeps codes <= 2 cells for
+/// the whole 150-hint collection cap (14^2 = 196).
+const KEY_ALPHABET: [char; 14] = [
+    's', 'a', 'd', 'f', 'j', 'k', 'l', 'e', 'w', 'c', 'm', 'p', 'g', 'h',
+];
+
+impl HintLabels {
+    /// The ordered symbol set for this source; index 0 takes the shortest codes.
+    fn alphabet(self) -> Vec<Label> {
+        match self {
+            HintLabels::Gamepad => Sym::ALL.iter().copied().map(Label::Sym).collect(),
+            HintLabels::Keyboard => KEY_ALPHABET.iter().copied().map(Label::Key).collect(),
+        }
+    }
+}
+
 /// Outcome of feeding one symbol into the typed buffer (see [`Hints::push_sym`]).
 pub enum HintInput {
     /// The buffer is a live prefix of one or more codes — keep typing.
@@ -85,10 +119,13 @@ pub struct Hints {
     /// caller's default. Set by an edge auto-scroll so the selection snaps to a
     /// freshly-revealed hint at the leading edge, not the now-stale old center.
     next_near: Option<(f32, f32)>,
+    /// Which alphabet this round's codes use (gamepad combos vs typed letters),
+    /// fixed when the mode is entered and kept across post-scroll re-collects.
+    labels: HintLabels,
     /// Typed combo code per hint (parallel to `hints`), reassigned every collect.
-    codes: Vec<Vec<Sym>>,
+    codes: Vec<Vec<Label>>,
     /// Symbols pressed so far toward a code; cleared on activate or re-collect.
-    typed: Vec<Sym>,
+    typed: Vec<Label>,
 }
 
 impl Hints {
@@ -100,14 +137,23 @@ impl Hints {
             collecting: false,
             refresh_at: None,
             next_near: None,
+            labels: HintLabels::Gamepad,
             codes: vec![],
             typed: vec![],
         }
     }
 
     /// A collection round was started; the results arrive asynchronously.
-    pub fn begin_collect(&mut self) {
+    /// `labels` fixes the badge alphabet for the whole session (the input that
+    /// opened the mode) — a re-collect via [`Self::take_refresh_due`] keeps it.
+    pub fn begin_collect(&mut self, labels: HintLabels) {
         self.collecting = true;
+        self.labels = labels;
+    }
+
+    /// Whether this round's codes are typed on a keyboard (vs gamepad combos).
+    pub fn is_keyboard(&self) -> bool {
+        self.labels == HintLabels::Keyboard
     }
 
     /// Fresh rects from the page. Keeps the selection near `near` (the previous
@@ -127,7 +173,7 @@ impl Hints {
         }
         let near = self.next_near.take().unwrap_or(near);
         self.selected = nearest_to(&hints, near);
-        self.codes = assign_codes(&hints, order_from);
+        self.codes = assign_codes(&hints, order_from, &self.labels.alphabet());
         self.typed.clear();
         self.hints = hints;
         self.visible = true;
@@ -169,10 +215,10 @@ impl Hints {
         }
     }
 
-    /// Feed one combo symbol into the typed buffer (see [`HintInput`]). Codes are
-    /// uniform-length and unique, so a full buffer that still prefixes a code is
-    /// an exact, single match.
-    pub fn push_sym(&mut self, s: Sym) -> HintInput {
+    /// Feed one label (a gamepad symbol or a typed letter) into the buffer (see
+    /// [`HintInput`]). Codes are uniform-length and unique, so a full buffer that
+    /// still prefixes a code is an exact, single match.
+    pub fn push_label(&mut self, s: Label) -> HintInput {
         self.typed.push(s);
         if !(0..self.codes.len()).any(|i| self.has_prefix(i, &self.typed)) {
             self.typed.clear();
@@ -195,17 +241,17 @@ impl Hints {
         self.typed.is_empty() || self.has_prefix(idx, &self.typed)
     }
 
-    fn has_prefix(&self, idx: usize, prefix: &[Sym]) -> bool {
+    fn has_prefix(&self, idx: usize, prefix: &[Label]) -> bool {
         self.codes.get(idx).is_some_and(|c| c.starts_with(prefix))
     }
 
     /// The combo code assigned to `hints[idx]` this round (for the renderer).
-    pub fn code(&self, idx: usize) -> &[Sym] {
+    pub fn code(&self, idx: usize) -> &[Label] {
         self.codes.get(idx).map(Vec::as_slice).unwrap_or_default()
     }
 
     /// Symbols typed so far toward a code (the renderer dims these leading cells).
-    pub fn typed(&self) -> &[Sym] {
+    pub fn typed(&self) -> &[Label] {
         &self.typed
     }
 
@@ -309,35 +355,42 @@ fn dist2(a: (f32, f32), b: (f32, f32)) -> f32 {
     (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)
 }
 
-/// Assign each hint a uniform-length code, low codes to the hints nearest
-/// `anchor` (the viewport top-center) so the obvious targets take the fewest
-/// presses. With 8 symbols, 1 press covers <= 8 hints, 2 <= 64, 3 <= 512 — past
-/// the 150-hint collection cap, so the length is never more than 3.
-fn assign_codes(hints: &[Hint], anchor: (f32, f32)) -> Vec<Vec<Sym>> {
+/// Assign each hint a uniform-length code from `alphabet`, low codes to the hints
+/// nearest `anchor` (the viewport top-center) so the obvious targets take the
+/// fewest presses. The length is the smallest that gives every hint a unique code
+/// (`base^len >= n`): the 8 gamepad symbols need <= 3 cells, the 14 keyboard
+/// letters <= 2, across the 150-hint collection cap.
+fn assign_codes(hints: &[Hint], anchor: (f32, f32), alphabet: &[Label]) -> Vec<Vec<Label>> {
     let n = hints.len();
-    let len = if n <= 8 {
-        1
-    } else if n <= 64 {
-        2
-    } else {
-        3
-    };
+    let len = code_len(n, alphabet.len());
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| dist2(hints[a].center(), anchor).total_cmp(&dist2(hints[b].center(), anchor)));
     let mut codes = vec![Vec::new(); n];
     for (rank, &idx) in order.iter().enumerate() {
-        codes[idx] = nth_code(rank, len);
+        codes[idx] = nth_code(rank, len, alphabet);
     }
     codes
 }
 
-/// The `rank`-th code of `len` symbols: base-8 over [`Sym::ALL`], most-
-/// significant symbol first, so codes enumerate in a stable order.
-fn nth_code(mut rank: usize, len: usize) -> Vec<Sym> {
-    let base = Sym::ALL.len();
-    let mut code = vec![Sym::X; len];
+/// Smallest code length whose `base`-symbol space holds `n` unique codes.
+fn code_len(n: usize, base: usize) -> usize {
+    let base = base.max(2); // a 0/1-symbol alphabet can't enumerate; guard anyway
+    let mut len = 1;
+    let mut cap = base;
+    while cap < n {
+        cap = cap.saturating_mul(base);
+        len += 1;
+    }
+    len
+}
+
+/// The `rank`-th code of `len` cells: base-`alphabet.len()` over `alphabet`,
+/// most-significant cell first, so codes enumerate in a stable order.
+fn nth_code(mut rank: usize, len: usize, alphabet: &[Label]) -> Vec<Label> {
+    let base = alphabet.len();
+    let mut code = vec![alphabet[0]; len];
     for slot in code.iter_mut().rev() {
-        *slot = Sym::ALL[rank % base];
+        *slot = alphabet[rank % base];
         rank /= base;
     }
     code
@@ -361,17 +414,22 @@ mod tests {
 
     fn shown(centers: &[(f32, f32)], anchor: (f32, f32)) -> Hints {
         let mut h = Hints::new();
-        h.begin_collect();
+        h.begin_collect(HintLabels::Gamepad);
         let hints = centers.iter().map(|&(x, y)| at(x, y)).collect();
         h.show(hints, anchor, anchor);
         h
+    }
+
+    /// The gamepad alphabet (8 symbols), as the assignment helpers take it.
+    fn pad() -> Vec<Label> {
+        HintLabels::Gamepad.alphabet()
     }
 
     #[test]
     fn code_length_scales_with_count() {
         let len_for = |n: usize| {
             let hints: Vec<Hint> = (0..n).map(|i| at(i as f32, 0.0)).collect();
-            assign_codes(&hints, (0.0, 0.0))[0].len()
+            assign_codes(&hints, (0.0, 0.0), &pad())[0].len()
         };
         assert_eq!(len_for(8), 1);
         assert_eq!(len_for(9), 2);
@@ -380,42 +438,64 @@ mod tests {
     }
 
     #[test]
+    fn keyboard_codes_stay_short() {
+        // 14 letters: 1 cell up to 14, 2 cells past it — the 150-hint cap is <= 2.
+        let len_for = |n: usize| {
+            let hints: Vec<Hint> = (0..n).map(|i| at(i as f32, 0.0)).collect();
+            assign_codes(&hints, (0.0, 0.0), &HintLabels::Keyboard.alphabet())[0].len()
+        };
+        assert_eq!(len_for(14), 1);
+        assert_eq!(len_for(15), 2);
+        assert_eq!(len_for(150), 2);
+    }
+
+    #[test]
     fn codes_are_unique() {
         let hints: Vec<Hint> = (0..50).map(|i| at(i as f32, 0.0)).collect();
-        let codes = assign_codes(&hints, (0.0, 0.0));
-        let unique: HashSet<&Vec<Sym>> = codes.iter().collect();
+        let codes = assign_codes(&hints, (0.0, 0.0), &pad());
+        let unique: HashSet<&Vec<Label>> = codes.iter().collect();
         assert_eq!(unique.len(), codes.len());
     }
 
     #[test]
     fn nearest_hint_gets_the_first_code() {
         // The anchor sits on the last hint, which should win rank 0 (code `X`).
-        let codes = assign_codes(&[at(100.0, 0.0), at(50.0, 0.0), at(0.0, 0.0)], (0.0, 0.0));
-        assert_eq!(codes[2], vec![Sym::X]);
+        let codes = assign_codes(
+            &[at(100.0, 0.0), at(50.0, 0.0), at(0.0, 0.0)],
+            (0.0, 0.0),
+            &pad(),
+        );
+        assert_eq!(codes[2], vec![Label::Sym(Sym::X)]);
     }
 
     #[test]
-    fn push_sym_narrows_then_activates() {
+    fn push_narrows_then_activates() {
         // 10 hints -> length-2 codes; the nearest (index 0) is `XX`.
         let mut h = shown(
             &(0..10).map(|i| (i as f32, 0.0)).collect::<Vec<_>>(),
             (0.0, 0.0),
         );
-        assert_eq!(h.code(0), [Sym::X, Sym::X]);
-        assert!(matches!(h.push_sym(Sym::X), HintInput::Pending));
+        assert_eq!(h.code(0), [Label::Sym(Sym::X), Label::Sym(Sym::X)]);
+        assert!(matches!(h.push_label(Label::Sym(Sym::X)), HintInput::Pending));
         assert!(h.has_typed());
-        assert!(matches!(h.push_sym(Sym::X), HintInput::Activate(0)));
+        assert!(matches!(
+            h.push_label(Label::Sym(Sym::X)),
+            HintInput::Activate(0)
+        ));
         assert!(!h.has_typed()); // cleared on activate
     }
 
     #[test]
-    fn push_sym_dead_end_is_nomatch() {
+    fn push_dead_end_is_nomatch() {
         // Only ranks 0..10 are assigned, none starting with `Right`.
         let mut h = shown(
             &(0..10).map(|i| (i as f32, 0.0)).collect::<Vec<_>>(),
             (0.0, 0.0),
         );
-        assert!(matches!(h.push_sym(Sym::Right), HintInput::NoMatch));
+        assert!(matches!(
+            h.push_label(Label::Sym(Sym::Right)),
+            HintInput::NoMatch
+        ));
         assert!(!h.has_typed());
     }
 
@@ -426,7 +506,7 @@ mod tests {
             (0.0, 0.0),
         );
         assert!(h.matches_prefix(0)); // nothing typed: everything matches
-        h.push_sym(Sym::X);
+        h.push_label(Label::Sym(Sym::X));
         assert!(h.matches_prefix(0)); // code `XX` still matches `X`
         assert!(!h.matches_prefix(8)); // code `YX` no longer matches
     }

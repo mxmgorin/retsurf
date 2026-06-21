@@ -282,6 +282,9 @@ impl AppEventHandler {
                     repeat,
                     pressed: true,
                 };
+                // Remember the input came from the keyboard so hint mode picks
+                // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
+                ui.note_input_keyboard(true);
                 self.keyboard.on_key(&key, ui, browser, commands);
             }
             Event::KeyUp {
@@ -304,6 +307,8 @@ impl AppEventHandler {
                 self.gamepad.on_axis(axis, value, commands);
             }
             Event::ControllerButtonDown { button, .. } => {
+                // A pad press reclaims hint badges as button combos (see KeyDown).
+                ui.note_input_keyboard(false);
                 self.gamepad.on_button(button, true, commands);
             }
             Event::ControllerButtonUp { button, .. } => {

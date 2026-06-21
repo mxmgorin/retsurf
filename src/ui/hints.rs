@@ -1,17 +1,20 @@
 //! Rendering of the link-hint overlay (state lives in [`crate::overlay::hints`]):
 //! a thin accent frame on every clickable element (the selected one filled and
-//! outlined brighter for the spatial stick hop), plus a Vimium-style combo-code
-//! badge per element — the gamepad buttons you press to jump straight to it.
+//! outlined brighter for the spatial stick hop), plus a Vimium-style code badge
+//! per element — the buttons/keys you press to jump straight to it. The alphabet
+//! follows whatever opened the mode: gamepad button combos, or typed letters
+//! when it was opened from the keyboard.
 //!
 //! Button glyphs aren't in egui's bundled fonts (see the `retsurf-egui-glyph-
 //! coverage` memory), so the symbols are painter shapes: lettered pills for the
 //! face/shoulder buttons (X / Y / L1 / R1, plain ASCII) and filled triangles for
-//! the four D-pad directions. While a combo is being typed, the already-pressed
-//! leading cells dim and the hints whose codes no longer match fade out, leaving
-//! only the live targets — the spatial selection frame stays so A still works.
+//! the four D-pad directions; keyboard codes are just uppercase letter pills.
+//! While a code is being typed, the already-pressed leading cells dim and the
+//! hints whose codes no longer match fade out, leaving only the live targets —
+//! the spatial selection frame stays so A / Enter still works.
 
 use super::theme::ACCENT;
-use crate::overlay::hints::{Hints, Sym};
+use crate::overlay::hints::{Hints, Label, Sym};
 use egui_sdl2::egui;
 
 /// Height of one combo-symbol cell (logical px); the badge is a row of these.
@@ -74,14 +77,14 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect,
     }
 }
 
-/// Draw the combo code as a row of symbol cells at the rect's top-left corner.
-/// `done` is how many leading symbols are already typed (drawn muted).
-fn draw_badge(painter: &egui::Painter, rect: egui::Rect, code: &[Sym], done: usize) {
+/// Draw the hint code as a row of label cells at the rect's top-left corner.
+/// `done` is how many leading cells are already typed (drawn muted).
+fn draw_badge(painter: &egui::Painter, rect: egui::Rect, code: &[Label], done: usize) {
     let mut x = rect.left();
     let top = rect.top();
     let last = code.len().saturating_sub(1);
-    for (j, &sym) in code.iter().enumerate() {
-        let w = cell_width(sym);
+    for (j, &label) in code.iter().enumerate() {
+        let w = cell_width(label);
         let cell = egui::Rect::from_min_size(egui::pos2(x, top), egui::vec2(w, CELL_H));
         let (pill, ink) = if j < done {
             (DONE_PILL, DONE_INK)
@@ -91,7 +94,7 @@ fn draw_badge(painter: &egui::Painter, rect: egui::Rect, code: &[Sym], done: usi
         // Cells abut with no gap; round only the row's outer corners so a code
         // reads as one pill.
         painter.rect_filled(cell, group_corners(j, last), pill);
-        draw_sym(painter, cell, sym, ink);
+        draw_label(painter, cell, label, ink);
         x += w;
     }
 }
@@ -109,31 +112,33 @@ fn group_corners(j: usize, last: usize) -> egui::CornerRadius {
     }
 }
 
-fn cell_width(sym: Sym) -> f32 {
-    match sym {
-        Sym::L1 | Sym::R1 => CELL_W_WIDE,
+fn cell_width(label: Label) -> f32 {
+    match label {
+        Label::Sym(Sym::L1) | Label::Sym(Sym::R1) => CELL_W_WIDE,
         _ => CELL_W,
     }
 }
 
-/// Render one symbol centered in its pill: a letter for the buttons, a filled
-/// triangle for the D-pad directions.
-fn draw_sym(painter: &egui::Painter, cell: egui::Rect, sym: Sym, ink: egui::Color32) {
-    let label = match sym {
-        Sym::X => "X",
-        Sym::Y => "Y",
-        Sym::L1 => "L1",
-        Sym::R1 => "R1",
-        _ => {
+/// Render one code cell centered in its pill: a gamepad symbol (lettered button
+/// or D-pad triangle) or a typed keyboard letter (drawn uppercase).
+fn draw_label(painter: &egui::Painter, cell: egui::Rect, label: Label, ink: egui::Color32) {
+    let mut buf = [0u8; 4];
+    let text: &str = match label {
+        Label::Sym(Sym::X) => "X",
+        Label::Sym(Sym::Y) => "Y",
+        Label::Sym(Sym::L1) => "L1",
+        Label::Sym(Sym::R1) => "R1",
+        Label::Sym(sym) => {
             triangle(painter, cell, sym, ink);
             return;
         }
+        Label::Key(c) => c.to_ascii_uppercase().encode_utf8(&mut buf),
     };
-    let size = if label.len() == 2 { 9.0 } else { 10.0 };
+    let size = if text.len() == 2 { 9.0 } else { 10.0 };
     painter.text(
         cell.center(),
         egui::Align2::CENTER_CENTER,
-        label,
+        text,
         egui::FontId::proportional(size),
         ink,
     );

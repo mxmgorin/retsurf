@@ -165,6 +165,19 @@ impl Keyboard {
                 }
                 _ => {}
             }
+            // Keyboard-opened hint mode: letter keys type the on-badge hint code
+            // (Vimium-style), so capture every letter here before the shortcut
+            // table or the page sees it. Modified keys (Ctrl+R etc.) still fall
+            // through. Arrows keep hopping the selection (the nav_* bindings).
+            let modified = key
+                .keymod
+                .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD);
+            if ui.hints_keyboard() && ui.hint_badges() && !key.repeat && !modified {
+                if let Some(c) = letter_of(key.kc) {
+                    commands.push(AppCommand::Input(InputCommand::HintKey(c)));
+                    return;
+                }
+            }
         }
 
         // The start page: arrows move the selection and Enter activates — the
@@ -340,4 +353,13 @@ impl Keyboard {
 
 fn into_servo(key: &KeyEvent) -> servo::KeyboardEvent {
     super::sdl2_servo::into_keyboard_event(key.kc, key.sc, key.keymod, key.pressed, key.repeat)
+}
+
+/// The lowercase letter `a`..=`z` a keycode stands for, else `None`. SDL letter
+/// keycodes are their ASCII lowercase value, so the range maps straight across.
+fn letter_of(kc: Keycode) -> Option<char> {
+    let v = kc.into_i32();
+    (('a' as i32)..=('z' as i32))
+        .contains(&v)
+        .then_some(v as u8 as char)
 }

@@ -178,6 +178,13 @@ impl App {
                     }
                 }
             }
+            // A typed letter for a keyboard-driven hint round (the keyboard handler
+            // only emits it in that mode); resolve it like a gamepad combo symbol.
+            InputCommand::HintKey(c) => {
+                if focus == Focus::Hints && self.config.input.hint_badges {
+                    self.hint_key(*c);
+                }
+            }
             // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
             // In the menu it depends on the section — Bookmarks pins (or unpins)
             // the selected entry to the speed dial, while History and Tabs toggle
@@ -298,6 +305,15 @@ impl App {
     /// badges already show it went nowhere — and a `Pending` combo waits for more.
     fn hint_sym(&mut self, sym: Sym) {
         if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
+            self.ui.hints_select(idx);
+            self.activate_hint();
+        }
+    }
+
+    /// Feed a typed letter to a keyboard hint round; on a resolved code, click the
+    /// matched hint (shares `hint_sym`'s activation path — see [`HintInput`]).
+    fn hint_key(&mut self, c: char) {
+        if let HintInput::Activate(idx) = self.ui.hints_push_key(c) {
             self.ui.hints_select(idx);
             self.activate_hint();
         }

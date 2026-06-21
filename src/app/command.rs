@@ -158,6 +158,10 @@ pub enum InputCommand {
     /// consumes it (as a combo symbol); other contexts already navigate off the
     /// merged aim and ignore it.
     DpadPress(i32, i32),
+    /// A typed letter for a keyboard-driven hint round — fed into the hint code
+    /// buffer (the keyboard counterpart of the gamepad combo symbols). Emitted
+    /// only while hint mode is open and was opened from the keyboard.
+    HintKey(char),
     /// Per-frame analog state. `aim` is the left stick + D-pad merged (drives the
     /// cursor and most overlay navigation); `stick` is the left stick alone, so
     /// hint mode can hop on the stick while the D-pad types combo symbols.
