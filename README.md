@@ -34,8 +34,8 @@ Handheld Linux distros (Knulli, muOS, ROCKNIX) lack a usable browser. Lightweigh
 - **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab)
 - **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
 - Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections
-- **Rebindable controls** (`bindings.toml`): gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: reload) · L1/R1 = back / forward (hold: zoom out / in; both together: reset zoom) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = D-pad scroll toggle (hold: bookmark) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
+- **Rebindable controls**: remap any gamepad gesture in-app from the **Controls** settings section, or edit `bindings.toml` directly — gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
+- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: bookmark) · L1/R1 = back / forward (hold: zoom out / in; both together: reset zoom) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = D-pad scroll toggle (hold: reload) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
 
 **Page zoom**
 - Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab

@@ -7,10 +7,13 @@
 //!
 //! Controls mirror the menu but free up ◀▶ for editing: L1/R1 (shoulders) switch
 //! section, ▲▼ move between rows, ◀▶ adjust the focused value, A edits, B saves
-//! and closes — all reachable without an analog stick. [`crate::ui::settings`]
-//! renders it.
+//! and closes — all reachable without an analog stick. The Controls section is
+//! the exception: an action list where A *adds* a binding (press the button or
+//! key you want — see [`Settings::controls_activate`]) or removes one.
+//! [`crate::ui::settings`] renders it.
 
 use crate::config::{AppConfig, CursorMode, MemoryProfile, ToolbarPosition};
+use crate::event::bindings::{self, Action, Store};
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
@@ -22,6 +25,10 @@ pub enum SettingsSection {
     Browser,
     Display,
     Input,
+    /// Rebinding: a list of actions, each showing its gamepad + keyboard bindings,
+    /// with add (capture) / remove. Built dynamically, not from [`FIELDS`] — see
+    /// [`Settings::controls_rows`].
+    Controls,
     /// History recording, the ad blocker, and data-saving content blocking,
     /// presented under one tab — they remain separate config sections
     /// (`[history]`, `[adblock]`, `[data_saving]`), shown here as sub-groups.
@@ -33,10 +40,11 @@ pub enum SettingsSection {
 
 impl SettingsSection {
     /// Left-to-right order of the section bar.
-    pub const ALL: [SettingsSection; 6] = [
+    pub const ALL: [SettingsSection; 7] = [
         SettingsSection::Browser,
         SettingsSection::Display,
         SettingsSection::Input,
+        SettingsSection::Controls,
         SettingsSection::Content,
         SettingsSection::Advanced,
         SettingsSection::About,
@@ -47,6 +55,7 @@ impl SettingsSection {
             SettingsSection::Browser => "Browser",
             SettingsSection::Display => "Display",
             SettingsSection::Input => "Input",
+            SettingsSection::Controls => "Controls",
             SettingsSection::Content => "Content",
             SettingsSection::Advanced => "Advanced",
             SettingsSection::About => "About",
@@ -117,10 +126,11 @@ pub enum Kind {
     },
 }
 
-/// A row in the list. `section` is the tab it lives under; `cat` is a sub-header
-/// shown only within sections that fold several config groups together (see
-/// [`SettingsSection`]). `restart` marks fields the running app can't apply live,
-/// flagged with `*` and a footer note.
+/// A config row in the list. `section` is the tab it lives under; `cat` is a
+/// sub-header shown only within sections that fold several config groups together
+/// (see [`SettingsSection`]). `restart` marks fields the running app can't apply
+/// live, flagged with `*` and a footer note. The Controls section is dynamic and
+/// has no `Field`s — see [`CtrlRow`].
 pub struct Field {
     pub section: SettingsSection,
     pub cat: &'static str,
@@ -183,9 +193,10 @@ const fn f(
 use FieldId as F;
 use SettingsSection as S;
 
-/// Every editable field, in display order (grouped by [`SettingsSection`]). Adding
-/// a setting is adding a row here plus an arm in the typed get/set helpers below.
-/// `restart = true` marks fields the running app can't apply live.
+/// Every editable config field, in display order (grouped by [`SettingsSection`]).
+/// Adding a setting is adding a row here plus an arm in the typed get/set helpers
+/// below. `restart = true` marks fields the running app can't apply live. The
+/// Controls section is not here — it's built dynamically (see [`Settings::controls_rows`]).
 #[rustfmt::skip]
 static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Home page",              F::HomePage,           Kind::Text, false),
@@ -227,7 +238,62 @@ static FIELDS: &[Field] = &[
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
 ];
 
-/// Settings overlay state: visibility, the working draft, the active section,
+/// The bindable actions shown in the Controls section, in display order — every
+/// [`Action`] except `None` (removal handles unbinding). `Scroll` is gamepad-only
+/// (a keyboard binding for it is rejected on apply).
+const CONTROLS_ACTIONS: &[Action] = &[
+    Action::Confirm,
+    Action::Cancel,
+    Action::Osk,
+    Action::Reload,
+    Action::Prev,
+    Action::Next,
+    Action::Hints,
+    Action::Bookmark,
+    Action::Home,
+    Action::Reader,
+    Action::Menu,
+    Action::Settings,
+    Action::Quit,
+    Action::TabNext,
+    Action::TabPrev,
+    Action::NewTab,
+    Action::ZoomIn,
+    Action::ZoomOut,
+    Action::ZoomReset,
+    Action::NavUp,
+    Action::NavDown,
+    Action::NavLeft,
+    Action::NavRight,
+    Action::Scroll,
+];
+
+/// One rendered row of the dynamic Controls list (built on demand from the
+/// bindings draft by [`Settings::controls_rows`]; not a static [`FIELDS`] row).
+#[derive(Clone)]
+pub enum CtrlRow {
+    /// Action group header (not selectable) — the action's display name.
+    Header(&'static str),
+    /// An existing binding for an action; activating it removes the binding.
+    Binding {
+        gesture: String,
+        keyboard: bool,
+    },
+    /// The "add a binding" row for an action; activating it starts capture.
+    Add(Action),
+    /// Restore the gamepad / keyboard default bindings.
+    GamepadReset,
+    KeyboardReset,
+}
+
+impl CtrlRow {
+    /// Header rows are labels only — every other row can be focused / activated.
+    fn selectable(&self) -> bool {
+        !matches!(self, CtrlRow::Header(_))
+    }
+}
+
+/// Settings overlay state: visibility, the working drafts, the active section,
 /// and the focused row.
 pub struct Settings {
     visible: bool,
@@ -236,8 +302,22 @@ pub struct Settings {
     draft: AppConfig,
     /// The active section (one tab of the bar).
     section: SettingsSection,
-    /// Focused row, as an index into [`FIELDS`] (always within `section`).
+    /// Focused row. In a config section it's a [`FIELDS`] index; in the Controls
+    /// section it's an index into [`Self::controls_rows`] (the active section
+    /// decides which, since focus only moves within it).
     selected: usize,
+    /// The bindings being edited (the Controls section), a clone of the on-disk
+    /// store taken on [`Self::open`]. Kept independent of `draft` so a config-only
+    /// edit never rewrites `bindings.toml` and vice versa.
+    bindings_draft: Store,
+    /// The bindings as seeded on [`Self::open`], to diff the draft against on close
+    /// — so `bindings.toml` is only rewritten when the controls actually changed
+    /// (a config-only edit leaves the file, and any hand-written comments, alone).
+    bindings_orig: Store,
+    /// While `Some`, the overlay is listening for a gesture (gamepad button or key
+    /// combo) to add to this action. The event loop routes raw input here instead
+    /// of dispatching it (see [`crate::event::handler`] / [`crate::event::gamepad`]).
+    capturing: Option<Action>,
 }
 
 impl Settings {
@@ -247,10 +327,14 @@ impl Settings {
             draft: AppConfig::default(),
             section: SettingsSection::Browser,
             selected: 0,
+            bindings_draft: Store::default(),
+            bindings_orig: Store::default(),
+            capturing: None,
         }
     }
 
-    /// All field descriptors, in display order (the renderer filters by section).
+    /// All config field descriptors, in display order (the renderer filters by
+    /// section; the Controls section is built separately).
     pub fn fields() -> &'static [Field] {
         FIELDS
     }
@@ -260,22 +344,44 @@ impl Settings {
         self.visible
     }
 
-    /// Open the overlay, seeding the draft from the live config and focusing the
-    /// first row of the first section.
+    /// Open the overlay, seeding both drafts from disk and focusing the first row
+    /// of the first section. Each bindings table is filled from its defaults when
+    /// empty so the Controls list shows the *effective* (running) bindings; since
+    /// the file is only rewritten when the draft actually changes, a fresh/empty
+    /// file with comments is left intact.
     pub fn open(&mut self, config: &AppConfig) {
         self.draft = config.clone();
+        self.bindings_draft = bindings::load_store();
+        if self.bindings_draft.gamepad.is_empty() {
+            self.bindings_draft.gamepad = bindings::default_gamepad_bindings();
+        }
+        if self.bindings_draft.keyboard.is_empty() {
+            self.bindings_draft.keyboard = bindings::default_keyboard_bindings();
+        }
+        self.bindings_orig = self.bindings_draft.clone();
         self.section = SettingsSection::Browser;
         self.selected = 0;
+        self.capturing = None;
         self.visible = true;
     }
 
     pub fn close(&mut self) {
         self.visible = false;
+        // Drop any pending capture — otherwise `capturing()` would keep the event
+        // loop swallowing input after the overlay is gone.
+        self.capturing = None;
     }
 
     /// The edited config (cloned out by the app on close to save + apply).
     pub fn draft(&self) -> AppConfig {
         self.draft.clone()
+    }
+
+    /// The edited bindings store, but only when the controls actually changed —
+    /// `None` leaves `bindings.toml` (and its comments) untouched on a config-only
+    /// edit. `Some` is cloned out by the app on close to save + reload.
+    pub fn changed_bindings(&self) -> Option<Store> {
+        (self.bindings_draft != self.bindings_orig).then(|| self.bindings_draft.clone())
     }
 
     #[inline]
@@ -288,9 +394,32 @@ impl Settings {
         self.section
     }
 
-    /// Focus a row directly (clicking it), syncing the active section to it.
+    /// Whether the active section is a config field list (not Controls or About).
+    fn is_field_section(&self) -> bool {
+        !matches!(
+            self.section,
+            SettingsSection::Controls | SettingsSection::About
+        )
+    }
+
+    /// Whether the active section is the dynamic Controls list (driven by
+    /// [`Self::controls_rows`] / [`Self::controls_activate`] rather than [`FIELDS`]).
+    pub fn is_controls_section(&self) -> bool {
+        matches!(self.section, SettingsSection::Controls)
+    }
+
+    /// Whether the active section is the read-only [`SettingsSection::About`] page.
+    pub fn is_info_section(&self) -> bool {
+        matches!(self.section, SettingsSection::About)
+    }
+
+    /// Focus a row directly (clicking it). In the Controls section `i` indexes
+    /// [`Self::controls_rows`]; otherwise it's a [`FIELDS`] index (and syncs the
+    /// active section to it).
     pub fn set_selected(&mut self, i: usize) {
-        if let Some(field) = FIELDS.get(i) {
+        if self.is_controls_section() {
+            self.selected = i;
+        } else if let Some(field) = FIELDS.get(i) {
             self.section = field.section;
             self.selected = i;
         }
@@ -299,10 +428,14 @@ impl Settings {
     /// Jump straight to a section (clicking its tab), focusing its first row.
     pub fn set_section(&mut self, section: SettingsSection) {
         self.section = section;
-        self.selected = FIELDS
-            .iter()
-            .position(|f| f.section == section)
-            .unwrap_or(0);
+        self.selected = if section == SettingsSection::Controls {
+            self.first_controls_selectable()
+        } else {
+            FIELDS
+                .iter()
+                .position(|f| f.section == section)
+                .unwrap_or(0)
+        };
     }
 
     /// Switch the active section by `delta` (L1/R1; clamped, no wrap).
@@ -312,9 +445,14 @@ impl Settings {
         self.set_section(SettingsSection::ALL[i]);
     }
 
-    /// Move the focus by `dy` rows within the active section (clamped, no wrap).
+    /// Move the focus by `dy` rows within the active section (clamped, no wrap),
+    /// skipping the Controls section's non-selectable headers.
     pub fn move_sel(&mut self, dy: i32) {
-        let rows = self.section_indices();
+        let rows = if self.is_controls_section() {
+            Self::ctrl_selectable(&self.controls_rows())
+        } else {
+            self.section_indices()
+        };
         let Some(pos) = rows.iter().position(|&g| g == self.selected) else {
             return;
         };
@@ -332,31 +470,26 @@ impl Settings {
             .collect()
     }
 
-    /// Whether the active section is the read-only [`SettingsSection::About`]
-    /// page: it has no [`FIELDS`], so A / ◀▶ are no-ops on it (and `selected`
-    /// still points at some other section's row, which must not be touched).
-    pub fn is_info_section(&self) -> bool {
-        matches!(self.section, SettingsSection::About)
-    }
-
-    /// Whether the focused row holds free text (A opens the OSK on it). Always
-    /// false on the About tab — there's nothing to type into.
+    /// Whether the focused row holds free text (A opens the OSK on it). Only ever
+    /// true in a config section.
     pub fn selected_is_text(&self) -> bool {
-        !self.is_info_section() && matches!(FIELDS[self.selected].kind, Kind::Text)
+        self.is_field_section() && matches!(FIELDS[self.selected].kind, Kind::Text)
     }
 
-    /// Whether row `i` is numeric (the renderer shows ◀▶ step buttons for it).
-    pub fn is_numeric(&self, i: usize) -> bool {
+    /// Whether row `i` shows ◀▶ step buttons — numbers only (bools/choices toggle
+    /// on click instead). Config sections only.
+    pub fn is_steppable(&self, i: usize) -> bool {
         matches!(FIELDS[i].kind, Kind::Int { .. } | Kind::Float { .. })
     }
 
     /// The OSK's edit buffer for the focused row — the draft's own `String` for a
-    /// `Text` field, so typing lands straight in the draft. `None` for any other
-    /// kind (the OSK only ever opens over a text row).
+    /// `Text` field, so typing lands straight in the draft. `None` otherwise.
     pub fn selected_text_mut(&mut self) -> Option<&mut String> {
-        let id = FIELDS[self.selected].id;
+        if !self.is_field_section() {
+            return None;
+        }
         let c = &mut self.draft;
-        match id {
+        match FIELDS[self.selected].id {
             FieldId::HomePage => Some(&mut c.browser.home_page),
             FieldId::SearchPage => Some(&mut c.browser.search_page),
             FieldId::DownloadDir => Some(&mut c.downloads.dir),
@@ -364,10 +497,11 @@ impl Settings {
         }
     }
 
-    /// Adjust the focused field by `dx` (◀ = -1, ▶ = +1): toggle a bool, cycle a
-    /// choice, or step a number within its bounds. Text rows ignore it.
+    /// Adjust the focused config field by `dx` (◀ = -1, ▶ = +1): toggle a bool,
+    /// cycle a choice, or step a number within its bounds. No-op outside config
+    /// sections (Controls edits via A; About is read-only).
     pub fn adjust(&mut self, dx: i32) {
-        if self.is_info_section() {
+        if !self.is_field_section() {
             return;
         }
         let i = self.selected;
@@ -397,7 +531,7 @@ impl Settings {
         }
     }
 
-    /// The display string for row `i`'s current value.
+    /// The display string for config row `i`'s current value.
     pub fn value_str(&self, i: usize) -> String {
         let id = FIELDS[i].id;
         match &FIELDS[i].kind {
@@ -420,6 +554,161 @@ impl Settings {
             Kind::Int { .. } => format!("{}", self.get_num(id) as i64),
             Kind::Float { decimals, .. } => format!("{:.*}", decimals, self.get_num(id)),
         }
+    }
+
+    // --- Controls section: a dynamic action list over the bindings draft. ---
+
+    /// Whether the overlay is listening for a binding right now — the event loop
+    /// routes raw input to [`Self::apply_capture`] / [`Self::cancel_capture`]
+    /// while this holds.
+    pub fn capturing(&self) -> bool {
+        self.capturing.is_some()
+    }
+
+    /// The action currently being bound (for the renderer's "listening" hint).
+    pub fn capturing_action(&self) -> Option<Action> {
+        self.capturing
+    }
+
+    /// Build the Controls rows from the bindings draft: per action, a header, a
+    /// row per existing binding (gamepad then keyboard), and an "add" row; then
+    /// the two reset rows. Rebuilt on demand — `selected` indexes into the result.
+    pub fn controls_rows(&self) -> Vec<CtrlRow> {
+        let mut rows = Vec::new();
+        for &action in CONTROLS_ACTIONS {
+            rows.push(CtrlRow::Header(action.display()));
+            let name = action.name();
+            for gesture in self.bound_gestures(&self.bindings_draft.gamepad, name) {
+                rows.push(CtrlRow::Binding {
+                    gesture,
+                    keyboard: false,
+                });
+            }
+            for gesture in self.bound_gestures(&self.bindings_draft.keyboard, name) {
+                rows.push(CtrlRow::Binding {
+                    gesture,
+                    keyboard: true,
+                });
+            }
+            rows.push(CtrlRow::Add(action));
+        }
+        rows.push(CtrlRow::GamepadReset);
+        rows.push(CtrlRow::KeyboardReset);
+        rows
+    }
+
+    /// The gestures in `table` bound to action `name`, in key order.
+    fn bound_gestures(
+        &self,
+        table: &std::collections::BTreeMap<String, String>,
+        name: &str,
+    ) -> Vec<String> {
+        table
+            .iter()
+            .filter(|(_, a)| a.as_str() == name)
+            .map(|(g, _)| g.clone())
+            .collect()
+    }
+
+    /// Indices of the selectable (non-header) rows in `rows`, in order.
+    fn ctrl_selectable(rows: &[CtrlRow]) -> Vec<usize> {
+        rows.iter()
+            .enumerate()
+            .filter(|(_, r)| r.selectable())
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// The first selectable Controls row (the header is row 0).
+    fn first_controls_selectable(&self) -> usize {
+        Self::ctrl_selectable(&self.controls_rows())
+            .first()
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Keep `selected` on a valid selectable row after the list changes (a binding
+    /// added or removed, or a reset) — nearest selectable at or before it.
+    fn clamp_controls_selection(&mut self) {
+        let rows = self.controls_rows();
+        let sel = Self::ctrl_selectable(&rows);
+        if sel.contains(&self.selected) {
+            return;
+        }
+        self.selected = sel
+            .iter()
+            .rev()
+            .find(|&&i| i <= self.selected)
+            .or_else(|| sel.first())
+            .copied()
+            .unwrap_or(0);
+    }
+
+    /// Focus an action's "add" row (after a capture, so repeated adds are easy).
+    fn focus_add(&mut self, action: Action) {
+        if let Some(i) = self
+            .controls_rows()
+            .iter()
+            .position(|r| matches!(r, CtrlRow::Add(a) if *a == action))
+        {
+            self.selected = i;
+        }
+    }
+
+    /// A / Enter / click on the focused Controls row: start capture on an "add"
+    /// row, remove a binding row, or restore defaults on a reset row.
+    pub fn controls_activate(&mut self) {
+        let rows = self.controls_rows();
+        match rows.get(self.selected) {
+            Some(CtrlRow::Add(action)) => self.capturing = Some(*action),
+            Some(CtrlRow::Binding {
+                gesture, keyboard, ..
+            }) => {
+                let (gesture, keyboard) = (gesture.clone(), *keyboard);
+                if keyboard {
+                    self.bindings_draft.keyboard.remove(&gesture);
+                } else {
+                    self.bindings_draft.gamepad.remove(&gesture);
+                }
+                self.clamp_controls_selection();
+            }
+            Some(CtrlRow::GamepadReset) => {
+                self.bindings_draft.gamepad = bindings::default_gamepad_bindings();
+                self.clamp_controls_selection();
+            }
+            Some(CtrlRow::KeyboardReset) => {
+                self.bindings_draft.keyboard = bindings::default_keyboard_bindings();
+                self.clamp_controls_selection();
+            }
+            Some(CtrlRow::Header(_)) | None => {}
+        }
+    }
+
+    /// Bind the captured `gesture` to the listening action and stop listening. The
+    /// gesture replaces any other action on that exact gesture (a gesture maps to
+    /// one action); a keyboard binding for the gamepad-only `Scroll` is dropped.
+    pub fn apply_capture(&mut self, gesture: String, keyboard: bool) {
+        let Some(action) = self.capturing.take() else {
+            return;
+        };
+        if keyboard {
+            if action == Action::Scroll {
+                return;
+            }
+            self.bindings_draft
+                .keyboard
+                .insert(gesture, action.name().to_string());
+        } else {
+            self.bindings_draft
+                .gamepad
+                .insert(gesture, action.name().to_string());
+        }
+        self.focus_add(action);
+    }
+
+    /// Stop listening without changing anything (Esc / timeout).
+    pub fn cancel_capture(&mut self) {
+        self.capturing = None;
     }
 
     // --- Typed accessors into the draft, keyed by `FieldId`. One arm per field;

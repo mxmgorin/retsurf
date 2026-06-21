@@ -399,13 +399,13 @@ impl AppUi {
         self.settings.open(config);
     }
 
-    /// Close the settings overlay, handing back its edited draft so the app can
-    /// save it and re-apply what changes live.
+    /// Close the settings overlay, handing back its edited config and bindings
+    /// drafts so the app can save them and re-apply what changes live.
     #[inline]
-    pub fn settings_close(&mut self) -> AppConfig {
-        let draft = self.settings.draft();
+    pub fn settings_close(&mut self) -> (AppConfig, Option<crate::event::bindings::Store>) {
+        let drafts = (self.settings.draft(), self.settings.changed_bindings());
         self.settings.close();
-        draft
+        drafts
     }
 
     /// Focus settings row `index` (clicking it).
@@ -444,6 +444,39 @@ impl AppUi {
     #[inline]
     pub fn settings_selected_is_text(&self) -> bool {
         self.settings.selected_is_text()
+    }
+
+    /// Whether the active settings section is the dynamic Controls list (A
+    /// adds/removes a binding rather than stepping / opening the OSK).
+    #[inline]
+    pub fn settings_is_controls(&self) -> bool {
+        self.settings.is_controls_section()
+    }
+
+    /// A / Enter on the focused Controls row: capture (add), remove, or reset.
+    #[inline]
+    pub fn settings_controls_activate(&mut self) {
+        self.settings.controls_activate();
+    }
+
+    /// Whether the settings overlay is listening for a binding (the event loop
+    /// routes raw key / gamepad input to the capture handlers while this holds).
+    #[inline]
+    pub fn settings_capturing(&self) -> bool {
+        self.settings.capturing()
+    }
+
+    /// Bind the captured `gesture` (a key combo if `keyboard`, else a gamepad
+    /// gesture) to the listening action.
+    #[inline]
+    pub fn settings_apply_capture(&mut self, gesture: String, keyboard: bool) {
+        self.settings.apply_capture(gesture, keyboard);
+    }
+
+    /// Stop listening without changing anything (Esc / timeout).
+    #[inline]
+    pub fn settings_cancel_capture(&mut self) {
+        self.settings.cancel_capture();
     }
 
     /// Set how long the gamepad cursor lingers after a move (the app calls this

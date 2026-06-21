@@ -33,6 +33,12 @@ impl Keyboard {
         }
     }
 
+    /// Swap in a freshly built shortcut table — the settings overlay rebinding
+    /// keyboard shortcuts live (see [`crate::app::App::settings_close`]).
+    pub fn set_bindings(&mut self, bindings: KeyBindings) {
+        self.bindings = bindings;
+    }
+
     /// Resolve one key edge: overlay fixed keys first, then the shortcut
     /// table, and finally fall through to the page.
     pub fn on_key(
@@ -300,7 +306,11 @@ impl Keyboard {
             }
         }
 
-        let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints);
+        // Overlays whose navigation comes from the `nav_*` bindings (so vim hjkl
+        // works there, not just the arrows the fixed handlers above catch). The
+        // settings overlay has no editable egui field, so a plain nav key can't
+        // collide with typing.
+        let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
         let typing = browser.text_input_focused()
             || ui.address_bar_focused()
             || ui.home_field_editing()

@@ -400,23 +400,51 @@ impl App {
                 self.settings_close();
                 self.open_url(url.clone());
             }
+            // Binding capture (Controls section): the gesture the user performed
+            // (gamepad gesture or key combo), bound to the listening action. The
+            // raw input comes from the event loop / pad while capturing (see
+            // [`crate::event::handler`] / [`crate::event::gamepad`]).
+            SettingsAction::CaptureBinding { gesture, keyboard } => {
+                self.ui.settings_apply_capture(gesture.clone(), *keyboard);
+            }
+            SettingsAction::CaptureCancel => self.ui.settings_cancel_capture(),
         }
     }
 
-    /// A / Enter on the focused settings row: open the on-screen keyboard to type
-    /// into a text field, or step every other kind forward (◀▶ does the rest).
+    /// A / Enter on the focused settings row: add/remove a binding in the Controls
+    /// section, open the on-screen keyboard on a text field, or step every other
+    /// kind forward (◀▶ does the rest).
     fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.settings_selected_is_text() {
+        if self.ui.settings_is_controls() {
+            self.ui.settings_controls_activate();
+        } else if self.ui.settings_selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         } else {
             self.ui.settings_adjust(1);
         }
     }
 
-    /// Close the settings overlay (B / ✖): take its edited draft and adopt it.
+    /// Close the settings overlay (B / ✖): take its edited drafts and adopt them
+    /// — the config and the gamepad bindings, each saved and re-applied live.
     fn settings_close(&mut self) {
-        let draft = self.ui.settings_close();
-        self.apply_config(draft);
+        let (config, bindings) = self.ui.settings_close();
+        self.apply_config(config);
+        if let Some(store) = bindings {
+            self.apply_bindings(store);
+        }
+    }
+
+    /// Adopt edited gamepad bindings from the settings overlay: persist them, then
+    /// rebuild the gesture table and swap it into the running gamepad handler (no
+    /// restart). Only called when the controls changed, so keyboard bindings and
+    /// any hand-written comments in `bindings.toml` survive a config-only edit.
+    fn apply_bindings(&mut self, store: crate::event::bindings::Store) {
+        use crate::event::bindings::{Bindings, KeyBindings};
+        crate::event::bindings::save(&store);
+        self.event_handler
+            .set_bindings(Bindings::from_store(&store));
+        self.event_handler
+            .set_key_bindings(KeyBindings::from_store(&store));
     }
 
     /// Adopt an edited config from the settings overlay: persist it to disk, then

@@ -68,6 +68,8 @@ pub enum Action {
     TabNext,
     /// Switch to the previous open tab (wraps around).
     TabPrev,
+    /// Open a new tab at the home page.
+    NewTab,
     /// Step the page zoom up / down the ladder, or back to the config default.
     ZoomIn,
     ZoomOut,
@@ -89,7 +91,7 @@ pub enum Action {
 }
 
 impl Action {
-    const ALL: [Action; 24] = [
+    pub(crate) const ALL: [Action; 25] = [
         Action::Confirm,
         Action::Cancel,
         Action::Osk,
@@ -105,6 +107,7 @@ impl Action {
         Action::Quit,
         Action::TabNext,
         Action::TabPrev,
+        Action::NewTab,
         Action::ZoomIn,
         Action::ZoomOut,
         Action::ZoomReset,
@@ -145,6 +148,7 @@ impl Action {
             Action::Quit => "quit",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
+            Action::NewTab => "new_tab",
             Action::ZoomIn => "zoom_in",
             Action::ZoomOut => "zoom_out",
             Action::ZoomReset => "zoom_reset",
@@ -157,8 +161,40 @@ impl Action {
         }
     }
 
-    fn parse(name: &str) -> Option<Action> {
+    pub(crate) fn parse(name: &str) -> Option<Action> {
         Self::ALL.into_iter().find(|action| action.name() == name)
+    }
+
+    /// Friendly label for the settings UI (the controls rows). `None` reads as
+    /// "(unbound)" since that's what an explicit `none` binding means.
+    pub(crate) fn display(self) -> &'static str {
+        match self {
+            Action::Confirm => "Confirm",
+            Action::Cancel => "Cancel",
+            Action::Osk => "Keyboard",
+            Action::Reload => "Reload",
+            Action::Prev => "Back / prev",
+            Action::Next => "Forward / next",
+            Action::Hints => "Link hints",
+            Action::Bookmark => "Bookmark",
+            Action::Home => "Home",
+            Action::Reader => "Reader mode",
+            Action::Menu => "Menu",
+            Action::Settings => "Settings",
+            Action::Quit => "Quit",
+            Action::TabNext => "Next tab",
+            Action::TabPrev => "Previous tab",
+            Action::NewTab => "New tab",
+            Action::ZoomIn => "Zoom in",
+            Action::ZoomOut => "Zoom out",
+            Action::ZoomReset => "Zoom reset",
+            Action::NavUp => "Nav up",
+            Action::NavDown => "Nav down",
+            Action::NavLeft => "Nav left",
+            Action::NavRight => "Nav right",
+            Action::Scroll => "Scroll toggle",
+            Action::None => "(unbound)",
+        }
     }
 
     /// Emit this action as a one-shot gesture (keyboard shortcuts): Confirm
@@ -192,6 +228,7 @@ impl Action {
             Action::Quit => AppCommand::Shutdown,
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
+            Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
             Action::ZoomIn => AppCommand::Browser(BrowserCommand::Zoom(1)),
             Action::ZoomOut => AppCommand::Browser(BrowserCommand::Zoom(-1)),
             Action::ZoomReset => AppCommand::Browser(BrowserCommand::Zoom(0)),
@@ -223,20 +260,51 @@ pub fn parse_button(name: &str) -> Option<Button> {
     })
 }
 
+/// The `bindings.toml` name of a bindable button — the inverse of [`parse_button`],
+/// used to format a captured gamepad gesture back into a gesture string. `None`
+/// for non-bindable buttons (D-pad, which is the aim vector).
+pub(crate) fn button_name(button: Button) -> Option<&'static str> {
+    Some(match button {
+        Button::A => "a",
+        Button::B => "b",
+        Button::X => "x",
+        Button::Y => "y",
+        Button::LeftShoulder => "l1",
+        Button::RightShoulder => "r1",
+        Button::LeftStick => "l3",
+        Button::RightStick => "r3",
+        Button::Start => "start",
+        Button::Back => "select",
+        _ => return None,
+    })
+}
+
+/// Format a two-button chord gesture (`"l1+r1"`), buttons ordered like
+/// [`normalize`] so the stored string is stable regardless of press order.
+pub(crate) fn chord_gesture(a: Button, b: Button) -> Option<String> {
+    if a == b {
+        return None;
+    }
+    let (a, b) = normalize(a, b);
+    Some(format!("{}+{}", button_name(a)?, button_name(b)?))
+}
+
 /// On-disk shape of `bindings.toml`: one table per input device. BTreeMap so
-/// the written template is sorted stably.
-#[derive(Default, Serialize, Deserialize)]
-struct Store {
+/// the written template is sorted stably. The settings overlay clones one as a
+/// draft, edits the `gamepad` table, and hands it back on close (see
+/// [`crate::overlay::settings`]).
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Store {
     #[serde(default)]
-    gamepad: BTreeMap<String, String>,
+    pub(crate) gamepad: BTreeMap<String, String>,
     #[serde(default)]
-    keyboard: BTreeMap<String, String>,
+    pub(crate) keyboard: BTreeMap<String, String>,
 }
 
 /// The stock layout, spelled with the typed [`Action`]s (no raw strings to
-/// typo): frequent actions on taps — hints on Y, reload on Start — and the
-/// rare bookmark behind a hold.
-fn default_gamepad_bindings() -> BTreeMap<String, String> {
+/// typo): frequent actions on taps — hints on Y — with reload and bookmark
+/// behind holds (hold:Start, hold:Y).
+pub(crate) fn default_gamepad_bindings() -> BTreeMap<String, String> {
     [
         ("a", Action::Confirm),
         ("b", Action::Cancel),
@@ -262,16 +330,14 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
         // hold:X below — R3 was only ever a duplicate of it.
         ("r3", Action::Settings),
         // Start taps toggle the D-pad/stick scroll mode — the main way stickless
-        // devices scroll, now a tap (was hold:Y) so it's easier to reach; holding
-        // Start still bookmarks. Both gestures defer to release.
+        // devices scroll; holding Start reloads. Both gestures defer to release.
         ("start", Action::Scroll),
-        ("hold:start", Action::Bookmark),
+        ("hold:start", Action::Reload),
         // Reader lives on a hold so stickless devices (no R3) have it out of the
         // box; the OSK tap moves to X's release as a side effect.
         ("hold:x", Action::Reader),
-        // Reload moved here from Start so refresh is a face-button hold (Y taps
-        // for hints). Swapped with the scroll toggle that used to live here.
-        ("hold:y", Action::Reload),
+        // Bookmark on hold:Y — Y taps for hints, holds to bookmark the page.
+        ("hold:y", Action::Bookmark),
         ("select", Action::Menu),
         // Tap Select opens the menu; holding it opens settings (its tap defers
         // to release, like the shoulders' — opening the menu on release is fine).
@@ -287,10 +353,10 @@ fn default_gamepad_bindings() -> BTreeMap<String, String> {
     .collect()
 }
 
-/// The stock keyboard shortcuts — all behind Ctrl, so none can collide with
-/// typing into the page. Plain keys (e.g. Vimium's `f`) are supported in the
-/// config; they're just not bound by default.
-fn default_keyboard_bindings() -> BTreeMap<String, String> {
+/// The stock keyboard shortcuts. Ctrl combos always fire; the Vimium-style plain
+/// keys (`f`, `enter`, `backspace`, `hjkl`) are muted whenever a text input holds
+/// focus, so they can't collide with typing into the page.
+pub(crate) fn default_keyboard_bindings() -> BTreeMap<String, String> {
     [
         ("ctrl+r", Action::Reload),
         ("ctrl+b", Action::Bookmark),
@@ -300,16 +366,25 @@ fn default_keyboard_bindings() -> BTreeMap<String, String> {
         ("ctrl+,", Action::Settings),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
-        ("ctrl+f", Action::Hints),
         ("ctrl+t", Action::TabNext),
         ("ctrl+shift+t", Action::TabPrev),
+        ("t", Action::NewTab),
         ("ctrl+=", Action::ZoomIn),
         ("ctrl+-", Action::ZoomOut),
         ("ctrl+0", Action::ZoomReset),
+        // Vimium-style plain keys (muted while typing).
+        ("f", Action::Hints),
+        ("enter", Action::Confirm),
+        ("backspace", Action::Cancel),
+        // Navigation: arrows and vim hjkl move overlays (page when none is open).
         ("up", Action::NavUp),
         ("down", Action::NavDown),
         ("left", Action::NavLeft),
         ("right", Action::NavRight),
+        ("k", Action::NavUp),
+        ("j", Action::NavDown),
+        ("h", Action::NavLeft),
+        ("l", Action::NavRight),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -323,7 +398,7 @@ fn bindings_path() -> String {
 /// Load `bindings.toml`. A missing file yields the defaults (and the template
 /// is written so there's a file to edit); a malformed one is logged and falls
 /// back to the defaults too.
-fn load_store() -> Store {
+pub(crate) fn load_store() -> Store {
     let path = bindings_path();
     match std::fs::read_to_string(&path) {
         Ok(text) => match toml::from_str(&text) {
@@ -351,6 +426,21 @@ fn load_store() -> Store {
     }
 }
 
+/// Write an edited [`Store`] back to `bindings.toml` (the settings overlay
+/// saving the controls draft on close). Errors are logged, not surfaced — a
+/// failed write just means the change doesn't persist past this run.
+pub(crate) fn save(store: &Store) {
+    let path = bindings_path();
+    match toml::to_string_pretty(store) {
+        Ok(text) => {
+            if let Err(e) = std::fs::write(&path, text) {
+                log::warn!("could not write bindings `{path}`: {e}");
+            }
+        }
+        Err(e) => log::warn!("could not serialize bindings: {e}"),
+    }
+}
+
 /// The parsed binding tables, ready for per-press lookup.
 pub struct Bindings {
     tap: HashMap<Button, Action>,
@@ -367,13 +457,19 @@ impl Bindings {
     /// (fresh file without `[gamepad]`) falls back to the defaults — an
     /// unbound pad would be unusable on a handheld.
     pub fn load() -> Self {
-        let store = load_store();
-        let map = if store.gamepad.is_empty() {
-            default_gamepad_bindings()
+        Self::from_store(&load_store())
+    }
+
+    /// Build the gamepad bindings from a [`Store`] — startup (via [`Self::load`])
+    /// and the settings overlay's live reload share this, so the empty-table
+    /// fallback and the confirm / deferred-set rules in [`Self::from_map`] stay
+    /// identical between them.
+    pub(crate) fn from_store(store: &Store) -> Self {
+        if store.gamepad.is_empty() {
+            Self::from_map(&default_gamepad_bindings())
         } else {
-            store.gamepad
-        };
-        Self::from_map(&map)
+            Self::from_map(&store.gamepad)
+        }
     }
 
     /// Parse a gesture → action map. Invalid entries are logged and skipped;
@@ -499,13 +595,18 @@ impl KeyBindings {
     /// Load and parse the keyboard table of `bindings.toml`; an empty/absent
     /// table falls back to the defaults.
     pub fn load() -> Self {
-        let store = load_store();
-        let map = if store.keyboard.is_empty() {
-            default_keyboard_bindings()
+        Self::from_store(&load_store())
+    }
+
+    /// Build the keyboard bindings from a [`Store`] — startup and the settings
+    /// overlay's live reload share this (and the empty-table fallback), like
+    /// [`Bindings::from_store`].
+    pub(crate) fn from_store(store: &Store) -> Self {
+        if store.keyboard.is_empty() {
+            Self::from_map(&default_keyboard_bindings())
         } else {
-            store.keyboard
-        };
-        Self::from_map(&map)
+            Self::from_map(&store.keyboard)
+        }
     }
 
     fn from_map(map: &BTreeMap<String, String>) -> Self {
@@ -551,6 +652,38 @@ impl KeyBindings {
             .get(&(key, mods))
             .map(|action| (*action, mods & (CTRL | ALT) == 0))
     }
+}
+
+/// Format a captured key event back into a gesture string (`"ctrl+shift+t"`) —
+/// the inverse of [`parse_key`] + [`mods_of`], used when the settings overlay
+/// captures a keyboard shortcut. Returns `None` for an unnamed key (the caller
+/// already filters bare modifiers out before this).
+pub(crate) fn format_key(kc: Keycode, keymod: Mod) -> Option<String> {
+    let name = kc.name();
+    if name.is_empty() {
+        return None;
+    }
+    // Mirror parse_key's friendly aliases so the written gesture round-trips.
+    let key = match name.as_str() {
+        "Escape" => "esc".to_string(),
+        "Return" => "enter".to_string(),
+        "PageUp" => "pageup".to_string(),
+        "PageDown" => "pagedown".to_string(),
+        other => other.to_ascii_lowercase(),
+    };
+    let mods = mods_of(keymod);
+    let mut out = String::new();
+    if mods & CTRL != 0 {
+        out.push_str("ctrl+");
+    }
+    if mods & ALT != 0 {
+        out.push_str("alt+");
+    }
+    if mods & SHIFT != 0 {
+        out.push_str("shift+");
+    }
+    out.push_str(&key);
+    Some(out)
 }
 
 /// Resolve a key name: a few friendly aliases, then SDL's own key names

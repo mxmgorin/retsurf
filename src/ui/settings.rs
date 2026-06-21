@@ -8,7 +8,7 @@
 
 use super::theme::{close_button, ACCENT, CLOSE_SIZE};
 use crate::app::{AppCommand, SettingsAction};
-use crate::overlay::settings::{Settings, SettingsSection};
+use crate::overlay::settings::{CtrlRow, Settings, SettingsSection};
 use egui_sdl2::egui;
 
 /// Rows and the section bar share the menu's metrics (height, radius, font, gap)
@@ -171,6 +171,73 @@ fn add_about(
         });
 }
 
+/// Render the dynamic Controls section: per action, a header then a selectable
+/// row for each existing binding (gamepad / keyboard) and an "add" row, plus the
+/// two reset rows. A on a binding removes it, A on "add" starts capture (press a
+/// button or key), A on a reset restores defaults. State lives in
+/// [`crate::overlay::settings::Settings`].
+fn add_controls(
+    ui: &mut egui::Ui,
+    settings: &Settings,
+    screen: egui::Rect,
+    commands: &mut Vec<AppCommand>,
+) {
+    let rows = settings.controls_rows();
+    let sel = settings.selected();
+    let capturing = settings.capturing_action();
+    let full_w = screen.width() - SIDES;
+    let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false; 2])
+        .max_height(max_h)
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = ROW_GAP;
+            for (i, row) in rows.iter().enumerate() {
+                // A header is a label, not a row; everything else is a selectable
+                // `label : value` line pushed through one click path.
+                let (label, value) = match row {
+                    CtrlRow::Header(name) => {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new(*name).color(ACCENT).strong().size(13.0));
+                        continue;
+                    }
+                    CtrlRow::Binding {
+                        gesture, keyboard, ..
+                    } => {
+                        let device = if *keyboard { "Keyboard" } else { "Gamepad" };
+                        (format!("    {device}"), gesture.clone())
+                    }
+                    CtrlRow::Add(action) => {
+                        let listening = capturing == Some(*action);
+                        let value = if listening {
+                            "press a button or key..."
+                        } else {
+                            ""
+                        };
+                        ("    + Add binding".to_string(), value.to_string())
+                    }
+                    CtrlRow::GamepadReset => {
+                        ("Restore gamepad defaults".to_string(), String::new())
+                    }
+                    CtrlRow::KeyboardReset => {
+                        ("Restore keyboard defaults".to_string(), String::new())
+                    }
+                };
+
+                let selected = i == sel;
+                let resp = setting_row(ui, full_w, selected, label, value);
+                if selected {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                // Clicking focuses the row and activates it (add / remove / reset).
+                if resp.clicked() {
+                    commands.push(AppCommand::Settings(SettingsAction::Select(i)));
+                    commands.push(AppCommand::Settings(SettingsAction::Activate));
+                }
+            }
+        });
+}
+
 /// Draw the full-screen settings overlay: a dark panel with the section bar, the
 /// close ✖, a one-line control hint, and the active section's field list. See
 /// the module docs for the controls.
@@ -224,8 +291,12 @@ pub(super) fn add_settings(
                             }
                         }
                     });
-                    let hint = if settings.is_info_section() {
+                    let hint = if settings.capturing() {
+                        "Press a button or key to bind      Esc cancel"
+                    } else if settings.is_info_section() {
                         "L1/R1 section   B close"
+                    } else if settings.is_controls_section() {
+                        "L1/R1 section   ⏶⏷ move   A add / remove   B save & close"
                     } else {
                         "L1/R1 section   ⏶⏷ move   ⏴⏵ adjust   A edit   B save & close      * needs restart"
                     };
@@ -236,6 +307,13 @@ pub(super) fn add_settings(
                     // it and stop (it has no FIELDS to iterate).
                     if settings.is_info_section() {
                         add_about(ui, screen, dim, commands);
+                        return;
+                    }
+
+                    // The Controls section is a dynamic action list (gamepad +
+                    // keyboard bindings), not FIELDS — render it and stop.
+                    if settings.is_controls_section() {
+                        add_controls(ui, settings, screen, commands);
                         return;
                     }
 
@@ -283,10 +361,10 @@ pub(super) fn add_settings(
                                     field.label.to_string()
                                 };
                                 let value = settings.value_str(i);
-                                let numeric = settings.is_numeric(i);
+                                let steppable = settings.is_steppable(i);
 
                                 ui.horizontal(|ui| {
-                                    let row_w = if numeric { num_w } else { full_w };
+                                    let row_w = if steppable { num_w } else { full_w };
                                     let resp = setting_row(ui, row_w, selected, label, value);
                                     // Keep the focused row in view — there's no
                                     // cursor to drag the scrollbar.
@@ -302,7 +380,7 @@ pub(super) fn add_settings(
                                         commands
                                             .push(AppCommand::Settings(SettingsAction::Activate));
                                     }
-                                    if numeric {
+                                    if steppable {
                                         if step_button(ui, "⏴", selected, dim).clicked() {
                                             commands.push(AppCommand::Settings(
                                                 SettingsAction::Select(i),

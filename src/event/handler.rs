@@ -1,7 +1,7 @@
 use super::gamepad::Gamepad;
 use super::keyboard::{KeyEvent, Keyboard};
 use crate::{
-    app::AppCommand,
+    app::{AppCommand, SettingsAction},
     browser::AppBrowser,
     config::InputConfig,
     event::{user::handle_user, window::handle_window},
@@ -9,6 +9,23 @@ use crate::{
     ui::AppUi,
 };
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+
+/// A bare modifier key (Ctrl/Shift/Alt/Gui on its own): during shortcut capture
+/// these are ignored so the captured combo waits for the actual key.
+fn is_modifier_key(kc: Keycode) -> bool {
+    matches!(
+        kc,
+        Keycode::LCtrl
+            | Keycode::RCtrl
+            | Keycode::LShift
+            | Keycode::RShift
+            | Keycode::LAlt
+            | Keycode::RAlt
+            | Keycode::LGui
+            | Keycode::RGui
+    )
+}
 
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
@@ -51,6 +68,18 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
+    /// Swap in a freshly built gamepad gesture table (the settings overlay
+    /// rebinding controls live; see [`crate::app::App::settings_close`]).
+    pub fn set_bindings(&mut self, bindings: crate::event::bindings::Bindings) {
+        self.gamepad.set_bindings(bindings);
+    }
+
+    /// Swap in a freshly built keyboard shortcut table (the keyboard half of
+    /// rebinding; the gamepad half is [`Self::set_bindings`]).
+    pub fn set_key_bindings(&mut self, bindings: crate::event::bindings::KeyBindings) {
+        self.keyboard.set_bindings(bindings);
+    }
+
     pub fn wait(
         &mut self,
         window: &AppWindow,
@@ -58,6 +87,10 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // Mirror the overlay's capture state into the pad so its buttons feed the
+        // gesture resolver (instead of dispatching) while a binding is captured.
+        self.gamepad.set_capture(ui.settings_capturing());
+
         // Block for the next event only when idle. When the gamepad is active or
         // the page is animating, return promptly so the main loop keeps ticking
         // (vsync caps the rate); blocking here would stall cursor/scroll motion.
@@ -96,6 +129,37 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // Settings is capturing a binding: take raw key events before egui or the
+        // shortcut table sees them (egui would eat Tab/arrows/Enter/Esc, so they
+        // couldn't be bound). A non-modifier KeyDown is the captured combo; Esc
+        // cancels; bare modifiers and the key-up / text edge are swallowed so
+        // nothing leaks to the page. (The gamepad half is captured in the pad's
+        // own capture mode, synced in `wait`.)
+        if ui.settings_capturing() {
+            match event {
+                Event::KeyDown {
+                    keycode: Some(kc),
+                    keymod,
+                    repeat: false,
+                    ..
+                } => {
+                    if kc == Keycode::Escape {
+                        commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
+                    } else if is_modifier_key(kc) {
+                        return;
+                    } else if let Some(gesture) = crate::event::bindings::format_key(kc, keymod) {
+                        commands.push(AppCommand::Settings(SettingsAction::CaptureBinding {
+                            gesture,
+                            keyboard: true,
+                        }));
+                    }
+                    return;
+                }
+                Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return,
+                _ => {}
+            }
+        }
+
         let consumed = ui.handle_event(window, &event);
 
         if consumed {

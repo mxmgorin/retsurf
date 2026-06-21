@@ -15,14 +15,18 @@
 //! latches `scroll_mode`, which turns the aim vector (D-pad / left stick) into
 //! page scrolling — the fallback for devices without a right analog stick.
 
-use crate::app::{AppCommand, InputCommand};
+use crate::app::{AppCommand, InputCommand, SettingsAction};
 use crate::config::InputConfig;
-use crate::event::bindings::{Action, Bindings};
+use crate::event::bindings::{self, Action, Bindings};
 use sdl2::controller::{Axis, Button};
 use std::time::{Duration, Instant};
 
 /// `i16::MAX`, the full-scale value SDL reports for a stick/trigger axis.
 const AXIS_MAX: f32 = 32767.0;
+
+/// Auto-cancel binding capture if nothing is pressed for this long — the handheld
+/// escape hatch (there's no Esc), so an accidental "add" doesn't trap input.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
 
 pub struct Gamepad {
     /// Left stick vector, normalized and dead-zoned (-1..=1).
@@ -45,6 +49,29 @@ pub struct Gamepad {
     scroll_mode: bool,
     /// Buttons currently down, with their gesture-resolution state.
     held: Vec<Held>,
+    /// Binding-capture mode (the settings overlay listening for a gamepad
+    /// gesture). While set, normal dispatch / cursor motion is suppressed and the
+    /// resolved gesture is reported as a [`SettingsAction::CaptureBinding`].
+    capture: Capture,
+}
+
+/// State for binding-capture mode (see [`Gamepad::set_capture`]). Resolves the
+/// same tap / hold / chord gestures as normal play, but reports the gesture
+/// string instead of dispatching the bound action.
+#[derive(Default)]
+struct Capture {
+    /// Whether capture is active.
+    on: bool,
+    /// Armed once the buttons held when capture began (the activating press)
+    /// have all been released — so that press isn't itself captured.
+    armed: bool,
+    /// A gesture was already reported this capture; ignore further input until
+    /// capture is turned off again.
+    done: bool,
+    /// Bindable buttons currently down, with their press time (for tap vs hold).
+    down: Vec<(Button, Instant)>,
+    /// When capture armed, for the idle-timeout cancel.
+    armed_at: Option<Instant>,
 }
 
 /// One pressed button awaiting (or past) gesture resolution.
@@ -69,6 +96,7 @@ impl Gamepad {
             hold: Duration::from_millis(cfg.hold_ms),
             scroll_mode: cfg.starts_in_scroll_mode(),
             held: vec![],
+            capture: Capture::default(),
             cfg,
         }
     }
@@ -79,6 +107,44 @@ impl Gamepad {
     pub fn set_config(&mut self, cfg: InputConfig) {
         self.hold = Duration::from_millis(cfg.hold_ms);
         self.cfg = cfg;
+    }
+
+    /// Swap in a freshly built gesture table — the settings overlay rebinding
+    /// controls live. Device state and pending gestures are untouched (a held
+    /// button keeps resolving against whatever was bound when it went down).
+    pub fn set_bindings(&mut self, bindings: Bindings) {
+        self.bindings = bindings;
+    }
+
+    /// Enter / leave binding-capture mode (the settings overlay listening for a
+    /// gamepad gesture). Idempotent — only the on/off transition resets state.
+    /// On entry, the bindable buttons currently held (the A that opened capture)
+    /// are remembered so capture arms only once they release.
+    pub fn set_capture(&mut self, on: bool) {
+        if on == self.capture.on {
+            return;
+        }
+        let down: Vec<(Button, Instant)> = if on {
+            let now = Instant::now();
+            self.held
+                .iter()
+                .filter(|h| bindings::button_name(h.button).is_some())
+                .map(|h| (h.button, now))
+                .collect()
+        } else {
+            vec![]
+        };
+        let armed = on && down.is_empty();
+        self.capture = Capture {
+            on,
+            armed,
+            done: false,
+            armed_at: armed.then(Instant::now),
+            down,
+        };
+        // Capture takes over the pad; drop any pending normal-mode gestures so a
+        // button held across the transition can't resolve as both.
+        self.held.clear();
     }
 
     /// Combined aim vector (left stick + D-pad), clamped to -1..=1.
@@ -92,7 +158,9 @@ impl Gamepad {
     /// Whether the loop should keep ticking at ~60fps: to animate cursor/scroll,
     /// and to time pending `hold:` gestures (no SDL event marks the threshold).
     pub fn is_active(&self) -> bool {
-        self.aim() != (0.0, 0.0)
+        // Capture keeps the loop ticking to time holds and the idle timeout.
+        self.capture.on
+            || self.aim() != (0.0, 0.0)
             || self.right.1 != 0.0
             || self
                 .held
@@ -112,6 +180,10 @@ impl Gamepad {
     }
 
     pub fn on_axis(&mut self, axis: Axis, value: i16, commands: &mut Vec<AppCommand>) {
+        // Capture freezes the sticks/triggers (no cursor, no tab cycling).
+        if self.capture.on {
+            return;
+        }
         // L2/R2 are throttle-style axes, emitted on both edges as a contextual
         // trigger intent: the router uses them for the on-screen keyboard (L2 Shift,
         // R2 Enter) when it's open, otherwise to cycle tabs (L2 previous, R2 next).
@@ -151,6 +223,10 @@ impl Gamepad {
     /// Resolve a button edge against the binding tables (see the module docs
     /// for the tap / hold / chord rules).
     pub fn on_button(&mut self, button: Button, pressed: bool, commands: &mut Vec<AppCommand>) {
+        if self.capture.on {
+            self.on_capture_button(button, pressed, commands);
+            return;
+        }
         // The D-pad contributes to the aim vector on both edges (per axis, so a
         // held diagonal keeps both), and emits a discrete press edge for hint
         // mode's combo symbols (ignored elsewhere).
@@ -252,6 +328,10 @@ impl Gamepad {
     /// context (cursor, overlay navigation, or page scroll) is the router's
     /// decision.
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
+        if self.capture.on {
+            self.capture_tick(commands);
+            return;
+        }
         let mut fired = vec![];
         for h in &mut self.held {
             if !h.resolved && h.at.elapsed() >= self.hold {
@@ -272,4 +352,89 @@ impl Gamepad {
             scroll_mode: self.scroll_mode,
         }));
     }
+
+    /// A button edge while capturing a binding. Resolves the same gestures as
+    /// play: a quick press+release is a tap, two buttons down is a chord, and a
+    /// single button held past the threshold is a hold (fired in [`capture_tick`]).
+    /// The first resolved gesture is reported and capture goes quiet until reset.
+    fn on_capture_button(&mut self, button: Button, pressed: bool, commands: &mut Vec<AppCommand>) {
+        // Only bindable buttons count; the D-pad and triggers aren't bindable.
+        if bindings::button_name(button).is_none() || self.capture.done {
+            return;
+        }
+        let now = Instant::now();
+        if pressed {
+            if !self.capture.down.iter().any(|(b, _)| *b == button) {
+                self.capture.down.push((button, now));
+            }
+            // Two buttons down (post-arm) is a chord, reported on the second press.
+            if self.capture.armed && self.capture.down.len() >= 2 {
+                let (a, b) = (self.capture.down[0].0, self.capture.down[1].0);
+                if let Some(gesture) = bindings::chord_gesture(a, b) {
+                    self.capture.done = true;
+                    push_capture(commands, gesture);
+                }
+            }
+            return;
+        }
+
+        let pressed_at = self
+            .capture
+            .down
+            .iter()
+            .position(|(b, _)| *b == button)
+            .map(|i| self.capture.down.remove(i).1);
+        if !self.capture.armed {
+            // Still waiting for the activating press to clear; arm once it does.
+            if self.capture.down.is_empty() {
+                self.capture.armed = true;
+                self.capture.armed_at = Some(now);
+            }
+            return;
+        }
+        // A button pressed and released before the hold threshold is a tap.
+        if let Some(at) = pressed_at {
+            if now.duration_since(at) < self.hold {
+                if let Some(name) = bindings::button_name(button) {
+                    self.capture.done = true;
+                    push_capture(commands, name.to_string());
+                }
+            }
+        }
+    }
+
+    /// Per-frame capture timing: a single button held past the threshold is a
+    /// hold; armed with nothing pressed for [`CAPTURE_TIMEOUT`] cancels (the
+    /// handheld escape hatch). No analog state is emitted while capturing.
+    fn capture_tick(&mut self, commands: &mut Vec<AppCommand>) {
+        if self.capture.done || !self.capture.armed {
+            return;
+        }
+        let now = Instant::now();
+        if self.capture.down.len() == 1 {
+            let (button, at) = self.capture.down[0];
+            if now.duration_since(at) >= self.hold {
+                if let Some(name) = bindings::button_name(button) {
+                    self.capture.done = true;
+                    push_capture(commands, format!("hold:{name}"));
+                }
+            }
+        } else if self.capture.down.is_empty()
+            && self
+                .capture
+                .armed_at
+                .is_some_and(|t| now.duration_since(t) >= CAPTURE_TIMEOUT)
+        {
+            self.capture.done = true;
+            commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
+        }
+    }
+}
+
+/// Report a captured gamepad gesture to the settings overlay.
+fn push_capture(commands: &mut Vec<AppCommand>, gesture: String) {
+    commands.push(AppCommand::Settings(SettingsAction::CaptureBinding {
+        gesture,
+        keyboard: false,
+    }));
 }

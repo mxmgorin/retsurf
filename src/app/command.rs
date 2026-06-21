@@ -51,6 +51,14 @@ pub enum SettingsAction {
     /// Follow a link on the read-only About tab: save & close the overlay, then
     /// navigate the focused tab to `url` (clicking a link row).
     OpenLink(String),
+    /// While capturing a binding (Controls section): the gesture the user just
+    /// performed, to add to the focused action. `keyboard` distinguishes a key
+    /// combo (`"ctrl+f"`) from a gamepad gesture (`"hold:y"`) — the strings can
+    /// collide (e.g. `"a"`). Pushed by the keyboard intercept and the gamepad's
+    /// capture mode (see [`crate::event::handler`] / [`crate::event::gamepad`]).
+    CaptureBinding { gesture: String, keyboard: bool },
+    /// Cancel binding capture without changing anything (Esc / timeout).
+    CaptureCancel,
 }
 
 /// Actions on the modal page-prompt overlay. The gamepad and keyboard push
