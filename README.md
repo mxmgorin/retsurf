@@ -29,42 +29,13 @@ Handheld Linux distros (Knulli, muOS, ROCKNIX) lack a usable browser. Lightweigh
 
 ## Features
 
-**Gamepad support**
-- Virtual **cursor** (left stick / D-pad) that can click page links *and* toolbar buttons
-- **Link hints** (Y or L3) — Vimium adapted for a gamepad: clickable elements get highlighted, the stick hops between them spatially, A clicks (hold A / Enter on a link to open it in a background tab)
-- **On-screen keyboard** with symbols, caps, shift, and switchable layouts (QWERTY + ЙЦУКЕН built in, picked via config) for typing URLs and searches
-- Full-screen **menu** (Select) with **Tabs**, **Bookmarks**, **History**, and **Downloads** sections
-- **Rebindable controls**: remap any gamepad gesture in-app from the **Controls** settings section, or edit `bindings.toml` directly — gamepad gestures (tap, hold, two-button chords) and keyboard shortcuts over the same actions, plus a D-pad cursor to scroll toggle for devices without analog sticks
-- Defaults: right-stick scroll · A = click/select · B = back / close (hold: home) · X = keyboard (hold: reader mode) · Y = link hints (hold: bookmark) · L1/R1 = back / forward (hold: zoom out / in; both together: reset zoom) · L2/R2 = switch tabs · L3 = link hints · R3 = settings · Start = D-pad scroll toggle (hold: reload) · Select = menu (hold: settings) · Select+Start = settings (press again to quit)
-
-**Page zoom**
-- Real zoom (reflows the layout, not a magnifier), stepping Firefox's 50–300% ladder, per tab
-- `[browser] page_zoom` in the config scales every tab by default — set `1.25` once and the whole web fits a small screen better
-- Hold R1/L1, `ctrl+=`/`ctrl+-`/`ctrl+0`, or the bindable `zoom_in`/`zoom_out`/`zoom_reset` actions
-
-**Reader mode**
-- Strip a page down to its article (Mozilla's [Readability](https://github.com/mozilla/readability), the Firefox Reader View engine) with a dark, narrow-column layout sized for small screens
-- Runs in place — no refetch, so it works on logged-in and dynamic pages; toggling off reloads
-- Toggle via the icon toolbar button, R3 (or hold X on stickless devices), `ctrl+e`, or the bindable `reader` action
-
-**Downloads**
-- Navigating to a file link downloads it in the background instead of rendering it
-- Progress, cancel, and history of finished downloads in the menu's **Downloads** section; a ⬇ toolbar chip shows what's in flight
-- Saves into the system download folder (`XDG_DOWNLOAD_DIR` / `~/Downloads`) or any configured directory
-
-**Ad blocking**
-- Network-level ad & tracker blocking with [Brave's adblock-rust](https://github.com/brave/adblock-rust) engine (EasyList + EasyPrivacy by default)
-- Filter lists are fetched in the background, compiled, and cached locally — warm starts are instant and work offline
-- Fully configurable: toggle it off, change the lists, or change the refresh interval
-
-**Start page**
-- A built-in start page (the default `home_page`, `retsurf:home`): a search/URL field over a speed-dial grid of your saved pins
-- Drawn natively with egui, so it's fully controller-navigable — D-pad/stick move the selection, A opens a tile or the keyboard to type, just like the other overlays
-
-**Rendering**
-- Real web rendering via the **Servo** engine (WebRender)
-- Runs on **OpenGL ES 3.x**; no X11/Wayland required (works on bare KMS/DRM)
-- Single GL context, zero CPU readback — Servo renders straight into the on-screen context
+- **Gamepad-native navigation** — a virtual cursor (stick / D-pad) clicks page links and toolbar buttons, Vimium-style link hints hop between clickable elements, and an on-screen keyboard (QWERTY + ЙЦУКЕН) types URLs and searches. Every gesture is rebindable in-app or in `bindings.toml`, with a D-pad scroll mode for stickless devices — see the [controls reference](docs/CONFIGURATION.md#bindings-bindingstoml).
+- **Tabs, bookmarks, history, downloads** — a full-screen menu (Select) collects them all. File links download in the background with progress, cancel, and a ⬇ toolbar chip, saving to the system download folder or a configured path.
+- **Real page zoom** — reflows the layout (not a magnifier) along Firefox's 50–300% ladder, per tab; set a default in the config so the whole web fits a small screen.
+- **Reader mode** — strips a page to its article with Mozilla's [Readability](https://github.com/mozilla/readability) and a dark, narrow-column layout. Runs in place, so it works on logged-in and dynamic pages.
+- **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy). Lists are fetched, compiled, and cached locally, so warm starts are instant and work offline. Configurable, or off.
+- **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), drawn in egui and fully controller-navigable like the other overlays.
+- **Modern rendering** — real web rendering via **Servo** (WebRender) on **OpenGL ES 3.x**, no X11/Wayland required (bare KMS/DRM). Single GL context, zero CPU readback — Servo draws straight into the on-screen context.
 
 ## Building & running
 
