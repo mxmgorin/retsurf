@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 mod adblock;
 mod browser;
 mod data_saving;
+mod debug;
 mod display;
 mod downloads;
 mod history;
@@ -22,6 +23,7 @@ mod performance;
 pub use adblock::AdblockConfig;
 pub use browser::BrowserConfig;
 pub use data_saving::DataSavingConfig;
+pub use debug::DebugConfig;
 pub use display::{DisplayConfig, ToolbarPosition};
 pub use downloads::DownloadsConfig;
 pub use history::HistoryConfig;
@@ -42,6 +44,7 @@ pub struct AppConfig {
     pub performance: PerformanceConfig,
     pub data_saving: DataSavingConfig,
     pub osk: OskConfig,
+    pub debug: DebugConfig,
 }
 
 impl AppConfig {

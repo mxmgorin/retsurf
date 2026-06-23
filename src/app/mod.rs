@@ -49,12 +49,19 @@ pub struct App {
     /// loss to [`HISTORY_FLUSH_INTERVAL`] while browsing, without ever waking the
     /// idle loop — the flush only fires on frames the loop is already running.
     last_history_flush: Instant,
+    /// Last time a memory report was requested (debug overlay only). Throttles
+    /// the requests to [`MEMORY_REPORT_INTERVAL`] since each one walks every reporter.
+    last_memory_report: Instant,
 }
 
 /// How often the main loop opportunistically flushes deferred history (only on
 /// frames it's already awake for — navigation, paint, input). Coalesces the
 /// per-navigation writes that used to rewrite `history.toml` on every page load.
 const HISTORY_FLUSH_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How often the debug memory overlay (`[debug] memory_overlay`) refreshes its
+/// figures by asking Servo for a new report.
+const MEMORY_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
@@ -80,6 +87,7 @@ impl App {
             &config.downloads,
             &config.osk,
             &config.input,
+            &config.debug,
         );
         log::info!("init: app constructed");
 
@@ -96,6 +104,7 @@ impl App {
             osk_nav_next: Instant::now(),
             hint_press_at: None,
             last_history_flush: Instant::now(),
+            last_memory_report: Instant::now(),
         })
     }
 
@@ -128,6 +137,19 @@ impl App {
             if self.last_history_flush.elapsed() >= HISTORY_FLUSH_INTERVAL {
                 self.ui.flush_history();
                 self.last_history_flush = Instant::now();
+            }
+
+            // Debug memory overlay: on a throttle, ask Servo for a fresh report,
+            // and adopt the latest one that has arrived (it comes back async, a
+            // frame or two later). Both no-ops unless the overlay is enabled.
+            if self.ui.memory_overlay_enabled() {
+                if self.last_memory_report.elapsed() >= MEMORY_REPORT_INTERVAL {
+                    self.browser.request_memory_report();
+                    self.last_memory_report = Instant::now();
+                }
+                if let Some(report) = self.browser.take_memory_report() {
+                    self.ui.set_memory_summary(report);
+                }
             }
 
             // Mirror whether the active tab is on the start page, so the UI's
@@ -465,6 +487,8 @@ impl App {
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
+        self.ui
+            .set_memory_overlay(self.config.debug.memory_overlay);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(

@@ -57,6 +57,10 @@ surfman = "0.12"
 log = "0.4.28"
 env_logger = "0.11.8"
 servo = { version = "0.3", default-features = false, features = ["clipboard", "js_jit"] }
+# Servo delivers its memory report (profile_traits::mem::MemoryReportResult) through
+# servo_base's GenericCallback; we need that type to build the report callback. Pinned
+# to the same 0.3 servo itself uses, so Cargo unifies on one version.
+servo-base = "0.3"
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"

@@ -22,10 +22,13 @@ use crate::{
     overlay::hints::Hint,
 };
 use ::url::Url;
+use servo::profile_traits::mem::MemoryReportResult;
 use servo::{EventLoopWaker, RenderingContext, WebView};
+use servo_base::generic_channel::GenericCallback;
 use std::{
     cell::{Cell, RefCell, RefMut},
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 #[derive(Clone)]
@@ -156,6 +159,10 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
+    /// Latest memory report from Servo (see [`AppBrowser::request_memory_report`]).
+    /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
+    /// main loop. Drained by [`AppBrowser::take_memory_report`].
+    mem_report: Arc<Mutex<Option<MemoryReportResult>>>,
 }
 
 impl AppBrowserInner {
@@ -188,6 +195,7 @@ impl AppBrowserInner {
             embedder_controls: RefCell::new(vec![]),
             dismissed_controls: RefCell::new(vec![]),
             default_zoom,
+            mem_report: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -284,6 +292,34 @@ impl AppBrowser {
     #[inline]
     pub fn take_download_requests(&self) -> Vec<String> {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
+    }
+
+    /// Ask Servo for a memory report (the data behind `about:memory`). The report
+    /// is gathered across all threads and delivered asynchronously on an IPC
+    /// router thread: the callback stashes it and wakes the loop, which drains it
+    /// via [`AppBrowser::take_memory_report`]. Drives the debug memory overlay
+    /// (`[debug] memory_overlay`). Not free (it walks every reporter), so the loop
+    /// throttles requests rather than firing one per frame.
+    pub fn request_memory_report(&self) {
+        let slot = self.inner.mem_report.clone();
+        let waker = self.inner.event_sender.clone();
+        let callback = GenericCallback::new(move |result| {
+            if let Ok(report) = result {
+                if let Ok(mut guard) = slot.lock() {
+                    *guard = Some(report);
+                }
+                // Wake the (possibly idle-blocked) loop so it renders the report.
+                waker.send(UserEvent::BrowserWakeup);
+            }
+        })
+        .expect("create memory-report callback");
+        self.inner.servo.create_memory_report(callback);
+    }
+
+    /// Take the most recent memory report, if one has arrived since the last call.
+    #[inline]
+    pub fn take_memory_report(&self) -> Option<MemoryReportResult> {
+        self.inner.mem_report.lock().ok().and_then(|mut g| g.take())
     }
 
     /// Replace the lightweight-mode content filter (called when the settings

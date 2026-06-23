@@ -4767,6 +4767,7 @@ dependencies = [
  "sdl2-keyboard-types",
  "serde",
  "servo",
+ "servo-base",
  "surfman",
  "toml",
  "ureq",

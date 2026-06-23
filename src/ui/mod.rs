@@ -6,6 +6,7 @@
 mod dial_edit;
 mod hints;
 mod home;
+mod memory;
 mod menu;
 mod osk;
 mod prompt;
@@ -17,8 +18,8 @@ use crate::{
     app::AppCommand,
     browser::AppBrowser,
     config::{
-        AppConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
-        ToolbarPosition,
+        AppConfig, DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig,
+        OskConfig, ToolbarPosition,
     },
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
@@ -165,6 +166,10 @@ pub struct AppUi {
     /// by the event handler. Read when hint mode opens to pick the badge alphabet:
     /// typed letters for the keyboard, button combos for the pad.
     last_input_keyboard: bool,
+    /// Whether the debug memory overlay is enabled (`[debug] memory_overlay`).
+    memory_overlay: bool,
+    /// The latest rolled-up memory report to draw, refreshed from the main loop.
+    memory_summary: Option<memory::MemorySummary>,
 }
 
 impl AppUi {
@@ -175,6 +180,7 @@ impl AppUi {
         downloads: &DownloadsConfig,
         osk: &OskConfig,
         input: &InputConfig,
+        debug: &DebugConfig,
     ) -> Self {
         let mut egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
         // Install the shared accent theme so every selectable widget, text
@@ -224,7 +230,30 @@ impl AppUi {
             scroll_mode: false,
             hint_badges: input.hint_badges,
             last_input_keyboard: false,
+            memory_overlay: debug.memory_overlay,
+            memory_summary: None,
         }
+    }
+
+    /// Whether the debug memory overlay is on (drives the main loop's periodic
+    /// memory-report requests; see [`crate::browser::AppBrowser::request_memory_report`]).
+    #[inline]
+    pub fn memory_overlay_enabled(&self) -> bool {
+        self.memory_overlay
+    }
+
+    /// Toggle the debug memory overlay live (from a settings save). Clears the
+    /// stale snapshot when turning off so it doesn't flash on the next enable.
+    pub fn set_memory_overlay(&mut self, on: bool) {
+        self.memory_overlay = on;
+        if !on {
+            self.memory_summary = None;
+        }
+    }
+
+    /// Adopt a fresh memory report for the overlay, rolling it up for display.
+    pub fn set_memory_summary(&mut self, report: servo::profile_traits::mem::MemoryReportResult) {
+        self.memory_summary = Some(memory::MemorySummary::from_report(report));
     }
 
     /// Whether an egui widget (e.g. the address bar) currently wants keyboard
@@ -1082,6 +1111,12 @@ impl AppUi {
         if let Some(refresh) = self.hints.refresh_in() {
             self.repaint_delay = Some(self.repaint_delay.map_or(refresh, |d| d.min(refresh)));
         }
+        // Keep the loop ticking ~1 Hz while the debug memory overlay is on, so its
+        // periodic report request fires and the figures stay fresh when idle.
+        if self.memory_overlay {
+            let tick = Duration::from_secs(1);
+            self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
+        }
 
         // Read tab info *before* borrowing the active tab's state below — both read
         // the browser's tab list, so they can't overlap. `tab_pos` is the 1-based
@@ -1298,6 +1333,14 @@ impl AppUi {
                             CURSOR_RADIUS,
                             egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK),
                         );
+                    }
+                }
+
+                // Debug memory overlay (opt-in), drawn last so it sits above
+                // everything; non-interactive, so it never blocks input.
+                if self.memory_overlay {
+                    if let Some(summary) = &self.memory_summary {
+                        memory::add_memory(ctx, summary);
                     }
                 }
             });

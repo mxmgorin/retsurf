@@ -5,8 +5,8 @@
 //! clone of the live one taken on open — that the rows mutate; closing saves the
 //! draft to disk and the app re-applies what can change live (see [`crate::app`]).
 //!
-//! Controls mirror the menu but free up ◀▶ for editing: L1/R1 (shoulders) switch
-//! section, ▲▼ move between rows, ◀▶ adjust the focused value, A edits, B saves
+//! Controls mirror the menu but free up dpad for editing: L1/R1 (shoulders) switch
+//! section, up/down move between rows, left adjust the focused value, A edits, B saves
 //! and closes — all reachable without an analog stick. The Controls section is
 //! the exception: an action list where A *adds* a binding (press the button or
 //! key you want — see [`Settings::controls_activate`]) or removes one.
@@ -103,10 +103,11 @@ enum FieldId {
     BlockMedia,
     BlockFonts,
     DownloadDir,
+    MemoryOverlay,
 }
 
 /// How a field is displayed and edited. `Choice` carries `(label, stored value)`
-/// pairs; `Int`/`Float` carry the bounds ◀▶ steps within (so the renderer and the
+/// pairs; `Int`/`Float` carry the bounds dpad steps within (so the renderer and the
 /// adjust logic share one source of truth for the range).
 pub enum Kind {
     Bool,
@@ -236,6 +237,7 @@ static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
+    f(S::Advanced, "Diagnostics", "Memory overlay",         F::MemoryOverlay,      Kind::Bool, false),
 ];
 
 /// The bindable actions shown in the Controls section, in display order — every
@@ -772,6 +774,7 @@ impl Settings {
             FieldId::BlockFonts => c.data_saving.block_fonts,
             FieldId::ToolbarAutohide => c.display.toolbar_autohide,
             FieldId::HintBadges => c.input.hint_badges,
+            FieldId::MemoryOverlay => c.debug.memory_overlay,
             _ => false,
         }
     }
@@ -788,6 +791,7 @@ impl Settings {
             FieldId::BlockFonts => c.data_saving.block_fonts = b,
             FieldId::ToolbarAutohide => c.display.toolbar_autohide = b,
             FieldId::HintBadges => c.input.hint_badges = b,
+            FieldId::MemoryOverlay => c.debug.memory_overlay = b,
             _ => {}
         }
     }
