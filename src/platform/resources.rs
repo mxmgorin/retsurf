@@ -13,10 +13,16 @@ servo::submit_resource_reader!(&RESOURCE_READER);
 
 impl servo::resources::ResourceReaderMethods for ServoResources {
     fn read(&self, file: servo::resources::Resource) -> Vec<u8> {
-        let file = file.filename();
-        let resource = ServoResources::get(file).unwrap();
-
-        resource.data.to_vec()
+        let name = file.filename();
+        // Degrade gracefully instead of aborting the browser: a servo version bump
+        // can add a Resource variant we haven't vendored into resources/servo.
+        match ServoResources::get(name) {
+            Some(resource) => resource.data.to_vec(),
+            None => {
+                log::error!("missing embedded servo resource: {name}");
+                Vec::new()
+            }
+        }
     }
 
     fn sandbox_access_files_dirs(&self) -> Vec<PathBuf> {
