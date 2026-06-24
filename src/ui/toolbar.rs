@@ -138,7 +138,7 @@ fn toolbar_contents(
                 commands.push(AppCommand::Browser(BrowserCommand::Back));
             }
             if ui.add(new_toolbar_button("→")).clicked() {
-                commands.push(AppCommand::Browser(BrowserCommand::Foward));
+                commands.push(AppCommand::Browser(BrowserCommand::Forward));
             }
 
             // Reload, disabled (greyed, non-interactive) while loading —

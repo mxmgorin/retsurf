@@ -223,7 +223,7 @@ impl App {
                     let cmd = if *delta < 0 {
                         BrowserCommand::Back
                     } else {
-                        BrowserCommand::Foward
+                        BrowserCommand::Forward
                     };
                     self.browser.execute_command(&cmd, &self.config.browser);
                 }

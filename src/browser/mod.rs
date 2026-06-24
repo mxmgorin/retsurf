@@ -34,7 +34,7 @@ use std::{
 #[derive(Clone)]
 pub enum BrowserCommand {
     Back,
-    Foward,
+    Forward,
     Reload,
     Load,
     /// Navigate the active tab to the configured home page (`home_page`).
@@ -606,7 +606,7 @@ impl AppBrowser {
     pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
         match command {
             BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
-            BrowserCommand::Foward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
+            BrowserCommand::Forward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
             BrowserCommand::Reload => _ = self.inner.active_webview().map(|x| x.reload()),
             BrowserCommand::Reader => self.toggle_reader(),
             BrowserCommand::Zoom(delta) => self.zoom(*delta),
