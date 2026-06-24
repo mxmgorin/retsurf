@@ -200,13 +200,7 @@ impl Keyboard {
                     return;
                 }
             } else {
-                let nav = match key.kc {
-                    Keycode::Up => Some((0, -1)),
-                    Keycode::Down => Some((0, 1)),
-                    Keycode::Left => Some((-1, 0)),
-                    Keycode::Right => Some((1, 0)),
-                    _ => None,
-                };
+                let nav = arrow_nav(key.kc);
                 if let Some((dx, dy)) = nav {
                     commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
                     return;
@@ -253,13 +247,7 @@ impl Keyboard {
                     return;
                 }
             } else {
-                let nav = match key.kc {
-                    Keycode::Up => Some((0, -1)),
-                    Keycode::Down => Some((0, 1)),
-                    Keycode::Left => Some((-1, 0)),
-                    Keycode::Right => Some((1, 0)),
-                    _ => None,
-                };
+                let nav = arrow_nav(key.kc);
                 if let Some((dx, dy)) = nav {
                     commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
                     return;
@@ -294,17 +282,9 @@ impl Keyboard {
                 return;
             }
             let ctrl = key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
-            let nav = if ctrl {
-                None
-            } else {
-                match key.kc {
-                    Keycode::Up => Some((0, -1)),
-                    Keycode::Down => Some((0, 1)),
-                    Keycode::Left => Some((-1, 0)),
-                    Keycode::Right => Some((1, 0)),
-                    _ => None,
-                }
-            };
+            // Ctrl+arrows switch section (above / via Shoulder), so only plain
+            // arrows navigate the rows here.
+            let nav = if ctrl { None } else { arrow_nav(key.kc) };
             if let Some((dx, dy)) = nav {
                 commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
                 return;
@@ -362,4 +342,15 @@ fn letter_of(kc: Keycode) -> Option<char> {
     (('a' as i32)..=('z' as i32))
         .contains(&v)
         .then_some(v as u8 as char)
+}
+
+/// The (dx, dy) overlay-navigation step an arrow keycode stands for, else `None`.
+fn arrow_nav(kc: Keycode) -> Option<(i32, i32)> {
+    match kc {
+        Keycode::Up => Some((0, -1)),
+        Keycode::Down => Some((0, 1)),
+        Keycode::Left => Some((-1, 0)),
+        Keycode::Right => Some((1, 0)),
+        _ => None,
+    }
 }
