@@ -182,7 +182,7 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
     ) -> Self {
-        let mut egui = EguiGlow::new(window.get_sdl2_window(), window.get_glow_ctx(), None, false);
+        let mut egui = EguiGlow::new(window.sdl2_window(), window.glow_ctx(), None, false);
         // Install the shared accent theme so every selectable widget, text
         // selection, and link picks up the brand green (see [`theme`]).
         theme::apply(&egui.ctx);
@@ -307,7 +307,7 @@ impl AppUi {
     pub fn click_ui(&mut self, pressed: bool, window: &AppWindow) {
         let ppp = self.egui.ctx.pixels_per_point();
         let (x, y) = ((self.cursor.0 * ppp) as i32, (self.cursor.1 * ppp) as i32);
-        let win = window.get_sdl2_window();
+        let win = window.sdl2_window();
         let window_id = win.id();
         let event = if pressed {
             sdl2::event::Event::MouseButtonDown {
@@ -1083,12 +1083,12 @@ impl AppUi {
     /// portrait).
     #[cfg(target_os = "android")]
     pub fn sync_window_size(&mut self, window: &AppWindow) {
-        self.egui.state.sync_window_size(window.get_sdl2_window());
+        self.egui.state.sync_window_size(window.sdl2_window());
     }
 
     /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
-        let resp = self.egui.state.on_event(window.get_sdl2_window(), event);
+        let resp = self.egui.state.on_event(window.sdl2_window(), event);
         self.repaint_pending = resp.repaint;
         // don't consume when pointer over browser area
         resp.consumed & self.is_pointer_over_toolbar()

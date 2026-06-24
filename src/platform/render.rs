@@ -99,26 +99,13 @@ impl SdlRenderingContext {
     fn setup_texture_params(&self) {
         let gl = &self.gl;
         gl.bind_texture(gl::TEXTURE_2D, self.color_tex.get());
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_MAG_FILTER,
-            gl::NEAREST as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_MIN_FILTER,
-            gl::NEAREST as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_WRAP_S,
-            gl::CLAMP_TO_EDGE as gl::GLint,
-        );
-        gl.tex_parameter_i(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_WRAP_T,
-            gl::CLAMP_TO_EDGE as gl::GLint,
-        );
+        let set = |pname: gl::GLenum, val: gl::GLenum| {
+            gl.tex_parameter_i(gl::TEXTURE_2D, pname, val as gl::GLint);
+        };
+        set(gl::TEXTURE_MAG_FILTER, gl::NEAREST);
+        set(gl::TEXTURE_MIN_FILTER, gl::NEAREST);
+        set(gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE);
+        set(gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE);
         gl.bind_texture(gl::TEXTURE_2D, 0);
     }
 

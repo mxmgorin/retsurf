@@ -70,7 +70,7 @@ impl App {
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(
-            window.get_rendering_ctx(),
+            window.rendering_ctx(),
             event_sender.clone(),
             &config.browser,
             &config.performance,

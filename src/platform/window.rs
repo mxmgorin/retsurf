@@ -57,23 +57,20 @@ impl AppWindow {
         // busy-spin while the gamepad drives continuous cursor/scroll updates.
         let _ = video_subsystem.gl_set_swap_interval(sdl2::video::SwapInterval::VSync);
 
-        let glow_ctx = Arc::new(unsafe {
-            glow::Context::from_loader_function(|name| {
-                video_subsystem.gl_get_proc_address(name) as *const _
-            })
-        });
+        // glow (egui) and gleam (Servo/WebRender) both resolve GL entry points
+        // through SDL's loader; one closure feeds all three loads.
+        let get_proc =
+            |name: &str| video_subsystem.gl_get_proc_address(name) as *const std::os::raw::c_void;
+
+        let glow_ctx = Arc::new(unsafe { glow::Context::from_loader_function(get_proc) });
 
         // Servo/WebRender talks GL through `gleam`. Load the matching API for the
         // context profile we just created.
         let gl: Rc<dyn Gl> = unsafe {
             if config.use_gles {
-                gleam::gl::GlesFns::load_with(|name| {
-                    video_subsystem.gl_get_proc_address(name) as *const _
-                })
+                gleam::gl::GlesFns::load_with(get_proc)
             } else {
-                gleam::gl::GlFns::load_with(|name| {
-                    video_subsystem.gl_get_proc_address(name) as *const _
-                })
+                gleam::gl::GlFns::load_with(get_proc)
             }
         };
 
@@ -92,16 +89,16 @@ impl AppWindow {
         })
     }
 
-    pub fn get_sdl2_window(&self) -> &sdl2::video::Window {
+    pub fn sdl2_window(&self) -> &sdl2::video::Window {
         &self.window
     }
 
-    pub fn get_glow_ctx(&self) -> Arc<glow::Context> {
+    pub fn glow_ctx(&self) -> Arc<glow::Context> {
         self.glow_ctx.clone()
     }
 
     /// The rendering context Servo renders into (an FBO in our GL context).
-    pub fn get_rendering_ctx(&self) -> Rc<dyn RenderingContext> {
+    pub fn rendering_ctx(&self) -> Rc<dyn RenderingContext> {
         self.rendering_ctx.clone()
     }
 
