@@ -4,6 +4,7 @@
 //! default. The report is requested from the main loop and aggregated here;
 //! the holding state lives in [`crate::ui::AppUi`].
 
+use super::theme::DIM;
 use egui_sdl2::egui;
 use servo::profile_traits::mem::{MemoryReportResult, ReportKind};
 use std::cmp::Reverse;
@@ -107,7 +108,7 @@ pub(super) fn add_memory(ctx: &egui::Context, summary: &MemorySummary) {
                         ui.add_space(4.0);
                         ui.separator();
                         for (path, size) in &summary.gauges {
-                            row(ui, path, *size, egui::Color32::from_gray(0x99));
+                            row(ui, path, *size, DIM);
                         }
                     }
                 });

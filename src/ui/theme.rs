@@ -9,6 +9,15 @@ use egui_sdl2::egui;
 /// The brand accent (teal-green) — selected/active emphasis across the UI.
 pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x3f, 0xb8, 0xa0);
 
+/// Dark chrome panel fill, shared by the menu / settings / prompt overlays.
+pub const PANEL_FILL: egui::Color32 = egui::Color32::from_rgb(0x18, 0x18, 0x1c);
+
+/// Secondary / label text: hints, dates, statuses, mouse-only actions.
+pub const DIM: egui::Color32 = egui::Color32::from_gray(0x99);
+
+/// Row / section-bar font size shared across the full-screen overlays.
+pub const ROW_FONT: f32 = 15.0;
+
 /// Install the accent on egui's dark theme: a translucent accent fill behind
 /// selected widgets (so white text stays readable over the dark panels) ringed
 /// by the solid accent, plus accent-colored links and text caret.

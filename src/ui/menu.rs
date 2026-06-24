@@ -2,7 +2,7 @@
 //! the section bar with the ✖ close and contextual clear actions, and the four
 //! section lists (Tabs / Bookmarks / History / Downloads).
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
@@ -16,7 +16,6 @@ use egui_sdl2::egui;
 /// discrete entries rather than one dense block.
 const ROW_H: f32 = 32.0;
 const ROW_RADIUS: f32 = 6.0;
-const ROW_FONT: f32 = 15.0;
 const ROW_GAP: f32 = 4.0;
 
 /// Inner padding of the menu panel — the sides get more room than the top and
@@ -95,7 +94,7 @@ pub(super) fn add_menu(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let dim = egui::Color32::from_gray(0x99);
+    let dim = DIM;
     egui::Area::new(egui::Id::new("menu"))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
@@ -105,7 +104,7 @@ pub(super) fn add_menu(
         .constrain(false)
         .show(ctx, |ui| {
             egui::Frame::default()
-                .fill(egui::Color32::from_rgb(0x18, 0x18, 0x1c))
+                .fill(PANEL_FILL)
                 .inner_margin(egui::Margin::symmetric(PAD_X as i8, PAD_Y as i8))
                 .show(ui, |ui| {
                     // Size the *content* to the screen minus the frame margins, so
@@ -218,7 +217,7 @@ fn add_tabs_section(
     selected: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = egui::Color32::from_gray(0x99);
+    let dim = DIM;
     // Width left for the title before the trailing ★ and ✖ buttons (each DEL_W,
     // plus the spacing before each).
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;

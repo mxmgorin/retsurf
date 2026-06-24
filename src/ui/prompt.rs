@@ -3,7 +3,7 @@
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
-use super::theme::ACCENT;
+use super::theme::{ACCENT, DIM, PANEL_FILL};
 use crate::app::{AppCommand, PromptAction};
 use crate::overlay::prompt::Prompt;
 use egui_sdl2::egui;
@@ -49,7 +49,7 @@ pub(super) fn add_prompt(
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
             egui::Frame::default()
-                .fill(egui::Color32::from_rgb(0x18, 0x18, 0x1c))
+                .fill(PANEL_FILL)
                 .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x55)))
                 .corner_radius(10.0)
                 .inner_margin(14.0)
@@ -76,7 +76,7 @@ fn add_select(
     select: &SelectElement,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = egui::Color32::from_gray(0x99);
+    let dim = DIM;
     let multiple = select.allow_select_multiple();
     let row_w = (screen.width() - 96.0).min(448.0);
     ui.label(
@@ -205,7 +205,7 @@ fn add_dialog(
     osk_caret: Option<usize>,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = egui::Color32::from_gray(0x99);
+    let dim = DIM;
     // Web content can't draw browser chrome — the header marks the message as
     // coming from the page so it can't impersonate the UI.
     ui.label(egui::RichText::new("The page says:").color(dim));

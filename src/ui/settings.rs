@@ -6,7 +6,7 @@
 //! B save & close; the mouse can click a tab, a row, its ◀▶ step buttons, or
 //! Close. All of it works without an analog stick.
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use crate::app::{AppCommand, SettingsAction};
 use crate::overlay::settings::{CtrlRow, Settings, SettingsSection};
 use egui_sdl2::egui;
@@ -15,7 +15,6 @@ use egui_sdl2::egui;
 /// so the two full-screen overlays feel like one chrome.
 const ROW_H: f32 = 30.0;
 const ROW_RADIUS: f32 = 6.0;
-const ROW_FONT: f32 = 15.0;
 const ROW_GAP: f32 = 4.0;
 const PAD_X: f32 = 30.0;
 const PAD_Y: f32 = 16.0;
@@ -247,7 +246,7 @@ pub(super) fn add_settings(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let dim = egui::Color32::from_gray(0x99);
+    let dim = DIM;
     egui::Area::new(egui::Id::new("settings"))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
@@ -256,7 +255,7 @@ pub(super) fn add_settings(
         .constrain(false)
         .show(ctx, |ui| {
             egui::Frame::default()
-                .fill(egui::Color32::from_rgb(0x18, 0x18, 0x1c))
+                .fill(PANEL_FILL)
                 .inner_margin(egui::Margin::symmetric(PAD_X as i8, PAD_Y as i8))
                 .show(ui, |ui| {
                     ui.set_min_size(screen.size() - egui::vec2(SIDES, PAD_Y * 2.0));
