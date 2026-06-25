@@ -1,3 +1,4 @@
+use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 /// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,
@@ -58,41 +59,15 @@ impl InputConfig {
     }
 }
 
-/// The default behavior of the D-pad / left stick before any runtime toggle
-/// (see the `scroll` action). Serializes to `"mouse"` / `"scroll"` in TOML.
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CursorMode {
-    /// Move a clickable on-screen cursor (the default).
-    Mouse,
-    /// Scroll the page.
-    Scroll,
-}
-
-impl CursorMode {
-    /// The TOML/UI token for this mode (`"mouse"` / `"scroll"`).
-    pub fn as_str(self) -> &'static str {
-        match self {
-            CursorMode::Mouse => "mouse",
-            CursorMode::Scroll => "scroll",
-        }
-    }
-
-    /// Parse leniently: anything that isn't `"scroll"` (case-insensitive) is
-    /// `Mouse`, so a typo can't break the config (mirrors `sanitize`'s clamping).
-    pub fn from_value(s: &str) -> Self {
-        if s.eq_ignore_ascii_case("scroll") {
-            CursorMode::Scroll
-        } else {
-            CursorMode::Mouse
-        }
-    }
-}
-
-// Deserialize via a string so an unknown value falls back to `Mouse` instead of
-// failing the whole config parse — the rest of the config degrades gracefully too.
-impl<'de> Deserialize<'de> for CursorMode {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(Self::from_value(&String::deserialize(d)?))
+token_enum! {
+    /// The default behavior of the D-pad / left stick before any runtime toggle
+    /// (see the `scroll` action). Serializes to `"mouse"` / `"scroll"` in TOML;
+    /// an unknown value falls back to `Mouse`.
+    pub enum CursorMode {
+        default Mouse;
+        /// Move a clickable on-screen cursor (the default).
+        Mouse => "mouse", "Mouse",
+        /// Scroll the page.
+        Scroll => "scroll", "Scroll",
     }
 }

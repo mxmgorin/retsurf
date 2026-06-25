@@ -19,6 +19,7 @@ mod input;
 mod osk;
 mod paths;
 mod performance;
+mod token_enum;
 
 pub use adblock::AdblockConfig;
 pub use browser::BrowserConfig;
@@ -208,5 +209,55 @@ fn fix_ord<T: PartialOrd + Copy + std::fmt::Display>(name: &str, v: &mut T, min:
     }
     if *v != before {
         log::warn!("config: {name} = {before} out of range; using {}", *v);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CursorMode, MemoryProfile, ToolbarPosition};
+
+    /// Every `CHOICES` token round-trips through `from_value` -> `as_str`
+    /// unchanged, and an unknown token falls back to the default — the lenient
+    /// parse contract the GUI and hand-edited configs both rely on.
+    fn check<T: PartialEq + Copy + std::fmt::Debug>(
+        choices: &[(&str, &str)],
+        from: impl Fn(&str) -> T,
+        as_str: impl Fn(T) -> &'static str,
+        default: T,
+    ) {
+        for (_, token) in choices {
+            assert_eq!(as_str(from(token)), *token, "round-trip for `{token}`");
+        }
+        assert_eq!(from("not-a-real-token"), default);
+    }
+
+    #[test]
+    fn config_enums_round_trip() {
+        check(
+            CursorMode::CHOICES,
+            CursorMode::from_value,
+            CursorMode::as_str,
+            CursorMode::default(),
+        );
+        check(
+            ToolbarPosition::CHOICES,
+            ToolbarPosition::from_value,
+            ToolbarPosition::as_str,
+            ToolbarPosition::default(),
+        );
+        check(
+            MemoryProfile::CHOICES,
+            MemoryProfile::from_value,
+            MemoryProfile::as_str,
+            MemoryProfile::default(),
+        );
+    }
+
+    #[test]
+    fn from_value_is_lenient() {
+        // Case- and whitespace-insensitive, unified across all three enums.
+        assert_eq!(CursorMode::from_value("  SCROLL "), CursorMode::Scroll);
+        assert_eq!(ToolbarPosition::from_value("Bottom"), ToolbarPosition::Bottom);
+        assert_eq!(MemoryProfile::from_value(" Embedded"), MemoryProfile::Embedded);
     }
 }

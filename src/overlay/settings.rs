@@ -151,26 +151,6 @@ const UA_CHOICES: &[(&str, &str)] = &[
     ("iOS", "ios"),
 ];
 
-/// Default D-pad/stick mode — the `(label, stored value)` pairs map to
-/// [`crate::config::CursorMode`].
-const CURSOR_MODE_CHOICES: &[(&str, &str)] = &[("Mouse", "mouse"), ("Scroll", "scroll")];
-
-/// Toolbar edge — the `(label, stored value)` pairs map to
-/// [`crate::config::ToolbarPosition`].
-const TOOLBAR_POSITION_CHOICES: &[(&str, &str)] = &[("Top", "top"), ("Bottom", "bottom")];
-
-/// Engine memory/performance tiers — the `(label, stored value)` pairs map to
-/// [`crate::config::MemoryProfile`]. `Auto` picks one from the platform + RAM.
-const MEMORY_PROFILE_CHOICES: &[(&str, &str)] = &[
-    ("Auto", "auto"),
-    ("Embedded", "embedded"),
-    ("Tight", "tight"),
-    ("Balanced", "balanced"),
-    ("Generous", "generous"),
-    ("Android", "android"),
-    ("Desktop (Servo defaults)", "desktop"),
-];
-
 /// Compact constructor for the [`FIELDS`] table — without it `rustfmt` explodes
 /// each `Field` literal across six lines and drowns the table.
 const fn f(
@@ -210,7 +190,7 @@ static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Window height",          F::Height,             Kind::Int { min: 144, max: 2160, step: 16 }, true),
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
     f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       Kind::Int { min: 0, max: 10000, step: 100 }, false),
-    f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(TOOLBAR_POSITION_CHOICES), false),
+    f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(ToolbarPosition::CHOICES), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      F::ToolbarAutohide,    Kind::Bool, false),
 
     f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
@@ -221,7 +201,7 @@ static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, Kind::Int { min: 50, max: 1000, step: 50 }, false),
     f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       Kind::Int { min: 20, max: 500, step: 10 }, false),
     f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             Kind::Int { min: 100, max: 2000, step: 50 }, false),
-    f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CURSOR_MODE_CHOICES), true),
+    f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CursorMode::CHOICES), true),
     f(S::Input,  "Input",     "Hint badges",            F::HintBadges,         Kind::Bool, false),
 
     f(S::Content,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
@@ -233,7 +213,7 @@ static FIELDS: &[Field] = &[
     f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
     f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
 
-    f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MEMORY_PROFILE_CHOICES), true),
+    f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MemoryProfile::CHOICES), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),

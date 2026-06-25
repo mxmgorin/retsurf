@@ -1,3 +1,4 @@
+use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 /// Window/display settings (`[display]` in the config): size, GL backend, and
@@ -35,44 +36,15 @@ impl Default for DisplayConfig {
     }
 }
 
-/// Which window edge the toolbar sits on. Serializes to `"top"` / `"bottom"`
-/// in TOML.
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ToolbarPosition {
-    /// At the top of the window, above the page (the default).
-    Top,
-    /// At the bottom of the window, below the page — handy when the device's
-    /// face buttons sit low and a top bar is a reach.
-    Bottom,
-}
-
-impl ToolbarPosition {
-    /// The TOML/UI token for this position (`"top"` / `"bottom"`).
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ToolbarPosition::Top => "top",
-            ToolbarPosition::Bottom => "bottom",
-        }
-    }
-
-    /// Parse leniently: anything that isn't `"bottom"` (case-insensitive) is
-    /// `Top`, so a typo can't break the config (mirrors [`CursorMode::from_value`]).
-    ///
-    /// [`CursorMode::from_value`]: crate::config::CursorMode::from_value
-    pub fn from_value(s: &str) -> Self {
-        if s.eq_ignore_ascii_case("bottom") {
-            ToolbarPosition::Bottom
-        } else {
-            ToolbarPosition::Top
-        }
-    }
-}
-
-// Deserialize via a string so an unknown value falls back to `Top` instead of
-// failing the whole config parse (mirrors `CursorMode`).
-impl<'de> Deserialize<'de> for ToolbarPosition {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(Self::from_value(&String::deserialize(d)?))
+token_enum! {
+    /// Which window edge the toolbar sits on. Serializes to `"top"` / `"bottom"`
+    /// in TOML; an unknown value falls back to `Top`.
+    pub enum ToolbarPosition {
+        default Top;
+        /// At the top of the window, above the page (the default).
+        Top => "top", "Top",
+        /// At the bottom of the window, below the page — handy when the device's
+        /// face buttons sit low and a top bar is a reach.
+        Bottom => "bottom", "Bottom",
     }
 }

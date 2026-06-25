@@ -1,3 +1,4 @@
+use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 /// Servo thread-count tuning (`[performance]` in the config). Servo's defaults
@@ -22,74 +23,35 @@ pub struct PerformanceConfig {
     pub worker_pool_max: u32,
 }
 
-/// Memory/performance tier for the Servo engine (`[performance] memory_profile`).
-/// Each tier bundles a coordinated set of engine prefs — JS GC ceilings,
-/// back-forward-cache depth, HTTP/canvas caches, thread counts, and which DOM
-/// subsystems are even started — tuned for a class of hardware. Lower tiers
-/// trade speed for a smaller footprint; `Auto` picks one from the build target
-/// and detected RAM. See [`crate::browser::memory`] for what each tier sets.
-/// Serializes to a lowercase token in TOML; an unknown value falls back to
-/// `Auto`, like [`CursorMode`].
-///
-/// [`CursorMode`]: crate::config::CursorMode
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MemoryProfile {
-    /// Pick a tier from the build target and detected RAM (the default).
-    #[default]
-    Auto,
-    /// Tightest floor (~512 MB, sub-1 GB boards): baseline JIT only, single
-    /// thread, minimal caches, foreground tab only.
-    Embedded,
-    /// Very constrained (~1 GB boards): baseline JIT only, small caches.
-    Tight,
-    /// Balanced handheld (~2 GB boards): modest parallelism, full JIT.
-    Balanced,
-    /// Most headroom among handhelds (~4 GB): higher GC ceiling, modest threads.
-    Generous,
-    /// Android phone/tablet (>3 GB): full JIT, more threads, eager memory return.
-    Android,
-    /// Desktop / unconstrained: Servo's own defaults, untouched — no pref
-    /// overrides and no thread clamp. The escape hatch when you want exactly
-    /// what upstream ships.
-    Desktop,
-}
-
-impl MemoryProfile {
-    /// The TOML/UI token for this profile.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            MemoryProfile::Auto => "auto",
-            MemoryProfile::Embedded => "embedded",
-            MemoryProfile::Tight => "tight",
-            MemoryProfile::Balanced => "balanced",
-            MemoryProfile::Generous => "generous",
-            MemoryProfile::Android => "android",
-            MemoryProfile::Desktop => "desktop",
-        }
-    }
-
-    /// Parse leniently: an unrecognized token is `Auto`, so a typo can't break
-    /// the config (mirrors `sanitize`'s clamping and [`CursorMode::from_value`]).
+token_enum! {
+    /// Memory/performance tier for the Servo engine (`[performance] memory_profile`).
+    /// Each tier bundles a coordinated set of engine prefs — JS GC ceilings,
+    /// back-forward-cache depth, HTTP/canvas caches, thread counts, and which DOM
+    /// subsystems are even started — tuned for a class of hardware. Lower tiers
+    /// trade speed for a smaller footprint; `Auto` picks one from the build target
+    /// and detected RAM. See [`crate::browser::memory`] for what each tier sets.
+    /// Serializes to a lowercase token in TOML; an unknown value falls back to
+    /// `Auto`, like [`CursorMode`].
     ///
-    /// [`CursorMode::from_value`]: crate::config::CursorMode::from_value
-    pub fn from_value(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "embedded" => MemoryProfile::Embedded,
-            "tight" => MemoryProfile::Tight,
-            "balanced" => MemoryProfile::Balanced,
-            "generous" => MemoryProfile::Generous,
-            "android" => MemoryProfile::Android,
-            "desktop" => MemoryProfile::Desktop,
-            _ => MemoryProfile::Auto,
-        }
-    }
-}
-
-// Deserialize via a string so an unknown value falls back to `Auto` instead of
-// failing the whole config parse (same rationale as `CursorMode`).
-impl<'de> Deserialize<'de> for MemoryProfile {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(Self::from_value(&String::deserialize(d)?))
+    /// [`CursorMode`]: crate::config::CursorMode
+    pub enum MemoryProfile {
+        default Auto;
+        /// Pick a tier from the build target and detected RAM (the default).
+        Auto => "auto", "Auto",
+        /// Tightest floor (~512 MB, sub-1 GB boards): baseline JIT only, single
+        /// thread, minimal caches, foreground tab only.
+        Embedded => "embedded", "Embedded",
+        /// Very constrained (~1 GB boards): baseline JIT only, small caches.
+        Tight => "tight", "Tight",
+        /// Balanced handheld (~2 GB boards): modest parallelism, full JIT.
+        Balanced => "balanced", "Balanced",
+        /// Most headroom among handhelds (~4 GB): higher GC ceiling, modest threads.
+        Generous => "generous", "Generous",
+        /// Android phone/tablet (>3 GB): full JIT, more threads, eager memory return.
+        Android => "android", "Android",
+        /// Desktop / unconstrained: Servo's own defaults, untouched — no pref
+        /// overrides and no thread clamp. The escape hatch when you want exactly
+        /// what upstream ships.
+        Desktop => "desktop", "Desktop (Servo defaults)",
     }
 }
