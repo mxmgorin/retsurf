@@ -72,14 +72,7 @@ impl Dial {
         let store = Store {
             urls: self.urls.clone(),
         };
-        match toml::to_string_pretty(&store) {
-            Ok(text) => {
-                if let Err(e) = std::fs::write(Self::path(), text) {
-                    log::warn!("could not write dial: {e}");
-                }
-            }
-            Err(e) => log::warn!("could not serialize dial: {e}"),
-        }
+        super::save_toml("dial.toml", &store, "dial");
     }
 
     pub fn urls(&self) -> &[String] {

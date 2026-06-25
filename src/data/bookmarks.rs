@@ -3,7 +3,6 @@
 //! menu (see [`crate::overlay::menu`]) owns whether the overlay is shown; this just owns
 //! the list and selection. Rendered by [`crate::ui`], driven by the central router.
 
-use crate::config;
 use serde::{Deserialize, Serialize};
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).
@@ -22,16 +21,8 @@ pub struct Bookmarks {
 impl Bookmarks {
     /// Load the saved list (missing/invalid file → empty).
     pub fn load() -> Self {
-        let urls = std::fs::read_to_string(Self::path())
-            .ok()
-            .and_then(|text| toml::from_str::<Store>(&text).ok())
-            .map(|store| store.urls)
-            .unwrap_or_default();
+        let urls = super::load_toml::<Store>("bookmarks.toml").urls;
         Self { urls, selected: 0 }
-    }
-
-    fn path() -> String {
-        format!("{}bookmarks.toml", config::data_dir())
     }
 
     /// Best-effort persist; failures are logged, not fatal.
@@ -39,14 +30,7 @@ impl Bookmarks {
         let store = Store {
             urls: self.urls.clone(),
         };
-        match toml::to_string_pretty(&store) {
-            Ok(text) => {
-                if let Err(e) = std::fs::write(Self::path(), text) {
-                    log::warn!("could not write bookmarks: {e}");
-                }
-            }
-            Err(e) => log::warn!("could not serialize bookmarks: {e}"),
-        }
+        super::save_toml("bookmarks.toml", &store, "bookmarks");
     }
 
     pub fn urls(&self) -> &[String] {

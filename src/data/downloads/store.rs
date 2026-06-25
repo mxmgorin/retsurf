@@ -4,7 +4,6 @@
 //! across a restart, so they simply vanish from the list.
 
 use super::{Download, State};
-use crate::config;
 use serde::{Deserialize, Serialize};
 
 /// On-disk shape of a finished download.
@@ -28,17 +27,13 @@ struct Store {
     entries: Vec<DiskEntry>,
 }
 
-fn path() -> String {
-    format!("{}downloads.toml", config::data_dir())
-}
-
 /// Load the saved entries (missing/invalid file → empty).
 pub(super) fn load() -> Vec<Download> {
-    std::fs::read_to_string(path())
-        .ok()
-        .and_then(|text| toml::from_str::<Store>(&text).ok())
-        .map(|store| store.entries.into_iter().map(into_download).collect())
-        .unwrap_or_default()
+    crate::data::load_toml::<Store>("downloads.toml")
+        .entries
+        .into_iter()
+        .map(into_download)
+        .collect()
 }
 
 /// Best-effort persist of the finished entries; failures are logged, not fatal.
@@ -59,14 +54,7 @@ pub(super) fn save(items: &[Download]) {
             })
             .collect(),
     };
-    match toml::to_string_pretty(&store) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(path(), text) {
-                log::warn!("could not write downloads: {e}");
-            }
-        }
-        Err(e) => log::warn!("could not serialize downloads: {e}"),
-    }
+    crate::data::save_toml("downloads.toml", &store, "downloads");
 }
 
 fn into_download(entry: DiskEntry) -> Download {

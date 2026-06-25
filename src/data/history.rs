@@ -4,7 +4,7 @@
 //! [`crate::config`]). The full-screen menu (see [`crate::overlay::menu`]) renders it; the
 //! central router drives selection / open / delete / clear.
 
-use crate::config::{self, HistoryConfig};
+use crate::config::HistoryConfig;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -43,11 +43,7 @@ pub struct History {
 impl History {
     /// Load the saved list (missing/invalid file → empty), trimmed to the cap.
     pub fn load(cfg: &HistoryConfig) -> Self {
-        let mut entries = std::fs::read_to_string(Self::path())
-            .ok()
-            .and_then(|text| toml::from_str::<Store>(&text).ok())
-            .map(|store| store.entries)
-            .unwrap_or_default();
+        let mut entries = super::load_toml::<Store>("history.toml").entries;
         // Honor a shrunk cap from the config right away.
         entries.truncate(cfg.max_entries);
         Self {
@@ -59,10 +55,6 @@ impl History {
         }
     }
 
-    fn path() -> String {
-        format!("{}history.toml", config::data_dir())
-    }
-
     /// Best-effort persist; failures are logged, not fatal. Clears `dirty` only
     /// on a successful write, so a transient failure is retried by the next
     /// [`Self::flush`].
@@ -70,12 +62,8 @@ impl History {
         let store = Store {
             entries: self.entries.clone(),
         };
-        match toml::to_string_pretty(&store) {
-            Ok(text) => match std::fs::write(Self::path(), text) {
-                Ok(()) => self.dirty = false,
-                Err(e) => log::warn!("could not write history: {e}"),
-            },
-            Err(e) => log::warn!("could not serialize history: {e}"),
+        if super::save_toml("history.toml", &store, "history") {
+            self.dirty = false;
         }
     }
 
