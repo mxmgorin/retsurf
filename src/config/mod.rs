@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 mod adblock;
+pub mod bounds;
 mod browser;
 mod data_saving;
 mod debug;
@@ -107,92 +108,55 @@ impl AppConfig {
     /// them, and an out-of-range value (e.g. `page_zoom = 0`, `width = 0`, a
     /// negative speed, or a NaN) can break rendering or input. Logs corrections.
     fn sanitize(&mut self) {
-        fix_f32(
-            "browser.page_zoom",
-            &mut self.browser.page_zoom,
-            0.3,
-            3.0,
-            1.0,
-        );
+        use bounds as b;
 
-        fix_ord("display.width", &mut self.display.width, 160, 3840);
-        fix_ord("display.height", &mut self.display.height, 144, 2160);
-        fix_ord(
+        fix_f32("browser.page_zoom", &mut self.browser.page_zoom, b::PAGE_ZOOM);
+
+        fix_u32("display.width", &mut self.display.width, b::WIDTH);
+        fix_u32("display.height", &mut self.display.height, b::HEIGHT);
+        fix_u64(
             "display.cursor_linger_ms",
             &mut self.display.cursor_linger_ms,
-            0,
-            10_000,
+            b::CURSOR_LINGER_MS,
         );
 
         let i = &mut self.input;
-        fix_f32("input.deadzone", &mut i.deadzone, 0.0, 0.9, 0.25);
-        fix_f32(
-            "input.cursor_speed",
-            &mut i.cursor_speed,
-            100.0,
-            3000.0,
-            600.0,
-        );
-        fix_f32(
-            "input.scroll_speed",
-            &mut i.scroll_speed,
-            100.0,
-            5000.0,
-            1600.0,
-        );
-        fix_f32(
-            "input.trigger_threshold",
-            &mut i.trigger_threshold,
-            0.1,
-            0.9,
-            0.5,
-        );
-        fix_f32(
-            "input.osk_nav_threshold",
-            &mut i.osk_nav_threshold,
-            0.1,
-            0.9,
-            0.5,
-        );
-        fix_ord(
+        fix_f32("input.deadzone", &mut i.deadzone, b::DEADZONE);
+        fix_f32("input.cursor_speed", &mut i.cursor_speed, b::CURSOR_SPEED);
+        fix_f32("input.scroll_speed", &mut i.scroll_speed, b::SCROLL_SPEED);
+        fix_f32("input.trigger_threshold", &mut i.trigger_threshold, b::TRIGGER_THRESHOLD);
+        fix_f32("input.osk_nav_threshold", &mut i.osk_nav_threshold, b::OSK_NAV_THRESHOLD);
+        fix_u64(
             "input.osk_nav_initial_delay_ms",
             &mut i.osk_nav_initial_delay_ms,
-            50,
-            1000,
+            b::OSK_NAV_INITIAL_DELAY_MS,
         );
-        fix_ord("input.osk_nav_repeat_ms", &mut i.osk_nav_repeat_ms, 20, 500);
-        fix_ord("input.hold_ms", &mut i.hold_ms, 100, 2000);
+        fix_u64("input.osk_nav_repeat_ms", &mut i.osk_nav_repeat_ms, b::OSK_NAV_REPEAT_MS);
+        fix_u64("input.hold_ms", &mut i.hold_ms, b::HOLD_MS);
 
-        fix_ord(
-            "history.max_entries",
-            &mut self.history.max_entries,
-            0,
-            1000,
-        );
-        fix_ord("adblock.update_days", &mut self.adblock.update_days, 0, 90);
-        fix_ord(
+        fix_usize("history.max_entries", &mut self.history.max_entries, b::HISTORY_MAX);
+        fix_u64("adblock.update_days", &mut self.adblock.update_days, b::ADBLOCK_UPDATE_DAYS);
+        fix_u32(
             "performance.layout_threads",
             &mut self.performance.layout_threads,
-            0,
-            8,
+            b::LAYOUT_THREADS,
         );
-        fix_ord(
+        fix_u32(
             "performance.worker_pool_max",
             &mut self.performance.worker_pool_max,
-            0,
-            16,
+            b::WORKER_POOL_MAX,
         );
     }
 }
 
-/// Clamp a float field into `[min, max]`, replacing a non-finite value with
-/// `default`. Logs when it changes the stored value.
-fn fix_f32(name: &str, v: &mut f32, min: f32, max: f32, default: f32) {
+/// Clamp a float field into the bounds' range, replacing a non-finite value with
+/// the bounds' default. Logs when it changes the stored value.
+fn fix_f32(name: &str, v: &mut f32, b: bounds::FloatBounds) {
     let before = *v;
     *v = if v.is_finite() {
-        v.clamp(min, max)
+        v.clamp(b.min as f32, b.max as f32)
     } else {
-        default
+        b.default as f32
     };
     if before.to_bits() != v.to_bits() {
         log::warn!("config: {name} = {before} out of range; using {}", *v);
@@ -210,6 +174,21 @@ fn fix_ord<T: PartialOrd + Copy + std::fmt::Display>(name: &str, v: &mut T, min:
     if *v != before {
         log::warn!("config: {name} = {before} out of range; using {}", *v);
     }
+}
+
+// Type-specific wrappers over `fix_ord` that cast the shared `i64` bounds to the
+// field's own integer width. The bounds are small and non-negative, so the cast
+// is exact.
+fn fix_u32(name: &str, v: &mut u32, b: bounds::IntBounds) {
+    fix_ord(name, v, b.min as u32, b.max as u32);
+}
+
+fn fix_u64(name: &str, v: &mut u64, b: bounds::IntBounds) {
+    fix_ord(name, v, b.min as u64, b.max as u64);
+}
+
+fn fix_usize(name: &str, v: &mut usize, b: bounds::IntBounds) {
+    fix_ord(name, v, b.min as usize, b.max as usize);
 }
 
 #[cfg(test)]

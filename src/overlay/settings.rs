@@ -12,7 +12,7 @@
 //! key you want — see [`Settings::controls_activate`]) or removes one.
 //! [`crate::ui::settings`] renders it.
 
-use crate::config::{AppConfig, CursorMode, MemoryProfile, ToolbarPosition};
+use crate::config::{bounds, AppConfig, CursorMode, MemoryProfile, ToolbarPosition};
 use crate::event::bindings::{self, Action, Store};
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
@@ -171,6 +171,26 @@ const fn f(
     }
 }
 
+/// `Kind::Int` from a shared [`bounds::IntBounds`] range plus the GUI dpad step.
+const fn int(b: bounds::IntBounds, step: i64) -> Kind {
+    Kind::Int {
+        min: b.min,
+        max: b.max,
+        step,
+    }
+}
+
+/// `Kind::Float` from a shared [`bounds::FloatBounds`] range plus the GUI dpad
+/// step and display precision.
+const fn float(b: bounds::FloatBounds, step: f64, decimals: usize) -> Kind {
+    Kind::Float {
+        min: b.min,
+        max: b.max,
+        step,
+        decimals,
+    }
+}
+
 use FieldId as F;
 use SettingsSection as S;
 
@@ -183,39 +203,39 @@ static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Home page",              F::HomePage,           Kind::Text, false),
     f(S::Browser,  "Browser",     "Search URL",             F::SearchPage,         Kind::Text, false),
     f(S::Browser,  "Browser",     "User agent",             F::UserAgent,          Kind::Choice(UA_CHOICES), true),
-    f(S::Browser,  "Browser",     "Page zoom",              F::PageZoom,           Kind::Float { min: 0.3, max: 3.0, step: 0.05, decimals: 2 }, false),
+    f(S::Browser,  "Browser",     "Page zoom",              F::PageZoom,           float(bounds::PAGE_ZOOM, 0.05, 2), false),
     f(S::Browser,  "Browser",     "Keep site data",         F::PersistSiteData,    Kind::Bool, true),
 
-    f(S::Display,  "Display",     "Window width",           F::Width,              Kind::Int { min: 160, max: 3840, step: 16 }, true),
-    f(S::Display,  "Display",     "Window height",          F::Height,             Kind::Int { min: 144, max: 2160, step: 16 }, true),
+    f(S::Display,  "Display",     "Window width",           F::Width,              int(bounds::WIDTH, 16), true),
+    f(S::Display,  "Display",     "Window height",          F::Height,             int(bounds::HEIGHT, 16), true),
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
-    f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       Kind::Int { min: 0, max: 10000, step: 100 }, false),
+    f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       int(bounds::CURSOR_LINGER_MS, 100), false),
     f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(ToolbarPosition::CHOICES), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      F::ToolbarAutohide,    Kind::Bool, false),
 
-    f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           Kind::Float { min: 0.0, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        Kind::Float { min: 100.0, max: 3000.0, step: 50.0, decimals: 0 }, false),
-    f(S::Input,  "Input",     "Scroll speed",           F::ScrollSpeed,        Kind::Float { min: 100.0, max: 5000.0, step: 100.0, decimals: 0 }, false),
-    f(S::Input,  "Input",     "Trigger threshold",      F::TriggerThreshold,   Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Input,  "Input",     "OSK stick threshold",    F::OskNavThreshold,    Kind::Float { min: 0.1, max: 0.9, step: 0.05, decimals: 2 }, false),
-    f(S::Input,  "Input",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, Kind::Int { min: 50, max: 1000, step: 50 }, false),
-    f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       Kind::Int { min: 20, max: 500, step: 10 }, false),
-    f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             Kind::Int { min: 100, max: 2000, step: 50 }, false),
+    f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           float(bounds::DEADZONE, 0.05, 2), false),
+    f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        float(bounds::CURSOR_SPEED, 50.0, 0), false),
+    f(S::Input,  "Input",     "Scroll speed",           F::ScrollSpeed,        float(bounds::SCROLL_SPEED, 100.0, 0), false),
+    f(S::Input,  "Input",     "Trigger threshold",      F::TriggerThreshold,   float(bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
+    f(S::Input,  "Input",     "OSK stick threshold",    F::OskNavThreshold,    float(bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
+    f(S::Input,  "Input",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, int(bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
+    f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       int(bounds::OSK_NAV_REPEAT_MS, 10), false),
+    f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             int(bounds::HOLD_MS, 50), false),
     f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CursorMode::CHOICES), true),
     f(S::Input,  "Input",     "Hint badges",            F::HintBadges,         Kind::Bool, false),
 
     f(S::Content,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
-    f(S::Content,  "History",     "Max entries",            F::HistoryMax,         Kind::Int { min: 0, max: 1000, step: 5 }, false),
+    f(S::Content,  "History",     "Max entries",            F::HistoryMax,         int(bounds::HISTORY_MAX, 5), false),
     f(S::Content,  "Ad blocker",  "Enabled",                F::AdblockEnabled,     Kind::Bool, true),
-    f(S::Content,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  Kind::Int { min: 0, max: 90, step: 1 }, false),
+    f(S::Content,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  int(bounds::ADBLOCK_UPDATE_DAYS, 1), false),
 
     f(S::Content, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
     f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
     f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
 
     f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MemoryProfile::CHOICES), true),
-    f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     Kind::Int { min: 0, max: 8, step: 1 }, true),
-    f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    Kind::Int { min: 0, max: 16, step: 1 }, true),
+    f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     int(bounds::LAYOUT_THREADS, 1), true),
+    f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    int(bounds::WORKER_POOL_MAX, 1), true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
     f(S::Advanced, "Diagnostics", "Memory overlay",         F::MemoryOverlay,      Kind::Bool, false),
 ];
