@@ -15,14 +15,17 @@ struct Store {
 pub struct Bookmarks {
     urls: Vec<String>,
     /// Highlighted row in the menu's Bookmarks section.
-    selected: usize,
+    cursor: super::ListCursor,
 }
 
 impl Bookmarks {
     /// Load the saved list (missing/invalid file → empty).
     pub fn load() -> Self {
         let urls = super::load_toml::<Store>("bookmarks.toml").urls;
-        Self { urls, selected: 0 }
+        Self {
+            urls,
+            cursor: super::ListCursor::new(0),
+        }
     }
 
     /// Best-effort persist; failures are logged, not fatal.
@@ -38,7 +41,7 @@ impl Bookmarks {
     }
 
     pub fn selected(&self) -> usize {
-        self.selected
+        self.cursor.selected()
     }
 
     pub fn contains(&self, url: &str) -> bool {
@@ -58,25 +61,26 @@ impl Bookmarks {
 
     /// Reset the highlight to the top (called when the menu opens).
     pub fn reset(&mut self) {
-        self.selected = 0;
+        self.cursor.reset(self.urls.len());
     }
 
     /// Move the highlight by `dy` rows, clamped to the list.
     pub fn move_sel(&mut self, dy: i32) {
-        if self.urls.is_empty() {
-            return;
-        }
-        let last = self.urls.len() as i32 - 1;
-        self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+        self.cursor.move_sel(dy, self.urls.len());
     }
 
     pub fn selected_url(&self) -> Option<String> {
-        self.urls.get(self.selected).cloned()
+        self.cursor
+            .entry_index()
+            .and_then(|i| self.urls.get(i))
+            .cloned()
     }
 
     /// Remove the highlighted entry; persists.
     pub fn remove_selected(&mut self) {
-        self.remove(self.selected);
+        if let Some(i) = self.cursor.entry_index() {
+            self.remove(i);
+        }
     }
 
     /// Remove the entry at `index` (if in range); persists.
@@ -89,6 +93,6 @@ impl Bookmarks {
     }
 
     fn clamp_selected(&mut self) {
-        self.selected = self.selected.min(self.urls.len().saturating_sub(1));
+        self.cursor.clamp(self.urls.len());
     }
 }

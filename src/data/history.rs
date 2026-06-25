@@ -31,8 +31,9 @@ pub struct History {
     enabled: bool,
     /// Cap on retained entries; oldest are dropped past this.
     max_entries: usize,
-    /// Highlighted row in the menu's History section.
-    selected: usize,
+    /// Highlighted row in the menu's History section. Row 0 is the "Clear all"
+    /// reserved row, so the cursor carries a reserve of 1.
+    cursor: super::ListCursor,
     /// Set when `entries` has unsaved changes from [`Self::record`]; cleared by a
     /// successful [`Self::save`]. Lets per-navigation recording defer the disk
     /// write (coalesced via [`Self::flush`]) instead of rewriting the whole file
@@ -50,7 +51,7 @@ impl History {
             entries,
             enabled: cfg.enabled,
             max_entries: cfg.max_entries,
-            selected: 0,
+            cursor: super::ListCursor::new(1),
             dirty: false,
         }
     }
@@ -83,13 +84,13 @@ impl History {
     /// The highlighted row in the menu's History section. Index 0 is the
     /// "Clear all" top row; the entries follow at `1..=entries.len()`.
     pub fn selected(&self) -> usize {
-        self.selected
+        self.cursor.selected()
     }
 
     /// Whether the "Clear all" top row (cursor index 0) is highlighted. Only
     /// meaningful while there are entries (the row isn't shown otherwise).
     pub fn clear_selected(&self) -> bool {
-        !self.entries.is_empty() && self.selected == 0
+        self.cursor.on_reserved_row(self.entries.len())
     }
 
     /// Record a visit: most-recent-first, de-duplicated (a revisit moves to the
@@ -124,30 +125,26 @@ impl History {
     /// 1), not the destructive "Clear all" row at index 0 — mirrors how the Tabs
     /// section starts on the first tab rather than "+ New tab".
     pub fn reset(&mut self) {
-        self.selected = usize::from(!self.entries.is_empty());
+        self.cursor.reset(self.entries.len());
     }
 
     /// Move the highlight by `dy` rows, clamped to the list. Index 0 is the
     /// "Clear all" row; entries occupy `1..=entries.len()`.
     pub fn move_sel(&mut self, dy: i32) {
-        if self.entries.is_empty() {
-            return;
-        }
-        let last = self.entries.len() as i32; // 0 = Clear all, 1..=len = entries
-        self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+        self.cursor.move_sel(dy, self.entries.len());
     }
 
     pub fn selected_url(&self) -> Option<String> {
         // Index 0 is the "Clear all" row (no URL); entries start at 1.
-        self.selected
-            .checked_sub(1)
+        self.cursor
+            .entry_index()
             .and_then(|i| self.entries.get(i))
             .map(|e| e.url.clone())
     }
 
     /// Remove the highlighted entry; persists. No-op on the "Clear all" row.
     pub fn remove_selected(&mut self) {
-        if let Some(i) = self.selected.checked_sub(1) {
+        if let Some(i) = self.cursor.entry_index() {
             self.remove(i);
         }
     }
@@ -167,14 +164,14 @@ impl History {
             return;
         }
         self.entries.clear();
-        self.selected = 0;
+        self.cursor.reset(self.entries.len());
         self.save();
     }
 
     fn clamp_selected(&mut self) {
         // Max cursor index is `entries.len()` — index 0 is "Clear all", then the
         // entries at `1..=entries.len()`.
-        self.selected = self.selected.min(self.entries.len());
+        self.cursor.clamp(self.entries.len());
     }
 }
 

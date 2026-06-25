@@ -73,7 +73,7 @@ pub struct Downloads {
     /// Save directory, with a trailing separator (see [`DownloadsConfig`]).
     dir: String,
     /// Highlighted row in the menu's Downloads section.
-    selected: usize,
+    cursor: crate::data::ListCursor,
 }
 
 impl Downloads {
@@ -82,7 +82,7 @@ impl Downloads {
         Self {
             items: store::load(),
             dir: cfg.resolve_dir(),
-            selected: 0,
+            cursor: crate::data::ListCursor::new(0),
         }
     }
 
@@ -152,7 +152,7 @@ impl Downloads {
     }
 
     pub fn selected(&self) -> usize {
-        self.selected
+        self.cursor.selected()
     }
 
     /// Number of downloads still in flight (drives the toolbar ⬇ indicator).
@@ -166,16 +166,12 @@ impl Downloads {
 
     /// Reset the highlight to the top (called when the menu opens).
     pub fn reset(&mut self) {
-        self.selected = 0;
+        self.cursor.reset(self.items.len());
     }
 
     /// Move the highlight by `dy` rows, clamped to the list.
     pub fn move_sel(&mut self, dy: i32) {
-        if self.items.is_empty() {
-            return;
-        }
-        let last = self.items.len() as i32 - 1;
-        self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+        self.cursor.move_sel(dy, self.items.len());
     }
 
     /// `file://` URL of the entry at `index` if it finished successfully (so it
@@ -186,7 +182,7 @@ impl Downloads {
     }
 
     pub fn selected_open_url(&self) -> Option<String> {
-        self.open_url(self.selected)
+        self.cursor.entry_index().and_then(|i| self.open_url(i))
     }
 
     /// X/✖ on an entry: cancel it if still active (the entry stays and turns
@@ -206,7 +202,9 @@ impl Downloads {
     }
 
     pub fn remove_selected(&mut self) {
-        self.remove(self.selected);
+        if let Some(i) = self.cursor.entry_index() {
+            self.remove(i);
+        }
     }
 
     /// Drop all finished entries (active ones stay); persists.
@@ -220,7 +218,7 @@ impl Downloads {
     }
 
     fn clamp_selected(&mut self) {
-        self.selected = self.selected.min(self.items.len().saturating_sub(1));
+        self.cursor.clamp(self.items.len());
     }
 }
 
