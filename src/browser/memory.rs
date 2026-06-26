@@ -5,7 +5,7 @@
 //! Field names match `servo_config` 0.3.0's `Preferences` (re-exported from the
 //! `servo` crate). All fields are public, so each tier starts from `Default` and
 //! overrides only what matters. The thread counts here are *baselines* —
-//! [`crate::browser::build_preferences`] clamps them down to the machine's core
+//! [`crate::browser::engine::build_preferences`] clamps them down to the machine's core
 //! count and lets the `[performance]` config knobs override them.
 //!
 //! Unit notes:
@@ -349,7 +349,7 @@ fn android() -> Preferences {
 }
 
 /// Desktop / unconstrained: Servo's own defaults, untouched. No pref overrides,
-/// and [`crate::browser::build_preferences`] skips the thread clamp for this
+/// and [`crate::browser::engine::build_preferences`] skips the thread clamp for this
 /// tier, so the engine runs exactly as upstream ships it (unlimited JS heap,
 /// auto-scaled thread pools, subpixel AA on, WebGL2/service workers default-on).
 fn desktop() -> Preferences {
