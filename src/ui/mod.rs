@@ -98,6 +98,32 @@ pub enum Focus {
     Page,
 }
 
+/// Toolbar layout decided before the egui closure ([`AppUi::toolbar_layout`]):
+/// these reads borrow all of `self`, which can't overlap `egui.run`.
+struct ToolbarLayout {
+    position: ToolbarPosition,
+    /// Whether the bar is shown this frame (auto-hide forces it while typing).
+    shown: bool,
+    /// Bottom auto-hide bar: floats as an overlay instead of reserving a strip.
+    overlay: bool,
+}
+
+/// Per-frame inputs snapshotted from the browser before the render closure (see
+/// [`AppUi::frame_snapshot`]), as owned copies — so the browser borrow doesn't
+/// leak into `egui.run` (which borrows `self`).
+struct FrameInputs {
+    /// 1-based active tab index and tab count, shown in the toolbar.
+    tab_pos: (usize, usize),
+    /// Page-zoom chip percentage (`None` at the default zoom).
+    zoom_pct: Option<u16>,
+    /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
+    tab_infos: Vec<crate::browser::TabInfo>,
+    /// The field the OSK types into this frame (if any).
+    osk_field: OskField,
+    /// Where the OSK's caret sits, mirrored into each `TextEdit`.
+    osk_caret: usize,
+}
+
 pub struct AppUi {
     egui: EguiGlow,
     repaint_delay: Option<Duration>,
@@ -1094,17 +1120,12 @@ impl AppUi {
         resp.consumed & self.is_pointer_over_toolbar()
     }
 
-    pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
-        let mut desired_px: Option<(u32, u32)> = None;
-
-        // The cursor draws only while it lingers after a move. When it does, ask
-        // the loop to wake when the linger ends so it gets erased even if no other
-        // event arrives; otherwise leave the idle wait untouched.
-        let cursor_visible = if self.focus() == Focus::Page {
-            self.cursor_visible_for()
-        } else {
-            None
-        };
+    /// Fold the idle-repaint sources into `repaint_delay` so the blocking wait
+    /// wakes on its own when something time-based comes due: the lingering cursor
+    /// needs erasing (`cursor_visible`, the soonest of the linger end), a
+    /// post-scroll hint refresh is pending, or the debug memory overlay wants its
+    /// ~1 Hz tick. Each only ever shortens the wait; `None` leaves it untouched.
+    fn schedule_idle_repaints(&mut self, cursor_visible: Option<Duration>) {
         self.repaint_delay = cursor_visible;
         // A pending post-scroll hint refresh also needs the loop to wake by
         // itself — without this the wait blocks on input and it never fires.
@@ -1117,10 +1138,15 @@ impl AppUi {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
         }
+    }
 
-        // Read tab info *before* borrowing the active tab's state below — both read
-        // the browser's tab list, so they can't overlap. `tab_pos` is the 1-based
-        // active index and count, shown in the toolbar; `tab_infos` feeds the menu.
+    /// Snapshot the per-frame browser/overlay inputs the render closure needs, as
+    /// owned copies — so the browser borrow doesn't leak into `egui.run` (which
+    /// borrows `self`). The tab reads happen here, *before* the long
+    /// `get_state_mut` borrow taken just before `run`: both touch the browser's
+    /// tab list and can't overlap. `osk_field`/`osk_caret` are pure `self` reads,
+    /// gathered here too since the closure can't take all of `self`.
+    fn frame_snapshot(&mut self, browser: &mut AppBrowser) -> FrameInputs {
         let tab_pos = (browser.active_tab() + 1, browser.tab_count());
         let zoom_pct = browser.zoom_chip();
         let tab_infos = if self.menu.visible {
@@ -1129,10 +1155,20 @@ impl AppUi {
         } else {
             Vec::new()
         };
-        // Keep the start-page / editor selections in range before they render.
-        // The pin list itself isn't snapshotted here — the overlays borrow it
-        // straight from the live store at their call sites below, so there's no
-        // per-frame clone of the (kept-in-sync) speed-dial Vec.
+        FrameInputs {
+            tab_pos,
+            zoom_pct,
+            tab_infos,
+            osk_field: self.osk_target_field(),
+            osk_caret: self.osk.caret(),
+        }
+    }
+
+    /// Keep the start-page / speed-dial-editor selections in range before they
+    /// render. The pin list itself isn't snapshotted — the overlays borrow it
+    /// straight from the live store at their call sites, so there's no per-frame
+    /// clone of the (kept-in-sync) speed-dial Vec.
+    fn clamp_overlay_selections(&mut self) {
         let pin_count = self.menu.dial.urls().len();
         if self.home_active {
             // +1 for the trailing "Edit" tile, so its selection isn't clamped off.
@@ -1144,27 +1180,58 @@ impl AppUi {
             let slots = self.dial_edit_slots();
             self.dial_edit.clamp(slots);
         }
+    }
+
+    /// Decide the toolbar layout for this frame, before the egui closure (these
+    /// reads — esp. `focus()` — borrow all of `self`, which can't overlap
+    /// `egui.run`). Auto-hide forces the bar visible while typing so the address
+    /// bar is reachable. A top bar reserves space (the page reflows below it, so
+    /// the bar never covers content); a bottom auto-hide bar floats as an overlay
+    /// and slides off (no reflow). Without auto-hide the bar is always a panel.
+    fn toolbar_layout(&self) -> ToolbarLayout {
+        let typing = self.focus() != Focus::Page;
+        ToolbarLayout {
+            position: self.toolbar_position,
+            shown: !self.toolbar_autohide || self.toolbar_shown || typing,
+            overlay: self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom,
+        }
+    }
+
+    pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
+        let mut desired_px: Option<(u32, u32)> = None;
+
+        // The cursor draws only while it lingers after a move. When it does, ask
+        // the loop to wake when the linger ends so it gets erased even if no other
+        // event arrives; otherwise leave the idle wait untouched.
+        let cursor_visible = if self.focus() == Focus::Page {
+            self.cursor_visible_for()
+        } else {
+            None
+        };
+        self.schedule_idle_repaints(cursor_visible);
+
+        let snapshot = self.frame_snapshot(browser);
+        self.clamp_overlay_selections();
 
         {
             let mut state = browser.get_state_mut();
-            // Which field (if any) the OSK types into — computed here, before the
-            // closure borrows `self.egui` via `run`, since the lookup borrows all
-            // of `self` (the closure itself only captures disjoint fields).
-            let osk_field = self.osk_target_field();
-            // Where the OSK's caret sits, for the field it types into (if any) —
-            // each `TextEdit` parks its cursor here so it tracks the OSK.
-            let osk_caret = self.osk.caret();
+            // Owned copies (see `FrameInputs`), so the browser borrow above and the
+            // `self` reads here don't leak into the closure below. `caret_for`
+            // parks each `TextEdit`'s cursor at the OSK caret for the field it
+            // types into; the toolbar layout was decided in `toolbar_layout`.
+            let FrameInputs {
+                tab_pos,
+                zoom_pct,
+                tab_infos,
+                osk_field,
+                osk_caret,
+            } = snapshot;
             let caret_for = |f| (osk_field == f).then_some(osk_caret);
-            // Toolbar layout, decided before the closure (these reads — esp.
-            // `focus()` — borrow all of `self`, which can't overlap `egui.run`).
-            // Auto-hide forces the bar visible while typing so the address bar is
-            // reachable. A top bar reserves space (the page reflows below it, so the
-            // bar never covers content); a bottom bar floats as an overlay and
-            // slides off (no reflow). Without auto-hide the bar is always a panel.
-            let position = self.toolbar_position;
-            let typing = self.focus() != Focus::Page;
-            let toolbar_shown = !self.toolbar_autohide || self.toolbar_shown || typing;
-            let toolbar_overlay = self.toolbar_autohide && position == ToolbarPosition::Bottom;
+            let ToolbarLayout {
+                position,
+                shown: toolbar_shown,
+                overlay: toolbar_overlay,
+            } = self.toolbar_layout();
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
