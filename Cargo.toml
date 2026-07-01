@@ -49,8 +49,7 @@ rust-embed="8.7.2"
 rustls = {version = "0.23.32", features = ["ring"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
-sdl2 = { version = "0.38.0", default-features = false, features = ["raw-window-handle"] }
-raw-window-handle = "0.6.2"
+sdl2 = { version = "0.38.0", default-features = false }
 gleam = "0.15"
 glow = "0.17"
 surfman = "0.12"
@@ -82,10 +81,9 @@ egui-sdl2 = { version = "0.4.0", default-features = false, features = ["glow-bac
 sdl2-keyboard-types = "0.1.0"
 
 # Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the
-# C ABI int/char types from libc); logs go to logcat via android_logger since
-# there is no stderr to mirror to a file.
+# C ABI entry point (`std::os::raw` types); logs go to logcat via android_logger
+# since there is no stderr to mirror to a file.
 [target.'cfg(target_os = "android")'.dependencies]
-libc = "0.2"
 android_logger = "0.15"
 
 # Vendored servo-paint with the surfman connection made optional, so Servo runs
