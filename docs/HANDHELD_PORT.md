@@ -2,7 +2,7 @@
 
 Notes on running retsurf as a PortMaster port on aarch64 handhelds.
 
-## Goal and target
+## Goal
 
 Run retsurf on PortMaster-capable custom firmwares:
 
@@ -13,7 +13,7 @@ Run retsurf on PortMaster-capable custom firmwares:
 The approach was to get a software renderer working first (Path A), then move to GPU
 acceleration (Path B).
 
-## Constraints we ran into
+## Constraints
 
 Servo/WebRender and egui both run on OpenGL ES 3.0 and up. WebRender needs at least
 GLES 3.0 for instancing, MRT, integer attributes, and so on.
@@ -168,15 +168,3 @@ which is more than a typical C/SDL port pulls in, especially `mozjs_sys` and `mo
 `cargo build --release` runs as a native arm64 build under qemu, so the first build is slow,
 with SpiderMonkey and ANGLE the long poles. `libGLESv2` and `libEGL` (the Mali blob) resolve
 at runtime on the device, so they aren't bundled.
-
-## Gamepad input
-
-Implemented in `src/event/gamepad.rs` using SDL's GameController API, no gptokeyb needed:
-
-- Left stick or D-pad moves the cursor, A clicks, the right stick scrolls.
-- B or L go back, R goes forward, Start reloads.
-- Y opens the on-screen keyboard (`src/overlay/osk.rs`); the D-pad selects, A types into
-  the address bar (which also searches), Go loads, and B closes.
-
-Events are drained per-frame with vsync so the cursor isn't laggy on device. The on-screen
-keyboard currently targets the address bar only, not focused page fields.

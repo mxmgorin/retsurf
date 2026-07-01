@@ -29,8 +29,8 @@ Handheld Linux distros (Knulli, muOS, ROCKNIX) lack a usable browser. Lightweigh
 
 ## Features
 
-- **Gamepad-native navigation** — a virtual cursor (stick / D-pad) clicks page links and toolbar buttons, Vimium-style link hints hop between clickable elements, and an on-screen keyboard (QWERTY + ЙЦУКЕН) types URLs and searches. Every gesture is rebindable in-app or in `bindings.toml`, with a D-pad scroll mode for stickless devices — see the [controls reference](docs/CONFIGURATION.md#bindings-bindingstoml).
-- **Tabs, bookmarks, history, downloads** — a full-screen menu (Select) collects them all. File links download in the background with progress, cancel, and a ⬇ toolbar chip, saving to the system download folder or a configured path.
+- **Gamepad-native navigation** — a virtual cursor (stick / D-pad), Vimium-style link hints hop between clickable elements, and an on-screen keyboard (QWERTY + ЙЦУКЕН). Every gesture is rebindable in-app or in `bindings.toml`, with a D-pad scroll mode for stickless devices — see the [controls reference](docs/CONFIGURATION.md#bindings-bindingstoml).
+- **Tabs, bookmarks, history, downloads** — a full-screen menu. File links download in the background with progress, cancel, and a ⬇ toolbar chip, saving to the system download folder or a configured path.
 - **Real page zoom** — reflows the layout (not a magnifier) along Firefox's 50–300% ladder, per tab; set a default in the config so the whole web fits a small screen.
 - **Reader mode** — strips a page to its article with Mozilla's [Readability](https://github.com/mozilla/readability) and a dark, narrow-column layout. Runs in place, so it works on logged-in and dynamic pages.
 - **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy). Lists are fetched, compiled, and cached locally, so warm starts are instant and work offline. Configurable, or off.
