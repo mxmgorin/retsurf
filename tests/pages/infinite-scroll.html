@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>retsurf infinite-scroll test</title>
+<!--
+  Reproduces the pattern modern feeds (e.g. www.reddit.com / shreddit) use for
+  "load more on scroll": an IntersectionObserver watches a sentinel near the
+  bottom; when it enters the viewport, fetch() a fragment and append it.
+
+  The fixed HUD reports, live, whether the engine delivers each step under a
+  *compositor* scroll (the path retsurf's gamepad/wheel scrolling uses):
+    scrollEvt  - DOM `scroll` events fired
+    IOcb/IOhit - IntersectionObserver callbacks / intersecting entries
+    fetchOK    - successful load-more fetches (+ appended batches)
+  Serve over HTTP (fetch needs a real origin) and open it as the page.
+-->
+<style>
+  html, body { margin: 0; }
+  body { font-family: sans-serif; font-size: 20px; background: #fff; color: #111; }
+  .post { height: 220px; margin: 12px; padding: 12px; border: 2px solid #888;
+          background: #eef; box-sizing: border-box; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+         background: #000; color: #0f0; font: bold 22px monospace;
+         padding: 8px 10px; white-space: pre; line-height: 1.35; }
+  #sentinel { height: 40px; background: #f90; color:#000; text-align:center;
+              font: bold 18px monospace; }
+</style>
+</head>
+<body>
+<div id="hud">starting…</div>
+<div id="feed"></div>
+<div id="sentinel">SENTINEL</div>
+<script>
+(function () {
+  var hud = document.getElementById('hud');
+  var feed = document.getElementById('feed');
+  var sentinel = document.getElementById('sentinel');
+
+  var state = {
+    scrollEvents: 0,
+    lastScrollY: 0,
+    ioCallbacks: 0,
+    ioIntersecting: 0,
+    fetchOk: 0,
+    fetchErr: 0,
+    batches: 0,
+    lastErr: ''
+  };
+
+  function render() {
+    hud.textContent =
+      'scrollEvt=' + state.scrollEvents + '  scrollY=' + Math.round(state.lastScrollY) + '\n' +
+      'IOcb=' + state.ioCallbacks + '  IOhit=' + state.ioIntersecting + '\n' +
+      'fetchOK=' + state.fetchOk + '  fetchErr=' + state.fetchErr + '  batches=' + state.batches + '\n' +
+      'err=' + state.lastErr;
+  }
+
+  function addPosts(n, tag) {
+    for (var i = 0; i < n; i++) {
+      var d = document.createElement('div');
+      d.className = 'post';
+      d.textContent = tag + ' post #' + (feed.childElementCount + 1);
+      feed.appendChild(d);
+    }
+  }
+
+  // Initial "first page" of posts.
+  addPosts(6, 'initial');
+  render();
+
+  window.addEventListener('scroll', function () {
+    state.scrollEvents++;
+    state.lastScrollY = window.scrollY;
+    render();
+  }, { passive: true });
+
+  var loading = false;
+  var io = new IntersectionObserver(function (entries) {
+    state.ioCallbacks++;
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        state.ioIntersecting++;
+        render();
+        if (loading) return;
+        loading = true;
+        fetch('infinite-scroll-more.html', { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+          })
+          .then(function (txt) {
+            state.fetchOk++;
+            state.batches++;
+            var tmp = document.createElement('div');
+            tmp.innerHTML = txt;
+            // move sentinel to the end after appending fetched posts
+            feed.appendChild(tmp);
+            document.body.appendChild(sentinel);
+            loading = false;
+            render();
+          })
+          .catch(function (err) {
+            state.fetchErr++;
+            state.lastErr = String(err);
+            loading = false;
+            render();
+          });
+      }
+    });
+  }, { root: null, rootMargin: '200px', threshold: 0 });
+
+  io.observe(sentinel);
+  render();
+})();
+</script>
+</body>
+</html>
