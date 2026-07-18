@@ -78,10 +78,15 @@ impl Adblock {
             .as_ref()
             .map(url::Url::as_str)
             .unwrap_or(url);
-        let Ok(req) = Request::new(url, source, request_type(request.destination)) else {
+        let Ok(req) = Request::new(
+            url,
+            source,
+            request_type(request.destination),
+            request.method.as_str(),
+        ) else {
             return false;
         };
-        engine.check_network_request(&req).matched
+        engine.check_network_request(&req).should_block()
     }
 
     /// Move a builder-thread DAT (if one arrived) into the live engine.
@@ -152,7 +157,7 @@ fn build_engine(lists: Vec<String>, cache: String, out: Arc<Mutex<Option<Vec<u8>
     for url in &lists {
         match fetch_list(url) {
             Ok(text) => {
-                filter_set.add_filters(text.lines(), ParseOptions::default());
+                filter_set.add_filter_list(text, ParseOptions::default());
                 fetched += 1;
                 log::info!("adblock: fetched list `{url}`");
             }
@@ -162,7 +167,7 @@ fn build_engine(lists: Vec<String>, cache: String, out: Arc<Mutex<Option<Vec<u8>
     if fetched == 0 {
         return;
     }
-    let engine = Engine::from_filter_set(filter_set, true);
+    let engine = Engine::new_with_filter_set(filter_set);
     let dat = engine.serialize();
     if let Err(e) = std::fs::write(&cache, &dat) {
         log::warn!("adblock: could not write engine cache: {e}");
