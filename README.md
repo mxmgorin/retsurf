@@ -1,13 +1,19 @@
-[![Linux ARM](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml)
-[![Windows](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml)
-[![macOS](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml)
-[![Linux](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml)
-[![Android](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg)](https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml)
-[![Dependencies](https://deps.rs/repo/github/mxmgorin/retsurf/status.svg)](https://deps.rs/repo/github/mxmgorin/retsurf)
+<h1 align="center">
+  <img src="docs/images/retsurf-wordmark.png" alt="retsurf" width="320">
+</h1>
 
-## retsurf
+<p align="center">A lightweight, gamepad-native web browser.</p>
 
-A lightweight, experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
+<div align="center">
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg" alt="Linux ARM"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg" alt="Windows"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg" alt="macOS"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg" alt="Linux"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg" alt="Android"></a>
+  <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg" alt="Dependencies"></a>
+</div>
+
+retsurf (retro+surfing) is an experimental web browser written in **Rust**, using [**Servo**](https://github.com/servo/servo) as the rendering engine, **SDL2** for windowing and input, and **egui** for the UI.
 
 It is designed to run **without X11 or Wayland** — rendering through **OpenGL ES** on bare KMS/DRM — with **gamepad support**, targeting PortMaster-compatible Linux handhelds (**Knulli, muOS, ROCKNIX**), as well as regular desktops. It also runs on **Android** (touch + system keyboard).
 

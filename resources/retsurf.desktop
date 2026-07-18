@@ -1,0 +1,21 @@
+# Desktop entry for a menu/taskbar launcher on Linux.
+#
+#   1. mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps
+#   2. cp resources/retsurf.desktop ~/.local/share/applications/
+#   3. ln -s "$PWD/resources/retsurf.svg" ~/.local/share/icons/hicolor/scalable/apps/retsurf.svg
+#   4. Edit Exec below to point at your built binary.
+
+[Desktop Entry]
+Version=1.0
+Name=retsurf
+GenericName=Web Browser
+Comment=Lightweight gamepad-native web browser powered by Servo
+# Replace with the path to your built binary.
+Exec=retsurf %u
+Icon=retsurf
+Terminal=false
+Type=Application
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+Categories=Network;WebBrowser;
+Keywords=web;browser;internet;servo;
