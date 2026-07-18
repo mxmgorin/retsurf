@@ -52,14 +52,20 @@ toml = "1.1"
 sdl2 = { version = "0.38.0", default-features = false }
 gleam = "0.15"
 glow = "0.17"
-surfman = "0.12"
+surfman = "0.13"
 log = "0.4.28"
 env_logger = "0.11.8"
-servo = { version = "0.3", default-features = false, features = ["clipboard", "js_jit"] }
+servo = { version = "0.4", default-features = false, features = ["clipboard", "js_jit"] }
 # Servo delivers its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback; we need that type to build the report callback. Pinned
 # to the same 0.3 servo itself uses, so Cargo unifies on one version.
-servo-base = "0.3"
+servo-base = "0.4"
+# Build-fix pin for servo 0.4's pre-release crypto: servo pulls p256/p384/p521
+# `=0.14.0-rc.14`, which need primeorder rc.14 — but `>=0.14.0-rc.14` also matches
+# the released 0.14.0, whose `PrimeCurveParams` added a `WnafSize` bound the rc
+# curves don't implement (won't compile). Pin primeorder to the rc so cargo can't
+# pick the release. Drop once servo moves to the released RustCrypto 0.14 stack.
+primeorder = "=0.14.0-rc.14"
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
