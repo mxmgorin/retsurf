@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./Retsurf.sh</path>
+    <name>Retsurf</name>
+    <desc>A lightweight, experimental web browser powered by the Servo rendering engine. Native gamepad navigation with a virtual cursor and Vimium-style link hints, an on-screen keyboard, tabs, bookmarks, history, downloads, real page zoom, reader mode, and network-level ad and tracker blocking. Renders modern websites over OpenGL ES with no X11 or Wayland compositor.</desc>
+    <genre>other</genre>
+    <developer>mxmgorin</developer>
+    <publisher>mxmgorin</publisher>
+    <image>./retsurf/screenshot.png</image>
+  </game>
+</gameList>

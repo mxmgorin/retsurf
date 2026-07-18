@@ -1,0 +1,44 @@
+{
+    "version": 4,
+    "name": "retsurf.zip",
+    "items": [
+        "Retsurf.sh",
+        "retsurf"
+    ],
+    "items_opt": null,
+    "attr": {
+        "title": "retsurf",
+        "porter": [
+            "Troidem"
+        ],
+        "desc": "A lightweight, experimental web browser powered by the Servo rendering engine. Native gamepad navigation with a virtual cursor and Vimium-style link hints, an on-screen keyboard, tabs, bookmarks, history, downloads, real page zoom, reader mode, and network-level ad and tracker blocking. Renders modern websites over OpenGL ES with no X11 or Wayland compositor.",
+        "desc_md": null,
+        "inst": "Ready to run",
+        "inst_md": null,
+        "genres": [
+            "other"
+        ],
+        "image": {
+            "screenshot": "retsurf.screenshot.jpg",
+            "cover": null,
+            "thumbnail": null,
+            "video": null
+        },
+        "rtr": true,
+        "exp": true,
+        "runtime": [],
+        "store": [
+            {
+                "name": "GitHub",
+                "gameurl": "https://github.com/mxmgorin/retsurf",
+                "developerurl": "https://github.com/mxmgorin"
+            }
+        ],
+        "availability": "free",
+        "reqs": [],
+        "arch": [
+            "aarch64"
+        ],
+        "min_glibc": ""
+    }
+}

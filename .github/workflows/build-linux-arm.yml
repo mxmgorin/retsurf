@@ -123,6 +123,11 @@ jobs:
           rm -rf "$pm"
           mkdir -p "$pm/retsurf"
           cp portmaster/Retsurf.sh "$pm/"
+          # PortMaster metadata: manifest is required; README/screenshot flow in
+          # once present (guarded so the build doesn't fail before they exist).
+          cp portmaster/port.json "$pm/"
+          cp portmaster/README.md "$pm/" 2>/dev/null || true
+          cp portmaster/retsurf.screenshot.jpg "$pm/" 2>/dev/null || true
           # Bring over any bundled gamedir assets, minus the .gitkeep placeholder.
           cp -r portmaster/retsurf/. "$pm/retsurf/"
           rm -f "$pm/retsurf/.gitkeep"

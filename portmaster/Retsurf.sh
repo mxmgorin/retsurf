@@ -18,12 +18,9 @@ get_controls
 
 GAMEDIR=/$directory/ports/retsurf/
 
-# Pick the build matching this device's CPU. Match only cores we positively
-# recognize (by ARM "CPU part" id); anything unknown falls through to the v8.0
-# baseline, which runs on every ARMv8.0+ core. The .a55 binary is ARMv8.2 (LSE
-# atomics, fp16, crypto) and would SIGILL on older cores, so it is gated on BOTH
-# the A55 part id AND the runtime "atomics" (LSE) flag. All target SoCs are
-# homogeneous (no big.LITTLE), so the first CPU's part id is representative.
+# Pick the build matching this device's CPU. Match only cores we  recognize
+# anything unknown falls through to the v8.0baseline, which runs on every ARMv8.0+ core.
+# All target SoCs are homogeneous, so the first CPU's part id is representative.
 #   0xd05 = Cortex-A55 (RK3566, Allwinner A523)
 #   0xd04 = Cortex-A35 (RK3326)
 #   0xd03 = Cortex-A53 (H700, Allwinner A133 Plus) — and the sane default.
