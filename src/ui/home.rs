@@ -148,9 +148,13 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
 }
 
 /// The brand wordmark: a large two-tone "RET·SURF" logotype — the "RET" in ink,
-/// "SURF" in the accent — so the start page reads as branded rather than blank.
-/// Built as one `LayoutJob` so both colors stay on a single centered line, with
-/// wide letter-spacing for a logo feel.
+/// "SURF" in the surf gradient (teal warming to coral along the top edge, matching
+/// the SVG wordmark) — so the start page reads as branded rather than blank. Built
+/// as one `LayoutJob` on a single centered line, with wide letter-spacing.
+///
+/// egui has no gradient text fill, so we tag the `surf` glyphs with a marker color
+/// ([`ACCENT`]), tessellate the galley ourselves, and recolor those vertices by
+/// height.
 fn add_wordmark(ui: &mut egui::Ui) {
     const SIZE: f32 = 30.0;
     const TRACKING: f32 = 3.0;
@@ -165,9 +169,53 @@ fn add_wordmark(ui: &mut egui::Ui) {
     };
     job.append("ret", 0.0, fmt(INK));
     // Leading space: epaint skips extra_letter_spacing on a section's first glyph,
-    // so the ret/surf joint needs it added back to match the other gaps.
+    // so the ret/surf joint needs it added back to match the other gaps. ACCENT
+    // here is a marker recolored to the gradient below.
     job.append("surf", TRACKING, fmt(ACCENT));
-    ui.label(job);
+
+    let galley = ui.ctx().fonts_mut(|f| f.layout_job(job));
+    let (rect, _) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
+
+    // Tessellate the galley into a mesh and recolor the `surf` (marker-colored)
+    // vertices by their height: teal over the lower ~55%, warming to coral along
+    // the top edge — the same stops as `_surf_gradient` in the brand SVGs.
+    let ppp = ui.ctx().pixels_per_point();
+    let tex = ui.ctx().fonts(|f| f.font_image_size());
+    let mut mesh = egui::epaint::Mesh::default();
+    let shape = egui::epaint::TextShape::new(rect.min, galley, INK);
+    let opts = egui::epaint::TessellationOptions::default();
+    egui::epaint::Tessellator::new(ppp, opts, tex, Vec::new()).tessellate_text(&shape, &mut mesh);
+
+    // Key the gradient to the x-height, not the full vertex span: `f`'s ascender
+    // reaches higher than the other glyphs, so spanning to it would leave the
+    // x-height tops only partway to coral while `f`'s tip hit full coral (making
+    // `f` look yellower). Anchoring at the x-height clamps everything above it to
+    // coral, so every glyph's top matches — same as the SVG's y2=1120 stop.
+    let ys: Vec<f32> = mesh.vertices.iter().filter(|v| v.color == ACCENT).map(|v| v.pos.y).collect();
+    let bot = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    // Each glyph is one quad (4 verts); the x-height is the lowest of the glyph
+    // tops (the tall `f` top is the outlier and is excluded by taking the max).
+    let x_top = ys
+        .chunks(4)
+        .map(|g| g.iter().copied().fold(f32::INFINITY, f32::min))
+        .fold(f32::NEG_INFINITY, f32::max);
+    let span = (bot - x_top).max(1.0);
+    for v in mesh.vertices.iter_mut().filter(|v| v.color == ACCENT) {
+        let frac = ((bot - v.pos.y) / span).clamp(0.0, 1.0); // 0 baseline, 1 x-height+
+        let t = ((frac - 0.55) / 0.45).clamp(0.0, 1.0);
+        v.color = lerp_color(ACCENT, SURF_WARM, t);
+    }
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+/// Warm end of the `surf` gradient — the brand coral (`brand.py` CORAL).
+const SURF_WARM: egui::Color32 = egui::Color32::from_rgb(0xff, 0x8c, 0x69);
+
+/// Component-wise sRGB lerp. Fine for a subtle brand tint (no need for linear space).
+fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    egui::Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
 }
 
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
