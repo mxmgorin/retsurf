@@ -122,13 +122,18 @@ jobs:
           pm=portmaster-dist
           rm -rf "$pm"
           mkdir -p "$pm/retsurf"
+          # Only the launcher sits at the port root (installs to
+          # /roms/ports/Retsurf.sh). Everything else lives in the retsurf/ gamedir
+          # (/roms/ports/retsurf/), matching how installed ports lay out: port.json
+          # + gameinfo.xml + README + screenshot + licenses next to the binaries.
+          # port.json's bare "screenshot.png" and gameinfo's "./retsurf/screenshot.png"
+          # (written relative to the merged system gamelist) both resolve there.
           cp portmaster/Retsurf.sh "$pm/"
-          # PortMaster metadata: manifest is required; README/screenshot flow in
-          # once present (guarded so the build doesn't fail before they exist).
-          cp portmaster/port.json "$pm/"
-          cp portmaster/README.md "$pm/" 2>/dev/null || true
-          cp portmaster/retsurf.screenshot.jpg "$pm/" 2>/dev/null || true
-          # Bring over any bundled gamedir assets, minus the .gitkeep placeholder.
+          cp portmaster/port.json "$pm/retsurf/"
+          cp portmaster/gameinfo.xml "$pm/retsurf/"
+          cp portmaster/README.md "$pm/retsurf/"
+          cp portmaster/screenshot.png "$pm/retsurf/"
+          # Bring over any bundled gamedir assets (licenses/), minus .gitkeep.
           cp -r portmaster/retsurf/. "$pm/retsurf/"
           rm -f "$pm/retsurf/.gitkeep"
           # All three optimized variants; Retsurf.sh execs the matching one.
