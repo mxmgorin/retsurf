@@ -4759,6 +4759,7 @@ dependencies = [
  "keyboard-types",
  "log",
  "percent-encoding",
+ "png",
  "rust-embed",
  "rustls",
  "sdl2",

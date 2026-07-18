@@ -79,6 +79,9 @@ content-security-policy = "0.8"
 keyboard-types = "0.8.1"
 egui-sdl2 = { version = "0.4.0", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
+# Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
+# version already in the tree (pulled in via servo), so it adds no new resolve.
+png = "0.18"
 
 # Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the
 # C ABI entry point (`std::os::raw` types); logs go to logcat via android_logger
