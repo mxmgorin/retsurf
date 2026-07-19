@@ -24,6 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
+
       # Host tools for Servo's build scripts + SDL's CMake build (NOT the target
       # toolchain — that comes from the NDK below).
       - name: Install host build dependencies

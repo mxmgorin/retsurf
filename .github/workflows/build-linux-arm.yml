@@ -37,6 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Gates the `package` job too (it needs build-arm), so a mismatched release
+      # never produces the PortMaster zip either.
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
+
       - name: Diagnostics
         run: |
           set -eux
@@ -153,6 +159,10 @@ jobs:
         run: |
           set -eux
           cd portmaster-dist && zip -r ../retsurf-portmaster.zip .
+          cd ..
+          # Checksum sidecar the in-app updater verifies against (src/update). Format
+          # is `<hex>  <filename>`; the updater takes the first field.
+          sha256sum retsurf-portmaster.zip > retsurf-portmaster.zip.sha256
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
@@ -160,6 +170,7 @@ jobs:
         with:
           files: |
             retsurf-portmaster.zip
+            retsurf-portmaster.zip.sha256
 
   build-universal:
     # A single generic aarch64 binary for non-PortMaster installs: no -C
@@ -172,6 +183,10 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
 
       - name: Install Servo build dependencies
         run: |
@@ -222,6 +237,9 @@ jobs:
         run: |
           set -eux
           cd dist && zip ../retsurf-linux-aarch64.zip retsurf-linux-aarch64
+          cd ..
+          # Checksum sidecar the in-app updater verifies against (src/update).
+          sha256sum retsurf-linux-aarch64.zip > retsurf-linux-aarch64.zip.sha256
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
@@ -229,3 +247,4 @@ jobs:
         with:
           files: |
             retsurf-linux-aarch64.zip
+            retsurf-linux-aarch64.zip.sha256

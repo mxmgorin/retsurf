@@ -18,6 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
+
       # cmake builds the bundled SDL2; pkg-config resolves the rest. Both are
       # usually preinstalled on the runner images — this pins the assumption.
       - name: Install build dependencies

@@ -1,0 +1,20 @@
+name: Verify tag matches Cargo.toml
+description: >
+  Fail a release build when the git tag does not equal the Cargo.toml package
+  version. The in-app updater compares the release tag against CARGO_PKG_VERSION
+  (baked from Cargo.toml), so a mismatch ships an update nobody is ever offered.
+  Meant to run only on release events, after actions/checkout.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -eu
+        # On a release event GITHUB_REF_NAME is the tag; drop a leading `v`.
+        tag="${GITHUB_REF_NAME#v}"
+        crate="$(grep -m1 '^version = "' Cargo.toml | sed -E 's/^version = "([^"]*)".*/\1/')"
+        if [ "$tag" != "$crate" ]; then
+          echo "::error::release tag '$GITHUB_REF_NAME' (=> '$tag') != Cargo.toml version '$crate'. Bump Cargo.toml to match the tag before releasing — the updater compares Cargo.toml, not the tag."
+          exit 1
+        fi
+        echo "tag matches Cargo.toml version: $crate"

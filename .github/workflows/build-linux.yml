@@ -19,6 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
+
       - name: Diagnostics
         run: |
           set -eux
@@ -85,10 +89,16 @@ jobs:
 
       - name: Zip for release
         if: github.event_name == 'release'
-        run: cd dist && zip -r ../retsurf-linux-x86_64.zip .
+        run: |
+          cd dist && zip -r ../retsurf-linux-x86_64.zip .
+          cd ..
+          # Checksum sidecar the in-app updater verifies against (src/update).
+          sha256sum retsurf-linux-x86_64.zip > retsurf-linux-x86_64.zip.sha256
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: retsurf-linux-x86_64.zip
+          files: |
+            retsurf-linux-x86_64.zip
+            retsurf-linux-x86_64.zip.sha256
