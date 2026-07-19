@@ -9,8 +9,8 @@ zoom, reader mode, and network-level ad and tracker blocking are all built in.
 ## Controls
 
 D-pad / Left stick   Move the virtual cursor (or scroll the page in scroll mode)
+Right stick          Scroll the page
 L2 / R2              Cycle tabs / drive the on-screen keyboard
-
 A                    Confirm (click / select)
 B                    Cancel (back / close)          Hold: go to home page
 X                    On-screen keyboard             Hold: reader mode
@@ -41,6 +41,6 @@ Start scroll toggle and Select to reach every function.
 
 ## Credits
 
-- Port and app by mxmgorin (Troidem)
+- Developed and ported mxmgorin (Troidem)
 - Rendering by [Servo](https://github.com/servo/servo)
 - Source and issues: https://github.com/mxmgorin/retsurf
