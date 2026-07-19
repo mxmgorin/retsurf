@@ -15,11 +15,11 @@ mod theme;
 mod toolbar;
 
 use crate::{
-    app::AppCommand,
+    app::{AppCommand, SettingsAction},
     browser::AppBrowser,
     config::{
         AppConfig, DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig,
-        OskConfig, ToolbarPosition,
+        OskConfig, ToolbarPosition, UpdateConfig,
     },
     event::user::UserEventSender,
     overlay::dial_edit::{DialEdit, EditItem},
@@ -30,6 +30,7 @@ use crate::{
     overlay::prompt::Prompt,
     overlay::settings::{Settings, SettingsSection},
     platform::window::AppWindow,
+    update::Updater,
 };
 use egui_sdl2::egui;
 use egui_sdl2::EguiGlow;
@@ -170,6 +171,9 @@ pub struct AppUi {
     menu: Menu,
     /// The full-screen settings overlay (edits a draft of the config).
     settings: Settings,
+    /// Self-update manager (About tab): in-place on PortMaster / desktop installs,
+    /// "open the release page" elsewhere. See [`crate::update`].
+    update: Updater,
     /// The built-in start page overlay's selection / search-field state.
     home: Home,
     /// The standalone speed-dial editor overlay (opened from the start page).
@@ -199,6 +203,9 @@ pub struct AppUi {
 }
 
 impl AppUi {
+    // Each config section is passed in explicitly rather than the whole AppConfig,
+    // to keep the UI's dependencies visible; that legitimately runs past the lint.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         window: &AppWindow,
         display: &DisplayConfig,
@@ -207,6 +214,7 @@ impl AppUi {
         osk: &OskConfig,
         input: &InputConfig,
         debug: &DebugConfig,
+        update: &UpdateConfig,
     ) -> Self {
         let mut egui = EguiGlow::new(window.sdl2_window(), window.glow_ctx(), None, false);
         // Install the shared accent theme so every selectable widget, text
@@ -248,6 +256,7 @@ impl AppUi {
             osk: Osk::new(osk),
             menu: Menu::new(history, downloads),
             settings: Settings::new(),
+            update: Updater::new(update),
             home: Home::new(),
             dial_edit: DialEdit::new(),
             home_active: false,
@@ -513,6 +522,28 @@ impl AppUi {
         self.settings.is_controls_section()
     }
 
+    /// Whether the active settings section is the read-only About page (A activates
+    /// the focused update action / link — see [`Self::about_activate`]).
+    #[inline]
+    pub fn settings_is_info(&self) -> bool {
+        self.settings.is_info_section()
+    }
+
+    /// The action for the focused About-tab row on A: the update action for row 0,
+    /// else the link at row-1. `None` when the row has nothing to do (a check /
+    /// download / install in progress).
+    pub fn about_activate(&self) -> Option<SettingsAction> {
+        let sel = self.settings.selected();
+        if sel == 0 {
+            settings::update_command(&self.update.snapshot())
+        } else {
+            crate::overlay::settings::about_info()
+                .links
+                .get(sel - 1)
+                .map(|(_, url)| SettingsAction::OpenLink(url.to_string()))
+        }
+    }
+
     /// A / Enter on the focused Controls row: capture (add), remove, or reset.
     #[inline]
     pub fn settings_controls_activate(&mut self) {
@@ -702,6 +733,19 @@ impl AppUi {
     #[inline]
     pub fn start_download(&mut self, url: &str, sender: &UserEventSender) {
         self.menu.downloads.start(url, sender);
+    }
+
+    /// Kick off a self-update check in the background (About tab; a no-op off a
+    /// PortMaster install). See [`crate::update`].
+    #[inline]
+    pub fn update_check(&self, sender: &UserEventSender) {
+        self.update.check(sender);
+    }
+
+    /// Download + install the available update in the background (About tab).
+    #[inline]
+    pub fn update_install(&self, sender: &UserEventSender) {
+        self.update.install(sender);
     }
 
     /// Add or remove `url` from the saved bookmarks (★ button / Start).
@@ -1232,6 +1276,9 @@ impl AppUi {
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
             } = self.toolbar_layout();
+            // Snapshot the self-update state here (the About tab reads it): the
+            // `self.update` borrow can't overlap the `self`-borrowing closure below.
+            let update = self.update.snapshot();
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -1350,7 +1397,7 @@ impl AppUi {
                 // type into a text field (focus is `Osk` then, painting it here
                 // would put it under the keyboard).
                 if self.settings.visible() {
-                    settings::add_settings(ctx, &self.settings, commands);
+                    settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its

@@ -16,6 +16,9 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
         // Sent by the embedder-control delegate purely to wake the loop; the
         // main loop drains the pending/dismissed controls.
         UserEvent::ControlPending => None,
+        // Sent by the self-update worker purely to wake the loop; the About tab
+        // re-reads the updater snapshot each frame, so the wake just repaints.
+        UserEvent::UpdateProgress => None,
     }
 }
 
@@ -27,15 +30,17 @@ pub enum UserEvent {
     DownloadUpdate = 2,
     HintsReady = 3,
     ControlPending = 4,
+    UpdateProgress = 5,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 5] = [
+    pub const ALL: [UserEvent; 6] = [
         UserEvent::BrowserWakeup,
         UserEvent::BrowserFrameReady,
         UserEvent::DownloadUpdate,
         UserEvent::HintsReady,
         UserEvent::ControlPending,
+        UserEvent::UpdateProgress,
     ];
 
     pub fn from_code(code: i32) -> UserEvent {

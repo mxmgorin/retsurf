@@ -86,6 +86,7 @@ impl App {
             &config.osk,
             &config.input,
             &config.debug,
+            &config.update,
         );
         log::info!("init: app constructed");
 

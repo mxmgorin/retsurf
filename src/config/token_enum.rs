@@ -36,6 +36,8 @@ macro_rules! token_enum {
 
         impl $name {
             /// `(label, token)` pairs for the settings GUI, in declaration order.
+            // Config-only enums (not shown in the GUI) never read this.
+            #[allow(dead_code)]
             pub const CHOICES: &'static [(&'static str, &'static str)] =
                 &[ $( ($label, $token), )+ ];
 

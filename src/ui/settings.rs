@@ -8,7 +8,9 @@
 
 use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use crate::app::{AppCommand, SettingsAction};
+use crate::data::downloads::format_size;
 use crate::overlay::settings::{CtrlRow, Settings, SettingsSection};
+use crate::update::{Offer, UpdateState};
 use egui_sdl2::egui;
 
 /// Rows and the section bar share the menu's metrics (height, radius, font, gap)
@@ -75,33 +77,95 @@ fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
     });
 }
 
-/// A clickable link row: `label` in white with the URL (scheme stripped) in the
-/// accent, underlined to read as a link. Clicking pushes [`SettingsAction::OpenLink`]
-/// — the app saves & closes the overlay and loads it in the focused tab. Works
-/// with the gamepad cursor as well as touch/mouse.
-fn link_row(ui: &mut egui::Ui, label: &str, url: &str, commands: &mut Vec<AppCommand>) {
-    let shown = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(label)
-                .color(egui::Color32::WHITE)
-                .size(ROW_FONT),
-        );
-        let link = egui::Button::new(
-            egui::RichText::new(shown)
-                .color(ACCENT)
-                .underline()
-                .size(ROW_FONT),
-        )
-        .frame(false);
-        if ui.add(link).clicked() {
-            commands.push(AppCommand::Settings(SettingsAction::OpenLink(
-                url.to_string(),
-            )));
+/// The [`SettingsAction`] the About tab's update row triggers on A / click for the
+/// current `state`, or `None` while a check/download/install is in progress. Shared
+/// by the renderer and the gamepad activation path ([`super::AppUi::about_activate`])
+/// so the two never drift.
+pub(super) fn update_command(state: &UpdateState) -> Option<SettingsAction> {
+    match state {
+        UpdateState::Idle | UpdateState::UpToDate { .. } | UpdateState::Error(_) => {
+            Some(SettingsAction::CheckUpdate)
         }
-    });
+        UpdateState::Available {
+            offer: Offer::Install { .. },
+            ..
+        } => Some(SettingsAction::InstallUpdate),
+        UpdateState::Available {
+            offer: Offer::Open { page },
+            ..
+        } => Some(SettingsAction::OpenLink(page.clone())),
+        UpdateState::Installed { .. } => Some(SettingsAction::QuitForUpdate),
+        UpdateState::Checking | UpdateState::Downloading { .. } | UpdateState::Installing => None,
+    }
+}
+
+/// `(label, value)` for the About tab's single update row, folding any status into
+/// one line so the row stays one stable gamepad-focus target across states.
+fn update_row_text(state: &UpdateState) -> (String, String) {
+    match state {
+        UpdateState::Idle => ("Check for updates".to_string(), String::new()),
+        UpdateState::Checking => ("Checking for updates".to_string(), "...".to_string()),
+        UpdateState::UpToDate { current } => {
+            (format!("Up to date ({current})"), "Check again".to_string())
+        }
+        UpdateState::Available {
+            version,
+            offer: Offer::Install { size, .. },
+        } => (format!("Install {version}"), format_size(*size)),
+        UpdateState::Available {
+            version,
+            offer: Offer::Open { .. },
+        } => (format!("Download {version}"), "Open page".to_string()),
+        UpdateState::Downloading { received, total } => {
+            let value = if *total > 0 {
+                format!(
+                    "{}%  ·  {} / {}",
+                    received * 100 / total,
+                    format_size(*received),
+                    format_size(*total)
+                )
+            } else {
+                format_size(*received)
+            };
+            ("Downloading update".to_string(), value)
+        }
+        UpdateState::Installing => ("Installing update".to_string(), "...".to_string()),
+        UpdateState::Installed { version } => {
+            (format!("Update ready ({version})"), "Quit to apply".to_string())
+        }
+        UpdateState::Error(e) => (format!("Update failed: {e}"), "Retry".to_string()),
+    }
+}
+
+/// Render the self-update block on the About tab: a header and one selectable row
+/// (About focus index 0). Its label/action depend on the update state; gamepad A
+/// goes through [`super::AppUi::about_activate`], a click pushes the same command.
+/// Shown on every platform — in-place install where supported, else a "Download"
+/// that opens the release page.
+fn add_update(
+    ui: &mut egui::Ui,
+    full_w: f32,
+    selected: bool,
+    update: &UpdateState,
+    commands: &mut Vec<AppCommand>,
+) {
+    ui.add_space(10.0);
+    ui.label(
+        egui::RichText::new("Updates")
+            .color(ACCENT)
+            .strong()
+            .size(13.0),
+    );
+    let (label, value) = update_row_text(update);
+    let resp = setting_row(ui, full_w, selected, label, value);
+    if selected {
+        resp.scroll_to_me(Some(egui::Align::Center));
+    }
+    if resp.clicked() {
+        if let Some(action) = update_command(update) {
+            commands.push(AppCommand::Settings(action));
+        }
+    }
 }
 
 /// Render the read-only About tab (pulls its facts from
@@ -111,9 +175,12 @@ fn add_about(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     dim: egui::Color32,
+    sel: usize,
+    update: &UpdateState,
     commands: &mut Vec<AppCommand>,
 ) {
     let info = crate::overlay::settings::about_info();
+    let full_w = screen.width() - SIDES;
     let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false; 2])
@@ -134,6 +201,9 @@ fn add_about(
 
             info_row(ui, "Build", info.git_hash);
             info_row(ui, "Date", info.build_date);
+
+            // Self-update block — About focus row 0.
+            add_update(ui, full_w, sel == 0, update, commands);
 
             ui.add_space(10.0);
             ui.label(
@@ -164,8 +234,21 @@ fn add_about(
                     .strong()
                     .size(13.0),
             );
-            for (label, url) in info.links {
-                link_row(ui, label, url, commands);
+            // Links are About focus rows 1.., rendered selectable so the gamepad
+            // can highlight and open them (A -> OpenLink); the scheme is stripped
+            // to read as a link, shown in the accent like the field-row values.
+            for (i, (label, url)) in info.links.iter().enumerate() {
+                let selected = sel == 1 + i;
+                let shown = url
+                    .trim_start_matches("https://")
+                    .trim_start_matches("http://");
+                let resp = setting_row(ui, full_w, selected, label.to_string(), shown.to_string());
+                if selected {
+                    resp.scroll_to_me(Some(egui::Align::Center));
+                }
+                if resp.clicked() {
+                    commands.push(AppCommand::Settings(SettingsAction::OpenLink(url.to_string())));
+                }
             }
         });
 }
@@ -243,6 +326,7 @@ fn add_controls(
 pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
+    update: &UpdateState,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -293,7 +377,7 @@ pub(super) fn add_settings(
                     let hint = if settings.capturing() {
                         "Press a button or key to bind      Esc cancel"
                     } else if settings.is_info_section() {
-                        "L1/R1 section   B close"
+                        "L1/R1 section   ⏶⏷ move   A select   B close"
                     } else if settings.is_controls_section() {
                         "L1/R1 section   ⏶⏷ move   A add / remove   B save & close"
                     } else {
@@ -305,7 +389,7 @@ pub(super) fn add_settings(
                     // The About tab is read-only info, not a field list — render
                     // it and stop (it has no FIELDS to iterate).
                     if settings.is_info_section() {
-                        add_about(ui, screen, dim, commands);
+                        add_about(ui, screen, dim, settings.selected(), update, commands);
                         return;
                     }
 

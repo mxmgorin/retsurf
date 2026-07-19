@@ -206,6 +206,15 @@ impl App {
                 self.ui.settings_apply_capture(gesture.clone(), *keyboard);
             }
             SettingsAction::CaptureCancel => self.ui.settings_cancel_capture(),
+            // Self-update (About tab, PortMaster only). Check/Install forward to the
+            // background Updater; Quit reuses the audited two-step-quit path so the
+            // launcher's pm_finish runs and re-execs the freshly swapped binary.
+            SettingsAction::CheckUpdate => self.ui.update_check(&self.event_sender),
+            SettingsAction::InstallUpdate => self.ui.update_install(&self.event_sender),
+            SettingsAction::QuitForUpdate => {
+                self.settings_close();
+                self.shutdown();
+            }
         }
     }
 
@@ -213,7 +222,13 @@ impl App {
     /// section, open the on-screen keyboard on a text field, or step every other
     /// kind forward (◀▶ does the rest).
     pub(super) fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.settings_is_controls() {
+        if self.ui.settings_is_info() {
+            // About tab: A activates the focused row (update action or a link);
+            // the resulting SettingsAction routes back through settings_action.
+            if let Some(action) = self.ui.about_activate() {
+                out.push(AppCommand::Settings(action));
+            }
+        } else if self.ui.settings_is_controls() {
             self.ui.settings_controls_activate();
         } else if self.ui.settings_selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);

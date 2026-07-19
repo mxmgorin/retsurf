@@ -59,6 +59,12 @@ pub enum SettingsAction {
     CaptureBinding { gesture: String, keyboard: bool },
     /// Cancel binding capture without changing anything (Esc / timeout).
     CaptureCancel,
+    /// About tab: query GitHub for a newer release.
+    CheckUpdate,
+    /// About tab: download + verify + swap the available release in place.
+    InstallUpdate,
+    /// About tab: quit so the launcher re-execs the freshly swapped binary.
+    QuitForUpdate,
 }
 
 /// Actions on the modal page-prompt overlay. The gamepad and keyboard push

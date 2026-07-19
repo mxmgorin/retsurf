@@ -6,6 +6,7 @@ mod event;
 mod overlay;
 mod platform;
 mod ui;
+mod update;
 
 use crate::app::App;
 

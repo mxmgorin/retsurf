@@ -21,6 +21,7 @@ mod osk;
 mod paths;
 mod performance;
 mod token_enum;
+mod update;
 
 pub use adblock::AdblockConfig;
 pub use browser::BrowserConfig;
@@ -33,6 +34,7 @@ pub use input::{CursorMode, InputConfig};
 pub use osk::OskConfig;
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
+pub use update::{Channel, UpdateConfig};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -47,6 +49,7 @@ pub struct AppConfig {
     pub data_saving: DataSavingConfig,
     pub osk: OskConfig,
     pub debug: DebugConfig,
+    pub update: UpdateConfig,
 }
 
 impl AppConfig {
@@ -193,7 +196,7 @@ fn fix_usize(name: &str, v: &mut usize, b: bounds::IntBounds) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CursorMode, MemoryProfile, ToolbarPosition};
+    use super::{Channel, CursorMode, MemoryProfile, ToolbarPosition};
 
     /// Every `CHOICES` token round-trips through `from_value` -> `as_str`
     /// unchanged, and an unknown token falls back to the default — the lenient
@@ -230,13 +233,20 @@ mod tests {
             MemoryProfile::as_str,
             MemoryProfile::default(),
         );
+        check(
+            Channel::CHOICES,
+            Channel::from_value,
+            Channel::as_str,
+            Channel::default(),
+        );
     }
 
     #[test]
     fn from_value_is_lenient() {
-        // Case- and whitespace-insensitive, unified across all three enums.
+        // Case- and whitespace-insensitive, unified across all the enums.
         assert_eq!(CursorMode::from_value("  SCROLL "), CursorMode::Scroll);
         assert_eq!(ToolbarPosition::from_value("Bottom"), ToolbarPosition::Bottom);
         assert_eq!(MemoryProfile::from_value(" Embedded"), MemoryProfile::Embedded);
+        assert_eq!(Channel::from_value(" CI "), Channel::Ci);
     }
 }
