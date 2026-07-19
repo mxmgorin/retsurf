@@ -81,6 +81,17 @@ jobs:
           codesign --force --deep -s - "$APP"
           ls -la dist/
 
+      # hdiutil builds the dmg by copying dist/ into a mounted image and then
+      # compressing it, needing several times the app's size free. The Servo build
+      # tree in target/ (tens of GB) isn't needed once the binary is staged into the
+      # .app above, and this job doesn't cache it — drop it so packaging has room
+      # (fixes intermittent "hdiutil: create failed - No space left on device").
+      - name: Free disk space before packaging
+        run: |
+          set -eux
+          rm -rf target
+          df -h /
+
       # A dmg survives both the artifact pipeline and a browser download with
       # permissions and signature intact (zip via upload-artifact would not).
       - name: Create dmg
