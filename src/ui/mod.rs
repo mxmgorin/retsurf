@@ -30,7 +30,7 @@ use crate::{
     overlay::prompt::Prompt,
     overlay::settings::{Settings, SettingsSection},
     platform::window::AppWindow,
-    update::Updater,
+    update::{UpdateState, Updater},
 };
 use egui_sdl2::egui;
 use egui_sdl2::EguiGlow;
@@ -495,10 +495,13 @@ impl AppUi {
         self.settings.set_section(section);
     }
 
-    /// Move the settings selection by `dy` rows.
+    /// Move the settings selection by `dy` rows. On the About tab the update block's
+    /// row count depends on the live update state (a release-notes link appears when
+    /// an update is available), so it's resolved here and handed to the nav.
     #[inline]
     pub fn settings_move(&mut self, dy: i32) {
-        self.settings.move_sel(dy);
+        let update_rows = settings::update_row_count(&self.update.snapshot());
+        self.settings.move_sel(dy, update_rows);
     }
 
     /// Step the focused settings field by `dx` (◀ -1 / ▶ +1): toggle / cycle /
@@ -529,17 +532,24 @@ impl AppUi {
         self.settings.is_info_section()
     }
 
-    /// The action for the focused About-tab row on A: the update action for row 0,
-    /// else the link at row-1. `None` when the row has nothing to do (a check /
-    /// download / install in progress).
+    /// The action for the focused About-tab row on A: within the update block, the
+    /// primary action (row 0) or the "View release notes" link (row 1, when an update
+    /// is available); past it, the static link at `sel - update_rows`. `None` when the
+    /// row has nothing to do (a check / download / install in progress).
     pub fn about_activate(&self) -> Option<SettingsAction> {
         let sel = self.settings.selected();
-        if sel == 0 {
-            settings::update_command(&self.update.snapshot())
+        let state = self.update.snapshot();
+        let update_rows = settings::update_row_count(&state);
+        if sel < update_rows {
+            if sel == 0 {
+                settings::update_command(&state)
+            } else {
+                settings::release_link(&state).map(SettingsAction::OpenLink)
+            }
         } else {
             crate::overlay::settings::about_info()
                 .links
-                .get(sel - 1)
+                .get(sel - update_rows)
                 .map(|(_, url)| SettingsAction::OpenLink(url.to_string()))
         }
     }
@@ -740,6 +750,13 @@ impl AppUi {
     #[inline]
     pub fn update_check(&self, sender: &UserEventSender) {
         self.update.check(sender);
+    }
+
+    /// Startup: run a throttled background update check if `[update] auto_check` is
+    /// on and one is due (see [`crate::update::Updater::auto_check`]).
+    #[inline]
+    pub fn update_auto_check(&self, sender: &UserEventSender) {
+        self.update.auto_check(sender);
     }
 
     /// Download + install the available update in the background (About tab).
@@ -1279,6 +1296,9 @@ impl AppUi {
             // Snapshot the self-update state here (the About tab reads it): the
             // `self.update` borrow can't overlap the `self`-borrowing closure below.
             let update = self.update.snapshot();
+            // Toolbar update chip: shown only once a background/manual check has
+            // found a newer build.
+            let update_available = matches!(update, UpdateState::Available { .. });
             self.egui.run(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -1303,6 +1323,7 @@ impl AppUi {
                         bookmarked,
                         tab_pos,
                         active_downloads,
+                        update_available,
                         zoom_pct,
                         caret_for(OskField::AddressBar),
                         position,
@@ -1354,6 +1375,7 @@ impl AppUi {
                             bookmarked,
                             tab_pos,
                             active_downloads,
+                            update_available,
                             zoom_pct,
                             caret_for(OskField::AddressBar),
                             position,

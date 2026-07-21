@@ -7,9 +7,12 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,
-    /// The release's web page — offered when we can't install in place.
+    /// The release's web page — shown as a "View on GitHub" link beside the notes.
     #[serde(default)]
     html_url: String,
+    /// The release notes (markdown), shown read-only on the About tab.
+    #[serde(default)]
+    body: String,
     /// Unpublished draft (only ever visible to authenticated maintainers); skipped
     /// by the beta channel's newest-by-semver scan.
     #[serde(default)]
@@ -108,12 +111,19 @@ fn classify(release: &Release, asset: Option<&str>) -> Result<UpdateState, Strin
             sha256: find_asset(release, &format!("{}.sha256", a.name))
                 .and_then(|s| fetch_sha256(&s.browser_download_url)),
         },
-        None => Offer::Open {
-            page: release.html_url.clone(),
-        },
+        None => Offer::Open,
     };
+    // The notes (release body) and page back the About tab's read-only preview and
+    // "View on GitHub" link; both are shown regardless of the install path.
+    let notes = {
+        let body = release.body.trim();
+        (!body.is_empty()).then(|| body.to_string())
+    };
+    let page = (!release.html_url.is_empty()).then(|| release.html_url.clone());
     Ok(UpdateState::Available {
         version: tag,
+        notes,
+        page,
         offer,
     })
 }
@@ -199,6 +209,9 @@ pub(super) fn latest_ci(artifact: &str, token: &str) -> Result<UpdateState, Stri
         .to_string();
     Ok(UpdateState::Available {
         version: format!("main {short}"),
+        // Per-commit artifacts have no release notes or public page.
+        notes: None,
+        page: None,
         offer: Offer::Install {
             url: art.archive_download_url,
             size: art.size_in_bytes,
@@ -239,4 +252,88 @@ fn fetch_sha256(url: &str) -> Option<String> {
 
 fn current() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Deserialize a release the way the live query does, so the tests cover the
+    /// `body` field too. `99.0.0` is always newer than this crate; leaving out any
+    /// `.sha256` sidecar asset keeps [`classify`] off the network.
+    fn release(v: serde_json::Value) -> Release {
+        serde_json::from_value(v).expect("valid release json")
+    }
+
+    /// A newer release with notes and a matching asset -> an in-place install offer
+    /// carrying the notes and page (sha256 stays `None`: no sidecar asset).
+    #[test]
+    fn classify_install_carries_notes_and_page() {
+        let r = release(json!({
+            "tag_name": "v99.0.0",
+            "html_url": "https://example.com/tag/v99.0.0",
+            "body": "New in this release\n- one\n- two",
+            "assets": [
+                {"name": "retsurf-linux-x86_64.zip",
+                 "browser_download_url": "https://example.com/a.zip", "size": 123}
+            ]
+        }));
+        match classify(&r, Some("retsurf-linux-x86_64.zip")).unwrap() {
+            UpdateState::Available { version, notes, page, offer } => {
+                assert_eq!(version, "99.0.0");
+                assert_eq!(notes.as_deref(), Some("New in this release\n- one\n- two"));
+                assert_eq!(page.as_deref(), Some("https://example.com/tag/v99.0.0"));
+                match offer {
+                    Offer::Install { url, size, sha256 } => {
+                        assert_eq!(url, "https://example.com/a.zip");
+                        assert_eq!(size, 123);
+                        assert_eq!(sha256, None);
+                    }
+                    Offer::Open => panic!("expected an in-place install offer"),
+                }
+            }
+            _ => panic!("expected Available"),
+        }
+    }
+
+    /// A newer release whose asset we can't install in place still surfaces its
+    /// notes + page, just behind an "open the page" offer.
+    #[test]
+    fn classify_open_still_carries_notes_and_page() {
+        let r = release(json!({
+            "tag_name": "v99.0.0",
+            "html_url": "https://example.com/tag/v99.0.0",
+            "body": "notes",
+            "assets": []
+        }));
+        match classify(&r, None).unwrap() {
+            UpdateState::Available { notes, page, offer, .. } => {
+                assert_eq!(notes.as_deref(), Some("notes"));
+                assert_eq!(page.as_deref(), Some("https://example.com/tag/v99.0.0"));
+                assert!(matches!(offer, Offer::Open));
+            }
+            _ => panic!("expected Available"),
+        }
+    }
+
+    /// A blank release body (whitespace only) becomes `None`, not an empty preview.
+    #[test]
+    fn classify_blank_body_is_none() {
+        let r = release(json!({"tag_name": "v99.0.0", "html_url": "https://x", "body": "  \n\t "}));
+        match classify(&r, None).unwrap() {
+            UpdateState::Available { notes, .. } => assert_eq!(notes, None),
+            _ => panic!("expected Available"),
+        }
+    }
+
+    /// A release no newer than this build is `UpToDate`, never `Available`.
+    #[test]
+    fn classify_older_is_up_to_date() {
+        let r = release(json!({"tag_name": "v0.0.1", "html_url": "https://x", "body": "old"}));
+        assert!(matches!(
+            classify(&r, None).unwrap(),
+            UpdateState::UpToDate { .. }
+        ));
+    }
 }

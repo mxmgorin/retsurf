@@ -91,12 +91,47 @@ pub(super) fn update_command(state: &UpdateState) -> Option<SettingsAction> {
             ..
         } => Some(SettingsAction::InstallUpdate),
         UpdateState::Available {
-            offer: Offer::Open { page },
+            offer: Offer::Open,
+            page,
             ..
-        } => Some(SettingsAction::OpenLink(page.clone())),
+        } => page.clone().map(SettingsAction::OpenLink),
         UpdateState::Installed { .. } => Some(SettingsAction::QuitForUpdate),
         UpdateState::Checking | UpdateState::Downloading { .. } | UpdateState::Installing => None,
     }
+}
+
+/// The release page to link to ("View release notes on GitHub") when an update is
+/// available and carries one. `None` otherwise — the CI channel and non-available
+/// states have nothing to link to. Keeps the About focus nav, the renderer, and
+/// [`super::AppUi::about_activate`] agreeing on whether the link row exists.
+pub(super) fn release_link(state: &UpdateState) -> Option<String> {
+    match state {
+        UpdateState::Available { page: Some(page), .. } => Some(page.clone()),
+        _ => None,
+    }
+}
+
+/// How many gamepad-focusable rows the update block contributes to the About tab:
+/// the action row, plus a "View release notes" link row when [`release_link`] exists.
+pub(super) fn update_row_count(state: &UpdateState) -> usize {
+    1 + release_link(state).is_some() as usize
+}
+
+/// Trim release notes to a compact preview for the About tab (the full text is one
+/// tap away via the "View on GitHub" link): drop CRs, cap the length, and add an
+/// ellipsis on truncation.
+fn notes_preview(body: &str) -> String {
+    const MAX: usize = 600;
+    let body = body.replace('\r', "");
+    let body = body.trim();
+    if body.len() <= MAX {
+        return body.to_string();
+    }
+    let mut end = MAX;
+    while !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", body[..end].trim_end())
 }
 
 /// `(label, value)` for the About tab's single update row, folding any status into
@@ -111,10 +146,12 @@ fn update_row_text(state: &UpdateState) -> (String, String) {
         UpdateState::Available {
             version,
             offer: Offer::Install { size, .. },
+            ..
         } => (format!("Install {version}"), format_size(*size)),
         UpdateState::Available {
             version,
-            offer: Offer::Open { .. },
+            offer: Offer::Open,
+            ..
         } => (format!("Download {version}"), "Open page".to_string()),
         UpdateState::Downloading { received, total } => {
             let value = if *total > 0 {
@@ -137,18 +174,20 @@ fn update_row_text(state: &UpdateState) -> (String, String) {
     }
 }
 
-/// Render the self-update block on the About tab: a header and one selectable row
-/// (About focus index 0). Its label/action depend on the update state; gamepad A
-/// goes through [`super::AppUi::about_activate`], a click pushes the same command.
-/// Shown on every platform — in-place install where supported, else a "Download"
-/// that opens the release page.
+/// Render the self-update block on the About tab and return how many focusable rows
+/// it drew (see [`update_row_count`]): a header, the selectable action row (About
+/// focus index 0), and — when an update is available — the release notes (read-only)
+/// followed by a "View release notes on GitHub" link row (focus index 1). Its
+/// label/action depend on the update state; gamepad A goes through
+/// [`super::AppUi::about_activate`], a click pushes the same command. Shown on every
+/// platform — in-place install where supported, else a "Download" that opens the page.
 fn add_update(
     ui: &mut egui::Ui,
     full_w: f32,
-    selected: bool,
+    sel: usize,
     update: &UpdateState,
     commands: &mut Vec<AppCommand>,
-) {
+) -> usize {
     ui.add_space(10.0);
     ui.label(
         egui::RichText::new("Updates")
@@ -156,9 +195,11 @@ fn add_update(
             .strong()
             .size(13.0),
     );
+
+    // Row 0: the primary action (check / install / download / quit-to-apply / retry).
     let (label, value) = update_row_text(update);
-    let resp = setting_row(ui, full_w, selected, label, value);
-    if selected {
+    let resp = setting_row(ui, full_w, sel == 0, label, value);
+    if sel == 0 {
         resp.scroll_to_me(Some(egui::Align::Center));
     }
     if resp.clicked() {
@@ -166,6 +207,31 @@ fn add_update(
             commands.push(AppCommand::Settings(action));
         }
     }
+
+    // When an update is available: its notes (read-only), then a link row that opens
+    // the release page on GitHub (About focus index 1). The notes text isn't a focus
+    // target, so it doesn't shift the row indices.
+    if let UpdateState::Available { notes: Some(body), .. } = update {
+        ui.label(egui::RichText::new(notes_preview(body)).color(DIM).size(12.0));
+    }
+    if let Some(page) = release_link(update) {
+        let selected = sel == 1;
+        let resp = setting_row(
+            ui,
+            full_w,
+            selected,
+            "View release notes on GitHub".to_string(),
+            "Open page".to_string(),
+        );
+        if selected {
+            resp.scroll_to_me(Some(egui::Align::Center));
+        }
+        if resp.clicked() {
+            commands.push(AppCommand::Settings(SettingsAction::OpenLink(page)));
+        }
+    }
+
+    update_row_count(update)
 }
 
 /// Render the read-only About tab (pulls its facts from
@@ -202,8 +268,10 @@ fn add_about(
             info_row(ui, "Build", info.git_hash);
             info_row(ui, "Date", info.build_date);
 
-            // Self-update block — About focus row 0.
-            add_update(ui, full_w, sel == 0, update, commands);
+            // Self-update block — About focus rows 0.. (action, then an optional
+            // release-notes link). Returns how many focus rows it drew so the links
+            // below can offset their own indices past it.
+            let update_rows = add_update(ui, full_w, sel, update, commands);
 
             ui.add_space(10.0);
             ui.label(
@@ -234,11 +302,11 @@ fn add_about(
                     .strong()
                     .size(13.0),
             );
-            // Links are About focus rows 1.., rendered selectable so the gamepad
-            // can highlight and open them (A -> OpenLink); the scheme is stripped
-            // to read as a link, shown in the accent like the field-row values.
+            // Links are About focus rows `update_rows..`, rendered selectable so the
+            // gamepad can highlight and open them (A -> OpenLink); the scheme is
+            // stripped to read as a link, shown in the accent like the field values.
             for (i, (label, url)) in info.links.iter().enumerate() {
-                let selected = sel == 1 + i;
+                let selected = sel == update_rows + i;
                 let shown = url
                     .trim_start_matches("https://")
                     .trim_start_matches("http://");
@@ -486,4 +554,41 @@ pub(super) fn add_settings(
                         });
                 });
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::notes_preview;
+
+    /// A short body is returned trimmed, verbatim (no ellipsis).
+    #[test]
+    fn short_body_is_verbatim() {
+        assert_eq!(notes_preview("  ## Fixes\n- a bug  "), "## Fixes\n- a bug");
+    }
+
+    /// Carriage returns are stripped so CRLF release notes don't render blank lines.
+    #[test]
+    fn strips_carriage_returns() {
+        assert_eq!(notes_preview("line1\r\nline2"), "line1\nline2");
+    }
+
+    /// A body past the cap is truncated with a trailing ellipsis.
+    #[test]
+    fn long_body_is_truncated() {
+        let out = notes_preview(&"a".repeat(1000));
+        assert!(out.ends_with("..."));
+        assert!(out.len() < 1000);
+    }
+
+    /// Truncation lands on a char boundary even when the cap falls mid-codepoint —
+    /// the multi-byte walk-back must not panic or split a `char`.
+    #[test]
+    fn truncation_respects_char_boundary() {
+        // 598 ASCII + 3-byte chars puts byte 600 inside a codepoint.
+        let body = format!("{}{}", "a".repeat(598), "\u{65e5}".repeat(20));
+        let out = notes_preview(&body);
+        assert!(out.ends_with("..."));
+        // Round-trips as valid UTF-8 (would have panicked on a bad split).
+        assert!(out.chars().count() > 0);
+    }
 }

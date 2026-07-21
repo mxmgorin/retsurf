@@ -41,6 +41,7 @@ Handheld Linux distros (Knulli, muOS, ROCKNIX) lack a usable browser. Lightweigh
 - **Reader mode** — strips a page to its article with Mozilla's [Readability](https://github.com/mozilla/readability) and a dark, narrow-column layout. Runs in place, so it works on logged-in and dynamic pages.
 - **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy). Lists are fetched, compiled, and cached locally, so warm starts are instant and work offline. Configurable, or off.
 - **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), drawn in egui and fully controller-navigable like the other overlays.
+- **In-app updates** — checks GitHub on startup or on demand, shows release notes inline, and installs in place on PortMaster handhelds and Linux desktops (other platforms open the release page). Stable, beta, and dev channels.
 - **Modern rendering** — real web rendering via **Servo** (WebRender) on **OpenGL ES 3.x**, no X11/Wayland required (bare KMS/DRM). Single GL context, zero CPU readback — Servo draws straight into the on-screen context.
 
 ## Building & running

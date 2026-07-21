@@ -44,6 +44,7 @@ pub(super) enum FieldId {
     BlockMedia,
     BlockFonts,
     DownloadDir,
+    UpdateAutoCheck,
     MemoryOverlay,
 }
 
@@ -178,6 +179,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     int(bounds::LAYOUT_THREADS, 1), true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    int(bounds::WORKER_POOL_MAX, 1), true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
+    f(S::Advanced, "Updates",     "Auto-check on startup",  F::UpdateAutoCheck,    Kind::Bool, false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         F::MemoryOverlay,      Kind::Bool, false),
 ];
 
@@ -239,6 +241,7 @@ pub(super) fn get_bool(c: &AppConfig, id: FieldId) -> bool {
         FieldId::BlockFonts => c.data_saving.block_fonts,
         FieldId::ToolbarAutohide => c.display.toolbar_autohide,
         FieldId::HintBadges => c.input.hint_badges,
+        FieldId::UpdateAutoCheck => c.update.auto_check,
         FieldId::MemoryOverlay => c.debug.memory_overlay,
         _ => false,
     }
@@ -255,6 +258,7 @@ pub(super) fn set_bool(c: &mut AppConfig, id: FieldId, b: bool) {
         FieldId::BlockFonts => c.data_saving.block_fonts = b,
         FieldId::ToolbarAutohide => c.display.toolbar_autohide = b,
         FieldId::HintBadges => c.input.hint_badges = b,
+        FieldId::UpdateAutoCheck => c.update.auto_check = b,
         FieldId::MemoryOverlay => c.debug.memory_overlay = b,
         _ => {}
     }

@@ -6,6 +6,7 @@ use crate::app::{AppCommand, MenuAction, SettingsAction};
 use crate::browser::{BrowserCommand, BrowserState};
 use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;
+use crate::overlay::settings::SettingsSection;
 use egui_sdl2::egui::{self, Vec2};
 
 /// Create a frameless button with square sizing, as used in the toolbar.
@@ -122,6 +123,8 @@ fn toolbar_contents(
     tab_pos: (usize, usize),
     // Downloads still in flight; shown as a `⬇N` chip that jumps to the section.
     active_downloads: usize,
+    // A newer build was found; shown as an "Update" chip that opens Settings->About.
+    update_available: bool,
     // Active tab's page zoom percent when off the config default (chip hidden at it).
     zoom_pct: Option<u16>,
     // When the OSK types into the address bar, its caret position — park egui's
@@ -185,6 +188,25 @@ fn toolbar_contents(
                     // the settings overlay.
                     if ui.add(new_toolbar_button("⚙")).clicked() {
                         commands.push(AppCommand::Settings(SettingsAction::Open));
+                    }
+                    // Update chip — shown only once a check (auto or manual) has
+                    // found a newer build. Accent-coloured to draw the eye; opens
+                    // Settings straight to the About tab, where the notes, link, and
+                    // Install/Download action live. Plain text (no glyph) so it can't
+                    // tofu on egui's bundled fonts.
+                    if update_available {
+                        let label = egui::RichText::new("Update")
+                            .color(super::theme::ACCENT)
+                            .strong();
+                        let chip = egui::Button::new(label)
+                            .frame(false)
+                            .min_size(Vec2 { x: 20.0, y: 20.0 });
+                        if ui.add(chip).clicked() {
+                            commands.push(AppCommand::Settings(SettingsAction::Open));
+                            commands.push(AppCommand::Settings(SettingsAction::SetSection(
+                                SettingsSection::About,
+                            )));
+                        }
                     }
                     // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
                     // plain arrow, only the emoji one renders.
@@ -291,6 +313,7 @@ pub(super) fn add_toolbar(
     bookmarked: bool,
     tab_pos: (usize, usize),
     active_downloads: usize,
+    update_available: bool,
     zoom_pct: Option<u16>,
     osk_caret: Option<usize>,
     position: ToolbarPosition,
@@ -312,6 +335,7 @@ pub(super) fn add_toolbar(
                 bookmarked,
                 tab_pos,
                 active_downloads,
+                update_available,
                 zoom_pct,
                 osk_caret,
             )
@@ -333,6 +357,7 @@ pub(super) fn add_toolbar_overlay(
     bookmarked: bool,
     tab_pos: (usize, usize),
     active_downloads: usize,
+    update_available: bool,
     zoom_pct: Option<u16>,
     osk_caret: Option<usize>,
     position: ToolbarPosition,
@@ -358,6 +383,7 @@ pub(super) fn add_toolbar_overlay(
                         bookmarked,
                         tab_pos,
                         active_downloads,
+                        update_available,
                         zoom_pct,
                         osk_caret,
                     )

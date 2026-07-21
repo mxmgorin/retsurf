@@ -23,6 +23,11 @@ use std::sync::{Arc, Mutex};
 
 /// The repo the updater queries and pulls releases from.
 const REPO: &str = "mxmgorin/retsurf";
+/// Throttle marker in the data dir: the unix-seconds of the last automatic check.
+const LAST_CHECK_FILE: &str = "update-check";
+/// Minimum gap between automatic checks (checking every launch would hammer the
+/// GitHub API for no benefit — releases are days apart at most).
+const AUTO_CHECK_INTERVAL: u64 = 24 * 60 * 60;
 /// The PortMaster release asset (see the ARM CI package job).
 const PORTMASTER_ASSET: &str = "retsurf-portmaster.zip";
 /// User-Agent for the GitHub API (it 403s requests without one).
@@ -34,7 +39,16 @@ pub enum UpdateState {
     Idle,
     Checking,
     UpToDate { current: String },
-    Available { version: String, offer: Offer },
+    Available {
+        version: String,
+        /// Release notes (the GitHub release body), shown read-only on the About
+        /// tab. `None` on the CI channel (per-commit artifacts carry no notes).
+        notes: Option<String>,
+        /// The release's web page, offered as a "View on GitHub" link beside the
+        /// notes. `None` on the CI channel (artifacts have no public page).
+        page: Option<String>,
+        offer: Offer,
+    },
     Downloading { received: u64, total: u64 },
     Installing,
     Installed { version: String },
@@ -50,8 +64,9 @@ pub enum Offer {
         size: u64,
         sha256: Option<String>,
     },
-    /// No in-place path on this install — open the release page to download.
-    Open { page: String },
+    /// No in-place path on this install — the About row opens the release page
+    /// (the sibling [`UpdateState::Available::page`]) to download by hand.
+    Open,
 }
 
 /// The detected install kind, resolved once from the live process.
@@ -93,6 +108,8 @@ pub struct Updater {
     kind: Kind,
     /// Which builds to check (stable releases or CI artifacts).
     channel: Channel,
+    /// Run a throttled background check at startup (see [`Self::auto_check`]).
+    auto_check: bool,
     /// GitHub token for the CI channel (resolved from env/config once at startup).
     /// Held here, never in [`UpdateState`], so it stays out of the UI snapshot.
     token: Option<String>,
@@ -104,6 +121,7 @@ impl Updater {
             state: Arc::new(Mutex::new(UpdateState::Idle)),
             kind: resolve_kind(),
             channel: cfg.channel,
+            auto_check: cfg.auto_check,
             token: cfg.resolve_token(),
         }
     }
@@ -149,6 +167,23 @@ impl Updater {
         });
     }
 
+    /// Startup hook: kick off a background [`Self::check`] if `auto_check` is on and
+    /// the throttle interval has elapsed since the last one. The timestamp is written
+    /// up front (before the check runs), so a crash-loop or rapid relaunches can't
+    /// hammer the GitHub API. A no-op when disabled or not yet due; the result lands
+    /// in the usual state (the toolbar chip / About tab), never a blocking dialog.
+    pub fn auto_check(&self, sender: &UserEventSender) {
+        if !self.auto_check {
+            return;
+        }
+        let now = now_unix();
+        if now.saturating_sub(read_last_check()) < AUTO_CHECK_INTERVAL {
+            return;
+        }
+        write_last_check(now);
+        self.check(sender);
+    }
+
     /// Download + verify + swap the available release on a background thread. Only
     /// valid from an [`Offer::Install`]; the manual "Download" path uses `OpenLink`.
     pub fn install(&self, sender: &UserEventSender) {
@@ -158,6 +193,7 @@ impl Updater {
                 UpdateState::Available {
                     version,
                     offer: Offer::Install { url, sha256, .. },
+                    ..
                 } => (version.clone(), url.clone(), sha256.clone()),
                 _ => return,
             }
@@ -179,6 +215,37 @@ impl Updater {
 fn publish(state: &Mutex<UpdateState>, next: UpdateState, sender: &UserEventSender) {
     *state.lock().unwrap() = next;
     sender.send(UserEvent::UpdateProgress);
+}
+
+/// Current time in unix seconds (0 if the clock is before the epoch — treated as
+/// "long ago", so a check is due; harmless).
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// The auto-check throttle marker's path in the data dir.
+fn last_check_path() -> PathBuf {
+    PathBuf::from(crate::config::data_dir()).join(LAST_CHECK_FILE)
+}
+
+/// Read the last automatic-check timestamp (unix seconds); 0 when missing or
+/// unparseable, so the next check is due.
+fn read_last_check() -> u64 {
+    std::fs::read_to_string(last_check_path())
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// Record the last automatic-check timestamp; best-effort (a failure just means the
+/// throttle resets and we check again next launch).
+fn write_last_check(now: u64) {
+    if let Err(e) = std::fs::write(last_check_path(), now.to_string()) {
+        log::warn!("update: could not write auto-check marker: {e}");
+    }
 }
 
 /// Detect which install kind we are, from the live process.

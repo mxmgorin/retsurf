@@ -21,16 +21,32 @@ token_enum! {
 
 /// `[update]` config. Off the beaten path on purpose: the CI channel installs
 /// unsigned per-commit builds, so it stays opt-in via a hand-edited config.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateConfig {
     /// `release` (default) or `ci`. See [`Channel`].
     pub channel: Channel,
+    /// Check for a newer build in the background at startup (throttled to at most
+    /// once a day; see [`crate::update::Updater::auto_check`]). On by default; set
+    /// `false` to only ever check from the Settings -> About tab.
+    pub auto_check: bool,
     /// GitHub token (a fine-grained PAT with `actions:read`) for the `ci` channel —
     /// GitHub requires auth to list/download Actions artifacts. Prefer the
     /// `RETSURF_GITHUB_TOKEN` env var over writing a secret to disk; this field is a
     /// fallback. Empty by default and unused by the `release` channel.
     pub token: String,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        // `auto_check` defaults on — the whole point is discovery without a manual
+        // trip to the About tab; a derived `Default` would wrongly start it `false`.
+        Self {
+            channel: Channel::default(),
+            auto_check: true,
+            token: String::new(),
+        }
+    }
 }
 
 impl UpdateConfig {

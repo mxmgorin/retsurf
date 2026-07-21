@@ -200,10 +200,12 @@ impl Settings {
         matches!(self.section, SettingsSection::About)
     }
 
-    /// Number of gamepad-focusable rows on the About tab: the update action (row 0)
-    /// then the links. Drives [`Self::move_sel`] and the renderer's highlight.
-    pub fn about_row_count(&self) -> usize {
-        1 + about_info().links.len()
+    /// Number of gamepad-focusable rows on the About tab: the update block's
+    /// `update_rows` (action row, plus a release-notes link when an update is
+    /// available — computed from the live update state by the caller) then the
+    /// static links. Drives [`Self::move_sel`] and the renderer's highlight.
+    pub fn about_row_count(&self, update_rows: usize) -> usize {
+        update_rows + about_info().links.len()
     }
 
     /// Focus a row directly (clicking it). In the Controls section `i` indexes
@@ -239,11 +241,12 @@ impl Settings {
     }
 
     /// Move the focus by `dy` rows within the active section (clamped, no wrap),
-    /// skipping the Controls section's non-selectable headers.
-    pub fn move_sel(&mut self, dy: i32) {
+    /// skipping the Controls section's non-selectable headers. `update_rows` is the
+    /// About tab's live update-block row count (ignored in other sections).
+    pub fn move_sel(&mut self, dy: i32, update_rows: usize) {
         if self.is_info_section() {
-            // About: a flat list (update action, then links), all selectable.
-            let last = self.about_row_count() as i32 - 1;
+            // About: a flat list (update rows, then links), all selectable.
+            let last = self.about_row_count(update_rows) as i32 - 1;
             self.selected = (self.selected as i32 + dy).clamp(0, last.max(0)) as usize;
             return;
         }
