@@ -94,6 +94,13 @@ See **[Configuration & bindings](docs/CONFIGURATION.md)** for every option — t
 annotated `config.toml` (browser, display, OSK, performance/memory profile,
 history, downloads, ad blocker, input) and the full `bindings.toml` reference.
 
+## Support the project ⭐
+
+Bug reports and ideas are welcome — open an issue for anything broken or missing.
+
+If you find the project useful, please give it a star on GitHub. It helps others
+discover it and keeps development going.
+
 ## References
 
 - [Configuration & bindings](docs/CONFIGURATION.md) — every `config.toml` / `bindings.toml` option

@@ -74,7 +74,7 @@ pub(super) fn add_home(
                     // Vertically center the whole block (wordmark + field + grid),
                     // like the original page did, by padding the top by half the
                     // slack. Heights below are the laid-out sizes plus the gaps.
-                    const WORDMARK_H: f32 = 34.0;
+                    const WORDMARK_H: f32 = 46.0; // text + wave band
                     const FIELD_H: f32 = 44.0;
                     const GAP_TOP: f32 = 28.0; // wordmark → field
                     const GAP_MID: f32 = 36.0; // field → grid
@@ -174,7 +174,17 @@ fn add_wordmark(ui: &mut egui::Ui) {
     job.append("surf", TRACKING, fmt(ACCENT));
 
     let galley = ui.ctx().fonts_mut(|f| f.layout_job(job));
-    let (rect, _) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
+    let gsize = galley.size();
+
+    // Reserve a band below the text for the brand wave (the teal underline from
+    // the wordmark PNG). Ratios track the SVG (amp/cap-height ~0.11, stroke ~0.05),
+    // nudged up a touch so the thin stroke stays legible on a handheld screen.
+    const WAVE_GAP: f32 = SIZE * 0.2; // text bottom → wave centerline
+    const WAVE_AMP: f32 = SIZE * 0.08; // crest height
+    const WAVE_STROKE: f32 = SIZE * 0.045;
+    let band = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(gsize.x, gsize.y + band), egui::Sense::hover());
 
     // Tessellate the galley into a mesh and recolor the `surf` (marker-colored)
     // vertices by their height: teal over the lower ~55%, warming to coral along
@@ -206,6 +216,24 @@ fn add_wordmark(ui: &mut egui::Ui) {
         v.color = lerp_color(ACCENT, SURF_WARM, t);
     }
     ui.painter().add(egui::Shape::mesh(mesh));
+
+    // The brand wave: a solid-teal sine stroked under the text, ~3 periods and
+    // overhanging the letters slightly on each side (matching the PNG wordmark).
+    // Starts on the centerline dipping down first, same phase as the SVG path.
+    const N: usize = 120;
+    const PERIODS: f32 = 3.0;
+    let over = gsize.x * 0.02;
+    let (x0, x1) = (rect.min.x - over, rect.max.x + over);
+    let cy = rect.min.y + gsize.y + WAVE_GAP;
+    let pts: Vec<egui::Pos2> = (0..=N)
+        .map(|i| {
+            let t = i as f32 / N as f32;
+            let y = cy + WAVE_AMP * (t * PERIODS * std::f32::consts::TAU).sin();
+            egui::pos2(x0 + (x1 - x0) * t, y)
+        })
+        .collect();
+    ui.painter()
+        .add(egui::Shape::line(pts, egui::Stroke::new(WAVE_STROKE, ACCENT)));
 }
 
 /// Warm end of the `surf` gradient — the brand coral (`brand.py` CORAL).
