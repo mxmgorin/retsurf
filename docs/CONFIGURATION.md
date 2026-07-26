@@ -116,6 +116,18 @@ lists = [                  # filter lists (EasyList syntax) compiled into the en
 ]
 update_days = 7            # re-download lists when the cached engine is older; 0 = never
 
+[data_saving]
+# Lightweight mode: skip whole subresource categories at the network level (like
+# the ad blocker) to save bandwidth and memory. All apply live on the next load.
+block_images = false       # skip <img>, CSS backgrounds, favicons
+block_media = false        # skip audio/video/track loads
+block_fonts = false        # skip web-font downloads (fall back to system fonts)
+# Cap on images loaded per page (0 = unlimited). Servo loads/decodes every image
+# eagerly (no lazy-loading), so a client-rendered grid of hundreds of thumbnails
+# can freeze a handheld. Past the cap, image loads are soft-blocked; the counter
+# resets each navigation. Lower it on weak boards; raise it for image galleries.
+max_images_per_page = 48
+
 [input]
 deadzone = 0.25            # stick deflection below this is treated as centered
 cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)

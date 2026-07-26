@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// subresource categories to cut bandwidth and memory. Each is blocked at the
 /// network level like the ad blocker, so pages fail soft, and all apply live.
 /// See [`crate::browser::content_filter`].
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DataSavingConfig {
     /// Skip image subresource loads (`<img>`, CSS backgrounds, favicons).
@@ -13,4 +13,18 @@ pub struct DataSavingConfig {
     pub block_media: bool,
     /// Skip web-font downloads — pages fall back to the bundled system fonts.
     pub block_fonts: bool,
+    /// Cap on images loaded per page (0 = unlimited); beyond it, loads soft-block.
+    /// Servo has no lazy-loading, so image-heavy grids can freeze a handheld.
+    pub max_images_per_page: usize,
+}
+
+impl Default for DataSavingConfig {
+    fn default() -> Self {
+        Self {
+            block_images: false,
+            block_media: false,
+            block_fonts: false,
+            max_images_per_page: 48,
+        }
+    }
 }

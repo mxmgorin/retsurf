@@ -6,6 +6,7 @@
 
 use super::{AppBrowserInner, BrowserState, Tab};
 use crate::event::user::UserEvent;
+use content_security_policy::Destination;
 use servo::WebView;
 use url::Url;
 
@@ -144,12 +145,29 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let req = load.request();
         let url = req.url.clone();
         let is_home = req.is_for_main_frame && super::home::is_home(&url);
+
+        // A new top-level navigation resets the per-page image counter.
+        if req.is_for_main_frame {
+            self.images_loaded.set(0);
+        }
+
+        let filter = self.content_filter.get();
+        let is_subresource = !is_home && !req.is_for_main_frame;
         // Block ads and any lightweight-mode content categories (images / media
         // / fonts). Never the main document itself — only its subresources.
-        let block = !is_home
-            && !req.is_for_main_frame
-            && (self.adblock.should_block(req)
-                || self.content_filter.get().blocks(req.destination));
+        let mut block =
+            is_subresource && (self.adblock.should_block(req) || filter.blocks(req.destination));
+
+        // Per-page image cap: soft-block images past the limit so a huge grid
+        // doesn't freeze the device (Servo loads them all eagerly, no lazy-load).
+        if is_subresource && !block && req.destination == Destination::Image {
+            let loaded = self.images_loaded.get();
+            if filter.image_cap_reached(loaded) {
+                block = true;
+            } else {
+                self.images_loaded.set(loaded + 1);
+            }
+        }
 
         if is_home {
             let html = super::home::render().into_bytes();

@@ -129,6 +129,9 @@ struct AppBrowserInner {
     /// for every resource load alongside the ad blocker. Behind a `Cell` so a
     /// settings save can swap in new flags live (see [`AppBrowser::set_content_filter`]).
     content_filter: Cell<ContentFilter>,
+    /// Images allowed on the current page, for the per-page cap; reset on each
+    /// top-level navigation in [`delegate`].
+    images_loaded: Cell<usize>,
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
     hint_rects: RefCell<Option<Vec<Hint>>>,
@@ -176,6 +179,7 @@ impl AppBrowserInner {
                 .collect(),
             adblock,
             content_filter: Cell::new(content_filter),
+            images_loaded: Cell::new(0),
             hint_rects: RefCell::new(None),
             ime_control: Cell::new(None),
             embedder_controls: RefCell::new(vec![]),

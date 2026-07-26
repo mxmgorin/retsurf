@@ -47,6 +47,7 @@ pub const HOLD_MS: IntBounds = IntBounds { min: 100, max: 2000 };
 // Content
 pub const HISTORY_MAX: IntBounds = IntBounds { min: 0, max: 1000 };
 pub const ADBLOCK_UPDATE_DAYS: IntBounds = IntBounds { min: 0, max: 90 };
+pub const IMAGES_PER_PAGE: IntBounds = IntBounds { min: 0, max: 500 };
 
 // Performance
 pub const LAYOUT_THREADS: IntBounds = IntBounds { min: 0, max: 8 };

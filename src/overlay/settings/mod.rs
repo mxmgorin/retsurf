@@ -361,7 +361,15 @@ impl Settings {
                     .map(|(label, _)| label.to_string())
                     .unwrap_or_else(|| cur.to_string())
             }
-            Kind::Int { .. } => format!("{}", fields::get_num(&self.draft, id) as i64),
+            Kind::Int { .. } => {
+                let v = fields::get_num(&self.draft, id) as i64;
+                // The image cap reads "Unlimited" at 0, not the bare number.
+                if id == FieldId::MaxImagesPerPage && v == 0 {
+                    "Unlimited".to_string()
+                } else {
+                    format!("{v}")
+                }
+            }
             Kind::Float { decimals, .. } => {
                 format!("{:.*}", decimals, fields::get_num(&self.draft, id))
             }

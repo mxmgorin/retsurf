@@ -141,6 +141,11 @@ impl AppConfig {
         fix_u64("input.hold_ms", &mut i.hold_ms, b::HOLD_MS);
 
         fix_usize("history.max_entries", &mut self.history.max_entries, b::HISTORY_MAX);
+        fix_usize(
+            "data_saving.max_images_per_page",
+            &mut self.data_saving.max_images_per_page,
+            b::IMAGES_PER_PAGE,
+        );
         fix_u64("adblock.update_days", &mut self.adblock.update_days, b::ADBLOCK_UPDATE_DAYS);
         fix_u32(
             "performance.layout_threads",

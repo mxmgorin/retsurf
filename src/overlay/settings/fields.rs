@@ -58,6 +58,7 @@ pub(super) enum FieldId {
     BlockImages,
     BlockMedia,
     BlockFonts,
+    MaxImagesPerPage,
     DownloadDir,
     UpdateAutoCheck,
     MemoryOverlay,
@@ -203,6 +204,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Content, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
     f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
     f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
+    f(S::Content, "Data saving", "Max images/page",      F::MaxImagesPerPage,   int(bounds::IMAGES_PER_PAGE, 8), false),
 
     f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MemoryProfile::CHOICES), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     int(bounds::LAYOUT_THREADS, 1), true),
@@ -233,6 +235,7 @@ pub(super) fn get_num(c: &AppConfig, id: FieldId) -> f64 {
         FieldId::AdblockUpdateDays => c.adblock.update_days as f64,
         FieldId::LayoutThreads => c.performance.layout_threads as f64,
         FieldId::WorkerPoolMax => c.performance.worker_pool_max as f64,
+        FieldId::MaxImagesPerPage => c.data_saving.max_images_per_page as f64,
         _ => 0.0,
     }
 }
@@ -255,6 +258,7 @@ pub(super) fn set_num(c: &mut AppConfig, id: FieldId, v: f64) {
         FieldId::AdblockUpdateDays => c.adblock.update_days = v as u64,
         FieldId::LayoutThreads => c.performance.layout_threads = v as u32,
         FieldId::WorkerPoolMax => c.performance.worker_pool_max = v as u32,
+        FieldId::MaxImagesPerPage => c.data_saving.max_images_per_page = v as usize,
         _ => {}
     }
 }
