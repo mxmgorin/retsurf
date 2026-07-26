@@ -21,7 +21,6 @@ regenerable caches (the adblock engine) under `cache/` — the latter is safe to
 [browser]
 home_page = "retsurf:home"                     # built-in start page; or any URL
 search_page = "https://duckduckgo.com/?q=%s"   # %s is replaced with the query
-experimental_prefs_enabled = true              # enable Servo's experimental web features
 # The User-Agent sites see. Empty = Servo's platform default. The keywords
 # "desktop", "mobile" (or "android"), and "ios" pick a stock UA — "mobile"
 # makes sites serve their phone layouts, which fit a small screen far better;
@@ -33,6 +32,31 @@ persist_site_data = true
 # layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.
 page_zoom = 1.0
+
+[experimental]
+# Servo experimental web-platform features. These are standard but not yet stable
+# in Servo (it ships them off); most of the modern web needs them, so retsurf turns
+# them on. In the settings overlay (Browser tab) the "Web features" row is a preset
+# that sets the whole group at once — off / minimal / balanced / full — and shows
+# "custom" once you hand-toggle any one below. The default is "balanced": the layout
+# and compatibility essentials plus the graphics the handheld's GPU supports (WebGL2,
+# OffscreenCanvas). "minimal" is the essentials only; "full" adds WebGPU (immature,
+# heavy) and the niche APIs below. Each key can be set individually; changes apply on
+# the next page load. This preset is the sole authority for WebGL2/WebGPU — the memory
+# profile no longer gates them, so on <=1 GB boards prefer "minimal" to avoid WebGL2/
+# OffscreenCanvas drawing from the shared GPU/RAM pool.
+grid = true                   # CSS Grid (display: grid)             — essential
+columns = true                # CSS multi-column                     — essential
+container_queries = true      # CSS container queries (@container)   — essential
+fontface = true               # web fonts (@font-face / FontFace)    — essential
+intersection_observer = true  # IntersectionObserver (lazy-load)     — essential
+resize_observer = true        # ResizeObserver                       — essential
+webgl2 = true                 # WebGL 2.0 (GLES 3.0-class 3D)        — balanced+
+offscreen_canvas = true       # OffscreenCanvas (canvas off-thread)  — balanced+
+webgpu = false                # WebGPU (next-gen GPU API)            — full only
+notification = false          # Web Notifications                    — full only
+async_clipboard = false       # Async Clipboard API                  — full only
+permissions = false           # Permissions API                      — full only
 
 [display]
 width = 640
@@ -57,7 +81,7 @@ layouts = ["en", "ru"]
 #   auto      pick a tier from the build target + detected RAM (the default)
 #   embedded  ~512 MB / sub-1 GB boards: baseline JIT only, single-threaded, no caches
 #   tight     ~1 GB boards (RK3326, H700): baseline JIT only, small caches
-#   balanced  ~2 GB boards (RK3566, A527): modest parallelism, full JIT, WebGL2 on
+#   balanced  ~2 GB boards (RK3566, A527): modest parallelism, full JIT
 #   generous  ~4 GB handhelds (A527): higher GC ceiling, deeper history, full JIT
 #   android   Android phones/tablets (>3 GB): full JIT, more threads, eager mem return
 #   desktop   Servo's own defaults, untouched — unlimited JS heap, auto-scaled threads

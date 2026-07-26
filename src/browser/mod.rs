@@ -18,7 +18,7 @@ pub use url::try_into_url;
 
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{BrowserConfig, DataSavingConfig, PerformanceConfig},
+    config::{AppConfig, BrowserConfig, ExperimentalConfig},
     event::user::{UserEvent, UserEventSender},
     overlay::hints::Hint,
 };
@@ -203,24 +203,21 @@ impl AppBrowser {
     pub fn new(
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
-        config: &BrowserConfig,
-        perf: &PerformanceConfig,
-        data_saving: &DataSavingConfig,
-        download_exts: Vec<String>,
-        adblock: Adblock,
+        config: &AppConfig,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
-            .opts(engine::build_opts(config))
-            .preferences(engine::build_preferences(config, perf))
+            .opts(engine::build_opts(&config.browser))
+            .preferences(engine::build_preferences(&config.browser, &config.performance))
             .event_loop_waker(event_sender.clone_box())
             .build();
-        engine::set_experimental_prefs(&servo, config.experimental_prefs_enabled);
+        engine::set_experimental_prefs(&servo, &config.experimental);
         // Sanitize the config value: Servo clamps zoom to [0.1, 10.0] anyway,
         // and a zero/negative/NaN default would make every tab unusable.
-        let default_zoom = if config.page_zoom.is_finite() && config.page_zoom > 0.0 {
-            config.page_zoom.clamp(0.1, 10.0)
+        let zoom = config.browser.page_zoom;
+        let default_zoom = if zoom.is_finite() && zoom > 0.0 {
+            zoom.clamp(0.1, 10.0)
         } else {
             1.0
         };
@@ -228,9 +225,9 @@ impl AppBrowser {
             servo,
             rendering_ctx,
             event_sender.clone(),
-            download_exts,
-            adblock,
-            ContentFilter::from_config(data_saving),
+            config.downloads.extensions.clone(),
+            Adblock::new(&config.adblock),
+            ContentFilter::from_config(&config.data_saving),
             default_zoom,
         );
 
@@ -314,6 +311,13 @@ impl AppBrowser {
     #[inline]
     pub fn set_content_filter(&self, filter: ContentFilter) {
         self.inner.content_filter.set(filter);
+    }
+
+    /// Re-apply the experimental prefs live (settings overlay). Like
+    /// [`Self::set_content_filter`], effective on the next page load.
+    #[inline]
+    pub fn set_experimental_prefs(&self, exp: &ExperimentalConfig) {
+        engine::set_experimental_prefs(&self.inner.servo, exp);
     }
 
     /// Ask the active page for its visible clickable elements (hint mode). The

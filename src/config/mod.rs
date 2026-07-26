@@ -15,6 +15,7 @@ mod data_saving;
 mod debug;
 mod display;
 mod downloads;
+mod experimental;
 mod history;
 mod input;
 mod osk;
@@ -29,6 +30,7 @@ pub use data_saving::DataSavingConfig;
 pub use debug::DebugConfig;
 pub use display::{DisplayConfig, ToolbarPosition};
 pub use downloads::DownloadsConfig;
+pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use history::HistoryConfig;
 pub use input::{CursorMode, InputConfig};
 pub use osk::OskConfig;
@@ -40,6 +42,7 @@ pub use update::{Channel, UpdateConfig};
 #[serde(default)]
 pub struct AppConfig {
     pub browser: BrowserConfig,
+    pub experimental: ExperimentalConfig,
     pub display: DisplayConfig,
     pub input: InputConfig,
     pub history: HistoryConfig,

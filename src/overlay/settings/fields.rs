@@ -6,7 +6,9 @@
 //! The Controls section is not here — it's dynamic (see [`super::CtrlRow`]).
 
 use super::SettingsSection;
-use crate::config::{bounds, AppConfig, CursorMode, MemoryProfile, ToolbarPosition};
+use crate::config::{
+    bounds, AppConfig, CursorMode, ExperimentalPreset, MemoryProfile, ToolbarPosition,
+};
 
 /// One editable field, identified so the typed get/set helpers below can reach
 /// the right spot in the draft without a parallel copy of the values.
@@ -17,6 +19,19 @@ pub(super) enum FieldId {
     UserAgent,
     PageZoom,
     PersistSiteData,
+    WebFeatures,
+    ExpWebgl2,
+    ExpWebgpu,
+    ExpOffscreenCanvas,
+    ExpGrid,
+    ExpColumns,
+    ExpContainerQueries,
+    ExpFontface,
+    ExpIntersectionObserver,
+    ExpResizeObserver,
+    ExpNotification,
+    ExpAsyncClipboard,
+    ExpPermissions,
     Width,
     Height,
     UseGles,
@@ -148,6 +163,20 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Page zoom",              F::PageZoom,           float(bounds::PAGE_ZOOM, 0.05, 2), false),
     f(S::Browser,  "Browser",     "Keep site data",         F::PersistSiteData,    Kind::Bool, true),
 
+    f(S::Browser,  "Experimental", "Web features",          F::WebFeatures,        Kind::Choice(ExperimentalPreset::CHOICES), false),
+    f(S::Browser,  "Experimental", "WebGL 2",               F::ExpWebgl2,          Kind::Bool, false),
+    f(S::Browser,  "Experimental", "WebGPU",                F::ExpWebgpu,          Kind::Bool, false),
+    f(S::Browser,  "Experimental", "OffscreenCanvas",       F::ExpOffscreenCanvas, Kind::Bool, false),
+    f(S::Browser,  "Experimental", "CSS Grid",              F::ExpGrid,            Kind::Bool, false),
+    f(S::Browser,  "Experimental", "CSS columns",           F::ExpColumns,         Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Container queries",     F::ExpContainerQueries, Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Web fonts",             F::ExpFontface,        Kind::Bool, false),
+    f(S::Browser,  "Experimental", "IntersectionObserver",  F::ExpIntersectionObserver, Kind::Bool, false),
+    f(S::Browser,  "Experimental", "ResizeObserver",        F::ExpResizeObserver,  Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Notifications",         F::ExpNotification,    Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Async clipboard",       F::ExpAsyncClipboard,  Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Permissions",           F::ExpPermissions,     Kind::Bool, false),
+
     f(S::Display,  "Display",     "Window width",           F::Width,              int(bounds::WIDTH, 16), true),
     f(S::Display,  "Display",     "Window height",          F::Height,             int(bounds::HEIGHT, 16), true),
     f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
@@ -243,6 +272,18 @@ pub(super) fn get_bool(c: &AppConfig, id: FieldId) -> bool {
         FieldId::HintBadges => c.input.hint_badges,
         FieldId::UpdateAutoCheck => c.update.auto_check,
         FieldId::MemoryOverlay => c.debug.memory_overlay,
+        FieldId::ExpWebgl2 => c.experimental.webgl2,
+        FieldId::ExpWebgpu => c.experimental.webgpu,
+        FieldId::ExpOffscreenCanvas => c.experimental.offscreen_canvas,
+        FieldId::ExpGrid => c.experimental.grid,
+        FieldId::ExpColumns => c.experimental.columns,
+        FieldId::ExpContainerQueries => c.experimental.container_queries,
+        FieldId::ExpFontface => c.experimental.fontface,
+        FieldId::ExpIntersectionObserver => c.experimental.intersection_observer,
+        FieldId::ExpResizeObserver => c.experimental.resize_observer,
+        FieldId::ExpNotification => c.experimental.notification,
+        FieldId::ExpAsyncClipboard => c.experimental.async_clipboard,
+        FieldId::ExpPermissions => c.experimental.permissions,
         _ => false,
     }
 }
@@ -260,6 +301,18 @@ pub(super) fn set_bool(c: &mut AppConfig, id: FieldId, b: bool) {
         FieldId::HintBadges => c.input.hint_badges = b,
         FieldId::UpdateAutoCheck => c.update.auto_check = b,
         FieldId::MemoryOverlay => c.debug.memory_overlay = b,
+        FieldId::ExpWebgl2 => c.experimental.webgl2 = b,
+        FieldId::ExpWebgpu => c.experimental.webgpu = b,
+        FieldId::ExpOffscreenCanvas => c.experimental.offscreen_canvas = b,
+        FieldId::ExpGrid => c.experimental.grid = b,
+        FieldId::ExpColumns => c.experimental.columns = b,
+        FieldId::ExpContainerQueries => c.experimental.container_queries = b,
+        FieldId::ExpFontface => c.experimental.fontface = b,
+        FieldId::ExpIntersectionObserver => c.experimental.intersection_observer = b,
+        FieldId::ExpResizeObserver => c.experimental.resize_observer = b,
+        FieldId::ExpNotification => c.experimental.notification = b,
+        FieldId::ExpAsyncClipboard => c.experimental.async_clipboard = b,
+        FieldId::ExpPermissions => c.experimental.permissions = b,
         _ => {}
     }
 }
@@ -279,6 +332,8 @@ pub(super) fn get_choice(c: &AppConfig, id: FieldId) -> &str {
         FieldId::CursorMode => c.input.cursor_mode.as_str(),
         FieldId::MemoryProfile => c.performance.memory_profile.as_str(),
         FieldId::ToolbarPosition => c.display.toolbar_position.as_str(),
+        // Derived from the 12 feature bools — shows "Custom" when they match no preset.
+        FieldId::WebFeatures => ExperimentalPreset::detect(&c.experimental).as_str(),
         _ => "",
     }
 }
@@ -289,6 +344,8 @@ pub(super) fn set_choice(c: &mut AppConfig, id: FieldId, v: &str) {
         FieldId::CursorMode => c.input.cursor_mode = CursorMode::from_value(v),
         FieldId::MemoryProfile => c.performance.memory_profile = MemoryProfile::from_value(v),
         FieldId::ToolbarPosition => c.display.toolbar_position = ToolbarPosition::from_value(v),
+        // Picking a preset rewrites all 12 feature bools (the source of truth).
+        FieldId::WebFeatures => c.experimental = ExperimentalPreset::from_value(v).features(),
         _ => {}
     }
 }

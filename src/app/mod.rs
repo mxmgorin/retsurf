@@ -9,7 +9,6 @@ mod router;
 
 pub use command::{AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
 
-use crate::browser::adblock::Adblock;
 use crate::browser::AppBrowser;
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
@@ -67,15 +66,7 @@ impl App {
         let window = AppWindow::new(sdl, &config.display)?;
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
-        let browser = AppBrowser::new(
-            window.rendering_ctx(),
-            event_sender.clone(),
-            &config.browser,
-            &config.performance,
-            &config.data_saving,
-            config.downloads.extensions.clone(),
-            Adblock::new(&config.adblock),
-        )?;
+        let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
         log::info!("init: browser ready; creating event handler + ui");
         let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(

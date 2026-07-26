@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct BrowserConfig {
     pub home_page: String,
-    pub experimental_prefs_enabled: bool,
     pub search_page: String,
     /// The User-Agent header sites see. Empty keeps Servo's platform default;
     /// the keywords `desktop`, `mobile` (or `android`), and `ios` pick the
@@ -27,7 +26,6 @@ impl Default for BrowserConfig {
         Self {
             // The built-in start page (crate::browser::home::HOME_URL).
             home_page: "retsurf:home".to_string(),
-            experimental_prefs_enabled: true,
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
             user_agent: String::new(),
             persist_site_data: true,

@@ -1,27 +1,12 @@
-//! One-shot Servo startup configuration: `Opts`, `Preferences` (sized to the
-//! hardware), the user-agent resolver, and the experimental-pref toggle. None
-//! of this touches a live [`AppBrowser`] — it all feeds [`servo::ServoBuilder`]
-//! at construction time.
+//! Servo startup configuration: `Opts`, `Preferences` (sized to the hardware),
+//! the user-agent resolver, and the experimental-feature prefs. `Opts`/`Preferences`
+//! feed [`servo::ServoBuilder`] at build; the experimental prefs are set after
+//! `build()`, so [`set_experimental_prefs`] can re-apply them live.
 
 use crate::{
     browser::memory,
-    config::{BrowserConfig, PerformanceConfig},
+    config::{BrowserConfig, ExperimentalConfig, PerformanceConfig},
 };
-
-static EXPERIMENTAL_PREFS: &[&str] = &[
-    "dom_async_clipboard_enabled",
-    "dom_fontface_enabled",
-    "dom_intersection_observer_enabled",
-    "dom_notification_enabled",
-    "dom_offscreen_canvas_enabled",
-    "dom_permissions_enabled",
-    "dom_resize_observer_enabled",
-    "dom_webgl2_enabled",
-    "dom_webgpu_enabled",
-    "layout_columns_enabled",
-    "layout_container_queries_enabled",
-    "layout_grid_enabled",
-];
 
 /// Servo options: with `persist_site_data` on, point `config_dir` at the
 /// `servo/` subfolder of the user data dir — Servo's net and storage threads
@@ -115,10 +100,29 @@ fn resolve_user_agent(value: &str) -> Option<String> {
     Some(platform.to_user_agent_string())
 }
 
-pub(super) fn set_experimental_prefs(servo: &servo::Servo, value: bool) {
-    let value = servo::PrefValue::Bool(value);
+/// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
+/// `servo-config` — `set_preference` panics on an unknown pref.
+fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 12] {
+    [
+        ("dom_webgl2_enabled", exp.webgl2),
+        ("dom_webgpu_enabled", exp.webgpu),
+        ("dom_offscreen_canvas_enabled", exp.offscreen_canvas),
+        ("layout_grid_enabled", exp.grid),
+        ("layout_columns_enabled", exp.columns),
+        ("layout_container_queries_enabled", exp.container_queries),
+        ("dom_fontface_enabled", exp.fontface),
+        ("dom_intersection_observer_enabled", exp.intersection_observer),
+        ("dom_resize_observer_enabled", exp.resize_observer),
+        ("dom_notification_enabled", exp.notification),
+        ("dom_async_clipboard_enabled", exp.async_clipboard),
+        ("dom_permissions_enabled", exp.permissions),
+    ]
+}
 
-    for pref in EXPERIMENTAL_PREFS {
-        servo.set_preference(pref, value.clone());
+/// Apply the experimental prefs (after `build()` and on settings change).
+/// Effective on the next page load, not already-loaded pages.
+pub(super) fn set_experimental_prefs(servo: &servo::Servo, exp: &ExperimentalConfig) {
+    for (pref, on) in experimental_pref_values(exp) {
+        servo.set_preference(pref, servo::PrefValue::Bool(on));
     }
 }

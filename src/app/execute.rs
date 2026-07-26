@@ -285,6 +285,9 @@ impl App {
         self.browser.set_content_filter(
             crate::browser::content_filter::ContentFilter::from_config(&self.config.data_saving),
         );
+        // Experimental features apply live too — effective on the next page load.
+        self.browser
+            .set_experimental_prefs(&self.config.experimental);
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

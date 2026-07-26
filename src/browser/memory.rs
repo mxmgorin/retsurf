@@ -38,6 +38,11 @@
 // handful of fields that matter (see the module docs), with a comment per field.
 // That's far clearer here than a struct-update literal burying the overrides in a
 // 30-field initializer — and it keeps each field independent across servo bumps.
+//
+// NOTE: tiers do NOT set dom_webgl2_enabled / dom_webgpu_enabled — those are
+// owned by `[experimental]` (applied after build by engine::set_experimental_prefs),
+// so any tier value would just be overridden. Tiers manage only the subsystems
+// (WebXR, Bluetooth, service/shared workers, worklets) not exposed there.
 #![allow(clippy::field_reassign_with_default)]
 
 use crate::config::MemoryProfile;
@@ -160,9 +165,7 @@ fn embedded() -> Preferences {
     // Drop the glyph-cache cost of subpixel AA (grayscale AA still on).
     p.gfx_subpixel_text_antialiasing_enabled = false;
 
-    // Everything optional off.
-    p.dom_webgpu_enabled = false;
-    p.dom_webgl2_enabled = false;
+    // Optional subsystems off (WebGL2/WebGPU are owned by [experimental]).
     p.dom_webxr_enabled = false;
     p.dom_bluetooth_enabled = false;
     p.dom_serviceworker_enabled = false;
@@ -216,9 +219,7 @@ fn tight() -> Preferences {
     // AA stays on.
     p.gfx_subpixel_text_antialiasing_enabled = false;
 
-    // Skip standing up optional subsystems.
-    p.dom_webgpu_enabled = false;
-    p.dom_webgl2_enabled = false;
+    // Skip optional subsystems (WebGL2/WebGPU are owned by [experimental]).
     p.dom_webxr_enabled = false;
     p.dom_bluetooth_enabled = false;
     p.dom_serviceworker_enabled = false;
@@ -229,8 +230,8 @@ fn tight() -> Preferences {
     p
 }
 
-/// ~2 GB: balanced. Modest parallelism, moderate GC ceiling, keep WebGL2 and
-/// service workers; full JIT on.
+/// ~2 GB: balanced. Modest parallelism, moderate GC ceiling, keep service
+/// workers; full JIT on. (WebGL2/WebGPU are owned by [experimental].)
 fn balanced() -> Preferences {
     let mut p = Preferences::default();
 
@@ -259,8 +260,7 @@ fn balanced() -> Preferences {
     // Small HTTP cache (weight is a relative dial — tune to your profiler).
     p.network_http_cache_size = 32;
 
-    // Trim the rarely-needed subsystems; keep WebGL2 + service workers.
-    p.dom_webgpu_enabled = false;
+    // Trim rarely-needed subsystems; keep service workers. (WebGL2/WebGPU: [experimental].)
     p.dom_webxr_enabled = false;
     p.dom_bluetooth_enabled = false;
     p.dom_sharedworker_enabled = false;
@@ -339,9 +339,8 @@ fn android() -> Preferences {
     // cheaper on the glyph cache.
     p.gfx_subpixel_text_antialiasing_enabled = false;
 
-    // Keep WebGL2 + service workers (PWAs are common on Android). Leave the
-    // experimental/heavy and exotic-device APIs off.
-    p.dom_webgpu_enabled = false;
+    // Keep service workers (PWAs common on Android); exotic-device APIs off.
+    // (WebGL2/WebGPU are owned by [experimental].)
     p.dom_webxr_enabled = false;
     p.dom_bluetooth_enabled = false;
 
@@ -351,7 +350,8 @@ fn android() -> Preferences {
 /// Desktop / unconstrained: Servo's own defaults, untouched. No pref overrides,
 /// and [`crate::browser::engine::build_preferences`] skips the thread clamp for this
 /// tier, so the engine runs exactly as upstream ships it (unlimited JS heap,
-/// auto-scaled thread pools, subpixel AA on, WebGL2/service workers default-on).
+/// auto-scaled thread pools, subpixel AA on, service workers default-on;
+/// WebGL2/WebGPU per [experimental]).
 fn desktop() -> Preferences {
     Preferences::default()
 }
