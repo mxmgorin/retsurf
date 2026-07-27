@@ -1,5 +1,6 @@
-//! Bakes the facts shown on the settings → About tab into the binary as
-//! compile-time env vars (read with `env!` in `src/overlay/settings.rs`):
+//! Bakes the facts shown on the settings → About tab — and in the startup log
+//! line and panic file (`src/lib.rs`) — into the binary as compile-time env vars
+//! (read with `env!` in `src/overlay/settings.rs`):
 //!
 //! * `RETSURF_GIT_HASH` / `RETSURF_BUILD_DATE` — the short hash and committer
 //!   date of `HEAD`, pinning the exact source the build came from.
@@ -33,9 +34,27 @@ fn main() {
         println!("cargo:rustc-env=RETSURF_VER_{suffix}={ver}");
     }
 
-    // Re-run only when the things we read can change.
+    // Re-run only when the things we read can change. A commit on the current
+    // branch rewrites that branch's ref file, not `.git/HEAD`, so watch both —
+    // otherwise the stamped hash/date go stale after every commit.
     println!("cargo:rerun-if-changed=Cargo.lock");
-    println!("cargo:rerun-if-changed=.git/HEAD");
+    rerun_if_exists(".git/HEAD");
+    if let Some(git_ref) = std::fs::read_to_string(".git/HEAD")
+        .ok()
+        .and_then(|head| head.trim().strip_prefix("ref: ").map(str::to_string))
+    {
+        rerun_if_exists(&format!(".git/{git_ref}"));
+        // Where the tip lives once the ref is packed away.
+        rerun_if_exists(".git/packed-refs");
+    }
+}
+
+/// Emit `rerun-if-changed` only for paths that exist: cargo treats a missing one
+/// as changed, which would rebuild the crate on every invocation.
+fn rerun_if_exists(path: &str) {
+    if std::path::Path::new(path).exists() {
+        println!("cargo:rerun-if-changed={path}");
+    }
 }
 
 /// Run `git <args>`, returning the trimmed stdout or `"unknown"` (no repo, no git

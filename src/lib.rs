@@ -10,6 +10,18 @@ mod update;
 
 use crate::app::App;
 
+/// Build identity for the startup log and the panic file: crate version, plus the
+/// `HEAD` short hash and its committer date stamped in by `build.rs`. Both fall
+/// back to `unknown` when built without a git checkout.
+const BUILD_ID: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("RETSURF_GIT_HASH"),
+    ", ",
+    env!("RETSURF_BUILD_DATE"),
+    ")"
+);
+
 /// Shared startup used by both the desktop `main` binary and the Android
 /// `SDL_main` entry point. Everything platform-specific is `cfg`-gated here so the
 /// two callers stay trivial.
@@ -21,7 +33,7 @@ pub fn run_app() {
 
     init_logging();
 
-    log::info!("Init main");
+    log::info!("Init main: retsurf {BUILD_ID}");
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Error initializing crypto provider");
@@ -123,7 +135,11 @@ fn install_panic_hook() {
         let path =
             std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
         let backtrace = std::backtrace::Backtrace::force_capture();
-        let _ = std::fs::write(&path, format!("{info}\n\nbacktrace:\n{backtrace}\n"));
+        // Build first: the panic file is usually the only thing a bug report carries.
+        let _ = std::fs::write(
+            &path,
+            format!("retsurf {BUILD_ID}\n\n{info}\n\nbacktrace:\n{backtrace}\n"),
+        );
         default(info);
     }));
 }
