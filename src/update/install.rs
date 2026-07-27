@@ -15,17 +15,12 @@ use super::{publish, Kind, UpdateState, USER_AGENT};
 use crate::event::user::UserEventSender;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 /// The per-core binaries a PortMaster release ships, named under the extracted
 /// `retsurf/` subfolder and directly in the gamedir.
 const BINARIES: [&str; 3] = ["retsurf.a35", "retsurf.a53", "retsurf.a55"];
-
-/// Throttle for download-progress wakeups (matches the download worker).
-const NOTIFY_EVERY: Duration = Duration::from_millis(250);
 
 /// Drive the whole install, publishing the terminal state. Any error leaves the
 /// live install untouched (see the swap rollback) and surfaces as [`UpdateState::Error`].
@@ -81,7 +76,9 @@ fn install(
     if let Some(expected) = sha256 {
         if !digest.eq_ignore_ascii_case(expected) {
             let _ = fs::remove_dir_all(&staging);
-            return Err(format!("checksum mismatch (expected {expected}, got {digest})"));
+            return Err(format!(
+                "checksum mismatch (expected {expected}, got {digest})"
+            ));
         }
     }
 
@@ -139,34 +136,24 @@ fn download(
         request = request.header("Authorization", format!("Bearer {token}"));
     }
     let response = request.call().map_err(|e| e.to_string())?;
-    let total = response
-        .headers()
-        .get("Content-Length")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
-    publish(state, UpdateState::Downloading { received: 0, total }, sender);
+    let total = crate::net::content_length(response.headers()).unwrap_or(0);
+    publish(
+        state,
+        UpdateState::Downloading { received: 0, total },
+        sender,
+    );
 
     let part = with_suffix(dest, ".part");
-    let mut reader = response.into_body().into_reader();
+    let reader = response.into_body().into_reader();
     let mut file = fs::File::create(&part).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
-    let mut received = 0u64;
-    let mut last_notify = Instant::now();
-    loop {
-        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-        hasher.update(&buf[..n]);
-        received += n as u64;
-        if last_notify.elapsed() >= NOTIFY_EVERY {
-            last_notify = Instant::now();
+    crate::net::stream(reader, &mut file, |chunk, received, due| {
+        hasher.update(chunk);
+        if due {
             publish(state, UpdateState::Downloading { received, total }, sender);
         }
-    }
+        true
+    })?;
     file.sync_all().map_err(|e| e.to_string())?;
     drop(file);
     fs::rename(&part, dest).map_err(|e| format!("rename: {e}"))?;

@@ -7,36 +7,6 @@
 use super::Settings;
 use crate::event::bindings::{self, Action};
 
-/// The bindable actions shown in the Controls section, in display order — every
-/// [`Action`] except `None` (removal handles unbinding). `Scroll` is gamepad-only
-/// (a keyboard binding for it is rejected on apply).
-const CONTROLS_ACTIONS: &[Action] = &[
-    Action::Confirm,
-    Action::Cancel,
-    Action::Osk,
-    Action::Reload,
-    Action::Prev,
-    Action::Next,
-    Action::Hints,
-    Action::Bookmark,
-    Action::Home,
-    Action::Reader,
-    Action::Menu,
-    Action::Settings,
-    Action::Quit,
-    Action::TabNext,
-    Action::TabPrev,
-    Action::NewTab,
-    Action::ZoomIn,
-    Action::ZoomOut,
-    Action::ZoomReset,
-    Action::NavUp,
-    Action::NavDown,
-    Action::NavLeft,
-    Action::NavRight,
-    Action::Scroll,
-];
-
 /// One rendered row of the dynamic Controls list (built on demand from the
 /// bindings draft by [`Settings::controls_rows`]; not a static [`super::Field`] row).
 #[derive(Clone)]
@@ -75,12 +45,12 @@ impl Settings {
         self.capturing
     }
 
-    /// Build the Controls rows from the bindings draft: per action, a header, a
-    /// row per existing binding (gamepad then keyboard), and an "add" row; then
-    /// the two reset rows. Rebuilt on demand — `selected` indexes into the result.
+    /// A header, the existing bindings (gamepad then keyboard) and an "add" row
+    /// per [`Action::ALL`] entry except `None`, then the two resets. Rebuilt on
+    /// demand — `selected` indexes into the result.
     pub fn controls_rows(&self) -> Vec<CtrlRow> {
         let mut rows = Vec::new();
-        for &action in CONTROLS_ACTIONS {
+        for &action in Action::ALL.iter().filter(|&&a| a != Action::None) {
             rows.push(CtrlRow::Header(action.display()));
             let name = action.name();
             for gesture in self.bound_gestures(&self.bindings_draft.gamepad, name) {

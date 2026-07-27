@@ -42,6 +42,7 @@ impl Default for ExperimentalConfig {
 
 /// A named bundle of experimental features (settings "Web features" row). Derived
 /// from [`ExperimentalConfig`]'s bools, not stored; `Custom` = matches no preset.
+/// Hand-rolled rather than `token_enum!`: `Custom` is derived-only.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ExperimentalPreset {
     /// All features off — most stable, but breaks most modern sites.

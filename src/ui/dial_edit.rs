@@ -1,12 +1,9 @@
 //! Rendering of the speed-dial editor overlay (state lives in
-//! [`crate::overlay::dial_edit`]): a title, the pinned shortcuts as a deletable
-//! tile grid, and a URL field + "Add" button beneath. Navigation (move the
-//! selection, add, delete, close) is routed by [`crate::app`]; the mouse can
-//! click a tile's ✖, the field, or Add directly. Tiles reuse the start page's
-//! [`super::home::paint_tile`] look; deleting and adding go through
-//! [`crate::app::MenuAction`].
+//! [`crate::overlay::dial_edit`]): a title, the pins as a deletable tile grid,
+//! and a URL field + "Add" beneath. Tiles reuse the start page's
+//! [`super::home::paint_tile`] look; edits go through [`crate::app::MenuAction`].
 
-use super::home::{paint_tile, GAP, GLYPH, TILE_H, TILE_W};
+use super::home::{paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{ACCENT, CLOSE_SIZE};
 use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
@@ -42,9 +39,8 @@ pub(super) fn add_dial_edit(
                     let cols = (((field_w + GAP) / (TILE_W + GAP)).floor() as usize).max(1);
                     edit.set_cols(cols);
 
-                    // Mouse-only ✖ close, pinned to the top-right corner (the
-                    // gamepad closes with B). Painted/interacted directly so it
-                    // doesn't disturb the centered content flow below.
+                    // Mouse-only close button (the gamepad closes with B), painted
+                    // directly so it can't disturb the centered flow below.
                     add_close_button(ui, screen, commands);
 
                     ui.vertical_centered(|ui| {
@@ -56,9 +52,7 @@ pub(super) fn add_dial_edit(
                                 .strong(),
                         );
                         ui.add_space(20.0);
-                        // The grid ends with an always-present ⚙ settings tile
-                        // (toggled with A); the field below adds URL pins, which
-                        // pin on Enter (keyboard) / OSK Enter (gamepad).
+                        // The field pins its URL on Enter / OSK Enter.
                         add_grid(ui, edit, pins, field_w, cols, commands);
                         ui.add_space(24.0);
                         add_field(ui, edit, field_w, osk_caret);
@@ -68,10 +62,8 @@ pub(super) fn add_dial_edit(
         });
 }
 
-/// The tile grid: one deletable tile per regular pin (a ✖ badge to delete, the
-/// selection ring when focused), then an always-present trailing ⚙ settings
-/// toggle tile. The ⚙ sentinel is hidden from the regular pins so it shows only
-/// as that one tile — selecting it (A / click) pins or unpins the shortcut.
+/// The tile grid: a deletable tile per regular pin, then the always-present
+/// settings toggle tile (the sentinel is hidden from the regular pins).
 fn add_grid(
     ui: &mut egui::Ui,
     edit: &DialEdit,
@@ -80,8 +72,7 @@ fn add_grid(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    // Regular pins (with their real dial index for deletion), then the trailing
-    // ⚙ tile as the last slot.
+    // Real dial indices kept for deletion; the settings tile is the last slot.
     let regular: Vec<(usize, &String)> = pins
         .iter()
         .enumerate()
@@ -89,51 +80,24 @@ fn add_grid(
         .collect();
     let settings_pinned = pins.iter().any(|u| u == SETTINGS_PIN);
     let settings_slot = regular.len();
-    let total = settings_slot + 1;
 
-    ui.allocate_ui_with_layout(
-        egui::vec2(width, 0.0),
-        egui::Layout::top_down(egui::Align::Center),
-        |ui| {
-            for row_start in (0..total).step_by(cols) {
-                let n = (total - row_start).min(cols);
-                let row_w = n as f32 * TILE_W + (n.saturating_sub(1)) as f32 * GAP;
-                ui.allocate_ui_with_layout(
-                    egui::vec2(row_w, TILE_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.x = GAP;
-                        // `slot` reaches `settings_slot` (== `regular.len()`), the
-                        // trailing ⚙ tile — out of bounds for `regular`, so we can't
-                        // iterate `regular` directly; index it only on the else arm.
-                        #[allow(clippy::needless_range_loop)]
-                        for slot in row_start..row_start + n {
-                            let selected = edit.tile() == Some(slot);
-                            if slot == settings_slot {
-                                if add_settings_tile(ui, selected, settings_pinned) {
-                                    commands.push(AppCommand::Menu(MenuAction::DialToggleSettings));
-                                }
-                            } else {
-                                let (dial_index, url) = regular[slot];
-                                if add_edit_tile(ui, url, selected, dial_index) {
-                                    commands.push(AppCommand::Menu(MenuAction::DialRemoveAt(
-                                        dial_index,
-                                    )));
-                                }
-                            }
-                        }
-                    },
-                );
-                ui.add_space(GAP);
+    tile_grid(ui, width, cols, settings_slot + 1, |ui, slot| {
+        let selected = edit.tile() == Some(slot);
+        if slot == settings_slot {
+            if add_settings_tile(ui, selected, settings_pinned) {
+                commands.push(AppCommand::Menu(MenuAction::DialToggleSettings));
             }
-        },
-    );
+        } else {
+            let (dial_index, url) = regular[slot];
+            if add_edit_tile(ui, url, selected, dial_index) {
+                commands.push(AppCommand::Menu(MenuAction::DialRemoveAt(dial_index)));
+            }
+        }
+    });
 }
 
-/// The trailing ⚙ settings toggle tile: the shared filled tile look when the
-/// shortcut is pinned, an outline action-slot (like the start page's Edit tile)
-/// when it isn't — accent-ringed when selected or hovered. Returns whether it
-/// was clicked (which toggles the pin).
+/// The trailing settings toggle tile: the filled tile look when pinned, an outline
+/// action slot when not. Returns whether it was clicked (which toggles the pin).
 fn add_settings_tile(ui: &mut egui::Ui, selected: bool, pinned: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     let active = selected || resp.hovered();
@@ -172,15 +136,14 @@ fn add_settings_tile(ui: &mut egui::Ui, selected: bool, pinned: bool) -> bool {
     resp.clicked()
 }
 
-/// One editor tile: the shared tile visual plus a ✖ delete badge in the
-/// top-right. The tile body is inert (edit-only); returns whether the ✖ was
-/// clicked.
+/// One editor tile: the shared tile visual plus a delete badge. The body is inert
+/// (edit-only); returns whether the badge was clicked.
 fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::hover());
     let active = selected || resp.hovered();
     paint_tile(ui.painter(), rect, url, active);
 
-    // ✖ delete badge, top-right of the glyph square.
+    // Delete badge, top-right of the glyph square.
     let glyph_top = rect.top() + 2.0;
     let badge = egui::Rect::from_min_size(
         egui::pos2(rect.center().x + GLYPH / 2.0 - 16.0, glyph_top),
@@ -255,7 +218,7 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Opti
     });
 }
 
-/// The mouse-only ✖ close button in the top-right corner (shared with the menu).
+/// The mouse-only close button in the top-right corner (shared with the menu).
 fn add_close_button(ui: &mut egui::Ui, screen: egui::Rect, commands: &mut Vec<AppCommand>) {
     let rect = egui::Rect::from_min_size(
         egui::pos2(screen.right() - 16.0 - CLOSE_SIZE, screen.top() + 14.0),

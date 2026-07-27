@@ -91,6 +91,7 @@ pub enum Action {
 }
 
 impl Action {
+    /// Every action, in Controls display order (`None` last — the list drops it).
     pub(crate) const ALL: [Action; 25] = [
         Action::Confirm,
         Action::Cancel,

@@ -4,10 +4,8 @@
 //! the main loop with [`UserEvent::DownloadUpdate`] so the UI repaints while idle.
 
 use crate::event::user::{UserEvent, UserEventSender};
-use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 /// Worker → main-thread progress. The worker stores the counters as it streams
 /// and the final result exactly once; the main loop sets `cancel` to stop it.
@@ -17,9 +15,6 @@ pub(super) struct Shared {
     pub cancel: AtomicBool,
     pub result: Mutex<Option<Result<(), String>>>,
 }
-
-/// Throttle between progress wakeups sent to the main loop.
-const NOTIFY_EVERY: Duration = Duration::from_millis(250);
 
 /// Pick a free destination path for `url` inside `dir` and spawn the worker
 /// thread fetching it. Returns the path and the progress handle.
@@ -61,35 +56,18 @@ fn run(url: String, path: String, shared: Arc<Shared>, sender: UserEventSender) 
 
 fn fetch(url: &str, part: &str, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
     let response = ureq::get(url).call().map_err(|e| e.to_string())?;
-    if let Some(total) = response
-        .headers()
-        .get("Content-Length")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-    {
+    if let Some(total) = crate::net::content_length(response.headers()) {
         shared.total.store(total, Ordering::Relaxed);
     }
-    let mut reader = response.into_body().into_reader();
-    let mut file = std::fs::File::create(part).map_err(|e| e.to_string())?;
-    let mut buf = [0u8; 64 * 1024];
-    let mut received = 0u64;
-    let mut last_notify = Instant::now();
-    loop {
-        if shared.cancel.load(Ordering::Relaxed) {
-            return Err("cancelled".to_string());
-        }
-        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
-        if n == 0 {
-            return Ok(());
-        }
-        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-        received += n as u64;
+    let reader = response.into_body().into_reader();
+    let file = std::fs::File::create(part).map_err(|e| e.to_string())?;
+    crate::net::stream(reader, file, |_, received, due| {
         shared.received.store(received, Ordering::Relaxed);
-        if last_notify.elapsed() >= NOTIFY_EVERY {
-            last_notify = Instant::now();
+        if due {
             sender.send(UserEvent::DownloadUpdate);
         }
-    }
+        !shared.cancel.load(Ordering::Relaxed)
+    })
 }
 
 /// Derive a save name from the URL's last path segment (percent-decoded, path

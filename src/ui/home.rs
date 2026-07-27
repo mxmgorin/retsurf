@@ -58,12 +58,9 @@ pub(super) fn add_home(
                 .fill(BG)
                 .inner_margin(0.0)
                 .show(ui, |ui| {
-                    // Pin the content region to exactly the current area. `Area`
-                    // caches its size by id across frames, and `set_min_size` only
-                    // ever grows it — so after a landscape→portrait rotation the
-                    // stale (wider) size would persist and `vertical_centered`
-                    // would center against it, shoving the block off the right
-                    // edge. Capping the max as well lets it shrink back.
+                    // Pin the region to the current area: `Area` caches its size by
+                    // id and `set_min_size` only grows, so a portrait rotation would
+                    // keep centering against the stale landscape width.
                     ui.set_min_size(area.size());
                     ui.set_max_size(area.size());
                     // Field/grid width: the artifact's min(620, 90%).
@@ -76,8 +73,8 @@ pub(super) fn add_home(
                     // slack. Heights below are the laid-out sizes plus the gaps.
                     const WORDMARK_H: f32 = 46.0; // text + wave band
                     const FIELD_H: f32 = 44.0;
-                    const GAP_TOP: f32 = 28.0; // wordmark → field
-                    const GAP_MID: f32 = 36.0; // field → grid
+                    const GAP_TOP: f32 = 28.0; // wordmark to field
+                    const GAP_MID: f32 = 36.0; // field to grid
                                                // One tile per pin plus the trailing "+ Add" tile.
                     let tiles = pins.len() + 1;
                     let rows = tiles.div_ceil(cols);
@@ -106,7 +103,7 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     const HINTS: &[(&str, &str)] = &[("A", "Open"), ("☰", "Menu")];
     const PILL_H: f32 = 18.0;
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
-    const GAP_KL: f32 = 6.0; // key pill → its label
+    const GAP_KL: f32 = 6.0; // key pill to its label
     const GAP_SEG: f32 = 18.0; // between hint segments
     let key_font = font(12.0);
     let label_font = font(12.0);
@@ -147,14 +144,10 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     }
 }
 
-/// The brand wordmark: a large two-tone "RET·SURF" logotype — the "RET" in ink,
-/// "SURF" in the surf gradient (teal warming to coral along the top edge, matching
-/// the SVG wordmark) — so the start page reads as branded rather than blank. Built
-/// as one `LayoutJob` on a single centered line, with wide letter-spacing.
-///
-/// egui has no gradient text fill, so we tag the `surf` glyphs with a marker color
-/// ([`ACCENT`]), tessellate the galley ourselves, and recolor those vertices by
-/// height.
+/// The brand wordmark: "ret" in ink, "surf" in the brand gradient (teal warming to
+/// coral), matching the SVG wordmark. egui has no gradient text fill, so the `surf`
+/// glyphs are tagged with a marker color ([`ACCENT`]), tessellated here, and
+/// recolored by height.
 fn add_wordmark(ui: &mut egui::Ui) {
     const SIZE: f32 = 30.0;
     const TRACKING: f32 = 3.0;
@@ -179,7 +172,7 @@ fn add_wordmark(ui: &mut egui::Ui) {
     // Reserve a band below the text for the brand wave (the teal underline from
     // the wordmark PNG). Ratios track the SVG (amp/cap-height ~0.11, stroke ~0.05),
     // nudged up a touch so the thin stroke stays legible on a handheld screen.
-    const WAVE_GAP: f32 = SIZE * 0.2; // text bottom → wave centerline
+    const WAVE_GAP: f32 = SIZE * 0.2; // text bottom to wave centerline
     const WAVE_AMP: f32 = SIZE * 0.08; // crest height
     const WAVE_STROKE: f32 = SIZE * 0.045;
     let band = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
@@ -201,7 +194,12 @@ fn add_wordmark(ui: &mut egui::Ui) {
     // x-height tops only partway to coral while `f`'s tip hit full coral (making
     // `f` look yellower). Anchoring at the x-height clamps everything above it to
     // coral, so every glyph's top matches — same as the SVG's y2=1120 stop.
-    let ys: Vec<f32> = mesh.vertices.iter().filter(|v| v.color == ACCENT).map(|v| v.pos.y).collect();
+    let ys: Vec<f32> = mesh
+        .vertices
+        .iter()
+        .filter(|v| v.color == ACCENT)
+        .map(|v| v.pos.y)
+        .collect();
     let bot = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     // Each glyph is one quad (4 verts); the x-height is the lowest of the glyph
     // tops (the tall `f` top is the outlier and is excluded by taking the max).
@@ -232,8 +230,10 @@ fn add_wordmark(ui: &mut egui::Ui) {
             egui::pos2(x0 + (x1 - x0) * t, y)
         })
         .collect();
-    ui.painter()
-        .add(egui::Shape::line(pts, egui::Stroke::new(WAVE_STROKE, ACCENT)));
+    ui.painter().add(egui::Shape::line(
+        pts,
+        egui::Stroke::new(WAVE_STROKE, ACCENT),
+    ));
 }
 
 /// Warm end of the `surf` gradient — the brand coral (`brand.py` CORAL).
@@ -313,39 +313,48 @@ fn add_dial(
     commands: &mut Vec<AppCommand>,
 ) {
     let tiles = pins.len() + 1; // + the trailing "Edit" tile
-                                // Center the grid within the field width.
+    tile_grid(ui, width, cols, tiles, |ui, i| {
+        let selected = home.tile() == Some(i);
+        match pins.get(i) {
+            Some(url) => {
+                if add_tile(ui, url, selected).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
+                }
+            }
+            // i == pins.len(): the trailing "Edit" tile.
+            None => {
+                if add_edit_tile(ui, selected).clicked() {
+                    commands.push(AppCommand::Menu(MenuAction::DialEdit));
+                }
+            }
+        }
+    });
+}
+
+/// Lay out `total` tiles in rows of `cols` centred within `width`. Each row is
+/// allocated at its exact content width so a partial last row stays centred — a
+/// plain `ui.horizontal` would take the full width and left-align.
+pub(super) fn tile_grid(
+    ui: &mut egui::Ui,
+    width: f32,
+    cols: usize,
+    total: usize,
+    mut tile: impl FnMut(&mut egui::Ui, usize),
+) {
     ui.allocate_ui_with_layout(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
-            for row_start in (0..tiles).step_by(cols) {
-                // Allocate each row at its exact content width so a partial last
-                // row (or a grid narrower than `cols`) stays centred — a plain
-                // `ui.horizontal` would take the full width and left-align.
-                let n = (tiles - row_start).min(cols);
+            for row_start in (0..total).step_by(cols) {
+                let n = (total - row_start).min(cols);
                 let row_w = n as f32 * TILE_W + (n.saturating_sub(1)) as f32 * GAP;
                 ui.allocate_ui_with_layout(
                     egui::vec2(row_w, TILE_H),
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
                         ui.spacing_mut().item_spacing.x = GAP;
-                        for i in row_start..row_start + n {
-                            let selected = home.tile() == Some(i);
-                            match pins.get(i) {
-                                Some(url) => {
-                                    if add_tile(ui, url, selected).clicked() {
-                                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(
-                                            url.clone(),
-                                        )));
-                                    }
-                                }
-                                // i == pins.len(): the trailing "Edit" tile.
-                                None => {
-                                    if add_edit_tile(ui, selected).clicked() {
-                                        commands.push(AppCommand::Menu(MenuAction::DialEdit));
-                                    }
-                                }
-                            }
+                        for slot in row_start..row_start + n {
+                            tile(ui, slot);
                         }
                     },
                 );
@@ -370,7 +379,7 @@ fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
 
 /// Paint a speed-dial tile's visuals (glyph square + brand initial + name) into
 /// `rect`. Shared by the start page and the dial editor ([`super::dial_edit`]);
-/// the caller owns the click region (and any extra overlays like a ✖ badge).
+/// the caller owns the click region (and any extra overlays like a delete badge).
 pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, active: bool) {
     // Glyph square, centered near the top of the tile.
     let glyph = egui::Rect::from_center_size(
@@ -388,7 +397,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
         egui::StrokeKind::Inside,
     );
 
-    // The settings sentinel isn't a real address: show a ⚙ glyph and "Settings"
+    // The settings sentinel isn't a real address: show a gear glyph and "Settings"
     // rather than the garbage `brand_label` would derive from `retsurf:settings`.
     let (glyph_text, name) = if url == SETTINGS_PIN {
         ("⚙".to_string(), "Settings".to_string())
@@ -486,9 +495,8 @@ fn brand_label(url: &str) -> String {
     })
 }
 
-/// A short label for a tile: the registrable domain name (`duckduckgo.com` →
-/// `duckduckgo`, `en.wikipedia.org` → `wikipedia`, `bbc.co.uk` → `bbc`), falling
-/// back to the host, then the raw string.
+/// A short label for a tile: the registrable domain name (`en.wikipedia.org` ->
+/// `wikipedia`, `bbc.co.uk` -> `bbc`), falling back to the host, then the raw string.
 fn compute_brand_label(url: &str) -> String {
     let Some(host) = url::Url::parse(url)
         .ok()

@@ -9,6 +9,7 @@ mod home;
 mod memory;
 mod menu;
 mod osk;
+mod panel;
 mod prompt;
 mod settings;
 mod theme;
