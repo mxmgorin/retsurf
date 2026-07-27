@@ -108,6 +108,19 @@ dir = ""
 # listed extension load in the browser as usual.
 extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 
+[update]
+# Which builds the in-app updater checks for (also selectable in Settings > Advanced
+# > Updates). One of:
+#   release  tagged GitHub releases, stable only (the default)
+#   beta     tagged releases including pre-releases (highest semver wins)
+#   ci       per-commit main CI artifacts (dev/nightly) — needs a GitHub token
+channel = "release"
+auto_check = true          # throttled background check at startup (once/day); false = About tab only
+# GitHub token (fine-grained PAT with actions:read) for the "ci" channel only —
+# GitHub requires auth to download Actions artifacts. Prefer the RETSURF_GITHUB_TOKEN
+# env var over writing a secret to disk; this field is a fallback. Unused by release/beta.
+token = ""
+
 [adblock]
 enabled = true             # master switch for ad & tracker blocking
 lists = [                  # filter lists (EasyList syntax) compiled into the engine

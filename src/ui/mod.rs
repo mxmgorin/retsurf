@@ -765,6 +765,12 @@ impl AppUi {
         self.update.install(sender);
     }
 
+    /// Adopt edited `[update]` settings live (settings overlay), for the next check.
+    #[inline]
+    pub fn set_update_config(&mut self, cfg: &UpdateConfig) {
+        self.update.set_config(cfg);
+    }
+
     /// Add or remove `url` from the saved bookmarks (★ button / Start).
     #[inline]
     pub fn toggle_bookmark(&mut self, url: &str) {

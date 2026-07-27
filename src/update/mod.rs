@@ -126,6 +126,17 @@ impl Updater {
         }
     }
 
+    /// Adopt edited `[update]` settings live (channel / auto-check / token); a
+    /// channel switch resets state to Idle so no stale offer from the old channel.
+    pub fn set_config(&mut self, cfg: &UpdateConfig) {
+        if self.channel != cfg.channel {
+            *self.state.lock().unwrap() = UpdateState::Idle;
+        }
+        self.channel = cfg.channel;
+        self.auto_check = cfg.auto_check;
+        self.token = cfg.resolve_token();
+    }
+
     /// Snapshot the current state for the UI (lock, clone the small enum, release).
     pub fn snapshot(&self) -> UpdateState {
         self.state.lock().unwrap().clone()

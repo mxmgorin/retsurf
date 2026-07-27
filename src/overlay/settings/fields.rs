@@ -7,7 +7,7 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, CursorMode, ExperimentalPreset, MemoryProfile, ToolbarPosition,
+    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, ToolbarPosition,
 };
 
 /// One editable field, identified so the typed get/set helpers below can reach
@@ -60,6 +60,7 @@ pub(super) enum FieldId {
     BlockFonts,
     MaxImagesPerPage,
     DownloadDir,
+    UpdateChannel,
     UpdateAutoCheck,
     MemoryOverlay,
 }
@@ -210,6 +211,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     int(bounds::LAYOUT_THREADS, 1), true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    int(bounds::WORKER_POOL_MAX, 1), true),
     f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
+    f(S::Advanced, "Updates",     "Update channel",         F::UpdateChannel,      Kind::Choice(Channel::CHOICES), false),
     f(S::Advanced, "Updates",     "Auto-check on startup",  F::UpdateAutoCheck,    Kind::Bool, false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         F::MemoryOverlay,      Kind::Bool, false),
 ];
@@ -338,6 +340,7 @@ pub(super) fn get_choice(c: &AppConfig, id: FieldId) -> &str {
         FieldId::ToolbarPosition => c.display.toolbar_position.as_str(),
         // Derived from the 12 feature bools — shows "Custom" when they match no preset.
         FieldId::WebFeatures => ExperimentalPreset::detect(&c.experimental).as_str(),
+        FieldId::UpdateChannel => c.update.channel.as_str(),
         _ => "",
     }
 }
@@ -350,6 +353,7 @@ pub(super) fn set_choice(c: &mut AppConfig, id: FieldId, v: &str) {
         FieldId::ToolbarPosition => c.display.toolbar_position = ToolbarPosition::from_value(v),
         // Picking a preset rewrites all 12 feature bools (the source of truth).
         FieldId::WebFeatures => c.experimental = ExperimentalPreset::from_value(v).features(),
+        FieldId::UpdateChannel => c.update.channel = Channel::from_value(v),
         _ => {}
     }
 }
