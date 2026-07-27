@@ -26,7 +26,6 @@ pub use fields::{Field, Kind};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, Store};
-use fields::FieldId;
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
@@ -275,7 +274,7 @@ impl Settings {
     /// Whether the focused row holds free text (A opens the OSK on it). Only ever
     /// true in a config section.
     pub fn selected_is_text(&self) -> bool {
-        self.is_field_section() && matches!(fields::FIELDS[self.selected].kind, Kind::Text)
+        self.is_field_section() && matches!(fields::FIELDS[self.selected].kind, Kind::Text { .. })
     }
 
     /// Whether row `i` shows ◀▶ step buttons — numbers only (bools/choices toggle
@@ -293,11 +292,8 @@ impl Settings {
         if !self.is_field_section() {
             return None;
         }
-        let c = &mut self.draft;
-        match fields::FIELDS[self.selected].id {
-            FieldId::HomePage => Some(&mut c.browser.home_page),
-            FieldId::SearchPage => Some(&mut c.browser.search_page),
-            FieldId::DownloadDir => Some(&mut c.downloads.dir),
+        match &fields::FIELDS[self.selected].kind {
+            Kind::Text { get_mut, .. } => Some(get_mut(&mut self.draft)),
             _ => None,
         }
     }
@@ -309,69 +305,72 @@ impl Settings {
         if !self.is_field_section() {
             return;
         }
-        let i = self.selected;
-        let id = fields::FIELDS[i].id;
-        match &fields::FIELDS[i].kind {
-            Kind::Text => {}
-            Kind::Bool => {
-                let v = fields::get_bool(&self.draft, id);
-                fields::set_bool(&mut self.draft, id, !v);
+        match &fields::FIELDS[self.selected].kind {
+            Kind::Text { .. } => {}
+            Kind::Bool { get, set } => {
+                let v = !get(&self.draft);
+                set(&mut self.draft, v);
             }
-            Kind::Choice(opts) => {
-                let cur = fields::get_choice(&self.draft, id);
+            Kind::Choice { opts, get, set } => {
+                let cur = get(&self.draft);
                 let n = opts.len() as i32;
                 let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
                 let next = (idx + dx).rem_euclid(n) as usize;
-                fields::set_choice(&mut self.draft, id, opts[next].1);
+                set(&mut self.draft, opts[next].1);
             }
-            Kind::Int { min, max, step } => {
-                let v = (fields::get_num(&self.draft, id) + dx as f64 * *step as f64)
-                    .clamp(*min as f64, *max as f64);
-                fields::set_num(&mut self.draft, id, v.round());
+            Kind::Int {
+                min,
+                max,
+                step,
+                get,
+                set,
+                ..
+            } => {
+                let v = (get(&self.draft) + dx as i64 * step).clamp(*min, *max);
+                set(&mut self.draft, v);
             }
-            Kind::Float { min, max, step, .. } => {
-                let v = (fields::get_num(&self.draft, id) + dx as f64 * step).clamp(*min, *max);
-                fields::set_num(&mut self.draft, id, v);
+            Kind::Float {
+                min,
+                max,
+                step,
+                get,
+                set,
+                ..
+            } => {
+                let v = (get(&self.draft) + dx as f64 * step).clamp(*min, *max);
+                set(&mut self.draft, v);
             }
         }
     }
 
     /// The display string for config row `i`'s current value.
     pub fn value_str(&self, i: usize) -> String {
-        let id = fields::FIELDS[i].id;
         match &fields::FIELDS[i].kind {
-            Kind::Bool => if fields::get_bool(&self.draft, id) {
-                "On"
-            } else {
-                "Off"
-            }
-            .to_string(),
-            Kind::Text => {
-                let t = fields::get_text(&self.draft, id);
+            Kind::Bool { get, .. } => if get(&self.draft) { "On" } else { "Off" }.to_string(),
+            Kind::Text { get, .. } => {
+                let t = get(&self.draft);
                 if t.is_empty() {
                     "(default)".to_string()
                 } else {
-                    t.to_string()
+                    t
                 }
             }
-            Kind::Choice(opts) => {
-                let cur = fields::get_choice(&self.draft, id);
+            Kind::Choice { opts, get, .. } => {
+                let cur = get(&self.draft);
                 opts.iter()
                     .find(|(_, v)| *v == cur)
                     .map(|(label, _)| label.to_string())
-                    .unwrap_or_else(|| cur.to_string())
+                    .unwrap_or(cur)
             }
-            Kind::Int { .. } => {
-                let v = fields::get_num(&self.draft, id) as i64;
-                // The image cap reads "Unlimited" at 0, not the bare number.
-                if id == FieldId::MaxImagesPerPage && v == 0 {
-                    "Unlimited".to_string()
-                } else {
-                    format!("{v}")
+            Kind::Int { zero, get, .. } => {
+                let v = get(&self.draft);
+                match zero {
+                    Some(label) if v == 0 => label.to_string(),
+                    _ => format!("{v}"),
                 }
             }
-            Kind::Float { decimals, .. } => {
-                format!("{:.*}", decimals, fields::get_num(&self.draft, id))
+            Kind::Float { decimals, get, .. } => {
+                format!("{:.*}", decimals, get(&self.draft))
             }
         }
     }

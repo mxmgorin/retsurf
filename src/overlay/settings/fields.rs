@@ -1,89 +1,119 @@
 //! The static config-field table for the settings overlay: every editable
-//! [`crate::config::AppConfig`] field as a [`Field`] row (presentation in
-//! [`Kind`], identity in [`FieldId`]), plus the typed get/set dispatchers that
-//! read and write the matching spot in a config by [`FieldId`]. The kind
-//! metadata drives *how* a field is edited; the dispatchers drive *where*.
-//! The Controls section is not here — it's dynamic (see [`super::CtrlRow`]).
+//! [`crate::config::AppConfig`] field as a [`Field`] row. A [`Kind`] bundles the
+//! field's presentation with its typed get/set accessors into the config, so
+//! adding a setting is adding one row to [`FIELDS`]. The Controls section is
+//! not here — it's dynamic (see [`super::CtrlRow`]).
 
 use super::SettingsSection;
 use crate::config::{
     bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, ToolbarPosition,
 };
 
-/// One editable field, identified so the typed get/set helpers below can reach
-/// the right spot in the draft without a parallel copy of the values.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum FieldId {
-    HomePage,
-    SearchPage,
-    UserAgent,
-    PageZoom,
-    PersistSiteData,
-    WebFeatures,
-    ExpWebgl2,
-    ExpWebgpu,
-    ExpOffscreenCanvas,
-    ExpGrid,
-    ExpColumns,
-    ExpContainerQueries,
-    ExpFontface,
-    ExpIntersectionObserver,
-    ExpResizeObserver,
-    ExpNotification,
-    ExpAsyncClipboard,
-    ExpPermissions,
-    Width,
-    Height,
-    UseGles,
-    CursorLinger,
-    ToolbarPosition,
-    ToolbarAutohide,
-    Deadzone,
-    CursorSpeed,
-    ScrollSpeed,
-    TriggerThreshold,
-    OskNavThreshold,
-    OskNavInitialDelay,
-    OskNavRepeat,
-    HoldMs,
-    CursorMode,
-    HintBadges,
-    HistoryEnabled,
-    HistoryMax,
-    AdblockEnabled,
-    AdblockUpdateDays,
-    MemoryProfile,
-    LayoutThreads,
-    WorkerPoolMax,
-    BlockImages,
-    BlockMedia,
-    BlockFonts,
-    MaxImagesPerPage,
-    DownloadDir,
-    UpdateChannel,
-    UpdateAutoCheck,
-    MemoryOverlay,
-}
-
-/// How a field is displayed and edited. `Choice` carries `(label, stored value)`
-/// pairs; `Int`/`Float` carry the bounds dpad steps within (so the renderer and the
-/// adjust logic share one source of truth for the range).
+/// How a field is displayed, edited, and reached in a config. `Choice` carries
+/// `(label, stored value)` pairs; `Int`/`Float` carry the bounds dpad steps
+/// within (so the renderer and the adjust logic share one source of truth for
+/// the range). The `get`/`set` fn pointers are the field's only binding to
+/// [`AppConfig`].
 pub enum Kind {
-    Bool,
-    /// Free text, typed via the on-screen keyboard (◀▶ does nothing; A opens it).
-    Text,
-    Choice(&'static [(&'static str, &'static str)]),
+    Bool {
+        get: fn(&AppConfig) -> bool,
+        set: fn(&mut AppConfig, bool),
+    },
+    /// Free text, typed via the on-screen keyboard (Left/Right does nothing; A
+    /// opens it). `get_mut` hands the OSK the draft's own buffer.
+    Text {
+        get: fn(&AppConfig) -> String,
+        get_mut: fn(&mut AppConfig) -> &mut String,
+    },
+    Choice {
+        opts: &'static [(&'static str, &'static str)],
+        get: fn(&AppConfig) -> String,
+        set: fn(&mut AppConfig, &str),
+    },
     Int {
         min: i64,
         max: i64,
         step: i64,
+        /// Label shown instead of a bare `0` (e.g. "Unlimited").
+        zero: Option<&'static str>,
+        get: fn(&AppConfig) -> i64,
+        set: fn(&mut AppConfig, i64),
     },
     Float {
         min: f64,
         max: f64,
         step: f64,
         decimals: usize,
+        get: fn(&AppConfig) -> f64,
+        set: fn(&mut AppConfig, f64),
     },
+}
+
+/// `Kind::Bool` over a config path.
+macro_rules! flag {
+    ($($seg:ident).+) => {
+        Kind::Bool {
+            get: |c| c.$($seg).+,
+            set: |c, v| c.$($seg).+ = v,
+        }
+    };
+}
+
+/// `Kind::Text` over a config `String` path.
+macro_rules! text {
+    ($($seg:ident).+) => {
+        Kind::Text {
+            get: |c| c.$($seg).+.clone(),
+            get_mut: |c| &mut c.$($seg).+,
+        }
+    };
+}
+
+/// `Kind::Choice` over a `token_enum!` config path (`CHOICES` / `as_str` /
+/// `from_value`).
+macro_rules! choice {
+    ($($seg:ident).+: $ty:ty) => {
+        Kind::Choice {
+            opts: <$ty>::CHOICES,
+            get: |c| c.$($seg).+.as_str().to_string(),
+            set: |c, v| c.$($seg).+ = <$ty>::from_value(v),
+        }
+    };
+}
+
+/// `Kind::Int` over a config path (cast to/from its native `$ty`), ranged by a
+/// shared [`bounds::IntBounds`]; `step` is the GUI dpad step, the optional
+/// trailing label replaces a bare `0`.
+macro_rules! int {
+    ($($seg:ident).+ as $ty:ty, $b:expr, $step:expr) => {
+        int!($($seg).+ as $ty, $b, $step, None)
+    };
+    ($($seg:ident).+ as $ty:ty, $b:expr, $step:expr, $zero:expr) => {
+        Kind::Int {
+            min: $b.min,
+            max: $b.max,
+            step: $step,
+            zero: $zero,
+            get: |c| c.$($seg).+ as i64,
+            set: |c, v| c.$($seg).+ = v as $ty,
+        }
+    };
+}
+
+/// `Kind::Float` over a config path (cast to/from its native `$ty`), ranged by
+/// a shared [`bounds::FloatBounds`]; `step` is the GUI dpad step, `decimals`
+/// the display precision.
+macro_rules! float {
+    ($($seg:ident).+ as $ty:ty, $b:expr, $step:expr, $decimals:expr) => {
+        Kind::Float {
+            min: $b.min,
+            max: $b.max,
+            step: $step,
+            decimals: $decimals,
+            get: |c| c.$($seg).+ as f64,
+            set: |c, v| c.$($seg).+ = v as $ty,
+        }
+    };
 }
 
 /// A config row in the list. `section` is the tab it lives under; `cat` is a
@@ -95,14 +125,12 @@ pub struct Field {
     pub section: SettingsSection,
     pub cat: &'static str,
     pub label: &'static str,
-    pub(super) id: FieldId,
     pub kind: Kind,
     pub restart: bool,
 }
 
 /// User-Agent presets: the keywords [`crate::config::BrowserConfig::user_agent`]
-/// understands (empty keeps Servo's platform default). A UA set to something else
-/// in the file shows verbatim and cycles back into this list when adjusted.
+/// understands (empty keeps Servo's platform default).
 const UA_CHOICES: &[(&str, &str)] = &[
     ("Default", ""),
     ("Desktop", "desktop"),
@@ -110,13 +138,38 @@ const UA_CHOICES: &[(&str, &str)] = &[
     ("iOS", "ios"),
 ];
 
+/// The User-Agent choice — a free `String` in the config, not a `token_enum!`:
+/// a value outside [`UA_CHOICES`] shows verbatim and cycles back into the list
+/// when adjusted.
+const fn ua_kind() -> Kind {
+    Kind::Choice {
+        opts: UA_CHOICES,
+        get: |c| c.browser.user_agent.clone(),
+        set: |c, v| c.browser.user_agent = v.to_string(),
+    }
+}
+
+/// The Web-features preset choice — derived from the experimental bools (shows
+/// "Custom" when they match no preset); picking a preset rewrites all of them
+/// (the bools are the source of truth, see [`ExperimentalPreset`]).
+const fn web_features_kind() -> Kind {
+    Kind::Choice {
+        opts: ExperimentalPreset::CHOICES,
+        get: |c| {
+            ExperimentalPreset::detect(&c.experimental)
+                .as_str()
+                .to_string()
+        },
+        set: |c, v| c.experimental = ExperimentalPreset::from_value(v).features(),
+    }
+}
+
 /// Compact constructor for the [`FIELDS`] table — without it `rustfmt` explodes
 /// each `Field` literal across six lines and drowns the table.
 const fn f(
     section: SettingsSection,
     cat: &'static str,
     label: &'static str,
-    id: FieldId,
     kind: Kind,
     restart: bool,
 ) -> Field {
@@ -124,236 +177,122 @@ const fn f(
         section,
         cat,
         label,
-        id,
         kind,
         restart,
     }
 }
 
-/// `Kind::Int` from a shared [`bounds::IntBounds`] range plus the GUI dpad step.
-const fn int(b: bounds::IntBounds, step: i64) -> Kind {
-    Kind::Int {
-        min: b.min,
-        max: b.max,
-        step,
-    }
-}
-
-/// `Kind::Float` from a shared [`bounds::FloatBounds`] range plus the GUI dpad
-/// step and display precision.
-const fn float(b: bounds::FloatBounds, step: f64, decimals: usize) -> Kind {
-    Kind::Float {
-        min: b.min,
-        max: b.max,
-        step,
-        decimals,
-    }
-}
-
-use FieldId as F;
 use SettingsSection as S;
 
 /// Every editable config field, in display order (grouped by [`SettingsSection`]).
-/// Adding a setting is adding a row here plus an arm in the typed get/set helpers
-/// below. `restart = true` marks fields the running app can't apply live. The
-/// Controls section is not here — it's built dynamically (see [`super::Settings::controls_rows`]).
+/// Adding a setting is adding a row here. `restart = true` marks fields the
+/// running app can't apply live. The Controls section is not here — it's built
+/// dynamically (see [`super::Settings::controls_rows`]).
 #[rustfmt::skip]
 pub(super) static FIELDS: &[Field] = &[
-    f(S::Browser,  "Browser",     "Home page",              F::HomePage,           Kind::Text, false),
-    f(S::Browser,  "Browser",     "Search URL",             F::SearchPage,         Kind::Text, false),
-    f(S::Browser,  "Browser",     "User agent",             F::UserAgent,          Kind::Choice(UA_CHOICES), true),
-    f(S::Browser,  "Browser",     "Page zoom",              F::PageZoom,           float(bounds::PAGE_ZOOM, 0.05, 2), false),
-    f(S::Browser,  "Browser",     "Keep site data",         F::PersistSiteData,    Kind::Bool, true),
+    f(S::Browser,  "Browser",     "Home page",              text!(browser.home_page), false),
+    f(S::Browser,  "Browser",     "Search URL",             text!(browser.search_page), false),
+    f(S::Browser,  "Browser",     "User agent",             ua_kind(), true),
+    f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
+    f(S::Browser,  "Browser",     "Keep site data",         flag!(browser.persist_site_data), true),
 
-    f(S::Browser,  "Experimental", "Web features",          F::WebFeatures,        Kind::Choice(ExperimentalPreset::CHOICES), false),
-    f(S::Browser,  "Experimental", "WebGL 2",               F::ExpWebgl2,          Kind::Bool, false),
-    f(S::Browser,  "Experimental", "WebGPU",                F::ExpWebgpu,          Kind::Bool, false),
-    f(S::Browser,  "Experimental", "OffscreenCanvas",       F::ExpOffscreenCanvas, Kind::Bool, false),
-    f(S::Browser,  "Experimental", "CSS Grid",              F::ExpGrid,            Kind::Bool, false),
-    f(S::Browser,  "Experimental", "CSS columns",           F::ExpColumns,         Kind::Bool, false),
-    f(S::Browser,  "Experimental", "Container queries",     F::ExpContainerQueries, Kind::Bool, false),
-    f(S::Browser,  "Experimental", "Web fonts",             F::ExpFontface,        Kind::Bool, false),
-    f(S::Browser,  "Experimental", "IntersectionObserver",  F::ExpIntersectionObserver, Kind::Bool, false),
-    f(S::Browser,  "Experimental", "ResizeObserver",        F::ExpResizeObserver,  Kind::Bool, false),
-    f(S::Browser,  "Experimental", "Notifications",         F::ExpNotification,    Kind::Bool, false),
-    f(S::Browser,  "Experimental", "Async clipboard",       F::ExpAsyncClipboard,  Kind::Bool, false),
-    f(S::Browser,  "Experimental", "Permissions",           F::ExpPermissions,     Kind::Bool, false),
+    f(S::Browser,  "Experimental", "Web features",          web_features_kind(), false),
+    f(S::Browser,  "Experimental", "WebGL 2",               flag!(experimental.webgl2), false),
+    f(S::Browser,  "Experimental", "WebGPU",                flag!(experimental.webgpu), false),
+    f(S::Browser,  "Experimental", "OffscreenCanvas",       flag!(experimental.offscreen_canvas), false),
+    f(S::Browser,  "Experimental", "CSS Grid",              flag!(experimental.grid), false),
+    f(S::Browser,  "Experimental", "CSS columns",           flag!(experimental.columns), false),
+    f(S::Browser,  "Experimental", "Container queries",     flag!(experimental.container_queries), false),
+    f(S::Browser,  "Experimental", "Web fonts",              flag!(experimental.fontface), false),
+    f(S::Browser,  "Experimental", "IntersectionObserver",  flag!(experimental.intersection_observer), false),
+    f(S::Browser,  "Experimental", "ResizeObserver",        flag!(experimental.resize_observer), false),
+    f(S::Browser,  "Experimental", "Notifications",         flag!(experimental.notification), false),
+    f(S::Browser,  "Experimental", "Async clipboard",       flag!(experimental.async_clipboard), false),
+    f(S::Browser,  "Experimental", "Permissions",           flag!(experimental.permissions), false),
 
-    f(S::Display,  "Display",     "Window width",           F::Width,              int(bounds::WIDTH, 16), true),
-    f(S::Display,  "Display",     "Window height",          F::Height,             int(bounds::HEIGHT, 16), true),
-    f(S::Display,  "Display",     "Use OpenGL ES",          F::UseGles,            Kind::Bool, true),
-    f(S::Display,  "Display",     "Cursor linger (ms)",     F::CursorLinger,       int(bounds::CURSOR_LINGER_MS, 100), false),
-    f(S::Display,  "Display",     "Toolbar position",       F::ToolbarPosition,    Kind::Choice(ToolbarPosition::CHOICES), false),
-    f(S::Display,  "Display",     "Auto-hide toolbar",      F::ToolbarAutohide,    Kind::Bool, false),
+    f(S::Display,  "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
+    f(S::Display,  "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
+    f(S::Display,  "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
+    f(S::Display,  "Display",     "Cursor linger (ms)",     int!(display.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
+    f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
+    f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
 
-    f(S::Input,  "Input",     "Stick dead zone",        F::Deadzone,           float(bounds::DEADZONE, 0.05, 2), false),
-    f(S::Input,  "Input",     "Cursor speed",           F::CursorSpeed,        float(bounds::CURSOR_SPEED, 50.0, 0), false),
-    f(S::Input,  "Input",     "Scroll speed",           F::ScrollSpeed,        float(bounds::SCROLL_SPEED, 100.0, 0), false),
-    f(S::Input,  "Input",     "Trigger threshold",      F::TriggerThreshold,   float(bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
-    f(S::Input,  "Input",     "OSK stick threshold",    F::OskNavThreshold,    float(bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
-    f(S::Input,  "Input",     "OSK repeat delay (ms)",  F::OskNavInitialDelay, int(bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
-    f(S::Input,  "Input",     "OSK repeat rate (ms)",   F::OskNavRepeat,       int(bounds::OSK_NAV_REPEAT_MS, 10), false),
-    f(S::Input,  "Input",     "Hold gesture (ms)",      F::HoldMs,             int(bounds::HOLD_MS, 50), false),
-    f(S::Input,  "Input",     "Cursor mode",            F::CursorMode,         Kind::Choice(CursorMode::CHOICES), true),
-    f(S::Input,  "Input",     "Hint badges",            F::HintBadges,         Kind::Bool, false),
+    f(S::Input,  "Input",     "Stick dead zone",        float!(input.deadzone as f32, bounds::DEADZONE, 0.05, 2), false),
+    f(S::Input,  "Input",     "Cursor speed",           float!(input.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
+    f(S::Input,  "Input",     "Scroll speed",           float!(input.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
+    f(S::Input,  "Input",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
+    f(S::Input,  "Input",     "OSK stick threshold",    float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
+    f(S::Input,  "Input",     "OSK repeat delay (ms)",  int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
+    f(S::Input,  "Input",     "OSK repeat rate (ms)",   int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
+    f(S::Input,  "Input",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
+    f(S::Input,  "Input",     "Cursor mode",            choice!(input.cursor_mode: CursorMode), true),
+    f(S::Input,  "Input",     "Hint badges",            flag!(input.hint_badges), false),
 
-    f(S::Content,  "History",     "Record history",         F::HistoryEnabled,     Kind::Bool, false),
-    f(S::Content,  "History",     "Max entries",            F::HistoryMax,         int(bounds::HISTORY_MAX, 5), false),
-    f(S::Content,  "Ad blocker",  "Enabled",                F::AdblockEnabled,     Kind::Bool, true),
-    f(S::Content,  "Ad blocker",  "Update every (days)",    F::AdblockUpdateDays,  int(bounds::ADBLOCK_UPDATE_DAYS, 1), false),
+    f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
+    f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),
+    f(S::Content,  "Ad blocker",  "Enabled",                flag!(adblock.enabled), true),
+    f(S::Content,  "Ad blocker",  "Update every (days)",    int!(adblock.update_days as u64, bounds::ADBLOCK_UPDATE_DAYS, 1), false),
 
-    f(S::Content, "Data saving", "Block images",         F::BlockImages,        Kind::Bool, false),
-    f(S::Content, "Data saving", "Block audio/video",    F::BlockMedia,         Kind::Bool, false),
-    f(S::Content, "Data saving", "Block web fonts",      F::BlockFonts,         Kind::Bool, false),
-    f(S::Content, "Data saving", "Max images/page",      F::MaxImagesPerPage,   int(bounds::IMAGES_PER_PAGE, 8), false),
+    f(S::Content, "Data saving", "Block images",         flag!(data_saving.block_images), false),
+    f(S::Content, "Data saving", "Block audio/video",    flag!(data_saving.block_media), false),
+    f(S::Content, "Data saving", "Block web fonts",      flag!(data_saving.block_fonts), false),
+    f(S::Content, "Data saving", "Max images/page",      int!(data_saving.max_images_per_page as usize, bounds::IMAGES_PER_PAGE, 8, Some("Unlimited")), false),
 
-    f(S::Advanced, "Performance", "Memory profile",          F::MemoryProfile,     Kind::Choice(MemoryProfile::CHOICES), true),
-    f(S::Advanced, "Performance", "Layout threads (0=auto)", F::LayoutThreads,     int(bounds::LAYOUT_THREADS, 1), true),
-    f(S::Advanced, "Performance", "Worker pool max (0=auto)", F::WorkerPoolMax,    int(bounds::WORKER_POOL_MAX, 1), true),
-    f(S::Advanced, "Downloads",   "Save folder",            F::DownloadDir,        Kind::Text, true),
-    f(S::Advanced, "Updates",     "Update channel",         F::UpdateChannel,      Kind::Choice(Channel::CHOICES), false),
-    f(S::Advanced, "Updates",     "Auto-check on startup",  F::UpdateAutoCheck,    Kind::Bool, false),
-    f(S::Advanced, "Diagnostics", "Memory overlay",         F::MemoryOverlay,      Kind::Bool, false),
+    f(S::Advanced, "Performance", "Memory profile",          choice!(performance.memory_profile: MemoryProfile), true),
+    f(S::Advanced, "Performance", "Layout threads (0=auto)", int!(performance.layout_threads as u32, bounds::LAYOUT_THREADS, 1), true),
+    f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
+    f(S::Advanced, "Downloads",   "Save folder",            text!(downloads.dir), true),
+    f(S::Advanced, "Updates",     "Update channel",         choice!(update.channel: Channel), false),
+    f(S::Advanced, "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
+    f(S::Advanced, "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
 ];
 
-// --- Typed accessors into a config, keyed by `FieldId`. One arm per field; the
-// kind metadata above drives *how* fields are edited, these drive *where*. ---
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub(super) fn get_num(c: &AppConfig, id: FieldId) -> f64 {
-    match id {
-        FieldId::PageZoom => c.browser.page_zoom as f64,
-        FieldId::Width => c.display.width as f64,
-        FieldId::Height => c.display.height as f64,
-        FieldId::CursorLinger => c.display.cursor_linger_ms as f64,
-        FieldId::Deadzone => c.input.deadzone as f64,
-        FieldId::CursorSpeed => c.input.cursor_speed as f64,
-        FieldId::ScrollSpeed => c.input.scroll_speed as f64,
-        FieldId::TriggerThreshold => c.input.trigger_threshold as f64,
-        FieldId::OskNavThreshold => c.input.osk_nav_threshold as f64,
-        FieldId::OskNavInitialDelay => c.input.osk_nav_initial_delay_ms as f64,
-        FieldId::OskNavRepeat => c.input.osk_nav_repeat_ms as f64,
-        FieldId::HoldMs => c.input.hold_ms as f64,
-        FieldId::HistoryMax => c.history.max_entries as f64,
-        FieldId::AdblockUpdateDays => c.adblock.update_days as f64,
-        FieldId::LayoutThreads => c.performance.layout_threads as f64,
-        FieldId::WorkerPoolMax => c.performance.worker_pool_max as f64,
-        FieldId::MaxImagesPerPage => c.data_saving.max_images_per_page as f64,
-        _ => 0.0,
-    }
-}
-
-pub(super) fn set_num(c: &mut AppConfig, id: FieldId, v: f64) {
-    match id {
-        FieldId::PageZoom => c.browser.page_zoom = v as f32,
-        FieldId::Width => c.display.width = v as u32,
-        FieldId::Height => c.display.height = v as u32,
-        FieldId::CursorLinger => c.display.cursor_linger_ms = v as u64,
-        FieldId::Deadzone => c.input.deadzone = v as f32,
-        FieldId::CursorSpeed => c.input.cursor_speed = v as f32,
-        FieldId::ScrollSpeed => c.input.scroll_speed = v as f32,
-        FieldId::TriggerThreshold => c.input.trigger_threshold = v as f32,
-        FieldId::OskNavThreshold => c.input.osk_nav_threshold = v as f32,
-        FieldId::OskNavInitialDelay => c.input.osk_nav_initial_delay_ms = v as u64,
-        FieldId::OskNavRepeat => c.input.osk_nav_repeat_ms = v as u64,
-        FieldId::HoldMs => c.input.hold_ms = v as u64,
-        FieldId::HistoryMax => c.history.max_entries = v as usize,
-        FieldId::AdblockUpdateDays => c.adblock.update_days = v as u64,
-        FieldId::LayoutThreads => c.performance.layout_threads = v as u32,
-        FieldId::WorkerPoolMax => c.performance.worker_pool_max = v as u32,
-        FieldId::MaxImagesPerPage => c.data_saving.max_images_per_page = v as usize,
-        _ => {}
-    }
-}
-
-pub(super) fn get_bool(c: &AppConfig, id: FieldId) -> bool {
-    match id {
-        FieldId::PersistSiteData => c.browser.persist_site_data,
-        FieldId::UseGles => c.display.use_gles,
-        FieldId::HistoryEnabled => c.history.enabled,
-        FieldId::AdblockEnabled => c.adblock.enabled,
-        FieldId::BlockImages => c.data_saving.block_images,
-        FieldId::BlockMedia => c.data_saving.block_media,
-        FieldId::BlockFonts => c.data_saving.block_fonts,
-        FieldId::ToolbarAutohide => c.display.toolbar_autohide,
-        FieldId::HintBadges => c.input.hint_badges,
-        FieldId::UpdateAutoCheck => c.update.auto_check,
-        FieldId::MemoryOverlay => c.debug.memory_overlay,
-        FieldId::ExpWebgl2 => c.experimental.webgl2,
-        FieldId::ExpWebgpu => c.experimental.webgpu,
-        FieldId::ExpOffscreenCanvas => c.experimental.offscreen_canvas,
-        FieldId::ExpGrid => c.experimental.grid,
-        FieldId::ExpColumns => c.experimental.columns,
-        FieldId::ExpContainerQueries => c.experimental.container_queries,
-        FieldId::ExpFontface => c.experimental.fontface,
-        FieldId::ExpIntersectionObserver => c.experimental.intersection_observer,
-        FieldId::ExpResizeObserver => c.experimental.resize_observer,
-        FieldId::ExpNotification => c.experimental.notification,
-        FieldId::ExpAsyncClipboard => c.experimental.async_clipboard,
-        FieldId::ExpPermissions => c.experimental.permissions,
-        _ => false,
-    }
-}
-
-pub(super) fn set_bool(c: &mut AppConfig, id: FieldId, b: bool) {
-    match id {
-        FieldId::PersistSiteData => c.browser.persist_site_data = b,
-        FieldId::UseGles => c.display.use_gles = b,
-        FieldId::HistoryEnabled => c.history.enabled = b,
-        FieldId::AdblockEnabled => c.adblock.enabled = b,
-        FieldId::BlockImages => c.data_saving.block_images = b,
-        FieldId::BlockMedia => c.data_saving.block_media = b,
-        FieldId::BlockFonts => c.data_saving.block_fonts = b,
-        FieldId::ToolbarAutohide => c.display.toolbar_autohide = b,
-        FieldId::HintBadges => c.input.hint_badges = b,
-        FieldId::UpdateAutoCheck => c.update.auto_check = b,
-        FieldId::MemoryOverlay => c.debug.memory_overlay = b,
-        FieldId::ExpWebgl2 => c.experimental.webgl2 = b,
-        FieldId::ExpWebgpu => c.experimental.webgpu = b,
-        FieldId::ExpOffscreenCanvas => c.experimental.offscreen_canvas = b,
-        FieldId::ExpGrid => c.experimental.grid = b,
-        FieldId::ExpColumns => c.experimental.columns = b,
-        FieldId::ExpContainerQueries => c.experimental.container_queries = b,
-        FieldId::ExpFontface => c.experimental.fontface = b,
-        FieldId::ExpIntersectionObserver => c.experimental.intersection_observer = b,
-        FieldId::ExpResizeObserver => c.experimental.resize_observer = b,
-        FieldId::ExpNotification => c.experimental.notification = b,
-        FieldId::ExpAsyncClipboard => c.experimental.async_clipboard = b,
-        FieldId::ExpPermissions => c.experimental.permissions = b,
-        _ => {}
-    }
-}
-
-pub(super) fn get_text(c: &AppConfig, id: FieldId) -> &str {
-    match id {
-        FieldId::HomePage => &c.browser.home_page,
-        FieldId::SearchPage => &c.browser.search_page,
-        FieldId::DownloadDir => &c.downloads.dir,
-        _ => "",
-    }
-}
-
-pub(super) fn get_choice(c: &AppConfig, id: FieldId) -> &str {
-    match id {
-        FieldId::UserAgent => &c.browser.user_agent,
-        FieldId::CursorMode => c.input.cursor_mode.as_str(),
-        FieldId::MemoryProfile => c.performance.memory_profile.as_str(),
-        FieldId::ToolbarPosition => c.display.toolbar_position.as_str(),
-        // Derived from the 12 feature bools — shows "Custom" when they match no preset.
-        FieldId::WebFeatures => ExperimentalPreset::detect(&c.experimental).as_str(),
-        FieldId::UpdateChannel => c.update.channel.as_str(),
-        _ => "",
-    }
-}
-
-pub(super) fn set_choice(c: &mut AppConfig, id: FieldId, v: &str) {
-    match id {
-        FieldId::UserAgent => c.browser.user_agent = v.to_string(),
-        FieldId::CursorMode => c.input.cursor_mode = CursorMode::from_value(v),
-        FieldId::MemoryProfile => c.performance.memory_profile = MemoryProfile::from_value(v),
-        FieldId::ToolbarPosition => c.display.toolbar_position = ToolbarPosition::from_value(v),
-        // Picking a preset rewrites all 12 feature bools (the source of truth).
-        FieldId::WebFeatures => c.experimental = ExperimentalPreset::from_value(v).features(),
-        FieldId::UpdateChannel => c.update.channel = Channel::from_value(v),
-        _ => {}
+    /// Every accessor pair reads back what it wrote — catches a `get`/`set`
+    /// wired to different config spots.
+    #[test]
+    fn accessors_roundtrip() {
+        for field in FIELDS {
+            let mut c = AppConfig::default();
+            match &field.kind {
+                Kind::Bool { get, set } => {
+                    for v in [true, false] {
+                        set(&mut c, v);
+                        assert_eq!(get(&c), v, "{}", field.label);
+                    }
+                }
+                Kind::Text { get, get_mut } => {
+                    *get_mut(&mut c) = "roundtrip".to_string();
+                    assert_eq!(get(&c), "roundtrip", "{}", field.label);
+                }
+                Kind::Choice { opts, get, set } => {
+                    assert!(!opts.is_empty(), "{}", field.label);
+                    for (_, token) in *opts {
+                        set(&mut c, token);
+                        assert_eq!(get(&c), *token, "{}", field.label);
+                    }
+                }
+                Kind::Int {
+                    min, max, get, set, ..
+                } => {
+                    for v in [*min, *max] {
+                        set(&mut c, v);
+                        assert_eq!(get(&c), v, "{}", field.label);
+                    }
+                }
+                Kind::Float {
+                    min, max, get, set, ..
+                } => {
+                    for v in [*min, *max] {
+                        set(&mut c, v);
+                        let got = get(&c);
+                        assert!((got - v).abs() < 1e-3, "{}: {got} != {v}", field.label);
+                    }
+                }
+            }
+        }
     }
 }
