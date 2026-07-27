@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-27
+
+### Added
+
+- Experimental web-feature toggles, configurable individually or through presets
+  (Balanced by default), to enable or disable engine features.
+- Per-page image limit (`[data_saving] max_images_per_page`, default 48) to avoid
+  freezing on image-heavy pages (e.g. PortMaster).
+- Update channel (release, beta, or CI) is now selectable directly in settings.
+- Toolbar icon indicating when an update is available.
+
 ## [0.2.0] - 2026-07-22
 
 ### Added
@@ -66,6 +77,7 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mxmgorin/retsurf/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mxmgorin/retsurf/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mxmgorin/retsurf/releases/tag/v0.1.0
