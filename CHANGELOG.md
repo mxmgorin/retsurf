@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Crash on pages where a blocked subresource carries an `integrity` attribute
+  (e.g. gbatemp.net, whose Cloudflare beacon script is ad-blocked): the blocked
+  load now completes with an empty body instead of no body at all.
+
 ## [0.3.0] - 2026-07-27
 
 ### Added

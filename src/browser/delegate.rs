@@ -177,13 +177,26 @@ impl servo::WebViewDelegate for AppBrowserInner {
                 http::HeaderValue::from_static("text/html; charset=utf-8"),
             );
             let response = servo::WebResourceResponse::new(url).headers(headers);
-            let mut intercepted = load.intercept(response);
-            intercepted.send_body_data(html);
-            intercepted.finish();
+            finish_intercepted(load, response, html);
         } else if block {
             log::debug!("adblock: blocked {url}");
             let response = servo::WebResourceResponse::new(url);
-            load.intercept(response).finish();
+            finish_intercepted(load, response, Vec::new());
         }
     }
+}
+
+/// Answer an intercepted load with `body`, always sending a chunk — even an empty
+/// one. Servo's request interceptor only marks the response body `Done` once at
+/// least one chunk arrived, and net's subresource-integrity check panics on a body
+/// that isn't `Done`, so finishing empty kills the process on any blocked
+/// subresource carrying an `integrity` attribute.
+fn finish_intercepted(
+    load: servo::WebResourceLoad,
+    response: servo::WebResourceResponse,
+    body: Vec<u8>,
+) {
+    let mut intercepted = load.intercept(response);
+    intercepted.send_body_data(body);
+    intercepted.finish();
 }
