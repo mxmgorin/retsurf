@@ -25,10 +25,10 @@ use crate::{
     overlay::dial_edit::{DialEdit, EditItem},
     overlay::hints::{Hint, HintInput, HintLabels, Hints, Label, Sym},
     overlay::home::Home,
-    overlay::menu::{Menu, Section},
+    overlay::menu::Menu,
     overlay::osk::{Osk, OskCommand, OskTarget},
     overlay::prompt::Prompt,
-    overlay::settings::{Settings, SettingsSection},
+    overlay::settings::Settings,
     platform::window::AppWindow,
     update::{UpdateState, Updater},
 };
@@ -130,7 +130,7 @@ pub struct AppUi {
     repaint_delay: Option<Duration>,
     /// The web view's rect (logical px), measured from the central panel each
     /// frame. With a top toolbar it sits below the bar; with a bottom toolbar it
-    /// starts at the window top. Used to map cursor↔browser coordinates, keep
+    /// starts at the window top. Used to map cursor/browser coordinates, keep
     /// the cursor/pointer out of the toolbar, and anchor the home/hints overlays.
     webview_rect: egui::Rect,
     /// Toolbar thickness (logical px), measured each frame. Stays valid across
@@ -167,10 +167,12 @@ pub struct AppUi {
     scroll_accum: f32,
     /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
-    /// The full-screen menu (Tabs / Bookmarks / History / Downloads) and its state.
-    menu: Menu,
-    /// The full-screen settings overlay (edits a draft of the config).
-    settings: Settings,
+    /// The full-screen menu (Tabs / Bookmarks / History / Downloads). Public —
+    /// driven directly; open via [`AppUi::menu_open`] so competing overlays close.
+    pub menu: Menu,
+    /// The full-screen settings overlay (edits a config draft). Public — driven
+    /// directly; open/close/move go through the `settings_*` coordinators.
+    pub settings: Settings,
     /// Self-update manager (About tab): in-place on PortMaster / desktop installs,
     /// "open the release page" elsewhere. See [`crate::update`].
     update: Updater,
@@ -181,8 +183,10 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
-    /// Link-hint navigation state (L3); the rects come from the browser.
-    hints: Hints,
+    /// Link-hint navigation state (L3); rects come from the browser. Public —
+    /// driven directly; a round starts via [`AppUi::hints_begin_collect`] and
+    /// [`AppUi::hints_apply`].
+    pub hints: Hints,
     /// Modal page prompts: queued `<select>` pickers and JS dialogs. Public —
     /// the router and main loop drive [`Prompt`]'s own methods directly.
     pub prompt: Prompt,
@@ -432,12 +436,6 @@ impl AppUi {
         self.osk.handle(cmd, target, browser, commands);
     }
 
-    /// Whether the full-screen menu is shown.
-    #[inline]
-    pub fn menu_visible(&self) -> bool {
-        self.menu.visible
-    }
-
     /// Open the menu. It takes over the stick and A, so the other user
     /// overlays close — input focus and draw order can never disagree.
     #[inline]
@@ -445,17 +443,6 @@ impl AppUi {
         self.osk.visible = false;
         self.hints.hide();
         self.menu.open();
-    }
-
-    #[inline]
-    pub fn menu_close(&mut self) {
-        self.menu.close();
-    }
-
-    /// Whether the settings overlay is shown.
-    #[inline]
-    pub fn settings_visible(&self) -> bool {
-        self.settings.visible()
     }
 
     /// Open the settings overlay, seeding its draft from the live config. Like
@@ -477,24 +464,6 @@ impl AppUi {
         drafts
     }
 
-    /// Focus settings row `index` (clicking it).
-    #[inline]
-    pub fn settings_select(&mut self, index: usize) {
-        self.settings.set_selected(index);
-    }
-
-    /// Switch the active settings section by `delta` (L1/R1 / Tab / Ctrl+◀▶).
-    #[inline]
-    pub fn settings_switch(&mut self, delta: i32) {
-        self.settings.switch_section(delta);
-    }
-
-    /// Jump to a settings section (clicking its tab).
-    #[inline]
-    pub fn settings_set_section(&mut self, section: SettingsSection) {
-        self.settings.set_section(section);
-    }
-
     /// Move the settings selection by `dy` rows. On the About tab the update block's
     /// row count depends on the live update state (a release-notes link appears when
     /// an update is available), so it's resolved here and handed to the nav.
@@ -502,34 +471,6 @@ impl AppUi {
     pub fn settings_move(&mut self, dy: i32) {
         let update_rows = settings::update_row_count(&self.update.snapshot());
         self.settings.move_sel(dy, update_rows);
-    }
-
-    /// Step the focused settings field by `dx` (◀ -1 / ▶ +1): toggle / cycle /
-    /// nudge a number.
-    #[inline]
-    pub fn settings_adjust(&mut self, dx: i32) {
-        self.settings.adjust(dx);
-    }
-
-    /// Whether the focused settings row is a text field (A opens the OSK on it
-    /// rather than toggling/stepping).
-    #[inline]
-    pub fn settings_selected_is_text(&self) -> bool {
-        self.settings.selected_is_text()
-    }
-
-    /// Whether the active settings section is the dynamic Controls list (A
-    /// adds/removes a binding rather than stepping / opening the OSK).
-    #[inline]
-    pub fn settings_is_controls(&self) -> bool {
-        self.settings.is_controls_section()
-    }
-
-    /// Whether the active settings section is the read-only About page (A activates
-    /// the focused update action / link — see [`Self::about_activate`]).
-    #[inline]
-    pub fn settings_is_info(&self) -> bool {
-        self.settings.is_info_section()
     }
 
     /// The action for the focused About-tab row on A: within the update block, the
@@ -552,32 +493,6 @@ impl AppUi {
                 .get(sel - update_rows)
                 .map(|(_, url)| SettingsAction::OpenLink(url.to_string()))
         }
-    }
-
-    /// A / Enter on the focused Controls row: capture (add), remove, or reset.
-    #[inline]
-    pub fn settings_controls_activate(&mut self) {
-        self.settings.controls_activate();
-    }
-
-    /// Whether the settings overlay is listening for a binding (the event loop
-    /// routes raw key / gamepad input to the capture handlers while this holds).
-    #[inline]
-    pub fn settings_capturing(&self) -> bool {
-        self.settings.capturing()
-    }
-
-    /// Bind the captured `gesture` (a key combo if `keyboard`, else a gamepad
-    /// gesture) to the listening action.
-    #[inline]
-    pub fn settings_apply_capture(&mut self, gesture: String, keyboard: bool) {
-        self.settings.apply_capture(gesture, keyboard);
-    }
-
-    /// Stop listening without changing anything (Esc / timeout).
-    #[inline]
-    pub fn settings_cancel_capture(&mut self) {
-        self.settings.cancel_capture();
     }
 
     /// Set how long the gamepad cursor lingers after a move (the app calls this
@@ -652,99 +567,6 @@ impl AppUi {
         }
     }
 
-    /// Switch the active section by `delta` (◀▶).
-    #[inline]
-    pub fn menu_switch(&mut self, delta: i32) {
-        self.menu.switch_section(delta);
-    }
-
-    /// Jump to a specific section (clicking its tab).
-    #[inline]
-    pub fn menu_set_section(&mut self, section: Section) {
-        self.menu.set_section(section);
-    }
-
-    /// The active menu section.
-    #[inline]
-    pub fn menu_section(&self) -> Section {
-        self.menu.section()
-    }
-
-    /// Highlighted row in the Tabs section (== tab count means the "+ New tab" row).
-    #[inline]
-    pub fn menu_tab_selected(&self) -> usize {
-        self.menu.tab_selected()
-    }
-
-    /// Whether the History section's "Clear all" top row is highlighted.
-    #[inline]
-    pub fn menu_history_clear_selected(&self) -> bool {
-        self.menu.history_clear_selected()
-    }
-
-    /// Refresh the Tabs section's known tab count (keeps its selection in range).
-    #[inline]
-    pub fn menu_set_tab_count(&mut self, count: usize) {
-        self.menu.set_tab_count(count);
-    }
-
-    /// Move the active section's selection by `dy` rows.
-    #[inline]
-    pub fn menu_move(&mut self, dy: i32) {
-        self.menu.move_sel(dy);
-    }
-
-    /// The highlighted entry's URL in the active section, if any.
-    #[inline]
-    pub fn menu_selected_url(&self) -> Option<String> {
-        self.menu.selected_url()
-    }
-
-    /// Remove the highlighted entry in the active section.
-    #[inline]
-    pub fn menu_remove_selected(&mut self) {
-        self.menu.remove_selected();
-    }
-
-    /// Remove the entry at `index` in the active section (clicking its ✖ button).
-    #[inline]
-    pub fn menu_remove_at(&mut self, index: usize) {
-        self.menu.remove_at(index);
-    }
-
-    /// Clear all entries in the active section (History's "Clear all").
-    #[inline]
-    pub fn menu_clear(&mut self) {
-        self.menu.clear();
-    }
-
-    /// Record a visited URL in history (no-op if history is disabled). Only marks
-    /// the store dirty; the disk write is deferred (see [`AppUi::flush_history`]).
-    #[inline]
-    pub fn menu_record_history(&mut self, url: &str) {
-        self.menu.record_history(url);
-    }
-
-    /// Persist any history buffered since the last write. Called on a periodic
-    /// throttle while the loop is awake and at shutdown (see [`crate::app`]).
-    #[inline]
-    pub fn flush_history(&mut self) {
-        self.menu.flush_history();
-    }
-
-    /// Pull progress from download worker threads into the menu's Downloads list
-    /// (records finishes; cheap when nothing is downloading).
-    #[inline]
-    pub fn downloads_poll(&mut self) {
-        self.menu.downloads.poll();
-    }
-
-    /// Start downloading `url` in the background (see [`crate::data::downloads`]).
-    #[inline]
-    pub fn start_download(&mut self, url: &str, sender: &UserEventSender) {
-        self.menu.downloads.start(url, sender);
-    }
-
     /// Kick off a self-update check in the background (About tab; a no-op off a
     /// PortMaster install). See [`crate::update`].
     #[inline]
@@ -769,12 +591,6 @@ impl AppUi {
     #[inline]
     pub fn set_update_config(&mut self, cfg: &UpdateConfig) {
         self.update.set_config(cfg);
-    }
-
-    /// Add or remove `url` from the saved bookmarks (★ button / Start).
-    #[inline]
-    pub fn toggle_bookmark(&mut self, url: &str) {
-        self.menu.toggle_bookmark(url);
     }
 
     /// Mirror whether the active tab is on the start page (called each frame
@@ -830,13 +646,6 @@ impl AppUi {
         self.home.tile() == Some(self.menu.dial.urls().len())
     }
 
-    /// Pin `url` to the speed dial if absent (the editor's Add); unlike
-    /// [`Self::dial_toggle`] it never unpins.
-    #[inline]
-    pub fn dial_pin(&mut self, url: &str) {
-        self.menu.dial.pin(url);
-    }
-
     // --- Speed-dial editor (the standalone overlay opened from the start page) ---
 
     /// Open the speed-dial editor overlay.
@@ -888,7 +697,7 @@ impl AppUi {
     }
 
     /// Dial indices of the editor's regular (non-settings) pin tiles, in order.
-    /// The editor hides the ⚙ settings sentinel from the normal pins and shows
+    /// The editor hides the settings sentinel from the normal pins and shows
     /// it as a dedicated trailing toggle tile, so its grid slots are these pins
     /// followed by that one tile.
     fn dial_edit_pin_indices(&self) -> Vec<usize> {
@@ -902,28 +711,21 @@ impl AppUi {
             .collect()
     }
 
-    /// Number of editor grid slots: the regular pins plus the always-present ⚙
+    /// Number of editor grid slots: the regular pins plus the always-present
     /// settings toggle tile at the end.
     #[inline]
     fn dial_edit_slots(&self) -> usize {
         self.dial_edit_pin_indices().len() + 1
     }
 
-    /// Whether the focused grid tile is the trailing ⚙ settings toggle (its slot
+    /// Whether the focused grid tile is the trailing settings toggle (its slot
     /// is the one past the regular pins) — drives the **A** action in the editor.
     pub fn dial_edit_settings_selected(&self) -> bool {
         self.dial_edit.tile() == Some(self.dial_edit_pin_indices().len())
     }
 
-    /// Remove the pin at `index` from the speed dial (editor ✖ click, which
-    /// carries the real dial index).
-    #[inline]
-    pub fn dial_remove_at(&mut self, index: usize) {
-        self.menu.dial.remove(index);
-    }
-
     /// Delete the editor's focused tile (gamepad/keyboard X): a regular pin is
-    /// removed by its mapped dial index; the ⚙ settings toggle tile is left
+    /// removed by its mapped dial index; the settings toggle tile is left
     /// alone (it pins/unpins with A, not delete).
     pub fn dial_edit_remove_selected(&mut self) {
         if let Some(slot) = self.dial_edit.tile() {
@@ -940,19 +742,6 @@ impl AppUi {
         self.home.tile().is_some()
     }
 
-    /// Pin `url` to the speed dial, or unpin it if already pinned (Y on a menu
-    /// Bookmarks / History row, or on a focused start-page tile).
-    #[inline]
-    pub fn dial_toggle(&mut self, url: &str) {
-        self.menu.dial.toggle(url);
-    }
-
-    /// Whether link-hint navigation is currently shown.
-    #[inline]
-    pub fn hints_visible(&self) -> bool {
-        self.hints.visible
-    }
-
     /// Hint mode opened: a collection round was started in the browser. The badge
     /// alphabet follows the device that triggered it (typed letters from the
     /// keyboard, button combos from the pad) — fixed for the whole session.
@@ -964,13 +753,6 @@ impl AppUi {
             HintLabels::Gamepad
         };
         self.hints.begin_collect(labels);
-    }
-
-    /// Whether the open hint round is typed on the keyboard (vs gamepad combos) —
-    /// the keyboard handler routes letter keys into the buffer only then.
-    #[inline]
-    pub fn hints_keyboard(&self) -> bool {
-        self.hints.is_keyboard()
     }
 
     /// Fresh clickable rects from the page. Selection lands near the previous
@@ -986,18 +768,6 @@ impl AppUi {
         self.hints.show(rects, near, top_center);
     }
 
-    #[inline]
-    pub fn hints_hide(&mut self) {
-        self.hints.hide();
-    }
-
-    /// Hop the hint selection in `dir` (a dominant-axis step from the router).
-    /// Returns whether it moved; `false` is the edge (no hint further that way).
-    #[inline]
-    pub fn hints_move(&mut self, dir: (i32, i32)) -> bool {
-        self.hints.move_sel(dir)
-    }
-
     /// Feed one gamepad combo symbol into hint mode (see [`HintInput`]).
     #[inline]
     pub fn hints_push_sym(&mut self, s: Sym) -> HintInput {
@@ -1008,24 +778,6 @@ impl AppUi {
     #[inline]
     pub fn hints_push_key(&mut self, c: char) -> HintInput {
         self.hints.push_label(Label::Key(c))
-    }
-
-    /// Point the hint selection at `idx` (a resolved combo) for the click path.
-    #[inline]
-    pub fn hints_select(&mut self, idx: usize) {
-        self.hints.select(idx);
-    }
-
-    /// Whether a partial combo is buffered (B clears it before exiting).
-    #[inline]
-    pub fn hints_has_typed(&self) -> bool {
-        self.hints.has_typed()
-    }
-
-    /// Drop a partially-typed combo (B with a non-empty buffer).
-    #[inline]
-    pub fn hints_clear_typed(&mut self) {
-        self.hints.clear_typed();
     }
 
     /// Height of the browser viewport (logical px) — for screen-relative scrolls.
@@ -1039,37 +791,6 @@ impl AppUi {
     #[inline]
     pub fn browser_area_width(&self) -> f32 {
         self.webview_rect.width()
-    }
-
-    /// Center of the selected hint in browser-relative coordinates.
-    #[inline]
-    pub fn hints_selected_center(&self) -> Option<(f32, f32)> {
-        self.hints.selected_center()
-    }
-
-    /// The selected hint's link URL (owned), if it is a link.
-    #[inline]
-    pub fn hints_selected_url(&self) -> Option<String> {
-        self.hints.selected_url().map(str::to_owned)
-    }
-
-    /// The page scrolled under the badges: schedule a re-collect.
-    #[inline]
-    pub fn hints_mark_stale(&mut self) {
-        self.hints.mark_stale();
-    }
-
-    /// An edge auto-scroll moved the page: re-collect and land the selection on
-    /// the newly-revealed hint nearest `near` (the leading edge).
-    #[inline]
-    pub fn hints_mark_stale_at(&mut self, near: (f32, f32)) {
-        self.hints.mark_stale_at(near);
-    }
-
-    /// Whether the post-scroll re-collect is due (cleared on read).
-    #[inline]
-    pub fn hints_refresh_due(&mut self) -> bool {
-        self.hints.take_refresh_due()
     }
 
     /// Mirror the gamepad's latched D-pad scroll mode (called by the router
@@ -1243,7 +964,7 @@ impl AppUi {
         }
         if self.dial_edit.visible() {
             // The editor's grid is its non-settings pins plus the trailing
-            // ⚙ toggle tile, so a selection up to that tile stays valid.
+            // settings toggle tile, so a selection up to that tile stays valid.
             let slots = self.dial_edit_slots();
             self.dial_edit.clamp(slots);
         }

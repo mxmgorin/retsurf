@@ -86,7 +86,7 @@ impl Keyboard {
 
         // While the menu is open it captures the keyboard wholesale — both
         // edges, so no stray release reaches the page either.
-        if ui.menu_visible() {
+        if ui.menu.visible {
             if key.pressed {
                 self.on_menu_key(key, commands);
             }
@@ -95,7 +95,7 @@ impl Keyboard {
 
         if key.pressed {
             self.on_key_down(key, ui, browser, commands);
-        } else if ui.hints_visible() && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+        } else if ui.hints.visible && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
             // Hint mode times Enter as a tap-vs-hold gesture, so its release edge
             // decides (click vs open-in-new-tab) in the router rather than going
             // to the page like other key-ups.
@@ -151,7 +151,7 @@ impl Keyboard {
         // bindings below). Enter is a tap-vs-hold gesture timed in the router,
         // so only its first edge counts — drop autorepeat, and let the release
         // edge (handled in `on_key`) close the gesture.
-        if ui.hints_visible() {
+        if ui.hints.visible {
             match key.kc {
                 Keycode::Return | Keycode::KpEnter => {
                     if !key.repeat {
@@ -172,7 +172,7 @@ impl Keyboard {
             let modified = key
                 .keymod
                 .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD);
-            if ui.hints_keyboard() && ui.hint_badges() && !key.repeat && !modified {
+            if ui.hints.is_keyboard() && ui.hint_badges() && !key.repeat && !modified {
                 if let Some(c) = letter_of(key.kc) {
                     commands.push(AppCommand::Input(InputCommand::HintKey(c)));
                     return;
@@ -266,10 +266,10 @@ impl Keyboard {
             }
         }
 
-        // The settings overlay: plain arrows move the selection (▲▼) and adjust
-        // the focused value (◀▶); Tab / Shift+Tab switch section (the Shoulder
+        // The settings overlay: plain arrows move the selection (Up/Down) and adjust
+        // the focused value (Left/Right); Tab / Shift+Tab switch section (the Shoulder
         // intent L1/R1 emit); Enter activates (toggle / cycle / edit text); Esc
-        // saves and closes. Ctrl+◀▶ also switch section. No text field can hold
+        // saves and closes. Ctrl+Left/Right also switch section. No text field can hold
         // egui focus here (typing goes through the OSK), so arrows are never caret
         // moves.
         if ui.focus() == Focus::Settings {

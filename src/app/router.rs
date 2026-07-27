@@ -59,9 +59,10 @@ impl App {
                             .hint_press_at
                             .take()
                             .is_some_and(|t| t.elapsed() >= hold);
-                        match self.ui.hints_selected_url().filter(|_| held_long) {
+                        let url = self.ui.hints.selected_url().filter(|_| held_long);
+                        match url.map(str::to_owned) {
                             Some(url) => {
-                                self.ui.hints_hide();
+                                self.ui.hints.hide();
                                 self.browser.open_tab_background(&url);
                             }
                             None => self.activate_hint(),
@@ -87,15 +88,15 @@ impl App {
             InputCommand::Cancel => match focus {
                 Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
-                Focus::Menu => self.ui.menu_close(),
-                // B saves the draft and closes (same as the ✖ button).
+                Focus::Menu => self.ui.menu.close(),
+                // B saves the draft and closes (same as the close button).
                 Focus::Settings => self.settings_close(),
                 // B drops a half-typed combo first, then exits hint mode.
                 Focus::Hints => {
-                    if self.ui.hints_has_typed() {
-                        self.ui.hints_clear_typed();
+                    if self.ui.hints.has_typed() {
+                        self.ui.hints.clear_typed();
                     } else {
-                        self.ui.hints_hide();
+                        self.ui.hints.hide();
                     }
                 }
                 // B in the editor returns to the start page.
@@ -111,17 +112,17 @@ impl App {
                     self.delete_menu_selection();
                 } else if focus == Focus::DialEdit {
                     // X deletes the focused pin tile (no-op on the field or the
-                    // trailing ⚙ settings toggle, which pins/unpins with A).
+                    // trailing settings toggle, which pins/unpins with A).
                     self.ui.dial_edit_remove_selected();
                 } else if focus == Focus::Settings {
-                    // X is unused in settings (rows edit with A and ◀▶).
+                    // X is unused in settings (rows edit with A and Left/Right).
                 } else if focus == Focus::Hints && self.config.input.hint_badges {
                     // In hint mode X is a combo symbol, not the OSK toggle (unless
                     // combos are disabled, when it falls through to the OSK below).
                     self.hint_sym(Sym::X);
                 } else {
                     // The keyboard takes over the stick and A — leave hint mode.
-                    self.ui.hints_hide();
+                    self.ui.hints.hide();
                     // On the start page, X types into the search field — focus it
                     // so a tile selection doesn't swallow the typed text.
                     if focus == Focus::Home {
@@ -151,17 +152,17 @@ impl App {
                 Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
                 Focus::Menu => {
                     if *dx != 0 {
-                        self.ui.menu_switch(*dx);
+                        self.ui.menu.switch_section(*dx);
                     } else if *dy != 0 {
-                        self.ui.menu_move(*dy);
+                        self.ui.menu.move_sel(*dy);
                     }
                 }
-                // ▲▼ moves between rows, ◀▶ adjusts the focused value.
+                // Up/Down moves between rows, Left/Right adjusts the focused value.
                 Focus::Settings => {
                     if *dy != 0 {
                         self.ui.settings_move(*dy);
                     } else if *dx != 0 {
-                        self.ui.settings_adjust(*dx);
+                        self.ui.settings.adjust(*dx);
                     }
                 }
                 Focus::Hints => self.hints_nav(*dx, *dy),
@@ -201,16 +202,16 @@ impl App {
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
-                Focus::Hints => self.ui.hints_hide(),
+                Focus::Hints => self.ui.hints.hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();
                     self.browser.collect_hints();
                 }
             },
             InputCommand::Shoulder(delta) => match focus {
-                Focus::Menu => self.ui.menu_switch(*delta),
-                // L1/R1 switch the settings section (◀▶ is taken by value editing).
-                Focus::Settings => self.ui.settings_switch(*delta),
+                Focus::Menu => self.ui.menu.switch_section(*delta),
+                // L1/R1 switch the settings section (Left/Right edits values).
+                Focus::Settings => self.ui.settings.switch_section(*delta),
                 // In hint mode L1/R1 are combo symbols; with combos off they fall
                 // through to the page back/forward below.
                 Focus::Hints if self.config.input.hint_badges => {
@@ -268,7 +269,7 @@ impl App {
     /// a freshly-revealed hint at that edge). Horizontal edges stay put: pages
     /// rarely scroll sideways, and an accidental sideways nudge shouldn't move it.
     fn hints_nav(&mut self, dx: i32, dy: i32) {
-        if self.ui.hints_move((dx, dy)) || dy == 0 {
+        if self.ui.hints.move_sel((dx, dy)) || dy == 0 {
             return;
         }
         let height = self.ui.browser_area_height();
@@ -285,7 +286,8 @@ impl App {
         // the selection somehow went away.
         let (sx, _) = self
             .ui
-            .hints_selected_center()
+            .hints
+            .selected_center()
             .unwrap_or_else(|| self.ui.cursor_browser_rel());
         let width = self.ui.browser_area_width();
         let sx = sx.clamp(1.0, (width - 1.0).max(1.0));
@@ -296,7 +298,7 @@ impl App {
         self.browser.scroll(0.0, chunk, sx, sy);
         self.ui.notify_page_scroll(chunk);
         let edge_y = if dy > 0 { height } else { 0.0 };
-        self.ui.hints_mark_stale_at((sx, edge_y));
+        self.ui.hints.mark_stale_at((sx, edge_y));
     }
 
     /// Feed a combo symbol to hint mode and, when it resolves to one hint, click
@@ -305,7 +307,7 @@ impl App {
     /// badges already show it went nowhere — and a `Pending` combo waits for more.
     fn hint_sym(&mut self, sym: Sym) {
         if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
-            self.ui.hints_select(idx);
+            self.ui.hints.select(idx);
             self.activate_hint();
         }
     }
@@ -314,7 +316,7 @@ impl App {
     /// matched hint (shares `hint_sym`'s activation path — see [`HintInput`]).
     fn hint_key(&mut self, c: char) {
         if let HintInput::Activate(idx) = self.ui.hints_push_key(c) {
-            self.ui.hints_select(idx);
+            self.ui.hints.select(idx);
             self.activate_hint();
         }
     }
@@ -323,11 +325,11 @@ impl App {
     /// center (so JS click handlers fire like for a real click), then leave hint
     /// mode — the click usually navigates, invalidating the rects anyway.
     fn activate_hint(&mut self) {
-        let Some((x, y)) = self.ui.hints_selected_center() else {
-            self.ui.hints_hide();
+        let Some((x, y)) = self.ui.hints.selected_center() else {
+            self.ui.hints.hide();
             return;
         };
-        self.ui.hints_hide();
+        self.ui.hints.hide();
         self.browser
             .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
         for pressed in [true, false] {
@@ -411,15 +413,16 @@ impl App {
             }
             // In hint mode the right stick still scrolls the page (the badges
             // go stale as it moves — schedule a re-collect).
-            if self.ui.hints_visible() && scroll != 0.0 {
+            if self.ui.hints.visible && scroll != 0.0 {
                 let dy = scroll * scroll_speed * dt;
                 let (x, y) = self
                     .ui
-                    .hints_selected_center()
+                    .hints
+            .selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
                 self.browser.scroll(0.0, dy, x, y);
                 self.ui.notify_page_scroll(dy);
-                self.ui.hints_mark_stale();
+                self.ui.hints.mark_stale();
             }
             return;
         }

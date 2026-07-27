@@ -1,5 +1,5 @@
-//! The full-screen menu opened with Select (or the ☰ toolbar button): a tabbed
-//! overlay over the page with **Tabs · Bookmarks · History · Downloads** sections.
+//! The full-screen menu opened with Select (or the menu toolbar button): a tabbed
+//! overlay over the page with Tabs / Bookmarks / History / Downloads sections.
 //! It owns the overlay state (whether it's shown, which section is active) and the
 //! Bookmarks, History, and Downloads stores. The central router ([`crate::app`])
 //! maps gamepad / keyboard / mouse input to section switches, selection moves,
@@ -178,7 +178,7 @@ impl Menu {
         }
     }
 
-    /// Remove the entry at `index` in the active section (clicking its ✖).
+    /// Remove the entry at `index` in the active section (clicking its remove button).
     pub fn remove_at(&mut self, index: usize) {
         match self.section {
             Section::Bookmarks => self.bookmarks.remove(index),
@@ -198,16 +198,18 @@ impl Menu {
         }
     }
 
+    /// Record a visited URL (no-op if history is disabled). Only marks the store
+    /// dirty; the disk write is deferred (see [`Self::flush_history`]).
     pub fn record_history(&mut self, url: &str) {
         self.history.record(url);
     }
 
-    /// Whether `url` is a saved bookmark (drives the ★/☆ toolbar icon).
+    /// Whether `url` is a saved bookmark (drives the toolbar bookmark icon).
     pub fn is_bookmarked(&self, url: &str) -> bool {
         self.bookmarks.contains(url)
     }
 
-    /// Add or remove `url` from saved bookmarks (the ★ button / Start).
+    /// Add or remove `url` from saved bookmarks (the bookmark button / Start).
     pub fn toggle_bookmark(&mut self, url: &str) {
         self.bookmarks.toggle(url);
     }

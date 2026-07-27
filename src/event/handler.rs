@@ -35,7 +35,7 @@ pub struct AppEventHandler {
     gamepad: Gamepad,
     /// Keyboard-side counterpart of [`Gamepad`]: shortcuts + overlay keys.
     keyboard: Keyboard,
-    /// Single-finger touch gestures (drag→scroll, tap→click) over the web view.
+    /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
     touch: super::touch::TouchState,
 }
 
@@ -89,7 +89,7 @@ impl AppEventHandler {
     ) {
         // Mirror the overlay's capture state into the pad so its buttons feed the
         // gesture resolver (instead of dispatching) while a binding is captured.
-        self.gamepad.set_capture(ui.settings_capturing());
+        self.gamepad.set_capture(ui.settings.capturing());
 
         // Block for the next event only when idle. When the gamepad is active or
         // the page is animating, return promptly so the main loop keeps ticking
@@ -135,7 +135,7 @@ impl AppEventHandler {
         // cancels; bare modifiers and the key-up / text edge are swallowed so
         // nothing leaks to the page. (The gamepad half is captured in the pad's
         // own capture mode, synced in `wait`.)
-        if ui.settings_capturing() {
+        if ui.settings.capturing() {
             match event {
                 Event::KeyDown {
                     keycode: Some(kc),

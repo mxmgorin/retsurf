@@ -53,35 +53,37 @@ impl App {
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
     fn menu_action(&mut self, action: &MenuAction) {
         match action {
-            // Select toggles the menu; the ☰ button only ever opens it (it's hidden
+            // Select toggles the menu; the menu button only ever opens it (it's hidden
             // behind the menu once shown).
             MenuAction::Open => {
-                if self.ui.menu_visible() {
-                    self.ui.menu_close();
+                if self.ui.menu.visible {
+                    self.ui.menu.close();
                 } else {
                     self.ui.menu_open();
                 }
             }
-            MenuAction::Close => self.ui.menu_close(),
-            MenuAction::SetSection(section) => self.ui.menu_set_section(*section),
+            MenuAction::Close => self.ui.menu.close(),
+            MenuAction::SetSection(section) => self.ui.menu.set_section(*section),
             MenuAction::OpenSelected => self.menu_open_selected(),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
-            MenuAction::Clear => self.ui.menu_clear(),
+            MenuAction::Clear => self.ui.menu.clear(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
-            MenuAction::ToggleBookmark(url) => self.ui.toggle_bookmark(url),
+            MenuAction::ToggleBookmark(url) => self.ui.menu.toggle_bookmark(url),
             MenuAction::DialEdit => self.ui.open_pins_editor(),
             MenuAction::DialClose => self.ui.close_pins_editor(),
             MenuAction::DialAdd(url) => self.dial_add(url),
-            MenuAction::DialRemoveAt(index) => self.ui.dial_remove_at(*index),
-            MenuAction::DialToggleSettings => self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN),
-            MenuAction::RemoveAt(index) => self.ui.menu_remove_at(*index),
+            MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
+            MenuAction::DialToggleSettings => {
+                self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN)
+            }
+            MenuAction::RemoveAt(index) => self.ui.menu.remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
-                self.ui.menu_close();
+                self.ui.menu.close();
             }
             MenuAction::CloseTab(index) => {
                 self.browser.close_tab(*index);
-                self.ui.menu_set_tab_count(self.browser.tab_count());
+                self.ui.menu.set_tab_count(self.browser.tab_count());
             }
             MenuAction::NewTab => self.new_tab(),
         }
@@ -91,14 +93,14 @@ impl App {
     fn new_tab(&mut self) {
         let home = self.config.browser.home_page.clone();
         self.browser.open_tab(&home);
-        self.ui.menu_close();
+        self.ui.menu.close();
     }
 
-    /// Toggle the current page in saved bookmarks (the ★ button / Start).
+    /// Toggle the current page in saved bookmarks (the bookmark button / Start).
     fn toggle_current_bookmark(&mut self) {
         let url = self.browser.get_state_mut().get_location().to_string();
         if !url.is_empty() {
-            self.ui.toggle_bookmark(&url);
+            self.ui.menu.toggle_bookmark(&url);
         }
     }
 
@@ -106,38 +108,38 @@ impl App {
     /// switches to the tab (or opens a new one on the "+ New tab" row); in the URL
     /// lists it loads the entry. Closes the menu either way.
     pub(super) fn menu_open_selected(&mut self) {
-        if self.ui.menu_section() == Section::Tabs {
-            let sel = self.ui.menu_tab_selected();
+        if self.ui.menu.section() == Section::Tabs {
+            let sel = self.ui.menu.tab_selected();
             if sel == 0 {
                 self.new_tab(); // the "+ New tab" button (index 0)
             } else {
                 self.browser.switch_to(sel - 1);
-                self.ui.menu_close();
+                self.ui.menu.close();
             }
-        } else if self.ui.menu_history_clear_selected() {
+        } else if self.ui.menu.history_clear_selected() {
             // History's "Clear all" top row (index 0): wipe the list, stay open.
-            self.ui.menu_clear();
-        } else if let Some(url) = self.ui.menu_selected_url() {
+            self.ui.menu.clear();
+        } else if let Some(url) = self.ui.menu.selected_url() {
             self.open_url(url);
-        } else if self.ui.menu_section() != Section::Downloads {
+        } else if self.ui.menu.section() != Section::Downloads {
             // A on an active/failed download has nothing to open — keep the menu
             // up so the user can watch the progress; other sections close.
-            self.ui.menu_close();
+            self.ui.menu.close();
         }
     }
 
     /// Delete the highlighted menu entry (the **X** button / Delete). In Tabs this
     /// closes the tab; in the URL lists it removes the bookmark / history entry.
     pub(super) fn delete_menu_selection(&mut self) {
-        if self.ui.menu_section() == Section::Tabs {
+        if self.ui.menu.section() == Section::Tabs {
             // Index 0 is the "+ New tab" button (nothing to delete); tabs are 1.. .
-            let sel = self.ui.menu_tab_selected();
+            let sel = self.ui.menu.tab_selected();
             if sel > 0 {
                 self.browser.close_tab(sel - 1);
-                self.ui.menu_set_tab_count(self.browser.tab_count());
+                self.ui.menu.set_tab_count(self.browser.tab_count());
             }
         } else {
-            self.ui.menu_remove_selected();
+            self.ui.menu.remove_selected();
         }
     }
 
@@ -146,24 +148,24 @@ impl App {
     /// History bookmarks (or un-bookmarks) the selected entry; Tabs bookmarks
     /// the selected tab's URL. Downloads has no Y action.
     pub(super) fn menu_y_action(&mut self) {
-        match self.ui.menu_section() {
+        match self.ui.menu.section() {
             Section::Bookmarks => {
-                if let Some(url) = self.ui.menu_selected_url() {
-                    self.ui.dial_toggle(&url);
+                if let Some(url) = self.ui.menu.selected_url() {
+                    self.ui.menu.dial.toggle(&url);
                 }
             }
             Section::History => {
-                if let Some(url) = self.ui.menu_selected_url() {
-                    self.ui.toggle_bookmark(&url);
+                if let Some(url) = self.ui.menu.selected_url() {
+                    self.ui.menu.toggle_bookmark(&url);
                 }
             }
             Section::Tabs => {
                 // Index 0 is the "+ New tab" button; the tabs follow at 1..=N.
-                let sel = self.ui.menu_tab_selected();
+                let sel = self.ui.menu.tab_selected();
                 if sel > 0 {
                     if let Some(info) = self.browser.tabs().get(sel - 1) {
                         if !info.url.is_empty() {
-                            self.ui.toggle_bookmark(&info.url);
+                            self.ui.menu.toggle_bookmark(&info.url);
                         }
                     }
                 }
@@ -180,7 +182,7 @@ impl App {
             // save the draft like a normal close, then shut down. A first press
             // just opens, seeding the draft from the live config.
             SettingsAction::Open => {
-                if self.ui.settings_visible() {
+                if self.ui.settings.visible() {
                     self.settings_close();
                     self.shutdown();
                 } else {
@@ -188,10 +190,10 @@ impl App {
                 }
             }
             SettingsAction::Close => self.settings_close(),
-            SettingsAction::SetSection(section) => self.ui.settings_set_section(*section),
-            SettingsAction::Select(index) => self.ui.settings_select(*index),
+            SettingsAction::SetSection(section) => self.ui.settings.set_section(*section),
+            SettingsAction::Select(index) => self.ui.settings.set_selected(*index),
             SettingsAction::Activate => self.settings_confirm(out),
-            SettingsAction::Adjust(dx) => self.ui.settings_adjust(*dx),
+            SettingsAction::Adjust(dx) => self.ui.settings.adjust(*dx),
             // A link on the About tab: save & close like a normal exit, then load
             // it in the focused tab (open_url also tidies the menu, harmless here).
             SettingsAction::OpenLink(url) => {
@@ -203,9 +205,9 @@ impl App {
             // raw input comes from the event loop / pad while capturing (see
             // [`crate::event::handler`] / [`crate::event::gamepad`]).
             SettingsAction::CaptureBinding { gesture, keyboard } => {
-                self.ui.settings_apply_capture(gesture.clone(), *keyboard);
+                self.ui.settings.apply_capture(gesture.clone(), *keyboard);
             }
-            SettingsAction::CaptureCancel => self.ui.settings_cancel_capture(),
+            SettingsAction::CaptureCancel => self.ui.settings.cancel_capture(),
             // Self-update (About tab, PortMaster only). Check/Install forward to the
             // background Updater; Quit reuses the audited two-step-quit path so the
             // launcher's pm_finish runs and re-execs the freshly swapped binary.
@@ -220,24 +222,24 @@ impl App {
 
     /// A / Enter on the focused settings row: add/remove a binding in the Controls
     /// section, open the on-screen keyboard on a text field, or step every other
-    /// kind forward (◀▶ does the rest).
+    /// kind forward (Left/Right does the rest).
     pub(super) fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.settings_is_info() {
+        if self.ui.settings.is_info_section() {
             // About tab: A activates the focused row (update action or a link);
             // the resulting SettingsAction routes back through settings_action.
             if let Some(action) = self.ui.about_activate() {
                 out.push(AppCommand::Settings(action));
             }
-        } else if self.ui.settings_is_controls() {
-            self.ui.settings_controls_activate();
-        } else if self.ui.settings_selected_is_text() {
+        } else if self.ui.settings.is_controls_section() {
+            self.ui.settings.controls_activate();
+        } else if self.ui.settings.selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         } else {
-            self.ui.settings_adjust(1);
+            self.ui.settings.adjust(1);
         }
     }
 
-    /// Close the settings overlay (B / ✖): take its edited drafts and adopt them
+    /// Close the settings overlay (B / close button): adopt its edited drafts
     /// — the config and the gamepad bindings, each saved and re-applied live.
     pub(super) fn settings_close(&mut self) {
         let (config, bindings) = self.ui.settings_close();
@@ -312,11 +314,11 @@ impl App {
                 self.ui.dial_edit_focus_field();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
-            // A on the trailing ⚙ tile toggles the settings shortcut on/off the
+            // A on the trailing settings tile toggles the settings shortcut on/off the
             // dial; the regular pin tiles are edit-only (delete with X).
             EditItem::Tile(_) => {
                 if self.ui.dial_edit_settings_selected() {
-                    self.ui.dial_toggle(crate::data::dial::SETTINGS_PIN);
+                    self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN);
                 }
             }
         }
@@ -329,23 +331,23 @@ impl App {
         if let Some(url) =
             crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
         {
-            self.ui.dial_pin(url.as_str());
+            self.ui.menu.dial.pin(url.as_str());
         }
         self.ui.dial_edit_clear_input();
     }
 
     /// Load `url` in the focused tab and close the menu. The settings pin is a
     /// sentinel, not a real address: it opens the settings overlay instead of
-    /// navigating (so a ⚙ speed-dial tile / menu row behaves like the toolbar's).
+    /// navigating (so a settings speed-dial tile / menu row behaves like the toolbar's).
     fn open_url(&mut self, url: String) {
         if url == crate::data::dial::SETTINGS_PIN {
-            self.ui.menu_close();
+            self.ui.menu.close();
             self.ui.settings_open(&self.config);
             return;
         }
         *self.browser.get_state_mut().get_location_mut() = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);
-        self.ui.menu_close();
+        self.ui.menu.close();
     }
 }

@@ -119,7 +119,7 @@ impl App {
             // Record any pages the focused webview navigated to this frame. Sourced
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
-                self.ui.menu_record_history(&url);
+                self.ui.menu.record_history(&url);
             }
 
             // Recording only marks history dirty; flush it on a throttle so a busy
@@ -128,7 +128,7 @@ impl App {
             // wake (the blocking wait stays battery-efficient). A clean exit and
             // menu close flush the remainder.
             if self.last_history_flush.elapsed() >= HISTORY_FLUSH_INTERVAL {
-                self.ui.flush_history();
+                self.ui.menu.flush_history();
                 self.last_history_flush = Instant::now();
             }
 
@@ -155,9 +155,9 @@ impl App {
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
-            self.ui.downloads_poll();
+            self.ui.menu.downloads.poll();
             for url in self.browser.take_download_requests() {
-                self.ui.start_download(&url, &self.event_sender);
+                self.ui.menu.downloads.start(&url, &self.event_sender);
             }
 
             // Modal page controls (select pickers, JS dialogs): queue fresh
@@ -177,7 +177,7 @@ impl App {
             if let Some(rects) = self.browser.take_hint_rects() {
                 self.ui.hints_apply(rects);
             }
-            if self.ui.hints_refresh_due() {
+            if self.ui.hints.take_refresh_due() {
                 self.browser.collect_hints();
             }
 
@@ -216,7 +216,7 @@ impl App {
 
         // Persist history buffered since the last throttle tick — `Drop` won't
         // run (we `process::exit` below), so this must be explicit.
-        self.ui.flush_history();
+        self.ui.menu.flush_history();
         self.ui.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage
