@@ -105,6 +105,17 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
     resp
 }
 
+/// "Update available" chip: a painted accent dot (can't tofu). Brightens on hover.
+fn add_update_dot(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 20.0, y: 20.0 }, egui::Sense::click());
+    let color = super::theme::ACCENT;
+    let color = if resp.hovered() { color.gamma_multiply(1.25) } else { color };
+    // Half-pixel center keeps the dot's edge crisp and symmetric.
+    let c = rect.center().floor() + egui::vec2(0.5, 0.5);
+    ui.painter().circle_filled(c, 4.5, color);
+    resp
+}
+
 #[inline]
 fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
     response.lost_focus() && ui.input(|i| i.key_pressed(key))
@@ -181,6 +192,13 @@ fn toolbar_contents(
                 ui.available_size(),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
+                    // Update chip: far-right accent dot when a newer build is found; opens Settings -> About.
+                    if update_available && add_update_dot(ui).clicked() {
+                        commands.push(AppCommand::Settings(SettingsAction::Open));
+                        commands.push(AppCommand::Settings(SettingsAction::SetSection(
+                            SettingsSection::About,
+                        )));
+                    }
                     if ui.add(new_toolbar_button("☰")).clicked() {
                         commands.push(AppCommand::Menu(MenuAction::Open));
                     }
@@ -188,25 +206,6 @@ fn toolbar_contents(
                     // the settings overlay.
                     if ui.add(new_toolbar_button("⚙")).clicked() {
                         commands.push(AppCommand::Settings(SettingsAction::Open));
-                    }
-                    // Update chip — shown only once a check (auto or manual) has
-                    // found a newer build. Accent-coloured to draw the eye; opens
-                    // Settings straight to the About tab, where the notes, link, and
-                    // Install/Download action live. Plain text (no glyph) so it can't
-                    // tofu on egui's bundled fonts.
-                    if update_available {
-                        let label = egui::RichText::new("Update")
-                            .color(super::theme::ACCENT)
-                            .strong();
-                        let chip = egui::Button::new(label)
-                            .frame(false)
-                            .min_size(Vec2 { x: 20.0, y: 20.0 });
-                        if ui.add(chip).clicked() {
-                            commands.push(AppCommand::Settings(SettingsAction::Open));
-                            commands.push(AppCommand::Settings(SettingsAction::SetSection(
-                                SettingsSection::About,
-                            )));
-                        }
                     }
                     // ⬇ U+2B07 (not ↓ U+2193): egui's default fonts lack the
                     // plain arrow, only the emoji one renders.
