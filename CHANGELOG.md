@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   load now completes with an empty body instead of no body at all.
 - Update channel switched in settings is now used by a "Check for updates" made
   in the same visit, instead of only after the overlay is closed.
+- Android APK no longer reports a stale `0.1.0` / versionCode 1: both are derived
+  from `Cargo.toml`.
 
 ## [0.3.0] - 2026-07-27
 
