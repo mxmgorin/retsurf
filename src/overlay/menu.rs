@@ -109,6 +109,10 @@ impl Menu {
         &self.history
     }
 
+    pub fn history_mut(&mut self) -> &mut History {
+        &mut self.history
+    }
+
     /// Switch the active section by `delta` (clamped to the ends, no wrap).
     pub fn switch_section(&mut self, delta: i32) {
         let last = Section::ALL.len() as i32 - 1;

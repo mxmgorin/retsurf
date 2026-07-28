@@ -56,6 +56,18 @@ impl History {
         }
     }
 
+    /// Adopt edited `[history]` settings live (settings overlay). A shrunk cap
+    /// trims the stored list right away, mirroring [`Self::load`].
+    pub fn set_config(&mut self, cfg: &HistoryConfig) {
+        self.enabled = cfg.enabled;
+        self.max_entries = cfg.max_entries;
+        if self.entries.len() > self.max_entries {
+            self.entries.truncate(self.max_entries);
+            self.clamp_selected();
+            self.save();
+        }
+    }
+
     /// Best-effort persist; failures are logged, not fatal. Clears `dirty` only
     /// on a successful write, so a transient failure is retried by the next
     /// [`Self::flush`].
