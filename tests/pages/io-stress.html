@@ -1,0 +1,137 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IntersectionObserver stress</title>
+<!--
+  Reproduces a reddit-style feed's IntersectionObserver load: many posts, each
+  wrapped in a deep nesting chain and watched by its own observer (shreddit
+  attaches a viewability tracker per post), plus one sentinel observer.
+
+  Knobs (query string):
+    posts=300     number of posts
+    depth=8       wrapper divs around each post (containing-block chain length)
+    contents=0    give every other wrapper `display: contents` (no layout box)
+    obs=per-post  per-post = one IntersectionObserver each; shared = one for all
+    thr=0         comma-separated thresholds
+    mutate=1      callback writes to the DOM (the reddit tracker does)
+
+  Reports rAF frame timings to tests/serve.py every second, so a headless run is
+  readable from the terminal.
+-->
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; background: #101418; color: #dfe6ee; }
+  .post { margin: 8px; padding: 12px; height: 180px; background: #1b2129; border-radius: 6px; }
+  .seen { outline: 2px solid #3fb8a0; }
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9; padding: 6px 8px;
+    background: #000c; font: 12px monospace; white-space: pre;
+  }
+</style>
+<div id="hud">starting</div>
+<div id="feed"></div>
+<div id="sentinel" style="height: 40px"></div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const num = (k, d) => parseInt(params.get(k) ?? d, 10);
+  const POSTS = num("posts", 300);
+  const DEPTH = num("depth", 8);
+  const PER_POST = (params.get("obs") ?? "per-post") === "per-post";
+  const MUTATE = num("mutate", 1) !== 0;
+  const CONTENTS = num("contents", 0) !== 0;
+  const THRESHOLDS = (params.get("thr") ?? "0").split(",").map(Number);
+  const REPORT_MS = 1000;
+
+  const hud = document.getElementById("hud");
+  const feed = document.getElementById("feed");
+  const supported = typeof IntersectionObserver !== "undefined";
+
+  let callbacks = 0;
+  let entries = 0;
+  let observers = 0;
+
+  function buildPost(i) {
+    let outer = document.createElement("div");
+    let node = outer;
+    for (let d = 0; d < DEPTH; d++) {
+      const wrap = document.createElement("div");
+      // Positioned wrappers lengthen the containing-block chain the intersection
+      // computation walks, which is what a component-heavy feed looks like.
+      wrap.style.position = d % 2 ? "relative" : "static";
+      // A `display: contents` ancestor has no layout box - the shape web
+      // components produce, and the case the chain walk has to skip over.
+      if (CONTENTS && d % 2 === 0) {
+        wrap.style.position = "static";
+        wrap.style.display = "contents";
+      }
+      node.appendChild(wrap);
+      node = wrap;
+    }
+    const post = document.createElement("div");
+    post.className = "post";
+    post.textContent = `post ${i}`;
+    node.appendChild(post);
+    return { root: outer, target: post };
+  }
+
+  const onIntersect = (list) => {
+    callbacks++;
+    entries += list.length;
+    if (!MUTATE) return;
+    for (const entry of list) {
+      entry.target.classList.toggle("seen", entry.isIntersecting);
+      entry.target.dataset.ratio = entry.intersectionRatio.toFixed(2);
+    }
+  };
+
+  const shared = supported && !PER_POST
+    ? new IntersectionObserver(onIntersect, { threshold: THRESHOLDS })
+    : null;
+  if (shared) observers++;
+
+  for (let i = 0; i < POSTS; i++) {
+    const { root, target } = buildPost(i);
+    feed.appendChild(root);
+    if (!supported) continue;
+    if (shared) {
+      shared.observe(target);
+    } else {
+      new IntersectionObserver(onIntersect, { threshold: THRESHOLDS }).observe(target);
+      observers++;
+    }
+  }
+
+  if (supported) {
+    new IntersectionObserver(() => { callbacks++; }, { rootMargin: "200px" })
+      .observe(document.getElementById("sentinel"));
+    observers++;
+  }
+
+  // Frame timing: a freeze shows up as a low frame count and a huge worst frame.
+  let frames = 0;
+  let worst = 0;
+  let last = performance.now();
+  let windowStart = last;
+
+  function tick(now) {
+    const delta = now - last;
+    last = now;
+    frames++;
+    if (delta > worst) worst = delta;
+
+    if (now - windowStart >= REPORT_MS) {
+      const seconds = (now - windowStart) / 1000;
+      const line =
+        `io=${supported} obs=${observers} posts=${POSTS} depth=${DEPTH}` +
+        ` fps=${(frames / seconds).toFixed(1)} worst=${worst.toFixed(0)}ms` +
+        ` cb=${callbacks} entries=${entries} y=${Math.round(window.scrollY)}`;
+      hud.textContent = line;
+      fetch("/report?" + line.replace(/ /g, "&")).catch(() => {});
+      frames = 0;
+      worst = 0;
+      windowStart = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>

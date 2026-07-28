@@ -104,8 +104,12 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-# Vendored servo-paint with the surfman connection made optional, so Servo runs
-# on EGL 1.4 devices (Mali) where surfman can't create a connection. See
-# vendor/servo-paint/paint.rs and docs/HANDHELD_PORT.md.
+# Vendored Servo crates, each carrying one small fix. See docs/SERVO_PATCH.md.
+#  - servo-paint: surfman connection made optional, so Servo runs on EGL 1.4
+#    devices (Mali) where surfman can't create one (docs/HANDHELD_PORT.md).
+#  - servo-layout: containing-block walk advances past boxless ancestors, so a
+#    `display: contents` element above an IntersectionObserver target no longer
+#    hangs the script thread.
 [patch.crates-io]
 servo-paint = { path = "vendor/servo-paint" }
+servo-layout = { path = "vendor/servo-layout" }
