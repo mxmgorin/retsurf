@@ -8,6 +8,7 @@ use super::{AppBrowserInner, BrowserState, Tab};
 use crate::event::user::UserEvent;
 use content_security_policy::Destination;
 use servo::WebView;
+use std::cell::Cell;
 use url::Url;
 
 impl AppBrowserInner {
@@ -128,6 +129,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         tabs.push(Tab {
             webview,
             state: BrowserState::default(),
+            images_loaded: Cell::new(0),
         });
         self.active.set(tabs.len() - 1);
         drop(tabs);
@@ -141,15 +143,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// blocked load gets an empty 200 response so scripts/images fail soft
     /// instead of raising network errors. Everything else proceeds untouched
     /// (dropping the load means "do not intercept").
-    fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
+    fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
         let req = load.request();
         let url = req.url.clone();
         let is_home = req.is_for_main_frame && super::home::is_home(&url);
-
-        // A new top-level navigation resets the per-page image counter.
-        if req.is_for_main_frame {
-            self.images_loaded.set(0);
-        }
 
         let filter = self.content_filter.get();
         let is_subresource = !is_home && !req.is_for_main_frame;
@@ -160,12 +157,18 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
         // Per-page image cap: soft-block images past the limit so a huge grid
         // doesn't freeze the device (Servo loads them all eagerly, no lazy-load).
-        if is_subresource && !block && req.destination == Destination::Image {
-            let loaded = self.images_loaded.get();
-            if filter.image_cap_reached(loaded) {
-                block = true;
-            } else {
-                self.images_loaded.set(loaded + 1);
+        if let Some(i) = self.tab_index(webview.id()) {
+            let tabs = self.tabs.borrow();
+            let images_loaded = &tabs[i].images_loaded;
+            if req.is_for_main_frame {
+                images_loaded.set(0);
+            } else if is_subresource && !block && req.destination == Destination::Image {
+                let loaded = images_loaded.get();
+                if filter.image_cap_reached(loaded) {
+                    block = true;
+                } else {
+                    images_loaded.set(loaded + 1);
+                }
             }
         }
 

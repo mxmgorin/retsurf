@@ -32,7 +32,7 @@ impl ContentFilter {
     }
 
     /// Per-page image cap: block once `loaded` reaches the limit (0 = unlimited).
-    /// Counter lives in the delegate, reset each navigation.
+    /// Counter lives on the tab, reset on each of its navigations.
     pub fn image_cap_reached(&self, loaded: usize) -> bool {
         self.max_images != 0 && loaded >= self.max_images
     }
