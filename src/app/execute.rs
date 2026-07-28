@@ -211,7 +211,14 @@ impl App {
             // Self-update (About tab, PortMaster only). Check/Install forward to the
             // background Updater; Quit reuses the audited two-step-quit path so the
             // launcher's pm_finish runs and re-execs the freshly swapped binary.
-            SettingsAction::CheckUpdate => self.ui.update_check(&self.event_sender),
+            SettingsAction::CheckUpdate => {
+                // A channel edited in this visit is still only in the overlay draft
+                // (`apply_config` runs on close), so adopt it before checking.
+                if let Some(update) = self.ui.settings.pending_update().cloned() {
+                    self.ui.set_update_config(&update);
+                }
+                self.ui.update_check(&self.event_sender);
+            }
             SettingsAction::InstallUpdate => self.ui.update_install(&self.event_sender),
             SettingsAction::QuitForUpdate => {
                 self.settings_close();

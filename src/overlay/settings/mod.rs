@@ -163,6 +163,14 @@ impl Settings {
         self.draft.clone()
     }
 
+    /// The draft's pending `[update]` edits while the overlay is open, so an About-tab
+    /// check sees a channel switched in this same visit (the full draft is only handed
+    /// over on close). `None` once closed — `apply_config` has adopted it by then.
+    #[inline]
+    pub fn pending_update(&self) -> Option<&crate::config::UpdateConfig> {
+        self.visible.then_some(&self.draft.update)
+    }
+
     /// The edited bindings store, but only when the controls actually changed —
     /// `None` leaves `bindings.toml` (and its comments) untouched on a config-only
     /// edit. `Some` is cloned out by the app on close to save + reload.
@@ -373,5 +381,35 @@ impl Settings {
                 format!("{:.*}", decimals, get(&self.draft))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Channel;
+
+    /// An About-tab check runs while the overlay is open, so an edit from the same
+    /// visit must be readable before close — and gone after it.
+    #[test]
+    fn pending_update_follows_the_draft() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.update.channel, Channel::Release);
+        let row = fields::FIELDS
+            .iter()
+            .position(|f| f.label == "Update channel")
+            .expect("FIELDS lists the update channel row");
+
+        let mut settings = Settings::new();
+        settings.open(&cfg);
+        settings.set_selected(row);
+        settings.adjust(1);
+
+        assert_eq!(
+            settings.pending_update().map(|u| u.channel),
+            Some(Channel::Beta)
+        );
+        settings.close();
+        assert!(settings.pending_update().is_none());
     }
 }

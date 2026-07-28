@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Crash on pages where a blocked subresource carries an `integrity` attribute
   (e.g. gbatemp.net, whose Cloudflare beacon script is ad-blocked): the blocked
   load now completes with an empty body instead of no body at all.
+- Update channel switched in settings is now used by a "Check for updates" made
+  in the same visit, instead of only after the overlay is closed.
 
 ## [0.3.0] - 2026-07-27
 
