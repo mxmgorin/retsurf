@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>retsurf web-component probe</title>
+<!--
+  What a modern feed (www.reddit.com / shreddit and its faceplate "load more")
+  needs to append posts: custom elements, shadow DOM, declarative shadow roots,
+  and the fragment-parse APIs that turn a fetched HTML string into nodes.
+
+  Each row prints PASS/FAIL on screen, and is beaconed to /report when
+  `tests/serve.py` is behind it (a plain static server just 404s the beacon).
+
+  Result on servo 0.4 (2026-07-27): all pass EXCEPT declarative shadow roots via
+  `DOMParser.parseFromString` and `Range.createContextualFragment` --
+  `servo-script/dom/domparser.rs` passes allow_declarative_shadow_roots = false
+  where `parseHTMLUnsafe` passes true, so a feed whose load-more fragments go
+  through those APIs appends components with empty shadow trees.
+-->
+<style>
+  body { font: 16px monospace; margin: 0; padding: 8px; }
+  .ok { color: #060; } .bad { color: #b00; font-weight: bold; }
+  #out { white-space: pre; }
+</style>
+</head>
+<body>
+<div id="out">running...</div>
+<!-- Parsed by the MAIN HTML parser: how a feed's first page arrives. -->
+<div id="static-dsd"><template shadowrootmode="open"><b>static-shadow</b></template></div>
+<div id="sandbox" style="position:absolute; left:-9999px; top:0;"></div>
+<script>
+(function () {
+  var out = document.getElementById('out');
+  var sandbox = document.getElementById('sandbox');
+  var results = [];
+
+  function record(name, pass, detail) {
+    results.push({ name: name, pass: !!pass, detail: detail || '' });
+    out.innerHTML = results.map(function (r) {
+      return '<span class="' + (r.pass ? 'ok' : 'bad') + '">' +
+             (r.pass ? 'PASS ' : 'FAIL ') + r.name + '</span>' +
+             (r.detail ? '  (' + r.detail + ')' : '');
+    }).join('\n');
+  }
+
+  function send() {
+    var q = results.map(function (r) {
+      return encodeURIComponent(r.name) + '=' +
+             (r.pass ? 'pass' : 'fail:' + encodeURIComponent(r.detail));
+    }).join('&');
+    try { fetch('/report?tag=probe&' + q, { cache: 'no-store' }); } catch (e) {}
+  }
+
+  // Custom elements: a feed is nothing but these.
+  var upgraded = 0;
+  try {
+    class ProbeEl extends HTMLElement {
+      connectedCallback() { upgraded++; }
+    }
+    customElements.define('probe-el', ProbeEl);
+    record('customElements.define', true);
+  } catch (e) {
+    record('customElements.define', false, String(e));
+  }
+
+  // Upgrade of markup inserted after definition (how fetched posts arrive).
+  try {
+    sandbox.innerHTML = '<probe-el>x</probe-el>';
+    record('custom element upgrade via innerHTML', upgraded > 0, 'connectedCallback=' + upgraded);
+  } catch (e) {
+    record('custom element upgrade via innerHTML', false, String(e));
+  }
+
+  try {
+    var host = document.createElement('div');
+    host.attachShadow({ mode: 'open' }).innerHTML = '<span>shadow</span>';
+    record('attachShadow', host.shadowRoot && host.shadowRoot.textContent === 'shadow');
+  } catch (e) {
+    record('attachShadow', false, String(e));
+  }
+
+  try {
+    var st = document.getElementById('static-dsd');
+    record('declarative shadow DOM (main parser)', !!(st && st.shadowRoot),
+           'shadowRoot=' + !!(st && st.shadowRoot));
+  } catch (e) {
+    record('declarative shadow DOM (main parser)', false, String(e));
+  }
+
+  try {
+    var doc = new DOMParser().parseFromString(
+      '<body><div id="h"><template shadowrootmode="open"><b>ds</b></template></div></body>',
+      'text/html');
+    var h = doc.getElementById('h');
+    record('declarative shadow DOM (DOMParser)', !!(h && h.shadowRoot),
+           'shadowRoot=' + !!(h && h.shadowRoot));
+  } catch (e) {
+    record('declarative shadow DOM (DOMParser)', false, String(e));
+  }
+
+  try {
+    var rng = document.createRange();
+    rng.selectNode(document.body);
+    var frag = rng.createContextualFragment(
+      '<div id="ccf"><template shadowrootmode="open"><b>ccf</b></template></div>');
+    var ccf = frag.querySelector('#ccf');
+    record('createContextualFragment + DSD', !!(ccf && ccf.shadowRoot),
+           'host=' + !!ccf + ' shadowRoot=' + !!(ccf && ccf.shadowRoot));
+  } catch (e) {
+    record('createContextualFragment + DSD', false, String(e));
+  }
+
+  try {
+    var d2 = document.createElement('div');
+    if (typeof d2.setHTMLUnsafe !== 'function') {
+      record('Element.setHTMLUnsafe', false, 'not a function');
+    } else {
+      d2.setHTMLUnsafe('<div id="h2"><template shadowrootmode="open"><b>ds2</b></template></div>');
+      var h2 = d2.querySelector('#h2');
+      record('Element.setHTMLUnsafe', !!(h2 && h2.shadowRoot), 'shadowRoot=' + !!(h2 && h2.shadowRoot));
+    }
+  } catch (e) {
+    record('Element.setHTMLUnsafe', false, String(e));
+  }
+
+  try {
+    if (typeof Document.parseHTMLUnsafe !== 'function') {
+      record('Document.parseHTMLUnsafe', false, 'not a function');
+    } else {
+      var pdoc = Document.parseHTMLUnsafe(
+        '<div id="phu"><template shadowrootmode="open"><b>phu</b></template></div>');
+      var phu = pdoc.getElementById('phu');
+      record('Document.parseHTMLUnsafe', !!(phu && phu.shadowRoot), 'shadowRoot=' + !!(phu && phu.shadowRoot));
+    }
+  } catch (e) {
+    record('Document.parseHTMLUnsafe', false, String(e));
+  }
+
+  try {
+    sandbox.insertAdjacentHTML('beforeend', '<div id="iah">y</div>');
+    record('insertAdjacentHTML', !!sandbox.querySelector('#iah'));
+  } catch (e) {
+    record('insertAdjacentHTML', false, String(e));
+  }
+
+  // Slots: how a post component composes its light-DOM children.
+  try {
+    var sh = document.createElement('div');
+    document.body.appendChild(sh);
+    var sr = sh.attachShadow({ mode: 'open' });
+    sr.innerHTML = '<slot name="a"></slot>';
+    sh.innerHTML = '<span slot="a">slotted</span>';
+    var assigned = sr.querySelector('slot').assignedNodes().length;
+    record('slot assignment', assigned === 1, 'assignedNodes=' + assigned);
+  } catch (e) {
+    record('slot assignment', false, String(e));
+  }
+
+  record('ElementInternals', typeof HTMLElement.prototype.attachInternals === 'function');
+  record('fetch + ReadableStream body', typeof Response !== 'undefined' && !!(new Response('x')).body);
+
+  // A loader sentinel usually sits inside a component's shadow tree, so the
+  // observer has to see through it. Needs a frame, hence the timeout.
+  var ioShadowFired = false;
+  try {
+    var ihost = document.createElement('div');
+    document.body.appendChild(ihost);
+    var isr = ihost.attachShadow({ mode: 'open' });
+    isr.innerHTML = '<div id="t" style="height:20px;background:#ccc">t</div>';
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) ioShadowFired = true; });
+    }, { threshold: 0 }).observe(isr.getElementById('t'));
+  } catch (e) {
+    record('IntersectionObserver on shadow-tree target', false, String(e));
+  }
+
+  setTimeout(function () {
+    record('IntersectionObserver on shadow-tree target', ioShadowFired);
+    send();
+  }, 1200);
+})();
+</script>
+</body>
+</html>

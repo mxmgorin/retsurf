@@ -8,22 +8,19 @@ use std::sync::Arc;
 
 /// Create a surfman connection, or `None` if surfman can't initialize here.
 ///
-/// Servo uses this connection only for WebGL/WebGPU external images. surfman 0.12
-/// requires `eglGetPlatformDisplay` (EGL 1.5) and *panics* — rather than returning
-/// `Err` — when it's missing, as on EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX). So we
-/// guard the call with `catch_unwind`: capable platforms (desktop, EGL 1.5) keep a
-/// working connection and WebGL; older devices fall back to `None` (WebGL disabled,
-/// normal rendering unaffected). Must run before other threads start — it briefly
-/// swaps the global panic hook (logging, not silencing, so an *unexpected* panic
-/// here is still recorded).
+/// Servo uses it only for WebGL/WebGPU external images. surfman 0.12 requires
+/// `eglGetPlatformDisplay` (EGL 1.5) and *panics* instead of returning `Err` when
+/// it's missing, as on EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX), so the call is
+/// guarded with `catch_unwind` — `None` there costs only WebGL, not rendering. Must
+/// run before other threads start: it briefly swaps the global panic hook (logging,
+/// not silencing, so an unexpected panic is still recorded).
 ///
-/// The whole probe is behind the `webgl` feature; the handheld build disables it
-/// (`--no-default-features`) so surfman is never touched there.
+/// The whole probe is behind the `webgl` feature, off in the handheld build.
 fn create_surfman_connection() -> Option<surfman::Connection> {
     #[cfg(not(feature = "webgl"))]
     {
         log::info!("WebGL disabled at build time (`webgl` feature off); skipping surfman");
-        return None;
+        None
     }
 
     #[cfg(feature = "webgl")]

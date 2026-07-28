@@ -14,7 +14,13 @@
     scrollEvt  - DOM `scroll` events fired
     IOcb/IOhit - IntersectionObserver callbacks / intersecting entries
     fetchOK    - successful load-more fetches (+ appended batches)
-  Serve over HTTP (fetch needs a real origin) and open it as the page.
+  Serve over HTTP (fetch needs a real origin). Behind `tests/serve.py` the counters
+  are also beaconed to /report, so a headless run is readable from the server log.
+
+  Result on servo 0.4 (2026-07-27, wheel-driven, i.e. the compositor path): one DOM
+  scroll event per wheel click, IO fires at its rootMargin, fetch appends — the
+  engine side works. See shreddit-probe.html for the fragment-parse gap that can
+  still break a real feed.
 -->
 <style>
   html, body { margin: 0; }
@@ -57,6 +63,30 @@
       'err=' + state.lastErr;
   }
 
+  // Mirror the HUD to `tests/serve.py` (404s harmlessly without it). Identical
+  // consecutive ticks are dropped so an idle page stays quiet in the log.
+  var lastSent = '';
+  function beacon(tag) {
+    try {
+      var q = 'tag=' + tag +
+        '&scrollEvt=' + state.scrollEvents +
+        '&scrollY=' + Math.round(state.lastScrollY) +
+        '&docScrollTop=' + Math.round(document.documentElement.scrollTop) +
+        '&IOcb=' + state.ioCallbacks +
+        '&IOhit=' + state.ioIntersecting +
+        '&fetchOK=' + state.fetchOk +
+        '&fetchErr=' + state.fetchErr +
+        '&batches=' + state.batches +
+        '&sentinelTop=' + Math.round(sentinel.getBoundingClientRect().top) +
+        '&innerH=' + window.innerHeight +
+        '&posts=' + feed.childElementCount +
+        '&err=' + encodeURIComponent(state.lastErr);
+      if (q === lastSent) return;
+      lastSent = q;
+      fetch('/report?' + q, { cache: 'no-store' });
+    } catch (e) { /* reporting must never break the test */ }
+  }
+
   function addPosts(n, tag) {
     for (var i = 0; i < n; i++) {
       var d = document.createElement('div');
@@ -74,6 +104,7 @@
     state.scrollEvents++;
     state.lastScrollY = window.scrollY;
     render();
+    beacon('scroll');
   }, { passive: true });
 
   var loading = false;
@@ -83,6 +114,7 @@
       if (e.isIntersecting) {
         state.ioIntersecting++;
         render();
+        beacon('iohit');
         if (loading) return;
         loading = true;
         fetch('infinite-scroll-more.html', { cache: 'no-store' })
@@ -100,12 +132,14 @@
             document.body.appendChild(sentinel);
             loading = false;
             render();
+            beacon('batch');
           })
           .catch(function (err) {
             state.fetchErr++;
             state.lastErr = String(err);
             loading = false;
             render();
+            beacon('fetcherr');
           });
       }
     });
@@ -113,6 +147,8 @@
 
   io.observe(sentinel);
   render();
+  beacon('start');
+  setInterval(function () { beacon('tick'); }, 1000);
 })();
 </script>
 </body>
