@@ -54,7 +54,9 @@ glow = "0.17"
 surfman = "0.13"
 log = "0.4.28"
 env_logger = "0.11.8"
-servo = { version = "0.4", default-features = false, features = ["clipboard", "js_jit"] }
+# bundled_freetype: a Servo default lost to default-features = false. Without it
+# freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
+servo = { version = "0.4", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
 # Servo delivers its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback; we need that type to build the report callback. Pinned
 # to the same 0.3 servo itself uses, so Cargo unifies on one version.
