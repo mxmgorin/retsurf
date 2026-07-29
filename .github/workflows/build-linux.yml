@@ -8,6 +8,13 @@ on:
   release:
     types: [published]
 
+# Only pushes supersede each other: a second push to main cancels the build the
+# first one started. Release and manual runs get their own group (the ref differs)
+# and never cancel, so a release can't lose its artifacts to a newer commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 permissions:
   contents: write
 
