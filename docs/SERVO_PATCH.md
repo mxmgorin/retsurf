@@ -1,14 +1,23 @@
-# The vendored Servo patches
+# The Servo patches
 
-retsurf carries two small changes to Servo, each in a crate vendored under
-`vendor/` and pinned via `[patch.crates-io]` in `Cargo.toml`.
+retsurf carries two small changes to Servo. They live as commits on the
+`retsurf-main` branch of our fork (`mxmgorin/servo`), which `[patch.crates-io]` in
+`Cargo.toml` pins by `rev` — so the engine retsurf builds is Servo's unreleased
+`main` plus exactly these two fixes. (`retsurf-0.4`, off the `release/v0.4` line
+the published crates come from, is kept as the fallback.) Each pinned rev is
+tagged in the fork (`retsurf-main-1`, ...), and `patches/` in this repo mirrors the
+diff as plain files (8 KB) so the change is readable without fetching the fork.
 
-## 1. `servo-paint`: optional surfman connection
+`docs/SERVO_WORKFLOW.md` is the procedure around them: where a fix is authored,
+how it reaches this repo, how to build against unreleased Servo, and how the
+patches are sent upstream and retired.
+
+## 1. `components/paint`: optional surfman connection
 
 Lets Servo start on handhelds whose GL driver is EGL 1.4. The change lives in
 two places:
 
-- `vendor/servo-paint/paint.rs`
+- `components/paint/paint.rs` in the fork
 - `src/platform/render.rs`, in retsurf's own `connection()`
 
 ### What was done
@@ -43,11 +52,11 @@ than returning `Err`) when EGL symbols are missing, so `render.rs` wraps it in
   surfman can't create a `Connection` at all. Without the patch the engine
   panics at startup on those devices even though it renders fine otherwise.
 
-## 2. `servo-layout`: containing-block walk hangs on boxless ancestors
+## 2. `components/layout`: containing-block walk hangs on boxless ancestors
 
 Fixes a hard freeze on pages that combine `IntersectionObserver` with
-`display: contents` — reddit among them. The change is in
-`vendor/servo-layout/query.rs`, in `containing_block_for_node`.
+`display: contents` — reddit and MDN among them. The change is in
+`components/layout/query.rs`, in `containing_block_for_node`.
 
 ### What was done
 
@@ -97,6 +106,9 @@ after it, it runs at the same frame rate as `contents=0`.
 
 ## Cost
 
-The vendor dirs + `[patch.crates-io]` pin retsurf to a specific Servo version
-and must be re-vendored on every Servo bump. See `docs/HANDHELD_PORT.md` for the
-broader GLES port and the related dual-GL-context pitfalls.
+`[patch.crates-io]` pins retsurf to one Servo revision, and a fresh clone can no
+longer build offline — cargo needs the fork (~1.7 GB, cached once per machine).
+Each Servo bump means rebasing the fork branch and moving the pinned `rev`;
+`docs/SERVO_WORKFLOW.md` has the procedure and the exit condition for dropping a
+patch once it lands upstream. See `docs/HANDHELD_PORT.md` for the broader GLES
+port and the related dual-GL-context pitfalls.

@@ -59,12 +59,6 @@ servo = { version = "0.4", default-features = false, features = ["clipboard", "j
 # servo_base's GenericCallback; we need that type to build the report callback. Pinned
 # to the same 0.3 servo itself uses, so Cargo unifies on one version.
 servo-base = "0.4"
-# Build-fix pin for servo 0.4's pre-release crypto: servo pulls p256/p384/p521
-# `=0.14.0-rc.14`, which need primeorder rc.14 — but `>=0.14.0-rc.14` also matches
-# the released 0.14.0, whose `PrimeCurveParams` added a `WnafSize` bound the rc
-# curves don't implement (won't compile). Pin primeorder to the rc so cargo can't
-# pick the release. Drop once servo moves to the released RustCrypto 0.14 stack.
-primeorder = "=0.14.0-rc.14"
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
@@ -104,12 +98,15 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-# Vendored Servo crates, each carrying one small fix. See docs/SERVO_PATCH.md.
-#  - servo-paint: surfman connection made optional, so Servo runs on EGL 1.4
-#    devices (Mali) where surfman can't create one (docs/HANDHELD_PORT.md).
-#  - servo-layout: containing-block walk advances past boxless ancestors, so a
-#    `display: contents` element above an IntersectionObserver target no longer
-#    hangs the script thread.
+# The engine comes from our Servo fork: `retsurf-main` is upstream `main` plus the
+# two fixes mirrored in `patches/`, with `retsurf-0.4` (the released 0.4 line) as
+# the fallback. See docs/SERVO_PATCH.md and docs/SERVO_WORKFLOW.md.
+#
+# Both entries must name one source: crates in the Servo repo depend on each other
+# by path, so patching one from git drags its siblings out of that checkout, and a
+# mixed graph ends up with two of every crate. Pin a `rev`, never a branch —
+# `retsurf-main` is rebased onto upstream, so each pinned rev needs its
+# `retsurf-main-<n>` tag to stay reachable.
 [patch.crates-io]
-servo-paint = { path = "vendor/servo-paint" }
-servo-layout = { path = "vendor/servo-layout" }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }

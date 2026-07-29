@@ -126,10 +126,10 @@ The fix has two parts:
   is wrapped in `catch_unwind`, since surfman panics rather than returning `Err` on
   missing EGL symbols. Capable platforms (desktop, EGL 1.5) keep a real connection and
   WebGL; EGL 1.4 devices get `None`.
-- `vendor/servo-paint/paint.rs` (vendored via `[patch.crates-io]`):
-  `register_rendering_context` treats the connection as optional instead of calling
-  `.expect()`. WebGL is disabled when the connection is absent, but everything else
-  renders fine.
+- `components/paint/paint.rs` in our Servo fork (pinned via `[patch.crates-io]`,
+  see `docs/SERVO_PATCH.md`): `register_rendering_context` treats the connection as
+  optional instead of calling `.expect()`. WebGL is disabled when the connection is
+  absent, but everything else renders fine.
 
 WebGL on EGL 1.4 would need a surfman patch to fall back to `eglGetDisplay` (EGL 1.0), or
 to wrap SDL's current EGL display.

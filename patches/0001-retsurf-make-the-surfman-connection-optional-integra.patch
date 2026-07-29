@@ -1,0 +1,56 @@
+From 6b4fba083115f55972185ea9b0fe24a7073b2bd4 Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Tue, 28 Jul 2026 15:55:18 +0300
+Subject: [PATCH 1/2] retsurf: make the surfman connection optional
+ (integration only, do not send upstream)
+
+---
+ components/paint/paint.rs | 32 +++++++++++++++++++-------------
+ 1 file changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/components/paint/paint.rs b/components/paint/paint.rs
+index 284bb8ce469..a097868d20f 100644
+--- a/components/paint/paint.rs
++++ b/components/paint/paint.rs
+@@ -239,19 +239,25 @@ impl Paint {
+         }
+ 
+         let painter = Painter::new(rendering_context.clone(), self);
+-        let connection = rendering_context
+-            .connection()
+-            .expect("Failed to get connection");
+-        let adapter = connection
+-            .create_adapter()
+-            .expect("Failed to create adapter");
+-
+-        let painter_surfman_details = PainterSurfmanDetails {
+-            connection,
+-            adapter,
+-        };
+-        self.painter_surfman_details_map
+-            .insert(painter.painter_id, painter_surfman_details);
++        // retsurf patch: the surfman connection is only needed for WebGL/WebGPU
++        // external images. On EGL 1.4 devices (e.g. Mali on Knulli/muOS/ROCKNIX)
++        // surfman can't create a connection (`eglGetPlatformDisplay` is EGL 1.5),
++        // so treat it as optional instead of `.expect()`-ing. WebGL is disabled
++        // when absent; everything else renders normally.
++        if let Some(connection) = rendering_context.connection() {
++            match connection.create_adapter() {
++                Ok(adapter) => {
++                    self.painter_surfman_details_map.insert(
++                        painter.painter_id,
++                        PainterSurfmanDetails { connection, adapter },
++                    );
++                }
++                // Connection succeeded but no usable adapter — WebGL stays off and
++                // the page still renders. Seen on some Android GPUs; log so a
++                // connects-but-can't-adapt device is diagnosable.
++                Err(e) => warn!("surfman connection has no adapter; WebGL disabled: {e:?}"),
++            }
++        }
+ 
+         let painter_id = painter.painter_id;
+         self.painters.push(Rc::new(RefCell::new(painter)));
+-- 
+2.55.0
+

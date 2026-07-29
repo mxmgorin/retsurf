@@ -37,6 +37,15 @@ jobs:
           rustup show
           rustc --version
 
+      # The engine is a git dependency (our Servo fork), so a cold runner clones
+      # ~1.7 GB before it can resolve. Cargo home only: a Servo release target/
+      # would blow the 10 GB cache budget. `shared-key` shares one entry per OS.
+      - name: Cache cargo home
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+          shared-key: cargo-home
+
       # SDL2 is built from source and linked statically (no system SDL2 on the
       # runner, and users shouldn't need a DLL either). SpiderMonkey comes as
       # mozjs' prebuilt archive for x86_64-pc-windows-msvc (jit+intl on, so its
