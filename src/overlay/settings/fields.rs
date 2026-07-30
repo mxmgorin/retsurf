@@ -238,6 +238,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Content, "Data saving", "Block web fonts",      flag!(data_saving.block_fonts), false),
     f(S::Content, "Data saving", "Max images/page",      int!(data_saving.max_images_per_page as usize, bounds::IMAGES_PER_PAGE, 8, Some("Unlimited")), false),
 
+    f(S::Content, "Audio",       "Web Audio output",     flag!(audio.enabled), true),
+
     f(S::Advanced, "Performance", "Memory profile",          choice!(performance.memory_profile: MemoryProfile), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", int!(performance.layout_threads as u32, bounds::LAYOUT_THREADS, 1), true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),

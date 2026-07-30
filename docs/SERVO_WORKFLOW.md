@@ -12,7 +12,7 @@ travels: authored in the fork, consumed here, then sent upstream. Companion to
 | `~/Repos/servo`, remote `upstream` | `servo/servo`. `main` plus `release/v0.4`, the branch the published `0.4.x` crates are cut from. |
 | `~/Repos/servo`, remote `origin` | our fork, `mxmgorin/servo`. `main` is kept equal to `upstream/main` — nothing of ours lives there. |
 | `retsurf-main` | **what retsurf builds.** Our fixes on top of `upstream/main`, i.e. unreleased Servo. Pushed to the fork; `Cargo.toml` pins its `rev`, and each pinned rev carries a `retsurf-main-<n>` tag — the branch itself is rebased onto upstream, so its commits move and only the tags stay put. |
-| `retsurf-0.4` | the fallback line: the same fixes off `upstream/release/v0.4`, the tree the published `0.4.x` crates are cut from. Append-only, never force-pushed. Switch back by pointing both `rev`s at it. |
+| `retsurf-0.4` | the fallback line: the same fixes off `upstream/release/v0.4`, the tree the published `0.4.x` crates are cut from. Append-only, never force-pushed. Switch back by pointing every `rev` at it. |
 | `retsurf`, `patches/` | the same commits exported as plain `.patch` files (8 KB). Read-only mirror, not applied at build time. |
 | `fix/<slug>` | one branch per fix, off `upstream/main`. This is what becomes a pull request. |
 
@@ -32,14 +32,16 @@ shadow roots are still dropped by `DOMParser`, and `<audio>`/`<video>` and
 
 ### Why the whole workspace, not one crate
 
-`Cargo.toml` patches `servo` and `servo-base` — our only direct dependencies from
-`servo/servo` — and that pulls all 54 workspace crates from the fork. It has to be
-all or nothing: crates in the Servo repo depend on each other by path
-(`{ workspace = true }` resolving to `path = "components/..."`), so sourcing one
-crate from git drags its siblings out of the same checkout. Mixed with crates.io
-copies, cargo ends up with two distinct `servo-script` packages and the types stop
-matching at the boundary. `servo-media`/`servo-media-dummy` are the exception:
-they live in a different repo (`servo/media`) and stay on crates.io.
+`Cargo.toml` patches all four of our direct dependencies on `servo/servo` —
+`servo`, `servo-base`, `servo-media`, `servo-media-dummy` — and that pulls all 54
+workspace crates from the fork. It has to be all or nothing: crates in the Servo
+repo depend on each other by path (`{ workspace = true }` resolving to
+`path = "components/..."`), so sourcing one crate from git drags its siblings out
+of the same checkout. Mixed with crates.io copies, cargo ends up with two distinct
+`servo-script` packages and the types stop matching at the boundary. The two media
+crates are on that list only because `main` absorbed them from `servo/media`; on
+the `0.4` line they are still published separately and their entries come back out
+(see §2).
 
 The pin is a `rev`, not a `branch`, so a build is reproducible; adding a fix means
 bumping that `rev` deliberately.
@@ -91,7 +93,7 @@ git push origin retsurf-0.4 retsurf-main-<n>
 git rev-parse retsurf-main                             # -> new rev
 ```
 
-Then in retsurf: put that sha in both `[patch.crates-io]` entries in `Cargo.toml`,
+Then in retsurf: put that sha in every `[patch.crates-io]` entry in `Cargo.toml`,
 refresh the readable mirror with
 `git -C ~/Repos/servo format-patch upstream/main..retsurf-main -o patches`,
 then `cargo build --release`, `cargo test`,
@@ -129,8 +131,8 @@ git push -f origin retsurf-main
 git rev-parse retsurf-main
 ```
 
-then update both `rev`s, the tag, and `patches/` as in §1. To fall back to the
-release line instead, point both `rev`s at `retsurf-0.4` and restore the
+then update every `rev`, the tag, and `patches/` as in §1. To fall back to the
+release line instead, point the `rev`s at `retsurf-0.4` and restore the
 `primeorder` pin described below. What to expect either way:
 
 - **Dependency pins can collide.** `main` has moved to the released RustCrypto
@@ -144,10 +146,13 @@ release line instead, point both `rev`s at `retsurf-0.4` and restore the
   it, bump `servo = "0.4"` too or the patch is silently unused — and `cargo` only
   *warns* about that, so lean on `tests/engine_source.rs` to catch it.
 - **The workspace absorbs crates over time.** On `main`, `servo-media` and
-  `servo-media-dummy` come from the Servo repo itself rather than crates.io, and
-  `stylo` is a git dependency (`servo/stylo`). Anything of ours that depends on
-  those directly — the WebAudio backend on the `web-audio` branch — resolves
-  differently there and may need its own fixes.
+  `servo-media-dummy` live in the Servo repo rather than on crates.io, so both are
+  patched to the fork alongside `servo` — our WebAudio backend implements their
+  traits, and a crates.io copy would put two of each crate in the graph and
+  register the backend into the wrong one. Going back to the `0.4` line means
+  removing those two `[patch]` entries again. `stylo` is a git dependency
+  (`servo/stylo`) on `main` and a crates.io crate on the release line; nothing of
+  ours touches it directly.
 - Expect API drift to break our code, though it need not: measured 2026-07-28,
   `main` at `c2cb3d0e8b1` (440 commits past the `0.4` release point) built with
   **zero** changes to retsurf, in 10m34s, and both engine fixes still held at

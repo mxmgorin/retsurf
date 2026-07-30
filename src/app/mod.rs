@@ -49,6 +49,9 @@ pub struct App {
     /// Last time a memory report was requested (debug overlay only). Throttles
     /// the requests to [`MEMORY_REPORT_INTERVAL`] since each one walks every reporter.
     last_memory_report: Instant,
+    /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
+    /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
+    _audio: Option<sdl2::AudioSubsystem>,
 }
 
 /// How often the main loop opportunistically flushes deferred history (only on
@@ -64,6 +67,12 @@ impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
         let window = AppWindow::new(sdl, &config.display)?;
+        // Before the browser: whichever media backend lands first is the one that sticks.
+        let audio = if config.audio.enabled {
+            crate::media::init(sdl)
+        } else {
+            None
+        };
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
@@ -95,6 +104,7 @@ impl App {
             hint_press_at: None,
             last_history_flush: Instant::now(),
             last_memory_report: Instant::now(),
+            _audio: audio,
         })
     }
 

@@ -4994,6 +4994,8 @@ dependencies = [
  "serde_json",
  "servo",
  "servo-base",
+ "servo-media",
+ "servo-media-dummy",
  "sha2 0.11.0",
  "surfman",
  "toml",

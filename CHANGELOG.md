@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Web Audio output: retsurf now registers its own servo-media backend and plays the
+  audio graph through SDL2, so oscillators, gain, filters, panners, analysers and
+  JS-filled `AudioBuffer`s make sound. Toggle in settings or `[audio] enabled`.
+  `<audio>`/`<video>` elements and `decodeAudioData()` are still unsupported.
+
 ### Changed
 
 - The engine is now built from unreleased Servo (`main`) rather than the published

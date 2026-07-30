@@ -3,6 +3,7 @@ mod browser;
 mod config;
 mod data;
 mod event;
+mod media;
 mod net;
 mod overlay;
 mod platform;

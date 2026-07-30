@@ -141,6 +141,14 @@ block_fonts = false        # skip web-font downloads (fall back to system fonts)
 # resets each navigation. Lower it on weak boards; raise it for image galleries.
 max_images_per_page = 48
 
+[audio]
+# Web Audio output. retsurf renders the Web Audio graph itself and plays it through
+# SDL2, so oscillators, gain, filters, panners, analysers and JS-filled AudioBuffers
+# all make sound. Not covered: <audio>/<video> elements and decodeAudioData(), which
+# need a demuxer/decoder Servo has no backend for; those stay silent regardless.
+# Read once at startup (restart to apply). Off means no audio device is ever opened.
+enabled = true
+
 [input]
 deadzone = 0.25            # stick deflection below this is treated as centered
 cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)

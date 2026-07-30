@@ -8,8 +8,9 @@
 /// Source prefix cargo records in `Cargo.lock` for crates taken from the fork.
 const FORK_SOURCE: &str = "git+https://github.com/mxmgorin/servo";
 
-/// Crates retsurf patches directly; the rest of the workspace follows them.
-const PATCHED_CRATES: &[&str] = &["servo", "servo-base"];
+/// Crates retsurf patches directly; the rest of the workspace follows them. The
+/// media pair belongs here only while we track `main` — drop it on the 0.4 line.
+const PATCHED_CRATES: &[&str] = &["servo", "servo-base", "servo-media", "servo-media-dummy"];
 
 /// The `source` of `package` as recorded in `Cargo.lock`, or `None` when the
 /// package has no source entry (a path dependency).

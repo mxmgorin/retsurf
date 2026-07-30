@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 mod adblock;
+mod audio;
 pub mod bounds;
 mod browser;
 mod data_saving;
@@ -25,6 +26,7 @@ mod token_enum;
 mod update;
 
 pub use adblock::AdblockConfig;
+pub use audio::AudioConfig;
 pub use browser::BrowserConfig;
 pub use data_saving::DataSavingConfig;
 pub use debug::DebugConfig;
@@ -50,6 +52,7 @@ pub struct AppConfig {
     pub adblock: AdblockConfig,
     pub performance: PerformanceConfig,
     pub data_saving: DataSavingConfig,
+    pub audio: AudioConfig,
     pub osk: OskConfig,
     pub debug: DebugConfig,
     pub update: UpdateConfig,

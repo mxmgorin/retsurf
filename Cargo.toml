@@ -61,6 +61,14 @@ servo = { version = "0.4", default-features = false, features = ["bundled_freety
 # servo_base's GenericCallback; we need that type to build the report callback. Pinned
 # to the same 0.3 servo itself uses, so Cargo unifies on one version.
 servo-base = "0.4"
+# WebAudio (src/media): we register our own servo-media backend so the audio graph
+# renders to an SDL2 device instead of Servo's silent dummy. `servo-media` re-exports
+# the audio/player/streams/traits/webrtc crates, and the dummy backend supplies the
+# no-op Player/WebRTC/decoder types we reuse. Patched to the fork alongside `servo`:
+# on `main` these crates live in the Servo repo, so a crates.io copy would put two
+# of each in the graph and our backend would register into the wrong one.
+servo-media = "0.4"
+servo-media-dummy = "0.4"
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"
@@ -112,3 +120,5 @@ android_logger = "0.15"
 [patch.crates-io]
 servo = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
 servo-base = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }

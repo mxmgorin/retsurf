@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Web Audio</title>
+    <style>
+      body { font: 16px sans-serif; margin: 2rem; }
+      button { font-size: 1.2rem; padding: 0.6rem 1.2rem; margin-right: 0.5rem; }
+      dt { font-weight: bold; margin-top: 0.8rem; }
+      dd { font-family: monospace; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Web Audio</h1>
+    <p>
+      A 440 Hz sine through a gain node. <code>currentTime</code> only advances
+      while the render thread is producing blocks, so a frozen reading means the
+      sink stopped asking for data even though the context claims to be running.
+    </p>
+
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+
+    <dl>
+      <dt>AudioContext</dt><dd id="support">-</dd>
+      <dt>state</dt><dd id="state">-</dd>
+      <dt>sampleRate</dt><dd id="rate">-</dd>
+      <dt>currentTime</dt><dd id="time">-</dd>
+    </dl>
+
+    <script>
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      document.getElementById('support').textContent = Ctx ? 'available' : 'MISSING';
+
+      var ctx = null, osc = null;
+
+      function start() {
+        if (!Ctx || osc) return;
+        if (!ctx) ctx = new Ctx();
+        var gain = ctx.createGain();
+        gain.gain.value = 0.2;
+        gain.connect(ctx.destination);
+        osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 440;
+        osc.connect(gain);
+        osc.start();
+        ctx.resume();
+      }
+
+      function stop() {
+        if (!osc) return;
+        osc.stop();
+        osc.disconnect();
+        osc = null;
+      }
+
+      document.getElementById('start').addEventListener('click', start);
+      document.getElementById('stop').addEventListener('click', stop);
+
+      setInterval(function () {
+        if (!ctx) return;
+        document.getElementById('state').textContent = ctx.state;
+        document.getElementById('rate').textContent = ctx.sampleRate;
+        document.getElementById('time').textContent = ctx.currentTime.toFixed(3);
+      }, 250);
+
+      // Autoplay policies may refuse this; the Start button is the fallback.
+      start();
+    </script>
+  </body>
+</html>
