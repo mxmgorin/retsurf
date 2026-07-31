@@ -102,7 +102,7 @@ pub(super) fn filename_from_url(url: &str) -> String {
 
 /// `dir/filename`, suffixed `-1`, `-2`, … before the extension until neither the
 /// file nor its `.part` exists.
-fn unique_path(dir: &str, filename: &str) -> String {
+pub(super) fn unique_path(dir: &str, filename: &str) -> String {
     let (stem, ext) = match filename.rsplit_once('.') {
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
         _ => (filename.to_string(), String::new()),

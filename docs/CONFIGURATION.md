@@ -105,7 +105,10 @@ max_entries = 25           # cap on retained entries; oldest are dropped past th
 dir = ""
 # URL path extensions treated as downloads when navigated to (navigation is
 # cancelled and the file is fetched in the background instead). URLs without a
-# listed extension load in the browser as usual.
+# listed extension load in the browser as usual. Files a page builds in
+# JavaScript (a "Generate & Download" button: fetch, then a blob URL) don't go
+# through a navigation at all and are captured separately — no configuration,
+# see src/browser/blob_download.rs.
 extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 
 [update]

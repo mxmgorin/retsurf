@@ -123,6 +123,46 @@ impl Downloads {
         );
     }
 
+    /// Record a file the page built in JavaScript and handed us whole (see
+    /// [`crate::browser::BlobDownload`]). There is no fetch to run and no URL to
+    /// retry from, so the entry is born finished — saved, or failed with the
+    /// reason.
+    pub fn save_captured(&mut self, item: crate::browser::BlobDownload) {
+        let (filename, path, size, state) = match self.write_captured(&item.filename, item.bytes) {
+            Ok((path, size)) => (file_name_of(&path), path, size, State::Done),
+            Err(e) => (item.filename, String::new(), 0, State::Failed(e)),
+        };
+        self.items.insert(
+            0,
+            Download {
+                // Blob URLs are per-document and revoked by now, so there is
+                // nothing meaningful to record or re-open.
+                url: String::new(),
+                filename,
+                path,
+                received: size,
+                total: size,
+                time: history::now_unix(),
+                state,
+                shared: None,
+            },
+        );
+        store::save(&self.items);
+    }
+
+    /// Write captured bytes into the download dir under a free name.
+    fn write_captured(
+        &self,
+        filename: &str,
+        bytes: Result<Vec<u8>, String>,
+    ) -> Result<(String, u64), String> {
+        let bytes = bytes?;
+        std::fs::create_dir_all(&self.dir).map_err(|e| format!("create dir: {e}"))?;
+        let path = worker::unique_path(&self.dir, filename);
+        std::fs::write(&path, &bytes).map_err(|e| format!("write: {e}"))?;
+        Ok((path, bytes.len() as u64))
+    }
+
     /// Pull progress from the worker threads into the entries and record finishes
     /// (which also persists). Called once per frame; cheap when nothing is active.
     pub fn poll(&mut self) {

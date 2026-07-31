@@ -4973,6 +4973,7 @@ version = "0.3.1"
 dependencies = [
  "adblock",
  "android_logger",
+ "base64",
  "content-security-policy",
  "dpi",
  "egui-sdl2",

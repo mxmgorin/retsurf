@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Blob download paths</title>
+<!--
+  How a "download" button actually reaches the engine. Sites fetch the bytes with
+  JS, wrap them in a Blob, and hand the object URL to one of the paths below.
+  Servo has no `download` attribute support (htmlanchorelement.rs: "TODO: Download
+  the link is `download` attribute is set"), so an anchor click navigates instead,
+  and whether that navigation can still resolve the blob is what this page tells
+  apart. Beacons go to tests/serve.py, so a headless run is readable.
+-->
+<style>
+  body { font: 15px sans-serif; margin: 1.5rem; }
+  button { display: block; margin: .4rem 0; font-size: 1rem; padding: .5rem 1rem; }
+  #log { font: 13px monospace; white-space: pre; margin-top: 1rem; }
+</style>
+
+<h1>Blob download paths</h1>
+<button id="keep">1. anchor + download, keep the URL alive</button>
+<button id="revoke">2. anchor + download, revoke right after click</button>
+<button id="open">3. window.open(blobUrl)</button>
+<div id="log">ready</div>
+
+<script>
+  const out = document.getElementById("log");
+  const say = (line) => {
+    out.textContent = line;
+    fetch("/report?tag=blob&" + line.replace(/ /g, "&")).catch(() => {});
+  };
+
+  // A tiny PNG-ish payload; the bytes don't matter, only how the URL is consumed.
+  function blobUrl() {
+    return URL.createObjectURL(new Blob([new Uint8Array([1, 2, 3, 4])],
+      { type: "application/octet-stream" }));
+  }
+
+  function clickAnchor(url, revoke) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "test-file.bin";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Sites revoke immediately, assuming the download already took the bytes.
+    if (revoke) URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("keep").onclick = () => {
+    const url = blobUrl();
+    say("case=keep url=" + url.slice(0, 48));
+    clickAnchor(url, false);
+  };
+
+  document.getElementById("revoke").onclick = () => {
+    const url = blobUrl();
+    say("case=revoke url=" + url.slice(0, 48));
+    clickAnchor(url, true);
+  };
+
+  document.getElementById("open").onclick = () => {
+    const url = blobUrl();
+    say("case=open url=" + url.slice(0, 48));
+    window.open(url);
+  };
+</script>

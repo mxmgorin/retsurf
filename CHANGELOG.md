@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JS-filled `AudioBuffer`s make sound. Toggle in settings or `[audio] enabled`.
   `<audio>`/`<video>` elements and `decodeAudioData()` are still unsupported.
 
+### Fixed
+
+- Download buttons that build the file in JavaScript (a `fetch` plus a blob URL,
+  as on gettestfiles.com) now save it. Servo has no `download` attribute support,
+  so the click used to navigate to the blob and land on a blank error page; the
+  file is captured from the page instead and appears in the downloads list.
+
 ### Changed
 
 - The engine is now built from unreleased Servo (`main`) rather than the published

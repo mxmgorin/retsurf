@@ -169,6 +169,12 @@ impl App {
             for url in self.browser.take_download_requests() {
                 self.ui.menu.downloads.start(&url, &self.event_sender);
             }
+            // Files a page built in JS and handed us whole: ask the signalling
+            // pages for them, then save whatever earlier reads returned.
+            self.browser.poll_blob_downloads();
+            for item in self.browser.take_blob_downloads() {
+                self.ui.menu.downloads.save_captured(item);
+            }
 
             // Modal page controls (select pickers, JS dialogs): queue fresh
             // ones for the prompt overlay and drop ones Servo retracted.

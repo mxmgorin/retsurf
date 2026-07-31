@@ -4,6 +4,7 @@
 //! interpretation in [`url`].
 
 pub mod adblock;
+mod blob_download;
 pub mod content_filter;
 
 mod delegate;
@@ -13,6 +14,7 @@ pub mod memory;
 mod reader;
 mod url;
 
+pub use blob_download::BlobDownload;
 pub use home::HOME_URL;
 pub use url::try_into_url;
 
@@ -125,6 +127,11 @@ struct AppBrowserInner {
     /// (see [`delegate`]), drained once per frame by the main loop which hands
     /// them to the downloads store.
     download_requests: RefCell<Vec<String>>,
+    /// Webviews whose page signalled a captured blob download (see
+    /// [`blob_download`]), drained once per frame into `blob_downloads`.
+    blob_pings: RefCell<Vec<WebView>>,
+    /// Files captured from pages, waiting for the main loop to save them.
+    blob_downloads: RefCell<Vec<BlobDownload>>,
     /// Lowercased URL path extensions treated as downloads (from `[downloads]`).
     download_exts: Vec<String>,
     /// Network-level ad blocking, consulted for every resource load.
@@ -174,6 +181,8 @@ impl AppBrowserInner {
             repaint_pending: Cell::new(false),
             visited: RefCell::new(vec![]),
             download_requests: RefCell::new(vec![]),
+            blob_pings: RefCell::new(vec![]),
+            blob_downloads: RefCell::new(vec![]),
             download_exts: download_exts
                 .into_iter()
                 .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
@@ -213,7 +222,10 @@ impl AppBrowser {
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
             .opts(engine::build_opts(&config.browser))
-            .preferences(engine::build_preferences(&config.browser, &config.performance))
+            .preferences(engine::build_preferences(
+                &config.browser,
+                &config.performance,
+            ))
             .event_loop_waker(event_sender.clone_box())
             .build();
         engine::set_experimental_prefs(&servo, &config.experimental);
@@ -279,6 +291,34 @@ impl AppBrowser {
     #[inline]
     pub fn take_download_requests(&self) -> Vec<String> {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
+    }
+
+    /// Read back files captured by the injected script (see [`blob_download`]).
+    /// One signalled page yields one file per call; the read is asynchronous, so
+    /// the result lands in `blob_downloads` for [`AppBrowser::take_blob_downloads`].
+    pub fn poll_blob_downloads(&self) {
+        let pings: Vec<WebView> = self.inner.blob_pings.borrow_mut().drain(..).collect();
+        for webview in pings {
+            let inner = self.inner.clone();
+            webview.evaluate_javascript(blob_download::TAKE_JS, move |result| {
+                match result {
+                    Ok(servo::JSValue::String(taken)) => {
+                        if let Some(item) = blob_download::parse_taken(&taken) {
+                            inner.blob_downloads.borrow_mut().push(item);
+                        }
+                    }
+                    Ok(other) => log::warn!("blob download returned unexpected value: {other:?}"),
+                    Err(e) => log::warn!("blob download read failed: {e:?}"),
+                }
+                inner.event_sender.send(UserEvent::DownloadUpdate);
+            });
+        }
+    }
+
+    /// Take and clear the files captured from pages since the last call.
+    #[inline]
+    pub fn take_blob_downloads(&self) -> Vec<BlobDownload> {
+        std::mem::take(&mut self.inner.blob_downloads.borrow_mut())
     }
 
     /// Ask Servo for a memory report (the data behind `about:memory`). The report

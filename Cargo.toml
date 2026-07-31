@@ -91,10 +91,14 @@ sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
 # version already in the tree (pulled in via servo), so it adds no new resolve.
 png = "0.18"
+# Decoding files a page hands us as base64 over `evaluate_javascript`
+# (src/browser/blob_download.rs). Already in the tree via servo.
+base64 = "0.22"
 
 # In-app self-update (PortMaster only; see src/update). serde_json/sha2/semver are
 # already in the tree via servo, so promoting them adds no new compilation; parse
-# the GitHub release JSON, checksum the download, compare versions. `zip` is the
+# the GitHub release JSON, checksum the download, compare versions. serde_json
+# also parses blob-capture payloads (src/browser/blob_download.rs). `zip` is the
 # one genuinely new crate — the release artifact is a deflate .zip and no zip
 # reader was in the tree. flate2 backend (no C) keeps the ARM cross-builds simple.
 serde_json = "1"

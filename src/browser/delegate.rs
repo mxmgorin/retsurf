@@ -54,6 +54,16 @@ impl servo::WebViewDelegate for AppBrowserInner {
         if let Some(i) = self.tab_index(webview.id()) {
             self.tabs.borrow_mut()[i].state.load_status = status;
         }
+        // Arm the JS download capture (see [`super::blob_download`]) once the
+        // document is there. A click is what triggers it, so landing after the
+        // page's own scripts is early enough.
+        if status == servo::LoadStatus::Complete {
+            webview.evaluate_javascript(super::blob_download::capture_js(), |result| {
+                if let Err(e) = result {
+                    log::warn!("blob download capture not installed: {e:?}");
+                }
+            });
+        }
     }
 
     /// Servo can't download: navigating to a file URL would just fail to render.
@@ -146,6 +156,17 @@ impl servo::WebViewDelegate for AppBrowserInner {
     fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
         let req = load.request();
         let url = req.url.clone();
+
+        // The injected capture script signals a waiting file by loading this
+        // URL. Answer it here (it names no real host) and queue the tab; the
+        // bytes come back over `evaluate_javascript`.
+        if url.as_str().starts_with(super::blob_download::PING_URL) {
+            self.blob_pings.borrow_mut().push(webview);
+            self.event_sender.send(UserEvent::DownloadUpdate);
+            finish_intercepted(load, servo::WebResourceResponse::new(url), Vec::new());
+            return;
+        }
+
         let is_home = req.is_for_main_frame && super::home::is_home(&url);
 
         let filter = self.content_filter.get();
