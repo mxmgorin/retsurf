@@ -4,41 +4,31 @@ version = "0.3.1"
 edition = "2021"
 license = "GPL-3.0"
 
-# `cdylib` is what SDL's Android shell loads at runtime as `libretsurf.so` (listed
-# in RetsurfActivity.getLibraries()); `lib` keeps the crate linkable by the desktop
-# `src/main.rs` binary and integration tests. Desktop builds are unaffected — the
-# cdylib is just an extra artifact.
+# `cdylib` is the `libretsurf.so` SDL's Android shell loads (named in
+# RetsurfActivity.getLibraries()); `lib` keeps `src/main.rs` and the tests linkable.
 [lib]
 name = "retsurf"
 crate-type = ["lib", "cdylib"]
 
 [features]
 default = ["webgl"]
-# WebGL/WebGPU via a surfman connection. Disabled (`--no-default-features`) for the
-# handheld build: surfman can't initialize on EGL 1.4 Mali blobs (Knulli/muOS/
-# ROCKNIX) and the connection is unused there anyway, so skipping it avoids the
-# probe entirely. See `src/render.rs::create_surfman_connection`.
+# WebGL/WebGPU via a surfman connection. Off for the handheld build: surfman can't
+# initialize on the EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX). See
+# `src/platform/render.rs::create_surfman_connection`.
 webgl = []
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
-# Local release builds stay cheap to compile — Cargo's release defaults (no LTO,
-# 16 codegen units) — so iterating with `cargo build --release` is fast. The
-# slow, fully-optimized settings are CI-only, applied via CARGO_PROFILE_RELEASE_*
-# env vars in .github/workflows/* (fat LTO + codegen-units = 1 everywhere, plus
-# panic=abort for the webgl-off handheld build). To reproduce a CI-grade binary
-# locally, export those same vars. Kept out of this shared profile so it doesn't
-# also slow the desktop/Android/local builds.
+# Fat LTO and codegen-units = 1 are CI-only, set via CARGO_PROFILE_RELEASE_* in
+# .github/workflows/*, so local `cargo build --release` stays fast.
 #
-# `panic = "abort"` is deliberately NOT here: it makes `catch_unwind` inert and
-# would break the surfman EGL-1.4 probe (`platform/render.rs`) on webgl builds.
-# The handheld CI build (webgl off) sets it via env var, where it's safe.
+# `panic = "abort"` must stay out of here: it makes `catch_unwind` inert and breaks the
+# surfman EGL-1.4 probe (`src/platform/render.rs`). Only the webgl-off handheld CI build
+# sets it, where there is no probe.
 [profile.release]
-# Cheap, build-uniform hardening (none of these slow compilation). `strip` is the
-# real win: CI strips the Linux binary but local builds and the Android APK have
-# no strip step, so the `.so`/binary ships with symbols → larger mmap, slower cold
-# start. The other two are already the release defaults; pinning them explicitly
-# keeps every build (local/CI/Android) identical.
+# `strip` is for local and Android builds, which have no strip step of their own and
+# would otherwise ship symbols. The other two are release defaults, pinned so every
+# build matches.
 strip = true
 debug-assertions = false
 overflow-checks = false
@@ -57,16 +47,13 @@ env_logger = "0.11.8"
 # bundled_freetype: a Servo default lost to default-features = false. Without it
 # freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
 servo = { version = "0.4", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
-# Servo delivers its memory report (profile_traits::mem::MemoryReportResult) through
-# servo_base's GenericCallback; we need that type to build the report callback. Pinned
-# to the same 0.3 servo itself uses, so Cargo unifies on one version.
+# Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
+# servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
 servo-base = "0.4"
-# WebAudio (src/media): we register our own servo-media backend so the audio graph
-# renders to an SDL2 device instead of Servo's silent dummy. `servo-media` re-exports
-# the audio/player/streams/traits/webrtc crates, and the dummy backend supplies the
-# no-op Player/WebRTC/decoder types we reuse. Patched to the fork alongside `servo`:
-# on `main` these crates live in the Servo repo, so a crates.io copy would put two
-# of each in the graph and our backend would register into the wrong one.
+# WebAudio (src/media): our own servo-media backend renders the audio graph to an
+# SDL2 device instead of Servo's silent dummy, which still supplies the no-op
+# Player/WebRTC/decoder types. Must resolve to the fork like `servo` does, or the
+# backend registers into a second copy of these crates.
 servo-media = "0.4"
 servo-media-dummy = "0.4"
 euclid = "0.22"
@@ -76,9 +63,9 @@ percent-encoding = "2.3"
 # Matches the version servo-embedder-traits uses, so HeaderMap/StatusCode values
 # we build for intercepted responses (the built-in start page) are the same type.
 http = "1"
-# Downloads are fetched by the embedder itself (Servo 0.2 has no download API).
-# ureq is blocking (one thread per download) and bundles webpki roots, so TLS
-# works on handhelds without a system CA store.
+# Downloads are the embedder's job: Servo has no download API, still true on `main`.
+# ureq is blocking (one thread per download) and bundles webpki roots, so TLS works
+# on handhelds without a system CA store.
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 # Ad blocking: Brave's engine (EasyList syntax), driven from Servo's
 # load_web_resource hook. content-security-policy is already in Servo's tree —
@@ -95,32 +82,28 @@ png = "0.18"
 # (src/browser/blob_download.rs). Already in the tree via servo.
 base64 = "0.22"
 
-# In-app self-update (PortMaster only; see src/update). serde_json/sha2/semver are
-# already in the tree via servo, so promoting them adds no new compilation; parse
-# the GitHub release JSON, checksum the download, compare versions. serde_json
-# also parses blob-capture payloads (src/browser/blob_download.rs). `zip` is the
-# one genuinely new crate — the release artifact is a deflate .zip and no zip
-# reader was in the tree. flate2 backend (no C) keeps the ARM cross-builds simple.
+# In-app self-update (PortMaster only; see src/update). serde_json/sha2/semver are already
+# in the tree via servo; serde_json also parses blob-capture payloads
+# (src/browser/blob_download.rs). `zip` is the one new crate: deflate is what the release
+# artifact uses, and its flate2 backend keeps the ARM cross-builds free of C.
 serde_json = "1"
 sha2 = "0.11"
 semver = "1"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
-# Android: SDL loads our cdylib and calls the C `SDL_main` we export (needs the
-# C ABI entry point (`std::os::raw` types); logs go to logcat via android_logger
-# since there is no stderr to mirror to a file.
+# Android: SDL loads our cdylib and calls the C `SDL_main` we export. Logs go to
+# logcat via android_logger since there is no stderr to mirror to a file.
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
 # The engine comes from our Servo fork: `retsurf-main` is upstream `main` plus the
-# two fixes mirrored in `patches/`, with `retsurf-0.4` (the released 0.4 line) as
-# the fallback. See docs/SERVO_PATCH.md and docs/SERVO_WORKFLOW.md.
+# two fixes in `patches/`, with `retsurf-0.4` (the released line) as the fallback.
+# See docs/SERVO_PATCH.md and docs/SERVO_WORKFLOW.md.
 #
-# Both entries must name one source: crates in the Servo repo depend on each other
-# by path, so patching one from git drags its siblings out of that checkout, and a
-# mixed graph ends up with two of every crate. Pin a `rev`, never a branch —
-# `retsurf-main` is rebased onto upstream, so each pinned rev needs its
-# `retsurf-main-<n>` tag to stay reachable.
+# Every entry must name one source: the Servo crates depend on each other by path,
+# so a mixed graph ends up with two of every crate. Pin a `rev`, never a branch —
+# `retsurf-main` is rebased onto upstream, so each rev needs its `retsurf-main-<n>`
+# tag to stay reachable.
 [patch.crates-io]
 servo = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
 servo-base = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }

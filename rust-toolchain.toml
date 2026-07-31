@@ -1,5 +1,5 @@
 [toolchain]
-# egui 0.34 requires rustc >= 1.92; servo 0.2 requires >= 1.86.
+# egui 0.34 requires rustc >= 1.92; 1.95.0 is also what the Servo fork pins.
 channel = "1.95.0"
 
 components = [

@@ -1,11 +1,9 @@
-//! File downloads. Servo 0.2 has no download support in its embedding API (no
-//! delegate hook, no `Content-Disposition` handling), so retsurf does it itself:
-//! the browser denies navigations to file-like URLs (see [`crate::browser`]) and
-//! the main loop hands them here. Fetching runs on background threads (see
-//! [`worker`]); finished entries persist to `downloads.toml` (see [`store`]),
-//! active ones live only in memory (they don't survive a restart). This module
-//! owns the entry list and the highlighted row in the menu's Downloads section
-//! (see [`crate::overlay::menu`]); [`crate::ui`] renders it.
+//! File downloads. Servo's embedding API has no support for them (no delegate hook, no
+//! `Content-Disposition` handling; still true on `main`), so retsurf does it itself: the
+//! browser denies navigations to file-like URLs (see [`crate::browser`]) and the main loop
+//! hands them here. Fetching runs on background threads (see [`worker`]); finished entries
+//! persist to `downloads.toml` (see [`store`]), active ones don't survive a restart. Owns
+//! the entry list and the menu's highlighted row; [`crate::ui`] renders it.
 
 mod store;
 mod worker;
@@ -77,7 +75,7 @@ pub struct Downloads {
 }
 
 impl Downloads {
-    /// Load the saved list (missing/invalid file → empty).
+    /// Load the saved list (empty if the file is missing or invalid).
     pub fn load(cfg: &DownloadsConfig) -> Self {
         Self {
             items: store::load(),
@@ -124,9 +122,7 @@ impl Downloads {
     }
 
     /// Record a file the page built in JavaScript and handed us whole (see
-    /// [`crate::browser::BlobDownload`]). There is no fetch to run and no URL to
-    /// retry from, so the entry is born finished — saved, or failed with the
-    /// reason.
+    /// [`crate::browser::BlobDownload`]). No fetch to run, so the entry is born finished.
     pub fn save_captured(&mut self, item: crate::browser::BlobDownload) {
         let (filename, path, size, state) = match self.write_captured(&item.filename, item.bytes) {
             Ok((path, size)) => (file_name_of(&path), path, size, State::Done),
@@ -135,8 +131,7 @@ impl Downloads {
         self.items.insert(
             0,
             Download {
-                // Blob URLs are per-document and revoked by now, so there is
-                // nothing meaningful to record or re-open.
+                // Blob URLs are per-document and revoked by now: nothing to re-open.
                 url: String::new(),
                 filename,
                 path,
@@ -214,8 +209,7 @@ impl Downloads {
         self.cursor.move_sel(dy, self.items.len());
     }
 
-    /// `file://` URL of the entry at `index` if it finished successfully (so it
-    /// can be opened in the browser); `None` otherwise.
+    /// `file://` URL of the entry at `index` if it finished; `None` otherwise.
     pub fn open_url(&self, index: usize) -> Option<String> {
         let d = self.items.get(index)?;
         matches!(d.state, State::Done).then(|| format!("file://{}", d.path))
@@ -225,9 +219,8 @@ impl Downloads {
         self.cursor.entry_index().and_then(|i| self.open_url(i))
     }
 
-    /// X/✖ on an entry: cancel it if still active (the entry stays and turns
-    /// Failed once the worker stops), otherwise remove it from the list. The
-    /// downloaded file on disk is kept either way.
+    /// X/✖ on an entry: cancel it if still active (it stays, turning Failed once the
+    /// worker stops), otherwise drop it from the list. The file on disk is kept either way.
     pub fn remove(&mut self, index: usize) {
         let Some(d) = self.items.get(index) else {
             return;
