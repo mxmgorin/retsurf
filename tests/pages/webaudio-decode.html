@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Web Audio: decodeAudioData</title>
+    <style>
+      body { font: 16px sans-serif; margin: 2rem; }
+      button { font-size: 1.2rem; padding: 0.6rem 1.2rem; margin-right: 0.5rem; }
+      dt { font-weight: bold; margin-top: 0.8rem; }
+      dd { font-family: monospace; margin: 0; }
+      .bad { color: #b00; }
+    </style>
+  </head>
+  <body>
+    <h1>decodeAudioData</h1>
+    <p>
+      Builds a 16-bit PCM wav in JavaScript at <b>48 kHz</b>, decodes it with
+      <code>decodeAudioData</code>, and loops it through an
+      <code>AudioBufferSourceNode</code>. The context runs at its own rate, so the
+      decoder has to resample: the tone must still come out at 441 Hz, and
+      <code>duration</code> must stay 1.000 s.
+    </p>
+
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+
+    <dl>
+      <dt>file</dt><dd id="file">-</dd>
+      <dt>context sampleRate</dt><dd id="rate">-</dd>
+      <dt>decoded</dt><dd id="decoded">-</dd>
+      <dt>currentTime</dt><dd id="time">-</dd>
+    </dl>
+
+    <script>
+      var FILE_RATE = 48000, TONE_HZ = 441, PEAK = 0.5, SECONDS = 1;
+
+      function wav(rate, channels, frames) {
+        var bytes = new Uint8Array(44 + frames * channels * 2);
+        var view = new DataView(bytes.buffer);
+        function tag(offset, text) {
+          for (var i = 0; i < text.length; i++) bytes[offset + i] = text.charCodeAt(i);
+        }
+        tag(0, 'RIFF');
+        view.setUint32(4, 36 + frames * channels * 2, true);
+        tag(8, 'WAVE');
+        tag(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);            // PCM
+        view.setUint16(22, channels, true);
+        view.setUint32(24, rate, true);
+        view.setUint32(28, rate * channels * 2, true);
+        view.setUint16(32, channels * 2, true);
+        view.setUint16(34, 16, true);
+        tag(36, 'data');
+        view.setUint32(40, frames * channels * 2, true);
+        for (var f = 0; f < frames; f++) {
+          var s = Math.sin(2 * Math.PI * TONE_HZ * f / rate) * PEAK * 32767;
+          for (var c = 0; c < channels; c++) {
+            view.setInt16(44 + (f * channels + c) * 2, s, true);
+          }
+        }
+        return bytes.buffer;
+      }
+
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      var ctx = null, source = null;
+
+      // Over http (see tests/serve.py) the result lands in the server log too, so a
+      // headless or on-device run needs no screenshot.
+      function beacon(fields) {
+        try {
+          fetch('/report?page=webaudio-decode&' + fields, { cache: 'no-store' });
+        } catch (e) { /* reporting must never break the test */ }
+      }
+
+      function show(id, text, bad) {
+        var el = document.getElementById(id);
+        el.textContent = text;
+        el.className = bad ? 'bad' : '';
+      }
+
+      function start() {
+        if (!Ctx || source) return;
+        if (!ctx) ctx = new Ctx();
+        show('rate', ctx.sampleRate);
+
+        var data = wav(FILE_RATE, 1, FILE_RATE * SECONDS);
+        show('file', FILE_RATE + ' Hz mono, ' + data.byteLength + ' bytes');
+        show('decoded', 'decoding...');
+
+        ctx.decodeAudioData(data, function (buffer) {
+          show('decoded',
+            buffer.numberOfChannels + ' ch, ' + buffer.sampleRate + ' Hz, ' +
+            buffer.length + ' frames, ' + buffer.duration.toFixed(3) + ' s');
+          beacon('decoded=ok&channels=' + buffer.numberOfChannels +
+            '&rate=' + buffer.sampleRate + '&frames=' + buffer.length +
+            '&duration=' + buffer.duration.toFixed(3));
+          source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.loop = true;
+          source.connect(ctx.destination);
+          source.start();
+          ctx.resume();
+        }, function (e) {
+          show('decoded', 'REJECTED: ' + e, true);
+          beacon('decoded=rejected&error=' + encodeURIComponent(String(e)));
+        });
+      }
+
+      function stop() {
+        if (!source) return;
+        source.stop();
+        source.disconnect();
+        source = null;
+      }
+
+      document.getElementById('start').addEventListener('click', start);
+      document.getElementById('stop').addEventListener('click', stop);
+
+      setInterval(function () {
+        if (ctx) show('time', ctx.currentTime.toFixed(3));
+      }, 250);
+
+      start();
+    </script>
+  </body>
+</html>

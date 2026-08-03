@@ -42,7 +42,7 @@ Handheld Linux distros lack a usable browser: lightweight options can't render m
 - **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy), compiled and cached locally so warm starts are instant and work offline.
 - **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), controller-navigable like every other overlay.
 - **In-app updates** — checks GitHub, shows release notes inline, and installs in place on PortMaster handhelds and Linux desktops (elsewhere it opens the release page). Stable, beta, and dev channels.
-- **Web Audio** — retsurf's own servo-media backend renders the audio graph and plays it through SDL2, so oscillators, gain, filters, panners and scripted buffers make sound. `<audio>`/`<video>` elements and `decodeAudioData()` are not supported (no demuxer/codec stack).
+- **Web Audio** — retsurf's own servo-media backend renders the audio graph and plays it through SDL2, so oscillators, gain, filters, panners and scripted buffers make sound. `decodeAudioData()` decodes mp3, wav, flac, ogg/vorbis and aac/m4a and resamples to the context rate. `<audio>`/`<video>` elements are not supported (no demuxing player).
 - **Modern rendering** — Servo's WebRender on OpenGL ES 3.x: a single GL context and zero CPU readback, Servo drawing straight into the on-screen framebuffer.
 
 ## Building & running

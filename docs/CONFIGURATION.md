@@ -147,10 +147,17 @@ max_images_per_page = 48
 [audio]
 # Web Audio output. retsurf renders the Web Audio graph itself and plays it through
 # SDL2, so oscillators, gain, filters, panners, analysers and JS-filled AudioBuffers
-# all make sound. Not covered: <audio>/<video> elements and decodeAudioData(), which
-# need a demuxer/decoder Servo has no backend for; those stay silent regardless.
-# Read once at startup (restart to apply). Off means no audio device is ever opened.
+# all make sound, and decodeAudioData() decodes mp3/wav/flac/ogg/aac. Not covered:
+# <audio>/<video> elements, which need a demuxing player Servo has no backend for.
+# Read once at startup (restart to apply). Off means no audio device is ever opened;
+# decodeAudioData() still works, pages are just silent.
 enabled = true
+# Longest clip decodeAudioData() will decode, in seconds (0 = unlimited). A decoded
+# clip costs seconds * rate * channels * 4 bytes in memory, so a 5 min stereo track is
+# ~106 MB - briefly twice that if the file needs resampling to the context rate - and
+# an hour-long file would exhaust a 1 GB board. Past the cap the promise is rejected.
+# Lower it on weak boards; raise it if a page needs long tracks.
+max_decode_seconds = 300
 
 [input]
 deadzone = 0.25            # stick deflection below this is treated as centered

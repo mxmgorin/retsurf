@@ -151,6 +151,11 @@ impl AppConfig {
         );
         fix_u64("adblock.update_days", &mut self.adblock.update_days, b::ADBLOCK_UPDATE_DAYS);
         fix_u32(
+            "audio.max_decode_seconds",
+            &mut self.audio.max_decode_seconds,
+            b::DECODE_SECONDS,
+        );
+        fix_u32(
             "performance.layout_threads",
             &mut self.performance.layout_threads,
             b::LAYOUT_THREADS,

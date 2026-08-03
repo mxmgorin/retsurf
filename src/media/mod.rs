@@ -3,15 +3,16 @@
 //! Servo's only real backend needs GStreamer, absent from the handheld firmwares,
 //! so retsurf registers its own before Servo installs the dummy. The audio graph is
 //! backend-independent, so all this adds is somewhere for the rendered blocks to go
-//! (see [`sink`]). The rest keeps the dummy types: `<audio>`, MediaStream/WebRTC and
-//! `decode_audio_data` want a demuxer, a capture stack and a file decoder, none of
-//! them SDL2's job — so [`Backend::can_play_type`] answers no.
+//! (see [`sink`]) and a decoder for `decodeAudioData` (see [`decoder`]). The rest keeps
+//! the dummy types: `<audio>` wants a demuxing `Player`, MediaStream/WebRTC a capture
+//! stack, neither of them SDL2's job — so [`Backend::can_play_type`] answers no.
 
+mod decoder;
 mod sink;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex, Weak};
+use std::sync::{mpsc, Arc, Mutex, OnceLock, Weak};
 
 use sdl2::{AudioSubsystem, Sdl};
 use servo_base::generic_channel::GenericCallback;
@@ -29,30 +30,66 @@ use servo_media::traits::{ClientContextId, MediaInstance};
 use servo_media::webrtc::{WebRtcBackend, WebRtcController, WebRtcSignaller};
 use servo_media::{Backend, BackendInit, ServoMedia, SupportsMediaType};
 use servo_media_dummy::{
-    DummyAudioDecoder, DummyMediaOutput, DummyPlayer, DummySocket, DummyStreamReader,
-    DummyWebRtcController,
+    DummyMediaOutput, DummyPlayer, DummySocket, DummyStreamReader, DummyWebRtcController,
 };
 
+use decoder::SymphoniaAudioDecoder;
 use sink::SdlAudioSink;
 
-/// Registers the WebAudio backend, before Servo is built. The returned subsystem
-/// must stay alive: dropping it closes every device the sinks opened. `None` leaves
-/// Servo to install its own silent backend.
-pub fn init(sdl: &Sdl) -> Option<AudioSubsystem> {
-    let subsystem = match sdl.audio() {
-        Ok(subsystem) => subsystem,
-        Err(e) => {
-            log::warn!("audio: SDL audio unavailable ({e}); pages will be silent");
-            return None;
+/// A static because `make_sink`/`make_decoder` are associated functions with no
+/// access to the backend instance.
+static SETTINGS: OnceLock<Settings> = OnceLock::new();
+
+pub(crate) struct Settings {
+    /// Whether a playback device may be opened at all.
+    pub output: bool,
+    /// `[audio] max_decode_seconds`; `0` is unlimited.
+    pub max_decode_seconds: u32,
+}
+
+impl Default for Settings {
+    /// Only reachable when [`init`] never ran, i.e. in tests.
+    fn default() -> Self {
+        Self {
+            output: true,
+            max_decode_seconds: 0,
         }
-    };
-    log::info!("audio: SDL driver `{}`", subsystem.current_audio_driver());
+    }
+}
+
+pub(crate) fn settings() -> &'static Settings {
+    SETTINGS.get_or_init(Settings::default)
+}
+
+/// Registers the WebAudio backend, before Servo is built. The returned subsystem must
+/// stay alive: dropping it closes every device the sinks opened. `None` means pages stay
+/// silent; the backend registers anyway, since decoding needs no device.
+pub fn init(sdl: &Sdl, config: &crate::config::AudioConfig) -> Option<AudioSubsystem> {
+    let subsystem = config
+        .enabled
+        .then(|| sdl.audio())
+        .and_then(|result| match result {
+            Ok(subsystem) => {
+                log::info!("audio: SDL driver `{}`", subsystem.current_audio_driver());
+                Some(subsystem)
+            }
+            Err(e) => {
+                log::warn!("audio: SDL audio unavailable ({e}); pages will be silent");
+                None
+            }
+        });
+
+    // `App::new` runs once per process, so the first set is the only one.
+    let _ = SETTINGS.set(Settings {
+        output: subsystem.is_some(),
+        max_decode_seconds: config.max_decode_seconds,
+    });
 
     ServoMedia::init::<SdlMediaBackend>();
     // Blocks until the shared `OnceLock` is filled, so ours wins the race with
     // Servo's dummy.
     ServoMedia::get();
-    Some(subsystem)
+    subsystem
 }
 
 /// Live audio contexts of one Servo pipeline, so `suspend`/`resume`/`mute` can
@@ -201,9 +238,8 @@ impl AudioBackend for SdlMediaBackend {
         Ok(SdlAudioSink::default())
     }
 
-    /// `decodeAudioData` needs a codec, not a device, so the promise never settles.
     fn make_decoder() -> Box<dyn AudioDecoder> {
-        Box::new(DummyAudioDecoder)
+        Box::new(SymphoniaAudioDecoder)
     }
 
     /// `MediaStreamAudioSourceNode`. Nothing produces streams here, so it reads silence.

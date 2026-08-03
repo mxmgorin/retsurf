@@ -137,6 +137,13 @@ pub struct SdlAudioSink {
     stream_only: Cell<bool>,
 }
 
+impl SdlAudioSink {
+    /// Nowhere to put audio: a `MediaStreamDestinationNode`, or output off in config.
+    fn silent(&self) -> bool {
+        self.stream_only.get() || !crate::media::settings().output
+    }
+}
+
 impl Drop for SdlAudioSink {
     fn drop(&mut self) {
         // Close the device before `queue` is released: SDL holds that allocation's
@@ -164,7 +171,7 @@ impl AudioSink for SdlAudioSink {
     }
 
     fn play(&self) -> Result<(), AudioSinkError> {
-        if self.stream_only.get() {
+        if self.silent() {
             return Ok(());
         }
         let mut device = self.device.borrow_mut();
@@ -190,12 +197,14 @@ impl AudioSink for SdlAudioSink {
         Ok(())
     }
 
+    /// A silent sink claims to be full: nothing drains its queue, so the render thread
+    /// would spin instead of parking.
     fn has_enough_data(&self) -> bool {
-        lock(&self.queue).samples.len() >= QUEUE_TARGET_SAMPLES
+        self.silent() || lock(&self.queue).samples.len() >= QUEUE_TARGET_SAMPLES
     }
 
     fn push_data(&self, chunk: Chunk) -> Result<(), AudioSinkError> {
-        if self.stream_only.get() {
+        if self.silent() {
             return Ok(());
         }
         // No block at all means nothing is connected, which is silence.

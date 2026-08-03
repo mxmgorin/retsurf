@@ -50,12 +50,20 @@ servo = { version = "0.4", default-features = false, features = ["bundled_freety
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
 servo-base = "0.4"
-# WebAudio (src/media): our own servo-media backend renders the audio graph to an
-# SDL2 device instead of Servo's silent dummy, which still supplies the no-op
-# Player/WebRTC/decoder types. Must resolve to the fork like `servo` does, or the
-# backend registers into a second copy of these crates.
+# WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
+# device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
+# types. Must resolve to the fork like `servo` does, or the backend registers into a
+# second copy of these crates.
 servo-media = "0.4"
 servo-media-dummy = "0.4"
+# `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
+# handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
+# left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
+symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav", "pcm", "flac", "ogg", "vorbis", "aac", "isomp4", "id3v2"] }
+# Files come at their own rate, `AudioBuffer` wants the context's. Polynomial resampling
+# (no `fft_resampler`, so no FFT crates) is rubato's cheap end, which beats transition-band
+# purity on an A35.
+rubato = { version = "4", default-features = false }
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"

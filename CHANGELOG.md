@@ -12,10 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web Audio output: retsurf now registers its own servo-media backend and plays the
   audio graph through SDL2, so oscillators, gain, filters, panners, analysers and
   JS-filled `AudioBuffer`s make sound. Toggle in settings or `[audio] enabled`.
-  `<audio>`/`<video>` elements and `decodeAudioData()` are still unsupported.
+  `<audio>`/`<video>` elements are still unsupported.
+- `decodeAudioData()` decodes mp3, wav, flac, ogg/vorbis and aac/m4a, resampling to
+  the context's rate. Sound effects and music that pages load as a file and play
+  through Web Audio now work; the promise used to never settle. `[audio]
+  max_decode_seconds` (default 300) rejects clips too long to fit in memory.
 
 ### Fixed
 
+- Turning audio off no longer leaves `decodeAudioData()` hanging: the decoder is
+  registered even with no output, so the promise resolves and pages stay silent
+  instead of waiting forever.
+- A sink with nowhere to send audio (audio off, or a `MediaStreamAudioDestinationNode`)
+  no longer keeps Servo's audio render thread busy rendering blocks that are thrown
+  away.
 - Download buttons that build the file in JavaScript (a `fetch` plus a blob URL,
   as on gettestfiles.com) now save it. Servo has no `download` attribute support,
   so the click used to navigate to the blob and land on a blank error page; the
