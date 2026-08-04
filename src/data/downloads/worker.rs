@@ -1,23 +1,47 @@
-//! The downloading itself: one background thread per file (ureq is blocking),
-//! streaming to `<path>.part` and renaming into place on success. Progress flows
-//! back through [`Shared`] (read by [`super::Downloads::poll`]); the worker wakes
-//! the main loop with [`UserEvent::DownloadUpdate`] so the UI repaints while idle.
+//! One background thread per file (ureq is blocking): stream to `<path>.part`,
+//! rename into place. A watchdog fails stalled transfers (ureq has no idle timeout).
 
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
-/// Worker → main-thread progress. The worker stores the counters as it streams
-/// and the final result exactly once; the main loop sets `cancel` to stop it.
+/// Deadline for each pre-body phase of the request (DNS, connect, headers).
+const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// No received bytes for this long fails the transfer as stalled.
+const STALL_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How often the watchdog checks progress and the cancel flag.
+const WATCH_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Cancel grace before the watchdog resolves the entry for a blocked worker.
+const CANCEL_GRACE: Duration = Duration::from_secs(3);
+
+/// Worker → main-thread progress; `result` is write-once via `done`.
 pub(super) struct Shared {
     pub received: AtomicU64,
     pub total: AtomicU64,
     pub cancel: AtomicBool,
+    /// Claimed (exactly once) by whoever stores `result`.
+    done: AtomicBool,
     pub result: Mutex<Option<Result<(), String>>>,
 }
 
-/// Pick a free destination path for `url` inside `dir` and spawn the worker
-/// thread fetching it. Returns the path and the progress handle.
+/// Shared agent with per-phase deadlines; mid-body stalls are the watchdog's job.
+fn agent() -> &'static ureq::Agent {
+    static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
+        ureq::Agent::config_builder()
+            .timeout_resolve(Some(PHASE_TIMEOUT))
+            .timeout_connect(Some(PHASE_TIMEOUT))
+            .timeout_recv_response(Some(PHASE_TIMEOUT))
+            .build()
+            .new_agent()
+    });
+    &AGENT
+}
+
+/// Spawn the worker and its watchdog; returns the destination path and progress handle.
 pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, Arc<Shared>) {
     let path = unique_path(dir, &filename_from_url(url));
     log::info!("downloading `{url}` -> `{path}`");
@@ -25,6 +49,7 @@ pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, 
         received: AtomicU64::new(0),
         total: AtomicU64::new(0),
         cancel: AtomicBool::new(false),
+        done: AtomicBool::new(false),
         result: Mutex::new(None),
     });
     {
@@ -34,12 +59,15 @@ pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, 
         let sender = sender.clone();
         std::thread::spawn(move || run(url, path, shared, sender));
     }
+    {
+        let shared = shared.clone();
+        let sender = sender.clone();
+        std::thread::spawn(move || watch(shared, sender));
+    }
     (path, shared)
 }
 
-/// Worker-thread entry: stream the URL to `<path>.part`, then rename into place.
-/// The partial file is removed on failure/cancel. Always stores a result and
-/// wakes the main loop, so the poll sees the transition exactly once.
+/// Worker-thread entry: stream to `<path>.part`, rename into place; partial removed on failure.
 fn run(url: String, path: String, shared: Arc<Shared>, sender: UserEventSender) {
     let part = format!("{path}.part");
     let mut result = fetch(&url, &part, &shared, &sender);
@@ -50,12 +78,52 @@ fn run(url: String, path: String, shared: Arc<Shared>, sender: UserEventSender) 
         let _ = std::fs::remove_file(&part);
         log::warn!("download `{url}` failed: {e}");
     }
+    finish(&shared, result, &sender);
+}
+
+/// Publish `result` once (first of worker/watchdog wins) and wake the main loop.
+fn finish(shared: &Shared, result: Result<(), String>, sender: &UserEventSender) {
+    if shared.done.swap(true, Ordering::Relaxed) {
+        return;
+    }
     *shared.result.lock().unwrap() = Some(result);
     sender.send(UserEvent::DownloadUpdate);
 }
 
+/// Resolve what the worker can't: an unacknowledged cancel or a stalled socket.
+fn watch(shared: Arc<Shared>, sender: UserEventSender) {
+    let mut last_received = 0;
+    let mut last_change = Instant::now();
+    let mut cancelled_at: Option<Instant> = None;
+    loop {
+        std::thread::sleep(WATCH_INTERVAL);
+        if shared.done.load(Ordering::Relaxed) {
+            return;
+        }
+        let received = shared.received.load(Ordering::Relaxed);
+        if received != last_received {
+            last_received = received;
+            last_change = Instant::now();
+        }
+        if shared.cancel.load(Ordering::Relaxed) {
+            if cancelled_at.get_or_insert_with(Instant::now).elapsed() >= CANCEL_GRACE {
+                finish(&shared, Err("cancelled".to_string()), &sender);
+                return;
+            }
+        } else if last_change.elapsed() >= STALL_TIMEOUT {
+            shared.cancel.store(true, Ordering::Relaxed);
+            finish(
+                &shared,
+                Err(format!("stalled: no data for {}s", STALL_TIMEOUT.as_secs())),
+                &sender,
+            );
+            return;
+        }
+    }
+}
+
 fn fetch(url: &str, part: &str, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
-    let response = ureq::get(url).call().map_err(|e| e.to_string())?;
+    let response = agent().get(url).call().map_err(|e| e.to_string())?;
     if let Some(total) = crate::net::content_length(response.headers()) {
         shared.total.store(total, Ordering::Relaxed);
     }
@@ -70,8 +138,7 @@ fn fetch(url: &str, part: &str, shared: &Shared, sender: &UserEventSender) -> Re
     })
 }
 
-/// Derive a save name from the URL's last path segment (percent-decoded, path
-/// separators stripped), falling back to `download`.
+/// Save name from the URL's last path segment, falling back to `download`.
 pub(super) fn filename_from_url(url: &str) -> String {
     let name = url::Url::parse(url)
         .ok()
@@ -100,8 +167,7 @@ pub(super) fn filename_from_url(url: &str) -> String {
     }
 }
 
-/// `dir/filename`, suffixed `-1`, `-2`, … before the extension until neither the
-/// file nor its `.part` exists.
+/// `dir/filename`, suffixed `-1`, `-2`, … until neither the file nor its `.part` exists.
 pub(super) fn unique_path(dir: &str, filename: &str) -> String {
     let (stem, ext) = match filename.rsplit_once('.') {
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
