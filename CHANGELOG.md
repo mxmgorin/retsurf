@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A download whose connection goes silent now fails with "stalled" after 60 s
   instead of staying active forever, and cancelling one that is stuck no longer
   leaves it in the list as active. Connecting to a dead server times out promptly.
+- Downloads send the browser's User-Agent and the linking page as Referer, so
+  hosts that reject unknown clients or hotlinking serve the file.
 - Turning audio off no longer leaves `decodeAudioData()` hanging: the decoder is
   registered even with no output, so the promise resolves and pages stay silent
   instead of waiting forever.

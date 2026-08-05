@@ -220,6 +220,7 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
+        user_agent: String,
     ) -> Self {
         let mut egui = EguiGlow::new(window.sdl2_window(), window.glow_ctx(), None, false);
         // Install the shared accent theme so every selectable widget, text
@@ -259,7 +260,7 @@ impl AppUi {
             toolbar_shown: true,
             scroll_accum: 0.0,
             osk: Osk::new(osk),
-            menu: Menu::new(history, downloads),
+            menu: Menu::new(history, downloads, user_agent),
             settings: Settings::new(),
             update: Updater::new(update),
             home: Home::new(),

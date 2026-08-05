@@ -69,7 +69,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// Servo can't download: navigating to a file URL would just fail to render.
     /// Deny those navigations and queue the URL for our own fetch instead (see
     /// [`crate::data::downloads`]). Everything else proceeds normally.
-    fn request_navigation(&self, _webview: WebView, request: servo::NavigationRequest) {
+    fn request_navigation(&self, webview: WebView, request: servo::NavigationRequest) {
         if !self.is_download_url(&request.url) {
             request.allow();
             return;
@@ -77,7 +77,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let url = request.url.to_string();
         log::info!("intercepting download navigation: {url}");
         request.deny();
-        self.download_requests.borrow_mut().push(url);
+        let referer = self
+            .tab_index(webview.id())
+            .and_then(|i| referer_for(&self.tabs.borrow()[i].state.location));
+        self.download_requests
+            .borrow_mut()
+            .push(super::DownloadRequest { url, referer });
         // Wake the main loop so the download starts right away even when idle.
         self.event_sender.send(UserEvent::DownloadUpdate);
     }
@@ -208,6 +213,18 @@ impl servo::WebViewDelegate for AppBrowserInner {
             finish_intercepted(load, response, Vec::new());
         }
     }
+}
+
+/// The linking page as a Referer: http(s) only, fragment and credentials stripped.
+fn referer_for(location: &str) -> Option<String> {
+    let mut url = Url::parse(location).ok()?;
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return None;
+    }
+    url.set_fragment(None);
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    Some(url.to_string())
 }
 
 /// Answer an intercepted load with `body`, always sending a chunk — even an empty

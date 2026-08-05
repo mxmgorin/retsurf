@@ -83,6 +83,13 @@ pub(super) fn build_preferences(
     prefs
 }
 
+/// The UA string Servo browses with; retsurf's own download fetches send the
+/// same one so servers see a single client (see [`crate::data::downloads`]).
+pub fn effective_user_agent(config: &BrowserConfig) -> String {
+    resolve_user_agent(&config.user_agent)
+        .unwrap_or_else(|| servo::Preferences::default().user_agent)
+}
+
 /// Resolve the `[browser] user_agent` config value: empty (or `default`)
 /// keeps Servo's platform default, the keywords pick a stock UA string, and
 /// anything else is sent verbatim. `mobile` is the interesting one on a
