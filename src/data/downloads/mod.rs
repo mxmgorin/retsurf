@@ -70,29 +70,32 @@ pub struct Downloads {
     items: Vec<Download>,
     /// Save directory, with a trailing separator (see [`DownloadsConfig`]).
     dir: String,
+    /// The browser's UA string, sent by the workers' fetches.
+    user_agent: String,
     /// Highlighted row in the menu's Downloads section.
     cursor: crate::data::ListCursor,
 }
 
 impl Downloads {
     /// Load the saved list (empty if the file is missing or invalid).
-    pub fn load(cfg: &DownloadsConfig) -> Self {
+    pub fn load(cfg: &DownloadsConfig, user_agent: String) -> Self {
         Self {
             items: store::load(),
             dir: cfg.resolve_dir(),
+            user_agent,
             cursor: crate::data::ListCursor::new(0),
         }
     }
 
-    /// Begin fetching `url` on a background thread, adding an Active entry on top.
-    pub fn start(&mut self, url: &str, sender: &UserEventSender) {
+    /// Begin fetching a denied navigation, adding an Active entry on top.
+    pub fn start(&mut self, request: crate::browser::DownloadRequest, sender: &UserEventSender) {
         if let Err(e) = std::fs::create_dir_all(&self.dir) {
             log::warn!("could not create download dir `{}`: {e}", self.dir);
             self.items.insert(
                 0,
                 Download {
-                    url: url.to_string(),
-                    filename: worker::filename_from_url(url),
+                    filename: worker::filename_from_url(&request.url),
+                    url: request.url,
                     path: String::new(),
                     received: 0,
                     total: 0,
@@ -105,12 +108,18 @@ impl Downloads {
             return;
         }
 
-        let (path, shared) = worker::spawn(url, &self.dir, sender);
+        let (path, shared) = worker::spawn(
+            &request.url,
+            request.referer,
+            &self.user_agent,
+            &self.dir,
+            sender,
+        );
         self.items.insert(
             0,
             Download {
-                url: url.to_string(),
                 filename: file_name_of(&path),
+                url: request.url,
                 path,
                 received: 0,
                 total: 0,

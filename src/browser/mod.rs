@@ -15,6 +15,7 @@ mod reader;
 mod url;
 
 pub use blob_download::BlobDownload;
+pub use engine::effective_user_agent;
 pub use home::HOME_URL;
 pub use url::try_into_url;
 
@@ -98,6 +99,13 @@ struct Tab {
     images_loaded: Cell<usize>,
 }
 
+/// A denied download navigation for [`crate::data::downloads`] to fetch.
+pub struct DownloadRequest {
+    pub url: String,
+    /// Linking page, sent as Referer.
+    pub referer: Option<String>,
+}
+
 /// A read-only snapshot of a tab for the menu's Tabs section.
 pub struct TabInfo {
     /// Page title, falling back to the URL (then "New tab") when unknown.
@@ -123,10 +131,8 @@ struct AppBrowserInner {
     /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
     /// the address-bar text — so typing a URL doesn't pollute history.
     visited: RefCell<Vec<String>>,
-    /// URLs whose navigation was denied because they look like file downloads
-    /// (see [`delegate`]), drained once per frame by the main loop which hands
-    /// them to the downloads store.
-    download_requests: RefCell<Vec<String>>,
+    /// Download navigations denied by [`delegate`], drained once per frame.
+    download_requests: RefCell<Vec<DownloadRequest>>,
     /// Webviews whose page signalled a captured blob download (see
     /// [`blob_download`]), drained once per frame into `blob_downloads`.
     blob_pings: RefCell<Vec<WebView>>,
@@ -286,10 +292,9 @@ impl AppBrowser {
         std::mem::take(&mut self.inner.visited.borrow_mut())
     }
 
-    /// Take and clear the download URLs whose navigation was denied since the
-    /// last call. Drained once per frame by the main loop.
+    /// Take and clear the download navigations denied since the last call.
     #[inline]
-    pub fn take_download_requests(&self) -> Vec<String> {
+    pub fn take_download_requests(&self) -> Vec<DownloadRequest> {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
     }
 

@@ -83,6 +83,7 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
+            crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");
 
@@ -162,8 +163,8 @@ impl App {
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
             self.ui.menu.downloads.poll();
-            for url in self.browser.take_download_requests() {
-                self.ui.menu.downloads.start(&url, &self.event_sender);
+            for request in self.browser.take_download_requests() {
+                self.ui.menu.downloads.start(request, &self.event_sender);
             }
             // Files a page built in JS and handed us whole: ask the signalling
             // pages for them, then save whatever earlier reads returned.

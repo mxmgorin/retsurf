@@ -60,14 +60,18 @@ pub struct Menu {
 }
 
 impl Menu {
-    pub fn new(history_cfg: &HistoryConfig, downloads_cfg: &DownloadsConfig) -> Self {
+    pub fn new(
+        history_cfg: &HistoryConfig,
+        downloads_cfg: &DownloadsConfig,
+        user_agent: String,
+    ) -> Self {
         Self {
             visible: false,
             section: Section::Tabs,
             bookmarks: Bookmarks::load(),
             dial: Dial::load(),
             history: History::load(history_cfg),
-            downloads: Downloads::load(downloads_cfg),
+            downloads: Downloads::load(downloads_cfg, user_agent),
             tab_selected: 0,
             tab_count: 0,
         }

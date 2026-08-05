@@ -1,5 +1,6 @@
 //! One background thread per file (ureq is blocking): stream to `<path>.part`,
-//! rename into place. A watchdog fails stalled transfers (ureq has no idle timeout).
+//! rename into place. Requests present as the browser (User-Agent, Referer).
+//! A watchdog fails stalled transfers (ureq has no idle timeout).
 
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -42,7 +43,13 @@ fn agent() -> &'static ureq::Agent {
 }
 
 /// Spawn the worker and its watchdog; returns the destination path and progress handle.
-pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, Arc<Shared>) {
+pub(super) fn spawn(
+    url: &str,
+    referer: Option<String>,
+    user_agent: &str,
+    dir: &str,
+    sender: &UserEventSender,
+) -> (String, Arc<Shared>) {
     let path = unique_path(dir, &filename_from_url(url));
     log::info!("downloading `{url}` -> `{path}`");
     let shared = Arc::new(Shared {
@@ -54,10 +61,11 @@ pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, 
     });
     {
         let url = url.to_string();
+        let user_agent = user_agent.to_string();
         let path = path.clone();
         let shared = shared.clone();
         let sender = sender.clone();
-        std::thread::spawn(move || run(url, path, shared, sender));
+        std::thread::spawn(move || run(url, path, referer, user_agent, shared, sender));
     }
     {
         let shared = shared.clone();
@@ -68,9 +76,16 @@ pub(super) fn spawn(url: &str, dir: &str, sender: &UserEventSender) -> (String, 
 }
 
 /// Worker-thread entry: stream to `<path>.part`, rename into place; partial removed on failure.
-fn run(url: String, path: String, shared: Arc<Shared>, sender: UserEventSender) {
+fn run(
+    url: String,
+    path: String,
+    referer: Option<String>,
+    user_agent: String,
+    shared: Arc<Shared>,
+    sender: UserEventSender,
+) {
     let part = format!("{path}.part");
-    let mut result = fetch(&url, &part, &shared, &sender);
+    let mut result = fetch(&url, &part, referer.as_deref(), &user_agent, &shared, &sender);
     if result.is_ok() {
         result = std::fs::rename(&part, &path).map_err(|e| format!("rename: {e}"));
     }
@@ -122,8 +137,19 @@ fn watch(shared: Arc<Shared>, sender: UserEventSender) {
     }
 }
 
-fn fetch(url: &str, part: &str, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
-    let response = agent().get(url).call().map_err(|e| e.to_string())?;
+fn fetch(
+    url: &str,
+    part: &str,
+    referer: Option<&str>,
+    user_agent: &str,
+    shared: &Shared,
+    sender: &UserEventSender,
+) -> Result<(), String> {
+    let mut request = agent().get(url).header("User-Agent", user_agent);
+    if let Some(referer) = referer {
+        request = request.header("Referer", referer);
+    }
+    let response = request.call().map_err(|e| e.to_string())?;
     if let Some(total) = crate::net::content_length(response.headers()) {
         shared.total.store(total, Ordering::Relaxed);
     }
