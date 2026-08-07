@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Downloads honor the name the server picks (`Content-Disposition`, or the file a
+  mirror redirect lands on) instead of always naming the file after the link URL.
 - A download whose connection goes silent now fails with "stalled" after 60 s
   instead of staying active forever, and cancelling one that is stuck no longer
   leaves it in the list as active. Connecting to a dead server times out promptly.

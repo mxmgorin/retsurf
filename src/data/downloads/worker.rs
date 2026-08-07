@@ -1,6 +1,7 @@
 //! One background thread per file (ureq is blocking): stream to `<path>.part`,
-//! rename into place. Requests present as the browser (User-Agent, Referer).
-//! A watchdog fails stalled transfers (ureq has no idle timeout).
+//! rename into place. Requests present as the browser (User-Agent, Referer) and
+//! the save name is picked from the response (Content-Disposition, redirect
+//! target). A watchdog fails stalled transfers (ureq has no idle timeout).
 
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -24,6 +25,8 @@ pub(super) struct Shared {
     pub received: AtomicU64,
     pub total: AtomicU64,
     pub cancel: AtomicBool,
+    /// Destination path, set once the response headers picked the final name.
+    pub path: Mutex<Option<String>>,
     /// Claimed (exactly once) by whoever stores `result`.
     done: AtomicBool,
     pub result: Mutex<Option<Result<(), String>>>,
@@ -42,55 +45,50 @@ fn agent() -> &'static ureq::Agent {
     &AGENT
 }
 
-/// Spawn the worker and its watchdog; returns the destination path and progress handle.
+/// Spawn the worker and its watchdog; the destination path arrives through the
+/// returned handle once known.
 pub(super) fn spawn(
     url: &str,
     referer: Option<String>,
     user_agent: &str,
     dir: &str,
     sender: &UserEventSender,
-) -> (String, Arc<Shared>) {
-    let path = unique_path(dir, &filename_from_url(url));
-    log::info!("downloading `{url}` -> `{path}`");
+) -> Arc<Shared> {
     let shared = Arc::new(Shared {
         received: AtomicU64::new(0),
         total: AtomicU64::new(0),
         cancel: AtomicBool::new(false),
+        path: Mutex::new(None),
         done: AtomicBool::new(false),
         result: Mutex::new(None),
     });
     {
         let url = url.to_string();
         let user_agent = user_agent.to_string();
-        let path = path.clone();
+        let dir = dir.to_string();
         let shared = shared.clone();
         let sender = sender.clone();
-        std::thread::spawn(move || run(url, path, referer, user_agent, shared, sender));
+        std::thread::spawn(move || run(url, referer, user_agent, dir, shared, sender));
     }
     {
         let shared = shared.clone();
         let sender = sender.clone();
         std::thread::spawn(move || watch(shared, sender));
     }
-    (path, shared)
+    shared
 }
 
-/// Worker-thread entry: stream to `<path>.part`, rename into place; partial removed on failure.
+/// Worker-thread entry: fetch, then publish the result.
 fn run(
     url: String,
-    path: String,
     referer: Option<String>,
     user_agent: String,
+    dir: String,
     shared: Arc<Shared>,
     sender: UserEventSender,
 ) {
-    let part = format!("{path}.part");
-    let mut result = fetch(&url, &part, referer.as_deref(), &user_agent, &shared, &sender);
-    if result.is_ok() {
-        result = std::fs::rename(&part, &path).map_err(|e| format!("rename: {e}"));
-    }
+    let result = fetch(&url, referer.as_deref(), &user_agent, &dir, &shared, &sender);
     if let Err(e) = &result {
-        let _ = std::fs::remove_file(&part);
         log::warn!("download `{url}` failed: {e}");
     }
     finish(&shared, result, &sender);
@@ -137,14 +135,18 @@ fn watch(shared: Arc<Shared>, sender: UserEventSender) {
     }
 }
 
+/// Fetch the URL, pick the save name from the response, and stream to
+/// `<path>.part`; renamed into place on success, removed on failure.
 fn fetch(
     url: &str,
-    part: &str,
     referer: Option<&str>,
     user_agent: &str,
+    dir: &str,
     shared: &Shared,
     sender: &UserEventSender,
 ) -> Result<(), String> {
+    use ureq::ResponseExt;
+
     let mut request = agent().get(url).header("User-Agent", user_agent);
     if let Some(referer) = referer {
         request = request.header("Referer", referer);
@@ -153,47 +155,136 @@ fn fetch(
     if let Some(total) = crate::net::content_length(response.headers()) {
         shared.total.store(total, Ordering::Relaxed);
     }
+
+    let name = pick_filename(response.headers(), response.get_uri().path(), url);
+    let (path, part, file) = create_unique(dir, &name)?;
+    log::info!("downloading `{url}` -> `{path}`");
+    *shared.path.lock().unwrap() = Some(path.clone());
+    sender.send(UserEvent::DownloadUpdate);
+
     let reader = response.into_body().into_reader();
-    let file = std::fs::File::create(part).map_err(|e| e.to_string())?;
-    crate::net::stream(reader, file, |_, received, due| {
+    let result = crate::net::stream(reader, file, |_, received, due| {
         shared.received.store(received, Ordering::Relaxed);
         if due {
             sender.send(UserEvent::DownloadUpdate);
         }
         !shared.cancel.load(Ordering::Relaxed)
     })
+    .and_then(|()| std::fs::rename(&part, &path).map_err(|e| format!("rename: {e}")));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    result
+}
+
+/// Save-name precedence: Content-Disposition, a file-naming redirect target,
+/// the link URL.
+fn pick_filename(headers: &ureq::http::HeaderMap, final_path: &str, url: &str) -> String {
+    let disposition = headers
+        .get("Content-Disposition")
+        .map(|v| String::from_utf8_lossy(v.as_bytes()).into_owned());
+    if let Some(name) = disposition.as_deref().and_then(filename_from_disposition) {
+        return name;
+    }
+    if let Some(name) = filename_from_path(final_path) {
+        if has_extension(&name) {
+            return name;
+        }
+    }
+    filename_from_url(url)
+}
+
+/// Filename from a Content-Disposition value (RFC 6266): `filename*` (RFC 5987)
+/// wins over plain `filename=`, quoted or bare.
+fn filename_from_disposition(value: &str) -> Option<String> {
+    let mut plain = None;
+    let mut extended = None;
+    for param in value.split(';') {
+        let Some((key, val)) = param.split_once('=') else {
+            continue;
+        };
+        let val = val.trim();
+        match key.trim().to_ascii_lowercase().as_str() {
+            // charset'language'percent-encoded; everything past the last quote.
+            "filename*" => {
+                let encoded = val.rsplit_once('\'').map_or(val, |(_, e)| e);
+                extended = Some(
+                    percent_encoding::percent_decode_str(encoded)
+                        .decode_utf8_lossy()
+                        .into_owned(),
+                );
+            }
+            "filename" => plain = Some(val.trim_matches('"').to_string()),
+            _ => {}
+        }
+    }
+    extended.or(plain).and_then(|name| sanitize(&name))
 }
 
 /// Save name from the URL's last path segment, falling back to `download`.
 pub(super) fn filename_from_url(url: &str) -> String {
-    let name = url::Url::parse(url)
+    url::Url::parse(url)
         .ok()
-        .and_then(|u| {
-            u.path_segments()
-                .and_then(|s| s.rev().find(|s| !s.is_empty()).map(str::to_string))
-        })
-        .unwrap_or_default();
-    let name = percent_encoding::percent_decode_str(&name)
-        .decode_utf8_lossy()
-        .to_string();
+        .and_then(|u| filename_from_path(u.path()))
+        .unwrap_or_else(|| "download".to_string())
+}
+
+/// Last non-empty segment of a URL path, percent-decoded and sanitized.
+fn filename_from_path(path: &str) -> Option<String> {
+    let segment = path.rsplit('/').find(|s| !s.is_empty())?;
+    let name = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
+    sanitize(&name)
+}
+
+/// Make an untrusted name safe as a bare file name: no separators, control
+/// characters, or leading dots. `None` when nothing usable remains.
+fn sanitize(name: &str) -> Option<String> {
     let name: String = name
         .chars()
-        .map(|c| {
-            if c == '/' || c == '\\' || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
+        .filter(|c| !matches!(c, '/' | '\\') && !c.is_control())
         .collect();
-    if name.is_empty() || name == "." || name == ".." {
-        "download".to_string()
-    } else {
-        name
+    let name = name.trim().trim_start_matches('.').trim();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
+fn has_extension(name: &str) -> bool {
+    matches!(name.rsplit_once('.'), Some((stem, ext)) if !stem.is_empty() && !ext.is_empty())
+}
+
+/// Reserve a free destination (`name`, `stem-1.ext`, …): creating the `.part`
+/// exclusively is the reservation, so parallel workers can't collide.
+fn create_unique(dir: &str, filename: &str) -> Result<(String, String, std::fs::File), String> {
+    let (stem, ext) = match filename.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (filename.to_string(), String::new()),
+    };
+    let mut n = 0u32;
+    loop {
+        let name = if n == 0 {
+            filename.to_string()
+        } else {
+            format!("{stem}-{n}{ext}")
+        };
+        let path = format!("{dir}{name}");
+        let part = format!("{path}.part");
+        n += 1;
+        if std::path::Path::new(&path).exists() {
+            continue;
+        }
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&part)
+        {
+            Ok(file) => return Ok((path, part, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("create: {e}")),
+        }
     }
 }
 
-/// `dir/filename`, suffixed `-1`, `-2`, … until neither the file nor its `.part` exists.
+/// `dir/filename`, suffixed `-1`, `-2`, … until neither the file nor its `.part`
+/// exists. For whole-file writes on the main thread; workers use [`create_unique`].
 pub(super) fn unique_path(dir: &str, filename: &str) -> String {
     let (stem, ext) = match filename.rsplit_once('.') {
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
@@ -212,5 +303,234 @@ pub(super) fn unique_path(dir: &str, filename: &str) -> String {
             return path;
         }
         n += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers(disposition: Option<&'static str>) -> ureq::http::HeaderMap {
+        let mut h = ureq::http::HeaderMap::new();
+        if let Some(v) = disposition {
+            h.insert(
+                "Content-Disposition",
+                ureq::http::HeaderValue::from_static(v),
+            );
+        }
+        h
+    }
+
+    /// A quoted filename parameter names the file.
+    #[test]
+    fn disposition_quoted_filename() {
+        let name = filename_from_disposition(r#"attachment; filename="release notes.pdf""#);
+        assert_eq!(name.as_deref(), Some("release notes.pdf"));
+    }
+
+    /// A bare (unquoted) filename parameter also works.
+    #[test]
+    fn disposition_bare_filename() {
+        let name = filename_from_disposition("attachment;filename=game.zip");
+        assert_eq!(name.as_deref(), Some("game.zip"));
+    }
+
+    /// The RFC 5987 form is percent-decoded and preferred over plain filename.
+    #[test]
+    fn disposition_extended_filename_wins() {
+        let name = filename_from_disposition(
+            "attachment; filename=fallback.bin; filename*=UTF-8''na%C3%AFve%20rom.gba",
+        );
+        assert_eq!(name.as_deref(), Some("naïve rom.gba"));
+    }
+
+    /// A disposition without any filename yields nothing.
+    #[test]
+    fn disposition_without_filename() {
+        assert_eq!(filename_from_disposition("inline"), None);
+        assert_eq!(filename_from_disposition("attachment; size=42"), None);
+    }
+
+    /// Server names are untrusted: no traversal, no hidden files.
+    #[test]
+    fn disposition_name_is_sanitized() {
+        let name = filename_from_disposition(r#"attachment; filename="../../.hidden""#);
+        assert_eq!(name.as_deref(), Some("hidden"));
+        assert_eq!(
+            filename_from_disposition(r#"attachment; filename="...""#),
+            None
+        );
+    }
+
+    /// Content-Disposition beats both URLs.
+    #[test]
+    fn pick_prefers_disposition() {
+        let h = headers(Some(r#"attachment; filename="real.zip""#));
+        let name = pick_filename(&h, "/mirror/obj123", "https://x.test/dl/linked.zip");
+        assert_eq!(name, "real.zip");
+    }
+
+    /// Without a disposition, a redirect target that names a file wins over the link.
+    #[test]
+    fn pick_uses_final_path_when_it_names_a_file() {
+        let h = headers(None);
+        let name = pick_filename(&h, "/files/game-1.2.chd", "https://x.test/latest.chd");
+        assert_eq!(name, "game-1.2.chd");
+    }
+
+    /// An extension-less redirect target (a CDN token path) loses to the link URL.
+    #[test]
+    fn pick_falls_back_to_the_link_url() {
+        let h = headers(None);
+        let name = pick_filename(&h, "/obj/ab12f3", "https://x.test/roms/game.sfc?sig=1");
+        assert_eq!(name, "game.sfc");
+    }
+
+    /// URL names are percent-decoded and never empty.
+    #[test]
+    fn filename_from_url_decodes_and_falls_back() {
+        assert_eq!(
+            filename_from_url("https://x.test/a%20b.zip"),
+            "a b.zip".to_string()
+        );
+        assert_eq!(filename_from_url("https://x.test/"), "download".to_string());
+        assert_eq!(filename_from_url("not a url"), "download".to_string());
+    }
+
+    /// Path separators and control characters never reach the file system.
+    #[test]
+    fn sanitize_strips_separators_and_controls() {
+        assert_eq!(sanitize("a/b\\c"), Some("abc".to_string()));
+        assert_eq!(sanitize("re\nport.pdf"), Some("report.pdf".to_string()));
+        assert_eq!(sanitize("  .. "), None);
+    }
+
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    /// Fresh download dir (with the trailing separator the workers expect).
+    fn temp_dir(tag: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("retsurf-worker-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        format!("{}/", dir.display())
+    }
+
+    /// Read one request's header block, returning its lines.
+    fn read_request(stream: &mut std::net::TcpStream) -> Vec<String> {
+        let mut lines = vec![];
+        let mut reader = BufReader::new(stream);
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("request line");
+            let line = line.trim_end().to_string();
+            if line.is_empty() {
+                return lines;
+            }
+            lines.push(line);
+        }
+    }
+
+    fn wait_result(shared: &Shared) -> Result<(), String> {
+        for _ in 0..1000 {
+            if let Some(result) = shared.result.lock().unwrap().take() {
+                return result;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        panic!("worker did not finish within 10s");
+    }
+
+    /// End to end: browser headers are sent, the redirect is followed, and the
+    /// server's Content-Disposition names the saved file.
+    #[test]
+    fn fetch_follows_redirect_and_honors_disposition() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let server = std::thread::spawn(move || {
+            let (mut first, _) = listener.accept().expect("accept");
+            let request = read_request(&mut first);
+            // Connection: close, or ureq reuses this socket for the redirect.
+            first
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: /real/path\r\n\
+                      Content-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("redirect");
+            let (mut second, _) = listener.accept().expect("accept redirect");
+            read_request(&mut second);
+            second
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\
+                      Content-Disposition: attachment; filename=\"server.bin\"\r\n\r\nhello",
+                )
+                .expect("response");
+            request
+        });
+
+        let dir = temp_dir("ok");
+        let sender = UserEventSender::new();
+        let shared = spawn(
+            &format!("http://127.0.0.1:{port}/linked.zip"),
+            Some("https://example.test/page".to_string()),
+            "retsurf-test-ua",
+            &dir,
+            &sender,
+        );
+
+        assert_eq!(wait_result(&shared), Ok(()));
+        let path = shared.path.lock().unwrap().take().expect("published path");
+        assert_eq!(path, format!("{dir}server.bin"));
+        assert_eq!(std::fs::read(&path).expect("saved file"), b"hello");
+        assert!(!std::path::Path::new(&format!("{path}.part")).exists());
+        let request = server.join().expect("server");
+        let has = |h: &str| request.iter().any(|l| l.eq_ignore_ascii_case(h));
+        assert!(has("user-agent: retsurf-test-ua"));
+        assert!(has("referer: https://example.test/page"));
+        std::fs::remove_dir_all(dir.trim_end_matches('/')).expect("cleanup");
+    }
+
+    /// Cancelling mid-body fails the entry and removes the partial file.
+    #[test]
+    fn cancel_mid_body_removes_the_partial() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let (hold_tx, hold_rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            read_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nfirst")
+                .expect("partial body");
+            stream.flush().expect("flush");
+            // Hold the connection until the test has set cancel, then send the
+            // rest so the worker's read returns and it sees the flag.
+            hold_rx.recv().expect("cancel signal");
+            let _ = stream.write_all(&[b'x'; 95]);
+        });
+
+        let dir = temp_dir("cancel");
+        let sender = UserEventSender::new();
+        let shared = spawn(
+            &format!("http://127.0.0.1:{port}/big.iso"),
+            None,
+            "retsurf-test-ua",
+            &dir,
+            &sender,
+        );
+
+        for _ in 0..1000 {
+            if shared.received.load(Ordering::Relaxed) > 0 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        shared.cancel.store(true, Ordering::Relaxed);
+        hold_tx.send(()).expect("unblock server");
+
+        assert_eq!(wait_result(&shared), Err("cancelled".to_string()));
+        let path = shared.path.lock().unwrap().take().expect("published path");
+        assert!(!std::path::Path::new(&path).exists());
+        assert!(!std::path::Path::new(&format!("{path}.part")).exists());
+        std::fs::remove_dir_all(dir.trim_end_matches('/')).expect("cleanup");
     }
 }

@@ -25,9 +25,9 @@ pub enum State {
 
 pub struct Download {
     pub url: String,
-    /// Final file name (the last component of `path`), shown in the menu.
+    /// Name shown in the menu; URL-derived until the response picks the real one.
     pub filename: String,
-    /// Destination path; the worker writes to `<path>.part` until done.
+    /// Destination path; empty until the response headers picked the name.
     pub path: String,
     pub received: u64,
     /// Total size from Content-Length, `0` while/if unknown.
@@ -108,7 +108,7 @@ impl Downloads {
             return;
         }
 
-        let (path, shared) = worker::spawn(
+        let shared = worker::spawn(
             &request.url,
             request.referer,
             &self.user_agent,
@@ -118,9 +118,9 @@ impl Downloads {
         self.items.insert(
             0,
             Download {
-                filename: file_name_of(&path),
+                filename: worker::filename_from_url(&request.url),
                 url: request.url,
-                path,
+                path: String::new(),
                 received: 0,
                 total: 0,
                 time: 0,
@@ -175,6 +175,10 @@ impl Downloads {
             let Some(shared) = &d.shared else { continue };
             d.received = shared.received.load(Ordering::Relaxed);
             d.total = shared.total.load(Ordering::Relaxed);
+            if let Some(path) = shared.path.lock().unwrap().take() {
+                d.filename = file_name_of(&path);
+                d.path = path;
+            }
             let result = shared.result.lock().unwrap().take();
             if let Some(result) = result {
                 d.state = match result {
