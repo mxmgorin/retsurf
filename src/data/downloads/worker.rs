@@ -1,8 +1,10 @@
 //! One background thread per file (ureq is blocking): stream to `<path>.part`,
 //! rename into place. Requests present as the browser (User-Agent, Referer) and
-//! the save name is picked from the response (Content-Disposition, redirect
-//! target). A watchdog fails stalled transfers (ureq has no idle timeout).
+//! the save name is picked from the response (Content-Disposition, `download`
+//! attribute, redirect target). A watchdog fails stalled transfers (ureq has
+//! no idle timeout).
 
+use crate::browser::DownloadRequest;
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -45,11 +47,19 @@ fn agent() -> &'static ureq::Agent {
     &AGENT
 }
 
+/// Everything one worker needs to fetch its file.
+struct Job {
+    url: String,
+    referer: Option<String>,
+    suggested_name: Option<String>,
+    user_agent: String,
+    dir: String,
+}
+
 /// Spawn the worker and its watchdog; the destination path arrives through the
 /// returned handle once known.
 pub(super) fn spawn(
-    url: &str,
-    referer: Option<String>,
+    request: &DownloadRequest,
     user_agent: &str,
     dir: &str,
     sender: &UserEventSender,
@@ -63,12 +73,16 @@ pub(super) fn spawn(
         result: Mutex::new(None),
     });
     {
-        let url = url.to_string();
-        let user_agent = user_agent.to_string();
-        let dir = dir.to_string();
+        let job = Job {
+            url: request.url.clone(),
+            referer: request.referer.clone(),
+            suggested_name: request.suggested_name.clone(),
+            user_agent: user_agent.to_string(),
+            dir: dir.to_string(),
+        };
         let shared = shared.clone();
         let sender = sender.clone();
-        std::thread::spawn(move || run(url, referer, user_agent, dir, shared, sender));
+        std::thread::spawn(move || run(job, shared, sender));
     }
     {
         let shared = shared.clone();
@@ -79,17 +93,10 @@ pub(super) fn spawn(
 }
 
 /// Worker-thread entry: fetch, then publish the result.
-fn run(
-    url: String,
-    referer: Option<String>,
-    user_agent: String,
-    dir: String,
-    shared: Arc<Shared>,
-    sender: UserEventSender,
-) {
-    let result = fetch(&url, referer.as_deref(), &user_agent, &dir, &shared, &sender);
+fn run(job: Job, shared: Arc<Shared>, sender: UserEventSender) {
+    let result = fetch(&job, &shared, &sender);
     if let Err(e) = &result {
-        log::warn!("download `{url}` failed: {e}");
+        log::warn!("download `{}` failed: {e}", job.url);
     }
     finish(&shared, result, &sender);
 }
@@ -137,18 +144,11 @@ fn watch(shared: Arc<Shared>, sender: UserEventSender) {
 
 /// Fetch the URL, pick the save name from the response, and stream to
 /// `<path>.part`; renamed into place on success, removed on failure.
-fn fetch(
-    url: &str,
-    referer: Option<&str>,
-    user_agent: &str,
-    dir: &str,
-    shared: &Shared,
-    sender: &UserEventSender,
-) -> Result<(), String> {
+fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
     use ureq::ResponseExt;
 
-    let mut request = agent().get(url).header("User-Agent", user_agent);
-    if let Some(referer) = referer {
+    let mut request = agent().get(&job.url).header("User-Agent", &job.user_agent);
+    if let Some(referer) = &job.referer {
         request = request.header("Referer", referer);
     }
     let response = request.call().map_err(|e| e.to_string())?;
@@ -156,9 +156,14 @@ fn fetch(
         shared.total.store(total, Ordering::Relaxed);
     }
 
-    let name = pick_filename(response.headers(), response.get_uri().path(), url);
-    let (path, part, file) = create_unique(dir, &name)?;
-    log::info!("downloading `{url}` -> `{path}`");
+    let name = pick_filename(
+        response.headers(),
+        response.get_uri().path(),
+        job.suggested_name.as_deref(),
+        &job.url,
+    );
+    let (path, part, file) = create_unique(&job.dir, &name)?;
+    log::info!("downloading `{}` -> `{path}`", job.url);
     *shared.path.lock().unwrap() = Some(path.clone());
     sender.send(UserEvent::DownloadUpdate);
 
@@ -177,13 +182,21 @@ fn fetch(
     result
 }
 
-/// Save-name precedence: Content-Disposition, a file-naming redirect target,
-/// the link URL.
-fn pick_filename(headers: &ureq::http::HeaderMap, final_path: &str, url: &str) -> String {
+/// Save-name precedence (per the HTML spec): Content-Disposition, the page's
+/// `download` attribute, a file-naming redirect target, the link URL.
+fn pick_filename(
+    headers: &ureq::http::HeaderMap,
+    final_path: &str,
+    suggested: Option<&str>,
+    url: &str,
+) -> String {
     let disposition = headers
         .get("Content-Disposition")
         .map(|v| String::from_utf8_lossy(v.as_bytes()).into_owned());
     if let Some(name) = disposition.as_deref().and_then(filename_from_disposition) {
+        return name;
+    }
+    if let Some(name) = suggested.and_then(sanitize) {
         return name;
     }
     if let Some(name) = filename_from_path(final_path) {
@@ -362,19 +375,37 @@ mod tests {
         );
     }
 
-    /// Content-Disposition beats both URLs.
+    /// Content-Disposition beats the download attribute and both URLs.
     #[test]
     fn pick_prefers_disposition() {
         let h = headers(Some(r#"attachment; filename="real.zip""#));
-        let name = pick_filename(&h, "/mirror/obj123", "https://x.test/dl/linked.zip");
+        let name = pick_filename(
+            &h,
+            "/mirror/obj123",
+            Some("asked.zip"),
+            "https://x.test/a.zip",
+        );
         assert_eq!(name, "real.zip");
     }
 
-    /// Without a disposition, a redirect target that names a file wins over the link.
+    /// Without a disposition, the page's download attribute names the file.
+    #[test]
+    fn pick_uses_the_suggested_name() {
+        let h = headers(None);
+        let name = pick_filename(
+            &h,
+            "/files/real.chd",
+            Some("asked.chd"),
+            "https://x.test/gen",
+        );
+        assert_eq!(name, "asked.chd");
+    }
+
+    /// Without either, a redirect target that names a file wins over the link.
     #[test]
     fn pick_uses_final_path_when_it_names_a_file() {
         let h = headers(None);
-        let name = pick_filename(&h, "/files/game-1.2.chd", "https://x.test/latest.chd");
+        let name = pick_filename(&h, "/files/game-1.2.chd", None, "https://x.test/latest.chd");
         assert_eq!(name, "game-1.2.chd");
     }
 
@@ -382,7 +413,12 @@ mod tests {
     #[test]
     fn pick_falls_back_to_the_link_url() {
         let h = headers(None);
-        let name = pick_filename(&h, "/obj/ab12f3", "https://x.test/roms/game.sfc?sig=1");
+        let name = pick_filename(
+            &h,
+            "/obj/ab12f3",
+            None,
+            "https://x.test/roms/game.sfc?sig=1",
+        );
         assert_eq!(name, "game.sfc");
     }
 
@@ -469,13 +505,12 @@ mod tests {
 
         let dir = temp_dir("ok");
         let sender = UserEventSender::new();
-        let shared = spawn(
-            &format!("http://127.0.0.1:{port}/linked.zip"),
-            Some("https://example.test/page".to_string()),
-            "retsurf-test-ua",
-            &dir,
-            &sender,
-        );
+        let request = DownloadRequest {
+            url: format!("http://127.0.0.1:{port}/linked.zip"),
+            referer: Some("https://example.test/page".to_string()),
+            suggested_name: None,
+        };
+        let shared = spawn(&request, "retsurf-test-ua", &dir, &sender);
 
         assert_eq!(wait_result(&shared), Ok(()));
         let path = shared.path.lock().unwrap().take().expect("published path");
@@ -510,13 +545,12 @@ mod tests {
 
         let dir = temp_dir("cancel");
         let sender = UserEventSender::new();
-        let shared = spawn(
-            &format!("http://127.0.0.1:{port}/big.iso"),
-            None,
-            "retsurf-test-ua",
-            &dir,
-            &sender,
-        );
+        let request = DownloadRequest {
+            url: format!("http://127.0.0.1:{port}/big.iso"),
+            referer: None,
+            suggested_name: None,
+        };
+        let shared = spawn(&request, "retsurf-test-ua", &dir, &sender);
 
         for _ in 0..1000 {
             if shared.received.load(Ordering::Relaxed) > 0 {

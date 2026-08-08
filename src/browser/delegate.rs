@@ -54,16 +54,6 @@ impl servo::WebViewDelegate for AppBrowserInner {
         if let Some(i) = self.tab_index(webview.id()) {
             self.tabs.borrow_mut()[i].state.load_status = status;
         }
-        // Arm the JS download capture (see [`super::blob_download`]) once the
-        // document is there. A click is what triggers it, so landing after the
-        // page's own scripts is early enough.
-        if status == servo::LoadStatus::Complete {
-            webview.evaluate_javascript(super::blob_download::capture_js(), |result| {
-                if let Err(e) = result {
-                    log::warn!("blob download capture not installed: {e:?}");
-                }
-            });
-        }
     }
 
     /// Servo can't download: navigating to a file URL would just fail to render.
@@ -82,7 +72,11 @@ impl servo::WebViewDelegate for AppBrowserInner {
             .and_then(|i| referer_for(&self.tabs.borrow()[i].state.location));
         self.download_requests
             .borrow_mut()
-            .push(super::DownloadRequest { url, referer });
+            .push(super::DownloadRequest {
+                url,
+                referer,
+                suggested_name: None,
+            });
         // Wake the main loop so the download starts right away even when idle.
         self.event_sender.send(UserEvent::DownloadUpdate);
     }
@@ -216,7 +210,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
 }
 
 /// The linking page as a Referer: http(s) only, fragment and credentials stripped.
-fn referer_for(location: &str) -> Option<String> {
+pub(super) fn referer_for(location: &str) -> Option<String> {
     let mut url = Url::parse(location).ok()?;
     if url.scheme() != "http" && url.scheme() != "https" {
         return None;
