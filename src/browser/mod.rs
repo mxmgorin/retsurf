@@ -99,11 +99,14 @@ struct Tab {
     images_loaded: Cell<usize>,
 }
 
-/// A denied download navigation for [`crate::data::downloads`] to fetch.
+/// A denied download navigation or an `a[download]` link, for
+/// [`crate::data::downloads`] to fetch.
 pub struct DownloadRequest {
     pub url: String,
     /// Linking page, sent as Referer.
     pub referer: Option<String>,
+    /// Name the page's `download` attribute asked for (already sanitized).
+    pub suggested_name: Option<String>,
 }
 
 /// A read-only snapshot of a tab for the menu's Tabs section.
@@ -159,6 +162,9 @@ struct AppBrowserInner {
     /// Controls Servo retracted before they were answered, drained alongside
     /// `embedder_controls` so the overlay drops them.
     dismissed_controls: RefCell<Vec<servo::EmbedderControlId>>,
+    /// Injects the download-capture shim (see [`blob_download`]) into every
+    /// document before its own scripts run; attached to each webview at build.
+    user_content: Rc<servo::UserContentManager>,
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
@@ -178,6 +184,14 @@ impl AppBrowserInner {
         content_filter: ContentFilter,
         default_zoom: f32,
     ) -> Self {
+        // The download-capture shim must wrap URL.createObjectURL before any
+        // page script runs, so it's a user script (per document, iframes
+        // included), not an evaluate_javascript after load.
+        let user_content = Rc::new(servo::UserContentManager::new(&servo));
+        user_content.add_script(Rc::new(servo::UserScript::new(
+            blob_download::capture_js().to_string(),
+            None,
+        )));
         Self {
             tabs: RefCell::new(vec![]),
             active: Cell::new(0),
@@ -199,6 +213,7 @@ impl AppBrowserInner {
             ime_control: Cell::new(None),
             embedder_controls: RefCell::new(vec![]),
             dismissed_controls: RefCell::new(vec![]),
+            user_content,
             default_zoom,
             mem_report: Arc::new(Mutex::new(None)),
         }
@@ -298,20 +313,33 @@ impl AppBrowser {
         std::mem::take(&mut self.inner.download_requests.borrow_mut())
     }
 
-    /// Read back files captured by the injected script (see [`blob_download`]).
-    /// One signalled page yields one file per call; the read is asynchronous, so
-    /// the result lands in `blob_downloads` for [`AppBrowser::take_blob_downloads`].
+    /// Read back entries captured by the injected script (see [`blob_download`]).
+    /// One signalled page yields one entry per call; the read is asynchronous, so
+    /// files land in `blob_downloads` and links in `download_requests`.
     pub fn poll_blob_downloads(&self) {
         let pings: Vec<WebView> = self.inner.blob_pings.borrow_mut().drain(..).collect();
         for webview in pings {
             let inner = self.inner.clone();
+            // Snapshot the linking page now; the callback runs frames later.
+            let referer = self
+                .inner
+                .tab_index(webview.id())
+                .and_then(|i| delegate::referer_for(&self.inner.tabs.borrow()[i].state.location));
             webview.evaluate_javascript(blob_download::TAKE_JS, move |result| {
                 match result {
-                    Ok(servo::JSValue::String(taken)) => {
-                        if let Some(item) = blob_download::parse_taken(&taken) {
+                    Ok(servo::JSValue::String(taken)) => match blob_download::parse_taken(&taken) {
+                        Some(blob_download::Captured::File(item)) => {
                             inner.blob_downloads.borrow_mut().push(item);
                         }
-                    }
+                        Some(blob_download::Captured::Link { url, name }) => {
+                            inner.download_requests.borrow_mut().push(DownloadRequest {
+                                url,
+                                referer,
+                                suggested_name: name,
+                            });
+                        }
+                        None => {}
+                    },
                     Ok(other) => log::warn!("blob download returned unexpected value: {other:?}"),
                     Err(e) => log::warn!("blob download read failed: {e:?}"),
                 }
@@ -487,6 +515,7 @@ impl AppBrowser {
                 // logical viewport and renders crisply rather than tiny.
                 .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
                 .delegate(self.inner.clone())
+                .user_content_manager(self.inner.user_content.clone())
                 .build();
         if self.inner.default_zoom != 1.0 {
             webview.set_page_zoom(self.inner.default_zoom);

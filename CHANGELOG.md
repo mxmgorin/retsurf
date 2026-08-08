@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Links with the `download` attribute now download: plain http(s) links fetch in
+  the background under the attribute's name (Servo ignores the attribute and
+  navigated instead), and `data:` links (canvas "save as PNG" exports) are saved.
+- The download capture now runs as a Servo user script in every document before
+  the page's own code, so files built by scripts that run at page load — or by
+  clicks before the page finished loading, or inside same-origin iframes — are
+  caught; it used to be injected only after the full page load.
 - Downloads honor the name the server picks (`Content-Disposition`, or the file a
   mirror redirect lands on) instead of always naming the file after the link URL.
 - A download whose connection goes silent now fails with "stalled" after 60 s

@@ -108,17 +108,13 @@ impl Downloads {
             return;
         }
 
-        let shared = worker::spawn(
-            &request.url,
-            request.referer,
-            &self.user_agent,
-            &self.dir,
-            sender,
-        );
+        let shared = worker::spawn(&request, &self.user_agent, &self.dir, sender);
         self.items.insert(
             0,
             Download {
-                filename: worker::filename_from_url(&request.url),
+                filename: request
+                    .suggested_name
+                    .unwrap_or_else(|| worker::filename_from_url(&request.url)),
                 url: request.url,
                 path: String::new(),
                 received: 0,

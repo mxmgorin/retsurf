@@ -1,13 +1,13 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Blob download paths</title>
+<title>JS download trigger paths</title>
 <!--
   How a "download" button actually reaches the engine. Sites fetch the bytes with
-  JS, wrap them in a Blob, and hand the object URL to one of the paths below.
-  Servo has no `download` attribute support (htmlanchorelement.rs: "TODO: Download
-  the link is `download` attribute is set"), so an anchor click navigates instead,
-  and whether that navigation can still resolve the blob is what this page tells
-  apart. Beacons go to tests/serve.py, so a headless run is readable.
+  JS and hand them over via a blob URL, a data: URL, or a plain link with the
+  `download` attribute (which Servo ignores: htmlanchorelement.rs "TODO: Download
+  the link if `download` attribute is set"). Each button below exercises one path
+  the injected capture shim (src/browser/blob_download.js) must intercept.
+  Beacons go to tests/serve.py, so a headless run is readable.
 -->
 <style>
   body { font: 15px sans-serif; margin: 1.5rem; }
@@ -15,10 +15,15 @@
   #log { font: 13px monospace; white-space: pre; margin-top: 1rem; }
 </style>
 
-<h1>Blob download paths</h1>
-<button id="keep">1. anchor + download, keep the URL alive</button>
-<button id="revoke">2. anchor + download, revoke right after click</button>
+<h1>JS download trigger paths</h1>
+<button id="keep">1. blob anchor + download, keep the URL alive</button>
+<button id="revoke">2. blob anchor + download, revoke right after click</button>
 <button id="open">3. window.open(blobUrl)</button>
+<button id="early">4. blob created at page load (before shim arms at Complete)</button>
+<button id="http">5. http anchor + download attribute (no listed extension)</button>
+<button id="data">6. data: anchor + download attribute</button>
+<button id="data-plain">7. data: anchor, octet-stream, no attribute</button>
+<button id="data-open">8. window.open(data:)</button>
 <div id="log">ready</div>
 
 <script>
@@ -28,16 +33,22 @@
     fetch("/report?tag=blob&" + line.replace(/ /g, "&")).catch(() => {});
   };
 
-  // A tiny PNG-ish payload; the bytes don't matter, only how the URL is consumed.
+  // A tiny payload; the bytes don't matter, only how the URL is consumed.
   function blobUrl() {
     return URL.createObjectURL(new Blob([new Uint8Array([1, 2, 3, 4])],
       { type: "application/octet-stream" }));
   }
 
-  function clickAnchor(url, revoke) {
+  // Created while the document parses: the shim must already be tracking
+  // createObjectURL for case 4 to work.
+  const earlyUrl = blobUrl();
+
+  const DATA_URL = "data:application/octet-stream;base64,AQIDBA==";
+
+  function clickAnchor(url, revoke, name) {
     const a = document.createElement("a");
     a.href = url;
-    a.download = "test-file.bin";
+    if (name !== null) a.setAttribute("download", name);
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -48,18 +59,43 @@
   document.getElementById("keep").onclick = () => {
     const url = blobUrl();
     say("case=keep url=" + url.slice(0, 48));
-    clickAnchor(url, false);
+    clickAnchor(url, false, "test-file.bin");
   };
 
   document.getElementById("revoke").onclick = () => {
     const url = blobUrl();
     say("case=revoke url=" + url.slice(0, 48));
-    clickAnchor(url, true);
+    clickAnchor(url, true, "test-file.bin");
   };
 
   document.getElementById("open").onclick = () => {
     const url = blobUrl();
     say("case=open url=" + url.slice(0, 48));
     window.open(url);
+  };
+
+  document.getElementById("early").onclick = () => {
+    say("case=early url=" + earlyUrl.slice(0, 48));
+    clickAnchor(earlyUrl, false, "early-file.bin");
+  };
+
+  document.getElementById("http").onclick = () => {
+    say("case=http");
+    clickAnchor("/ua.html", false, "from-attr.html");
+  };
+
+  document.getElementById("data").onclick = () => {
+    say("case=data");
+    clickAnchor(DATA_URL, false, "data-file.bin");
+  };
+
+  document.getElementById("data-plain").onclick = () => {
+    say("case=data-plain");
+    clickAnchor(DATA_URL, false, null);
+  };
+
+  document.getElementById("data-open").onclick = () => {
+    say("case=data-open");
+    window.open(DATA_URL);
   };
 </script>
