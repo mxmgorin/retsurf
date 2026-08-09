@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-09
+
 ### Added
 
+- Page theme (`[browser] page_theme`, also on the settings Browser tab): `dark`
+  tells pages to prefer a dark color scheme, so sites that ship one serve it;
+  `forced-dark` inverts every page for sites that don't. `light` stays the
+  default. Changing it reloads the open tabs.
 - Web Audio output: retsurf now registers its own servo-media backend and plays the
   audio graph through SDL2, so oscillators, gain, filters, panners, analysers and
   JS-filled `AudioBuffer`s make sound. Toggle in settings or `[audio] enabled`.
@@ -53,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Request` navigation flags, HTTP/2 upload fixes and further layout and GC
   hazard fixes. Unreleased upstream is not curated, so expect rough edges;
   `docs/SERVO_WORKFLOW.md` describes how to fall back to the release line.
+- Bumped `base64` to 0.23 (the version Servo itself uses) and `egui-sdl2` to 0.8,
+  which brings egui 0.35.
 
 ## [0.3.1] - 2026-07-28
 
@@ -140,7 +148,8 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mxmgorin/retsurf/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mxmgorin/retsurf/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mxmgorin/retsurf/compare/v0.1.0...v0.2.0
