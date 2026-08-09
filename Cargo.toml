@@ -81,14 +81,14 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 adblock = "0.13"
 content-security-policy = "0.8"
 keyboard-types = "0.8.1"
-egui-sdl2 = { version = "0.4.0", default-features = false, features = ["glow-backend"] }
+egui-sdl2 = { version = "0.8.1", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
 # version already in the tree (pulled in via servo), so it adds no new resolve.
 png = "0.18"
 # Decoding files a page hands us as base64 over `evaluate_javascript`
 # (src/browser/blob_download.rs). Already in the tree via servo.
-base64 = "0.22"
+base64 = "0.23"
 
 # In-app self-update (PortMaster only; see src/update). serde_json/sha2/semver are already
 # in the tree via servo; serde_json also parses blob-capture payloads

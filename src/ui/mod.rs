@@ -1066,7 +1066,7 @@ impl AppUi {
                 let frame = egui::Frame::default().inner_margin(0.0);
                 egui::CentralPanel::default()
                     .frame(frame)
-                    .show_inside(&mut root, |ui| {
+                    .show(&mut root, |ui| {
                         let rect = ui.max_rect();
                         self.webview_rect = rect;
                         // Panel mode: toolbar thickness is whatever the full content

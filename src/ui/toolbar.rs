@@ -326,7 +326,7 @@ pub(super) fn add_toolbar(
     };
     panel
         .frame(frame)
-        .show_inside(ui, |ui| {
+        .show(ui, |ui| {
             toolbar_contents(
                 ui,
                 state,
