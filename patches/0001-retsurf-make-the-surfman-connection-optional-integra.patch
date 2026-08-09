@@ -1,4 +1,4 @@
-From 6b4fba083115f55972185ea9b0fe24a7073b2bd4 Mon Sep 17 00:00:00 2001
+From ef1ddf10defbdeabcfecf8f53b999f0d673db102 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:18 +0300
 Subject: [PATCH 1/2] retsurf: make the surfman connection optional
@@ -9,10 +9,10 @@ Subject: [PATCH 1/2] retsurf: make the surfman connection optional
  1 file changed, 19 insertions(+), 13 deletions(-)
 
 diff --git a/components/paint/paint.rs b/components/paint/paint.rs
-index 284bb8ce469..a097868d20f 100644
+index df7311ca1a0..f5efa7857c3 100644
 --- a/components/paint/paint.rs
 +++ b/components/paint/paint.rs
-@@ -239,19 +239,25 @@ impl Paint {
+@@ -238,19 +238,25 @@ impl Paint {
          }
  
          let painter = Painter::new(rendering_context.clone(), self);

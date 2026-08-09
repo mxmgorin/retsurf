@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use sdl2::sys;
 use servo_media::audio::block::Chunk;
-use servo_media::audio::node::ChannelInterpretation;
+use servo_media::audio::audio_node::ChannelInterpretation;
 use servo_media::audio::render_thread::{AudioRenderThreadMsg, SinkEosCallback};
 use servo_media::audio::sink::{AudioSink, AudioSinkError};
 use servo_media::streams::MediaSocket;

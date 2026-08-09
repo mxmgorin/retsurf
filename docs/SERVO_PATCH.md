@@ -3,7 +3,7 @@
 retsurf carries two small changes to Servo. They live as commits on the
 `retsurf-main` branch of our fork (`mxmgorin/servo`), which `[patch.crates-io]` in
 `Cargo.toml` pins by `rev` — so the engine retsurf builds is Servo's unreleased
-`main` plus exactly these two fixes. (`retsurf-0.4`, off the `release/v0.4` line
+`main` plus exactly these two fixes. (`retsurf-0.5`, off the `release/v0.5` line
 the published crates come from, is kept as the fallback.) Each pinned rev is
 tagged in the fork (`retsurf-main-1`, ...), and `patches/` in this repo mirrors the
 diff as plain files (8 KB) so the change is readable without fetching the fork.

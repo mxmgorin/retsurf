@@ -1,4 +1,4 @@
-From 628c23a67f953d1f208a0ab5ec9b3de6f44cf793 Mon Sep 17 00:00:00 2001
+From 042fa6f5c9b970851af5a834561852e02b7ddca9 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:19 +0300
 Subject: [PATCH 2/2] retsurf: advance the containing-block walk past boxless
@@ -9,7 +9,7 @@ Subject: [PATCH 2/2] retsurf: advance the containing-block walk past boxless
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/components/layout/query.rs b/components/layout/query.rs
-index cdc6a987251..600aa26d3e2 100644
+index 925ba1117a6..58664a4f018 100644
 --- a/components/layout/query.rs
 +++ b/components/layout/query.rs
 @@ -809,6 +809,13 @@ fn containing_block_for_node<'a>(node: ServoLayoutNode<'a>) -> Option<ServoLayou

@@ -47,9 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The engine is now built from unreleased Servo (`main`) rather than the published
-  0.4 crates, picking up its layout, font-shaping and HTTP-cache fixes along with
-  several crash fixes. Unreleased upstream is not curated, so expect rough edges;
+- The engine is now built from unreleased Servo (`main`, past the 0.5 release)
+  rather than the published 0.4 crates, picking up its layout, font-shaping and
+  HTTP-cache fixes along with several crash fixes — plus, since 0.5, fetch
+  `Request` navigation flags, HTTP/2 upload fixes and further layout and GC
+  hazard fixes. Unreleased upstream is not curated, so expect rough edges;
   `docs/SERVO_WORKFLOW.md` describes how to fall back to the release line.
 
 ## [0.3.1] - 2026-07-28

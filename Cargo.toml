@@ -46,16 +46,16 @@ log = "0.4.28"
 env_logger = "0.11.8"
 # bundled_freetype: a Servo default lost to default-features = false. Without it
 # freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
-servo = { version = "0.4", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
+servo = { version = "0.5", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = "0.4"
+servo-base = "0.5"
 # WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
 # device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
 # types. Must resolve to the fork like `servo` does, or the backend registers into a
 # second copy of these crates.
-servo-media = "0.4"
-servo-media-dummy = "0.4"
+servo-media = "0.5"
+servo-media-dummy = "0.5"
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -113,7 +113,7 @@ android_logger = "0.15"
 # `retsurf-main` is rebased onto upstream, so each rev needs its `retsurf-main-<n>`
 # tag to stay reachable.
 [patch.crates-io]
-servo = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "628c23a67f953d1f208a0ab5ec9b3de6f44cf793" }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
