@@ -1,0 +1,43 @@
+<meta charset="utf-8">
+<title>prefers-color-scheme probe</title>
+<style>
+  /* Light is the default so a browser that reports nothing still renders. */
+  body { background: #ffffff; color: #111111; font: 20px sans-serif; margin: 0; padding: 1.5rem; }
+  #verdict::after { content: "LIGHT"; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #101014; color: #e8e6e3; }
+    #verdict::after { content: "DARK"; }
+  }
+  #log { font: 15px monospace; white-space: pre; }
+</style>
+<h1>prefers-color-scheme</h1>
+<p>CSS media query says: <b id="verdict"></b></p>
+<p>change events: <b id="changes">0</b></p>
+<div id="log"></div>
+<script>
+  // Three independent signals, sampled on a timer so one screenshot shows the
+  // whole history: what the CSS matched (::after content), what script sees
+  // (matchMedia), and the computed background the restyle actually produced.
+  // A climbing tick with `changes` back at 0 means the page reloaded.
+  const query = matchMedia("(prefers-color-scheme: dark)");
+  const log = document.getElementById("log");
+  let changes = 0;
+  let tick = 0;
+  let last = "";
+  query.addEventListener("change", () => {
+    changes++;
+    document.getElementById("changes").textContent = changes;
+  });
+  setInterval(() => {
+    tick++;
+    const css = getComputedStyle(document.getElementById("verdict"), "::after").content;
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const line = `js=${query.matches ? "DARK" : "LIGHT"} css=${css} bg=${bg} changes=${changes}`;
+    // Heartbeat every 5s as well as on change, so a reload is visible as the
+    // tick counter restarting rather than continuing to climb.
+    if (line !== last || tick % 20 === 0) {
+      last = line;
+      log.textContent += `t${String(tick).padStart(3, "0")} ${line}\n`;
+    }
+  }, 250);
+</script>

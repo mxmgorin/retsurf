@@ -27,7 +27,7 @@ mod update;
 
 pub use adblock::AdblockConfig;
 pub use audio::AudioConfig;
-pub use browser::BrowserConfig;
+pub use browser::{BrowserConfig, PageTheme};
 pub use data_saving::DataSavingConfig;
 pub use debug::DebugConfig;
 pub use display::{DisplayConfig, ToolbarPosition};

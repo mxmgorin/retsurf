@@ -5,7 +5,7 @@
 
 use crate::{
     browser::memory,
-    config::{BrowserConfig, ExperimentalConfig, PerformanceConfig},
+    config::{BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig},
 };
 
 /// Servo options: with `persist_site_data` on, point `config_dir` at the
@@ -81,6 +81,15 @@ pub(super) fn build_preferences(
         prefs.js_mem_max,
     );
     prefs
+}
+
+/// The engine theme a `[browser] page_theme` maps to. Servo turns it into the
+/// `prefers-color-scheme` value the page's media queries see.
+pub(super) fn theme(page_theme: PageTheme) -> servo::Theme {
+    match page_theme {
+        PageTheme::Light => servo::Theme::Light,
+        PageTheme::Dark => servo::Theme::Dark,
+    }
 }
 
 /// The UA string Servo browses with; retsurf's own download fetches send the

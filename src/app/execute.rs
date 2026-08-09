@@ -299,6 +299,8 @@ impl App {
         // Experimental features apply live too — effective on the next page load.
         self.browser
             .set_experimental_prefs(&self.config.experimental);
+        // The page theme needs no reload at all: open tabs restyle in place.
+        self.browser.set_page_theme(self.config.browser.page_theme);
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

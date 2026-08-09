@@ -1,3 +1,4 @@
+use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -19,6 +20,11 @@ pub struct BrowserConfig {
     /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
     /// `zoom_out` step from here, `zoom_reset` returns.
     pub page_zoom: f32,
+    /// Which color scheme pages are told to prefer (`prefers-color-scheme`).
+    /// Only sites that ship their own dark theme react; the rest stay light.
+    /// Changing it reloads the open tabs — Servo doesn't restyle a loaded
+    /// document on a theme change (see [`crate::browser::AppBrowser::set_page_theme`]).
+    pub page_theme: PageTheme,
 }
 
 impl Default for BrowserConfig {
@@ -30,6 +36,21 @@ impl Default for BrowserConfig {
             user_agent: String::new(),
             persist_site_data: true,
             page_zoom: 1.0,
+            page_theme: PageTheme::Light,
         }
+    }
+}
+
+token_enum! {
+    /// The color scheme reported to pages via the `prefers-color-scheme` media
+    /// query. Serializes to `"light"` / `"dark"`; an unknown value falls back to
+    /// `Light`. There is no `System` variant: neither SDL2 nor the handheld
+    /// targets expose a system theme to follow.
+    pub enum PageTheme {
+        default Light;
+        /// What every browser reports by default (the default).
+        Light => "light", "Light",
+        /// Sites with a dark stylesheet serve it; sites without one are unchanged.
+        Dark => "dark", "Dark",
     }
 }

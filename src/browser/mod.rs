@@ -21,7 +21,7 @@ pub use url::try_into_url;
 
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{AppConfig, BrowserConfig, ExperimentalConfig},
+    config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
     event::user::{UserEvent, UserEventSender},
     overlay::hints::Hint,
 };
@@ -168,6 +168,10 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
+    /// `[browser] page_theme`: the `prefers-color-scheme` value pages see.
+    /// Behind a `Cell` so a settings save can retheme the open tabs and still
+    /// be inherited by tabs opened later (see [`AppBrowser::set_page_theme`]).
+    page_theme: Cell<PageTheme>,
     /// Latest memory report from Servo (see [`AppBrowser::request_memory_report`]).
     /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
     /// main loop. Drained by [`AppBrowser::take_memory_report`].
@@ -182,8 +186,16 @@ impl AppBrowserInner {
         download_exts: Vec<String>,
         adblock: Adblock,
         content_filter: ContentFilter,
-        default_zoom: f32,
+        browser: &BrowserConfig,
     ) -> Self {
+        // Sanitize the configured zoom: Servo clamps it to [0.1, 10.0] anyway,
+        // and a zero/negative/NaN default would make every tab unusable.
+        let zoom = browser.page_zoom;
+        let default_zoom = if zoom.is_finite() && zoom > 0.0 {
+            zoom.clamp(0.1, 10.0)
+        } else {
+            1.0
+        };
         // The download-capture shim must wrap URL.createObjectURL before any
         // page script runs, so it's a user script (per document, iframes
         // included), not an evaluate_javascript after load.
@@ -215,6 +227,7 @@ impl AppBrowserInner {
             dismissed_controls: RefCell::new(vec![]),
             user_content,
             default_zoom,
+            page_theme: Cell::new(browser.page_theme),
             mem_report: Arc::new(Mutex::new(None)),
         }
     }
@@ -250,14 +263,6 @@ impl AppBrowser {
             .event_loop_waker(event_sender.clone_box())
             .build();
         engine::set_experimental_prefs(&servo, &config.experimental);
-        // Sanitize the config value: Servo clamps zoom to [0.1, 10.0] anyway,
-        // and a zero/negative/NaN default would make every tab unusable.
-        let zoom = config.browser.page_zoom;
-        let default_zoom = if zoom.is_finite() && zoom > 0.0 {
-            zoom.clamp(0.1, 10.0)
-        } else {
-            1.0
-        };
         let inner = AppBrowserInner::new(
             servo,
             rendering_ctx,
@@ -265,7 +270,7 @@ impl AppBrowser {
             config.downloads.extensions.clone(),
             Adblock::new(&config.adblock),
             ContentFilter::from_config(&config.data_saving),
-            default_zoom,
+            &config.browser,
         );
 
         Ok(Self {
@@ -397,6 +402,24 @@ impl AppBrowser {
         engine::set_experimental_prefs(&self.inner.servo, exp);
     }
 
+    /// Retheme every open tab and inherit the choice into later ones.
+    ///
+    /// Measured on Servo 0.4: notifying an already-loaded page flips what
+    /// `matchMedia("(prefers-color-scheme: …)")` reports and fires its `change`
+    /// event, but the document is not restyled — CSS `@media` blocks keep
+    /// matching the old scheme until the next load. So the tabs are reloaded
+    /// too. Guarded on an actual change, or every settings save would throw
+    /// away the open pages' scroll position and form state.
+    pub fn set_page_theme(&self, theme: PageTheme) {
+        if self.inner.page_theme.replace(theme) == theme {
+            return;
+        }
+        for tab in self.inner.tabs.borrow().iter() {
+            tab.webview.notify_theme_change(engine::theme(theme));
+            tab.webview.reload();
+        }
+    }
+
     /// Ask the active page for its visible clickable elements (hint mode). The
     /// JS runs asynchronously; the resulting rects land in `hint_rects` (drained
     /// via [`AppBrowser::take_hint_rects`]) and a wake-up event is sent. An
@@ -520,6 +543,7 @@ impl AppBrowser {
         if self.inner.default_zoom != 1.0 {
             webview.set_page_zoom(self.inner.default_zoom);
         }
+        webview.notify_theme_change(engine::theme(self.inner.page_theme.get()));
         Some(webview)
     }
 
