@@ -1,0 +1,21 @@
+<meta charset="utf-8">
+<title>forced dark probe</title>
+<style>
+  /* Deliberately no prefers-color-scheme block: this is a site with no dark
+     theme of its own, the case forced dark exists for. */
+  body { color: #222; font: 18px sans-serif; margin: 0; padding: 1.5rem; }
+  .card { background: #f2f2f2; border: 1px solid #ccc; padding: 1rem; margin: 1rem 0; }
+  a { color: #0645ad; }
+  .swatches span { display: inline-block; width: 90px; height: 40px; margin-right: 6px; }
+  .red { background: #cc0000; } .green { background: #00aa44; } .blue { background: #0044cc; }
+  /* Not re-invertible: a background-image stays negative under forced dark. */
+  .bgimg { height: 60px; background-image: url("swatch.svg"); background-repeat: repeat-x; }
+</style>
+<h1>Forced dark probe</h1>
+<p>Body text on the page background, plus <a href="#">a link</a>.</p>
+<div class="card">A card that sets its own light background.</div>
+<p class="swatches"><span class="red"></span><span class="green"></span><span class="blue"></span></p>
+<p>Image below must keep its real colors (it is inverted back):</p>
+<p><img src="swatch.svg" width="270" height="40" alt="red green blue swatch"></p>
+<p>CSS background-image below stays negative — the known limitation:</p>
+<div class="bgimg"></div>

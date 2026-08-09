@@ -39,10 +39,11 @@ Handheld Linux distros lack a usable browser: lightweight options can't render m
 - **Tabs, bookmarks, history, downloads** — in one full-screen menu. Files download in the background with progress, cancel, and a ⬇ toolbar chip.
 - **Real page zoom** — reflows the layout (not a magnifier) along Firefox's 50–300% ladder, per tab, so the whole web fits a small screen.
 - **Reader mode** — strips a page to its article with Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so logged-in and dynamic pages work too.
+- **Dark web pages** — asks sites for their dark theme (`prefers-color-scheme`), or forces one by inverting the pages that ship none. Off by default, see [`page_theme`](docs/CONFIGURATION.md#configuration-configtoml).
 - **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy), compiled and cached locally so warm starts are instant and work offline.
 - **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), controller-navigable like every other overlay.
 - **In-app updates** — checks GitHub, shows release notes inline, and installs in place on PortMaster handhelds and Linux desktops (elsewhere it opens the release page). Stable, beta, and dev channels.
-- **Web Audio** — retsurf's own servo-media backend renders the audio graph and plays it through SDL2, so oscillators, gain, filters, panners and scripted buffers make sound. `decodeAudioData()` decodes mp3, wav, flac, ogg/vorbis and aac/m4a and resamples to the context rate. `<audio>`/`<video>` elements are not supported (no demuxing player).
+- **Web Audio** — custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and decodeAudioData() for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate. <audio>/<video> are not supported (no demuxing media player).
 - **Modern rendering** — Servo's WebRender on OpenGL ES 3.x: a single GL context and zero CPU readback, Servo drawing straight into the on-screen framebuffer.
 
 ## Building & running

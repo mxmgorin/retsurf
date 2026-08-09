@@ -20,10 +20,9 @@ pub struct BrowserConfig {
     /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
     /// `zoom_out` step from here, `zoom_reset` returns.
     pub page_zoom: f32,
-    /// Which color scheme pages are told to prefer (`prefers-color-scheme`).
-    /// Only sites that ship their own dark theme react; the rest stay light.
-    /// Changing it reloads the open tabs — Servo doesn't restyle a loaded
-    /// document on a theme change (see [`crate::browser::AppBrowser::set_page_theme`]).
+    /// Page color scheme: `dark` only reaches sites that ship a dark theme,
+    /// `forced-dark` inverts every page. Changing it reloads the open tabs (see
+    /// [`crate::browser::AppBrowser::set_page_theme`]).
     pub page_theme: PageTheme,
 }
 
@@ -42,15 +41,27 @@ impl Default for BrowserConfig {
 }
 
 token_enum! {
-    /// The color scheme reported to pages via the `prefers-color-scheme` media
-    /// query. Serializes to `"light"` / `"dark"`; an unknown value falls back to
-    /// `Light`. There is no `System` variant: neither SDL2 nor the handheld
-    /// targets expose a system theme to follow.
+    /// How page content is themed. No `System` variant: neither SDL2 nor the
+    /// handheld targets expose a system theme to follow.
     pub enum PageTheme {
         default Light;
-        /// What every browser reports by default (the default).
         Light => "light", "Light",
         /// Sites with a dark stylesheet serve it; sites without one are unchanged.
         Dark => "dark", "Dark",
+        /// Invert every page (see [`crate::browser::forced_dark`]).
+        ForcedDark => "forced-dark", "Forced dark",
+    }
+}
+
+impl PageTheme {
+    /// The scheme pages are told to prefer. `ForcedDark` asks for light on
+    /// purpose: the filter inverts what it is given, so an already-dark page
+    /// would come out light.
+    pub fn prefers_dark(self) -> bool {
+        matches!(self, PageTheme::Dark)
+    }
+
+    pub fn is_forced_dark(self) -> bool {
+        matches!(self, PageTheme::ForcedDark)
     }
 }

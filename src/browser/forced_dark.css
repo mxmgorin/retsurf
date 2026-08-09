@@ -1,0 +1,28 @@
+/* Forced dark: invert the page, then invert media back. User-origin sheet, so
+   `!important` here outranks the page's own. Pages are told they are light, so
+   what gets inverted is always the light rendering. */
+
+html {
+  /* hue-rotate puts hues back after the inversion: blues stay blue. */
+  filter: invert(1) hue-rotate(180deg) !important;
+  /* The root's background is propagated to the canvas and painted outside the
+     filter, so this is the final color, not one to be inverted. Black is what
+     the page's own white areas invert to, so the two meet without a seam. */
+  background-color: #000000 !important;
+}
+
+/* Re-invert content whose colors are the content; this restores the element's
+   whole subtree, so text over a photo comes back with it. Saturated colors
+   don't survive the round trip exactly (#cc0000 came back as #893232): the
+   root pass clamps what it pushes out of gamut, and no child filter undoes
+   that. Reordering the inverse changes nothing — measured. */
+img,
+video,
+canvas,
+svg,
+iframe,
+embed,
+object,
+[style*="background-image"] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}

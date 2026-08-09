@@ -9,6 +9,7 @@ pub mod content_filter;
 
 mod delegate;
 mod engine;
+mod forced_dark;
 mod home;
 pub mod memory;
 mod reader;
@@ -168,10 +169,12 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
-    /// `[browser] page_theme`: the `prefers-color-scheme` value pages see.
-    /// Behind a `Cell` so a settings save can retheme the open tabs and still
-    /// be inherited by tabs opened later (see [`AppBrowser::set_page_theme`]).
+    /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
+    /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
+    /// The forced-dark sheet, attached to `user_content` while the theme asks
+    /// for it. Kept so it can be detached again.
+    forced_dark: Rc<servo::user_contents::UserStyleSheet>,
     /// Latest memory report from Servo (see [`AppBrowser::request_memory_report`]).
     /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
     /// main loop. Drained by [`AppBrowser::take_memory_report`].
@@ -204,6 +207,10 @@ impl AppBrowserInner {
             blob_download::capture_js().to_string(),
             None,
         )));
+        let forced_dark = forced_dark::stylesheet();
+        if browser.page_theme.is_forced_dark() {
+            user_content.add_stylesheet(forced_dark.clone());
+        }
         Self {
             tabs: RefCell::new(vec![]),
             active: Cell::new(0),
@@ -228,7 +235,18 @@ impl AppBrowserInner {
             user_content,
             default_zoom,
             page_theme: Cell::new(browser.page_theme),
+            forced_dark,
             mem_report: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Attach or detach the forced-dark sheet. Only ever called on a real theme
+    /// change: `add_stylesheet` pushes, so attaching twice would double it.
+    fn sync_forced_dark(&self, theme: PageTheme) {
+        if theme.is_forced_dark() {
+            self.user_content.add_stylesheet(self.forced_dark.clone());
+        } else {
+            self.user_content.remove_stylesheet(self.forced_dark.clone());
         }
     }
 
@@ -404,16 +422,15 @@ impl AppBrowser {
 
     /// Retheme every open tab and inherit the choice into later ones.
     ///
-    /// Measured on Servo 0.4: notifying an already-loaded page flips what
-    /// `matchMedia("(prefers-color-scheme: …)")` reports and fires its `change`
-    /// event, but the document is not restyled — CSS `@media` blocks keep
-    /// matching the old scheme until the next load. So the tabs are reloaded
-    /// too. Guarded on an actual change, or every settings save would throw
-    /// away the open pages' scroll position and form state.
+    /// Reloads them: measured on Servo 0.4, notifying a loaded page flips
+    /// `matchMedia` but does not restyle it, and user stylesheets need a load
+    /// either way. Guarded on an actual change so an unrelated settings save
+    /// can't discard scroll and form state.
     pub fn set_page_theme(&self, theme: PageTheme) {
         if self.inner.page_theme.replace(theme) == theme {
             return;
         }
+        self.inner.sync_forced_dark(theme);
         for tab in self.inner.tabs.borrow().iter() {
             tab.webview.notify_theme_change(engine::theme(theme));
             tab.webview.reload();
