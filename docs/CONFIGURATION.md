@@ -32,10 +32,15 @@ persist_site_data = true
 # layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.
 page_zoom = 1.0
-# Color scheme pages are told to prefer ("light" or "dark"), i.e. what the
-# prefers-color-scheme media query reports. Only sites that ship a dark theme
-# react to "dark"; ones without stay light. Changing it reloads the open tabs,
-# which is what makes their CSS pick it up. The app's own chrome is dark either way.
+# How page content is themed; the app's own chrome is dark either way. Changing
+# it reloads the open tabs, which is what makes the change take effect.
+#   "light"       what every browser reports by default
+#   "dark"        report prefers-color-scheme: dark — only sites that ship a
+#                 dark theme react, the rest stay light
+#   "forced-dark" invert every page, so sites without a dark theme get one too.
+#                 Costs a full-page filter pass per frame (measure before using
+#                 it on a handheld); photos are inverted back, CSS background
+#                 images are not.
 page_theme = "light"
 
 [experimental]

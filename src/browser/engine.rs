@@ -83,12 +83,12 @@ pub(super) fn build_preferences(
     prefs
 }
 
-/// The engine theme a `[browser] page_theme` maps to. Servo turns it into the
-/// `prefers-color-scheme` value the page's media queries see.
+/// The `prefers-color-scheme` value a `[browser] page_theme` reports to pages.
 pub(super) fn theme(page_theme: PageTheme) -> servo::Theme {
-    match page_theme {
-        PageTheme::Light => servo::Theme::Light,
-        PageTheme::Dark => servo::Theme::Dark,
+    if page_theme.prefers_dark() {
+        servo::Theme::Dark
+    } else {
+        servo::Theme::Light
     }
 }
 
