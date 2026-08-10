@@ -4,12 +4,17 @@
 //! A edit, B save & close — all of it without an analog stick.
 
 use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, DIM, ROW_FONT};
+use super::theme::{ACCENT, DIM, ROW_FONT, WARN};
 use crate::app::{AppCommand, SettingsAction};
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{CtrlRow, Settings, SettingsSection};
+use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_sdl2::egui;
+use inputbind::editor::{Bound, Row};
+use inputbind::Action as _;
+
+/// The reset rows, in the order the Controls list counts them.
+const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboard defaults"];
 
 /// Row height, tighter than the menu's so the long field lists fit.
 const ROW_H: f32 = 30.0;
@@ -318,11 +323,46 @@ fn add_about(
     });
 }
 
-/// Render the dynamic Controls section: per action, a header then a selectable
-/// row for each existing binding (gamepad / keyboard) and an "add" row, plus the
-/// two reset rows. A on a binding removes it, A on "add" starts capture (press a
-/// button or key), A on a reset restores defaults. State lives in
-/// [`crate::overlay::settings::Settings`].
+/// Focus and act in one click, keeping the focused row scrolled into view.
+fn control_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    index: usize,
+    selected: usize,
+    label: String,
+    value: String,
+    commands: &mut Vec<AppCommand>,
+) {
+    let focused = index == selected;
+    let resp = setting_row(ui, width, focused, label, value);
+    if focused {
+        resp.scroll_to_me(Some(egui::Align::Center));
+    }
+    if resp.clicked() {
+        commands.push(AppCommand::Settings(SettingsAction::Select(index)));
+        commands.push(AppCommand::Settings(SettingsAction::Activate));
+    }
+}
+
+fn gesture_summary(gestures: &[Bound]) -> String {
+    if gestures.is_empty() {
+        return "unbound".to_string();
+    }
+    gestures
+        .iter()
+        .map(|b| {
+            if b.suppressed {
+                format!("{} (off)", b.text)
+            } else {
+                b.text.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+/// A line per action, and for the open one a row per gesture plus its Add row.
+/// State lives in [`crate::overlay::settings::Settings`].
 fn add_controls(
     ui: &mut egui::Ui,
     settings: &Settings,
@@ -336,42 +376,53 @@ fn add_controls(
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, row) in rows.iter().enumerate() {
-            // A header is a label; every other row goes through one click path.
+            // A group is a label; every other row goes through one click path.
             let (label, value) = match row {
-                CtrlRow::Header(name) => {
+                Row::Group(name) => {
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new(*name).color(ACCENT).strong().size(13.0));
                     continue;
                 }
-                CtrlRow::Binding {
-                    gesture, keyboard, ..
+                Row::Command {
+                    action,
+                    gestures,
+                    open,
                 } => {
-                    let device = if *keyboard { "Keyboard" } else { "Gamepad" };
-                    (format!("    {device}"), gesture.clone())
+                    // The glyphs the section hint uses, so egui's fonts have them.
+                    let marker = if *open { "⏷" } else { "⏵" };
+                    (
+                        format!("{marker} {}", action.display()),
+                        gesture_summary(gestures),
+                    )
                 }
-                CtrlRow::Add(action) => {
-                    let listening = capturing == Some(*action);
-                    let value = if listening {
+                Row::Gesture { text, source } => {
+                    (format!("      {}", source.label()), text.clone())
+                }
+                Row::Suppressed { text, surface } => {
+                    (format!("      {surface}"), format!("{text} (off)"))
+                }
+                Row::Add(action) => {
+                    let value = if capturing == Some(*action) {
                         "press a button or key..."
                     } else {
                         ""
                     };
-                    ("    + Add binding".to_string(), value.to_string())
+                    ("      + Add".to_string(), value.to_string())
                 }
-                CtrlRow::GamepadReset => ("Restore gamepad defaults".to_string(), String::new()),
-                CtrlRow::KeyboardReset => ("Restore keyboard defaults".to_string(), String::new()),
             };
-
-            let selected = i == sel;
-            let resp = setting_row(ui, full_w, selected, label, value);
-            if selected {
-                resp.scroll_to_me(Some(egui::Align::Center));
-            }
-            // Clicking focuses the row and activates it (add / remove / reset).
-            if resp.clicked() {
-                commands.push(AppCommand::Settings(SettingsAction::Select(i)));
-                commands.push(AppCommand::Settings(SettingsAction::Activate));
-            }
+            control_row(ui, full_w, i, sel, label, value, commands);
+        }
+        for (offset, label) in RESETS.iter().enumerate() {
+            let index = rows.len() + offset;
+            control_row(
+                ui,
+                full_w,
+                index,
+                sel,
+                (*label).to_string(),
+                String::new(),
+                commands,
+            );
         }
     });
 }
@@ -404,11 +455,14 @@ pub(super) fn add_settings(
         } else if settings.is_info_section() {
             "L1/R1 section   ⏶⏷ move   A select   B close"
         } else if settings.is_controls_section() {
-            "L1/R1 section   ⏶⏷ move   A add / remove   B save & close"
+            "L1/R1 section   ⏶⏷ move   A open / bind / remove   B save & close"
         } else {
             "L1/R1 section   ⏶⏷ move   ⏴⏵ adjust   A edit   B save & close      * needs restart"
         };
         ui.label(egui::RichText::new(hint).color(dim));
+        if let Some(note) = settings.controls_note() {
+            ui.label(egui::RichText::new(note).color(WARN));
+        }
         ui.add_space(8.0);
 
         // The About tab is read-only info, not a FIELDS list.

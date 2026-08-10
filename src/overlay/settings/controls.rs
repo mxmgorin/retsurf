@@ -1,188 +1,183 @@
-//! The Controls section of the settings overlay: a dynamic action list over the
-//! bindings draft (not a static [`super::Field`] table). Each [`Action`] shows
-//! its gamepad + keyboard bindings with add (capture) / remove rows; activating
-//! "add" starts listening for a gesture, which [`Settings::apply_capture`] binds.
-//! See [`super`] for the rest of the overlay state.
+//! The Controls section: [`inputbind::editor::Controls`] over the bindings draft,
+//! plus the two rows restoring a table's defaults, which the editor leaves to the
+//! host. An edit that would leave the pad unable to operate the app is refused
+//! with a note — see [`bindings::REQUIRED`].
 
 use super::Settings;
-use crate::event::bindings::{self, Action};
+use crate::event::bindings::{self, Action, REQUIRED};
+use inputbind::editor::{validate, Refusal, Row, Source};
+use inputbind::Action as _;
 
-/// One rendered row of the dynamic Controls list (built on demand from the
-/// bindings draft by [`Settings::controls_rows`]; not a static [`super::Field`] row).
-#[derive(Clone)]
-pub enum CtrlRow {
-    /// Action group header (not selectable) — the action's display name.
-    Header(&'static str),
-    /// An existing binding for an action; activating it removes the binding.
-    Binding {
-        gesture: String,
-        keyboard: bool,
-    },
-    /// The "add a binding" row for an action; activating it starts capture.
-    Add(Action),
-    /// Restore the gamepad / keyboard default bindings.
-    GamepadReset,
-    KeyboardReset,
-}
-
-impl CtrlRow {
-    /// Header rows are labels only — every other row can be focused / activated.
-    fn selectable(&self) -> bool {
-        !matches!(self, CtrlRow::Header(_))
-    }
-}
+/// Restore the gamepad / keyboard defaults.
+pub const RESET_ROWS: usize = 2;
 
 impl Settings {
-    /// Whether the overlay is listening for a binding right now — the event loop
-    /// routes raw input to [`Self::apply_capture`] / [`Self::cancel_capture`]
-    /// while this holds.
+    /// While this holds, the event loop routes raw input to [`Self::apply_capture`].
     pub fn capturing(&self) -> bool {
-        self.capturing.is_some()
+        self.controls.capturing().is_some()
     }
 
-    /// The action currently being bound (for the renderer's "listening" hint).
+    /// The action being bound, for the renderer's "listening" hint.
     pub fn capturing_action(&self) -> Option<Action> {
-        self.capturing
+        self.controls.capturing()
     }
 
-    /// A header, the existing bindings (gamepad then keyboard) and an "add" row
-    /// per [`Action::ALL`] entry except `None`, then the two resets. Rebuilt on
-    /// demand — `selected` indexes into the result.
-    pub fn controls_rows(&self) -> Vec<CtrlRow> {
-        let mut rows = Vec::new();
-        for &action in Action::ALL.iter().filter(|&&a| a != Action::None) {
-            rows.push(CtrlRow::Header(action.display()));
-            let name = action.name();
-            for gesture in self.bound_gestures(&self.bindings_draft.gamepad, name) {
-                rows.push(CtrlRow::Binding {
-                    gesture,
-                    keyboard: false,
-                });
-            }
-            for gesture in self.bound_gestures(&self.bindings_draft.keyboard, name) {
-                rows.push(CtrlRow::Binding {
-                    gesture,
-                    keyboard: true,
-                });
-            }
-            rows.push(CtrlRow::Add(action));
-        }
-        rows.push(CtrlRow::GamepadReset);
-        rows.push(CtrlRow::KeyboardReset);
-        rows
+    /// The editor's rows. The reset rows follow at `rows().len()..`.
+    pub fn controls_rows(&self) -> &[Row<Action>] {
+        self.controls.rows()
     }
 
-    /// The gestures in `table` bound to action `name`, in key order.
-    fn bound_gestures(
-        &self,
-        table: &std::collections::BTreeMap<String, String>,
-        name: &str,
-    ) -> Vec<String> {
-        table
-            .iter()
-            .filter(|(_, a)| a.as_str() == name)
-            .map(|(g, _)| g.clone())
-            .collect()
+    /// Why the last edit was refused, shown under the section hint.
+    pub fn controls_note(&self) -> Option<&str> {
+        self.controls_note.as_deref()
     }
 
-    /// Indices of the selectable (non-header) rows in `rows`, in order.
-    pub(super) fn ctrl_selectable(rows: &[CtrlRow]) -> Vec<usize> {
-        rows.iter()
-            .enumerate()
-            .filter(|(_, r)| r.selectable())
-            .map(|(i, _)| i)
-            .collect()
+    /// The focused row, spanning the editor's own and the resets after them.
+    pub(super) fn controls_cursor(&self) -> usize {
+        self.controls.cursor()
     }
 
-    /// The first selectable Controls row (the header is row 0).
-    pub(super) fn first_controls_selectable(&self) -> usize {
-        Self::ctrl_selectable(&self.controls_rows())
-            .first()
-            .copied()
-            .unwrap_or(0)
+    pub(super) fn controls_move(&mut self, dy: i32) {
+        self.controls.move_cursor(dy);
     }
 
-    /// Keep `selected` on a valid selectable row after the list changes (a binding
-    /// added or removed, or a reset) — nearest selectable at or before it.
-    fn clamp_controls_selection(&mut self) {
-        let rows = self.controls_rows();
-        let sel = Self::ctrl_selectable(&rows);
-        if sel.contains(&self.selected) {
-            return;
-        }
-        self.selected = sel
-            .iter()
-            .rev()
-            .find(|&&i| i <= self.selected)
-            .or_else(|| sel.first())
-            .copied()
-            .unwrap_or(0);
+    pub(super) fn controls_set_cursor(&mut self, i: usize) {
+        self.controls.set_cursor(i);
     }
 
-    /// Focus an action's "add" row (after a capture, so repeated adds are easy).
+    pub(super) fn focus_first_control(&mut self) {
+        self.controls.focus_first();
+    }
+
+    /// After every edit, never per frame.
+    fn rebuild_controls(&mut self) {
+        self.controls.rebuild(&self.bindings_draft);
+    }
+
+    pub(super) fn show_controls(&mut self) {
+        self.controls.show(&self.bindings_draft);
+        self.controls_note = None;
+    }
+
+    /// Focus an action's Add row, so repeated adds need no cursor work.
     fn focus_add(&mut self, action: Action) {
         if let Some(i) = self
-            .controls_rows()
+            .controls
+            .rows()
             .iter()
-            .position(|r| matches!(r, CtrlRow::Add(a) if *a == action))
+            .position(|r| matches!(r, Row::Add(a) if *a == action))
         {
-            self.selected = i;
+            self.controls.set_cursor(i);
         }
     }
 
-    /// A / Enter / click on the focused Controls row: start capture on an "add"
-    /// row, remove a binding row, or restore defaults on a reset row.
+    /// A / Enter / click: open a command, unbind a gesture, capture, or restore.
     pub fn controls_activate(&mut self) {
-        let rows = self.controls_rows();
-        match rows.get(self.selected) {
-            Some(CtrlRow::Add(action)) => self.capturing = Some(*action),
-            Some(CtrlRow::Binding {
-                gesture, keyboard, ..
-            }) => {
-                let (gesture, keyboard) = (gesture.clone(), *keyboard);
-                if keyboard {
-                    self.bindings_draft.keyboard.remove(&gesture);
-                } else {
-                    self.bindings_draft.gamepad.remove(&gesture);
-                }
-                self.clamp_controls_selection();
+        self.controls_note = None;
+        if let Some(reset) = self.controls.trailing_cursor() {
+            match reset {
+                0 => self.bindings_draft.gamepad = bindings::default_store().gamepad,
+                1 => self.bindings_draft.keyboard = bindings::default_store().keyboard,
+                _ => return,
             }
-            Some(CtrlRow::GamepadReset) => {
-                self.bindings_draft.gamepad = bindings::default_gamepad_bindings();
-                self.clamp_controls_selection();
-            }
-            Some(CtrlRow::KeyboardReset) => {
-                self.bindings_draft.keyboard = bindings::default_keyboard_bindings();
-                self.clamp_controls_selection();
-            }
-            Some(CtrlRow::Header(_)) | None => {}
+            self.rebuild_controls();
+            return;
         }
-    }
-
-    /// Bind the captured `gesture` to the listening action and stop listening. The
-    /// gesture replaces any other action on that exact gesture (a gesture maps to
-    /// one action); a keyboard binding for the gamepad-only `Scroll` is dropped.
-    pub fn apply_capture(&mut self, gesture: String, keyboard: bool) {
-        let Some(action) = self.capturing.take() else {
+        let Some(row) = self.controls.selected() else {
             return;
         };
-        if keyboard {
-            if action == Action::Scroll {
-                return;
+        match row {
+            Row::Command { action, .. } => {
+                let action = *action;
+                self.controls.toggle_command(action, &self.bindings_draft);
             }
-            self.bindings_draft
-                .keyboard
-                .insert(gesture, action.name().to_string());
-        } else {
-            self.bindings_draft
-                .gamepad
-                .insert(gesture, action.name().to_string());
+            Row::Add(action) => self.controls.start_capture(*action),
+            Row::Gesture { text, source } => {
+                let (text, source) = (text.clone(), *source);
+                self.unbind(&text, source);
+            }
+            // A `none` override: dropping it lets the base binding through again.
+            Row::Suppressed { text, surface } => {
+                let (text, surface) = (text.clone(), *surface);
+                if let Some(table) = self.bindings_draft.surface.get_mut(surface) {
+                    table.remove(&text);
+                }
+                self.rebuild_controls();
+            }
+            Row::Group(_) => {}
         }
+    }
+
+    /// Drop a gesture, unless the pad would lose something it cannot work without.
+    fn unbind(&mut self, text: &str, source: Source) {
+        match source {
+            Source::Gamepad => {
+                if let Err(refusal) =
+                    validate::<Action>(&self.bindings_draft.gamepad, text, None, REQUIRED)
+                {
+                    self.controls_note = Some(explain(refusal));
+                    return;
+                }
+                self.bindings_draft.gamepad.remove(text);
+            }
+            Source::Keyboard => _ = self.bindings_draft.keyboard.remove(text),
+            Source::Surface(name) => {
+                if let Some(table) = self.bindings_draft.surface.get_mut(name) {
+                    table.remove(text);
+                }
+            }
+        }
+        self.rebuild_controls();
+    }
+
+    /// Replaces whatever else held that gesture: a gesture names one action.
+    pub fn apply_capture(&mut self, gesture: String, keyboard: bool) {
+        let Some(action) = self.controls.capturing() else {
+            return;
+        };
+        self.controls.stop_capture();
+        self.controls_note = None;
+        if let Some(refused) = self.refuse(&gesture, action, keyboard) {
+            self.controls_note = Some(refused);
+            return;
+        }
+        let table = if keyboard {
+            &mut self.bindings_draft.keyboard
+        } else {
+            &mut self.bindings_draft.gamepad
+        };
+        table.insert(gesture, action.name().to_string());
+        self.rebuild_controls();
         self.focus_add(action);
+    }
+
+    /// Why this binding cannot be made, if it cannot.
+    fn refuse(&self, gesture: &str, action: Action, keyboard: bool) -> Option<String> {
+        if keyboard {
+            // `scroll` latches inside the pad, so a key bound to it would do nothing.
+            return (action == Action::Scroll)
+                .then(|| format!("{} is gamepad-only", action.display()));
+        }
+        validate(
+            &self.bindings_draft.gamepad,
+            gesture,
+            Some(action),
+            REQUIRED,
+        )
+        .err()
+        .map(explain)
     }
 
     /// Stop listening without changing anything (Esc / timeout).
     pub fn cancel_capture(&mut self) {
-        self.capturing = None;
+        self.controls.stop_capture();
+    }
+}
+
+/// Only the host knows the table belongs to the gamepad.
+fn explain(refusal: Refusal) -> String {
+    match refusal {
+        Refusal::PressEdge(pad) => format!("{} must stay a tap", pad.name().to_uppercase()),
+        Refusal::Requirement(label) => format!("{label} needs a gesture on the gamepad"),
     }
 }

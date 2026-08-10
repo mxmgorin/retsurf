@@ -3337,6 +3337,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "inputbind"
+version = "0.1.0"
+source = "git+https://github.com/mxmgorin/inputbind?rev=523a8055575e01adee345bc16f8ed42c20014781#523a8055575e01adee345bc16f8ed42c20014781"
+dependencies = [
+ "log",
+ "sdl2",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "interpolate_name"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5079,6 +5090,7 @@ dependencies = [
  "gleam",
  "glow",
  "http 1.4.2",
+ "inputbind",
  "keyboard-types",
  "log",
  "percent-encoding",

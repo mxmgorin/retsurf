@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Input moved onto the [inputbind](https://github.com/mxmgorin/inputbind) crate:
+  the gesture machine, `bindings.toml`, gesture capture and the rebinding screen
+  now live there instead of in retsurf.
+  - The D-pad, L2/R2 and the stick clicks are bindable gestures (`up`, `l2`,
+    `l3`, ...) on top of what they already do — the D-pad still drives the aim
+    vector, L2/R2 still act as the on-screen keyboard's Shift/Enter. Nothing is
+    bound to them by default.
+  - **Chords are now ordered**: `select+start` means "hold Select, then press
+    Start". The stock layout binds both orders of its two chords, so squeezing
+    either way still works, but a hand-written `l1+r1` no longer fires as
+    `r1+l1`. Only the leading button's tap is deferred, so the other keeps its
+    press edge.
+  - The Controls screen is a line per action, opened to show and edit what is
+    bound to it, instead of one long flat list. It refuses an edit that would
+    leave the gamepad unable to confirm, cancel, or reach settings, and refuses
+    a hold or chord on a button whose tap has to fire on the press edge — both
+    with a reason, rather than dropping the binding silently at load.
+  - Key names come from SDL itself, so any key it can name is bindable
+    (`ctrl+f5`, `pagedown`), and a bare modifier can be bound on its own.
+  - An empty `[gamepad]` or `[keyboard]` table in a hand-edited `bindings.toml`
+    now means "nothing bound" rather than silently falling back to the defaults.
+    A missing file still gets the defaults written to it.
+
+### Fixed
+
+- A page click held while the bindings were saved, or while binding capture
+  opened, could leave the mouse button stuck down on the page: the press was
+  sent and its release never was. The gesture machine now closes what it owes.
+- Editing a gamepad tunable in settings (dead zone, trigger threshold, hold
+  time) no longer discards a gesture in progress — the machines are retuned in
+  place rather than rebuilt.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added
@@ -57,8 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than the published 0.4 crates, picking up its layout, font-shaping and
   HTTP-cache fixes along with several crash fixes — plus, since 0.5, fetch
   `Request` navigation flags, HTTP/2 upload fixes and further layout and GC
-  hazard fixes. Unreleased upstream is not curated, so expect rough edges;
-  `docs/SERVO_WORKFLOW.md` describes how to fall back to the release line.
+  hazard fixes. Unreleased upstream is not curated, so expect rough edges; the
+  released line is kept as a fallback.
 - Bumped `base64` to 0.23 (the version Servo itself uses) and `egui-sdl2` to 0.8,
   which brings egui 0.35.
 

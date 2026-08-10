@@ -16,9 +16,10 @@ pub struct InputConfig {
     pub trigger_threshold: f32,
     /// Stick deflection above which it counts as a directional OSK press.
     pub osk_nav_threshold: f32,
-    /// Delay before the first auto-repeat of stick-driven OSK navigation, in ms.
+    /// Delay before the first auto-repeat of navigation, in ms. Applies to
+    /// stick-driven OSK navigation and to a held `nav_*` gesture.
     pub osk_nav_initial_delay_ms: u64,
-    /// Interval between auto-repeats of stick-driven OSK navigation, in ms.
+    /// Interval between navigation auto-repeats, in ms — same two uses.
     pub osk_nav_repeat_ms: u64,
     /// Holding a bound button this long fires its `hold:` gesture. The
     /// bindings themselves live in `bindings.toml` — see

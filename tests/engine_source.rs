@@ -3,7 +3,7 @@
 //! When a version requirement stops matching the fork's workspace version — a
 //! Servo minor bump, typically — cargo does not fail. It warns `patch ... was not
 //! used in the crate graph`, exits 0, and links the unpatched crates.io release,
-//! silently dropping the fixes in `patches/`. See docs/SERVO_WORKFLOW.md.
+//! silently dropping the fixes in `patches/`. See docs/SERVO_PATCH.md.
 
 /// Source prefix cargo records in `Cargo.lock` for crates taken from the fork.
 const FORK_SOURCE: &str = "git+https://github.com/mxmgorin/servo";

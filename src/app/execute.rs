@@ -183,13 +183,13 @@ impl App {
             // just opens, seeding the draft from the live config.
             SettingsAction::Open => {
                 if self.ui.settings.visible() {
-                    self.settings_close();
+                    self.settings_close(out);
                     self.shutdown();
                 } else {
                     self.ui.settings_open(&self.config);
                 }
             }
-            SettingsAction::Close => self.settings_close(),
+            SettingsAction::Close => self.settings_close(out),
             SettingsAction::SetSection(section) => self.ui.settings.set_section(*section),
             SettingsAction::Select(index) => self.ui.settings.set_selected(*index),
             SettingsAction::Activate => self.settings_confirm(out),
@@ -197,7 +197,7 @@ impl App {
             // A link on the About tab: save & close like a normal exit, then load
             // it in the focused tab (open_url also tidies the menu, harmless here).
             SettingsAction::OpenLink(url) => {
-                self.settings_close();
+                self.settings_close(out);
                 self.open_url(url.clone());
             }
             // Binding capture (Controls section): the gesture the user performed
@@ -221,7 +221,7 @@ impl App {
             }
             SettingsAction::InstallUpdate => self.ui.update_install(&self.event_sender),
             SettingsAction::QuitForUpdate => {
-                self.settings_close();
+                self.settings_close(out);
                 self.shutdown();
             }
         }
@@ -248,25 +248,22 @@ impl App {
 
     /// Close the settings overlay (B / close button): adopt its edited drafts
     /// — the config and the gamepad bindings, each saved and re-applied live.
-    pub(super) fn settings_close(&mut self) {
+    pub(super) fn settings_close(&mut self, out: &mut Vec<AppCommand>) {
         let (config, bindings) = self.ui.settings_close();
         self.apply_config(config);
         if let Some(store) = bindings {
-            self.apply_bindings(store);
+            self.apply_bindings(store, out);
         }
     }
 
-    /// Adopt edited gamepad bindings from the settings overlay: persist them, then
-    /// rebuild the gesture table and swap it into the running gamepad handler (no
-    /// restart). Only called when the controls changed, so keyboard bindings and
-    /// any hand-written comments in `bindings.toml` survive a config-only edit.
-    fn apply_bindings(&mut self, store: crate::event::bindings::Store) {
-        use crate::event::bindings::{Bindings, KeyBindings};
+    /// Adopt edited bindings from the settings overlay: persist them, then rebuild
+    /// both devices' tables in the running handler (no restart). Only called when
+    /// the controls changed, so a config-only edit leaves `bindings.toml` — and any
+    /// hand-written comments in it — alone.
+    fn apply_bindings(&mut self, store: inputbind::Store, out: &mut Vec<AppCommand>) {
         crate::event::bindings::save(&store);
-        self.event_handler
-            .set_bindings(Bindings::from_store(&store));
-        self.event_handler
-            .set_key_bindings(KeyBindings::from_store(&store));
+        // The pad drops what it holds, so a click still open closes here.
+        self.event_handler.set_bindings(&store, out);
     }
 
     /// Adopt an edited config from the settings overlay: persist it to disk, then
@@ -288,8 +285,7 @@ impl App {
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
         self.ui.menu.history_mut().set_config(&self.config.history);
-        self.ui
-            .set_memory_overlay(self.config.debug.memory_overlay);
+        self.ui.set_memory_overlay(self.config.debug.memory_overlay);
         self.ui.set_update_config(&self.config.update);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).

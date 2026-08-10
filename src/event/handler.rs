@@ -1,5 +1,6 @@
 use super::gamepad::Gamepad;
-use super::keyboard::{KeyEvent, Keyboard};
+use super::keyboard::KeyEvent;
+use crate::event::bindings::{self, Action};
 use crate::{
     app::{AppCommand, SettingsAction},
     browser::AppBrowser,
@@ -8,33 +9,27 @@ use crate::{
     platform::window::AppWindow,
     ui::AppUi,
 };
+use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames};
+use inputbind::{Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use std::time::{Duration, Instant};
 
-/// A bare modifier key (Ctrl/Shift/Alt/Gui on its own): during shortcut capture
-/// these are ignored so the captured combo waits for the actual key.
-fn is_modifier_key(kc: Keycode) -> bool {
-    matches!(
-        kc,
-        Keycode::LCtrl
-            | Keycode::RCtrl
-            | Keycode::LShift
-            | Keycode::RShift
-            | Keycode::LAlt
-            | Keycode::RAlt
-            | Keycode::LGui
-            | Keycode::RGui
-    )
-}
+/// Give up on an idle capture: a handheld has no Esc to cancel with.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
 
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
+    /// Gesture → action tables for both devices, from `bindings.toml`.
+    bindings: Bindings<Action>,
+    /// Derived once, so the `[keyboard]` table resolves its names at load.
+    key_names: KeyNames,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
-    /// Keyboard-side counterpart of [`Gamepad`]: shortcuts + overlay keys.
-    keyboard: Keyboard,
+    /// Takes input from both devices, so it lives here rather than in either.
+    capture: Capture,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
     touch: super::touch::TouchState,
 }
@@ -51,12 +46,16 @@ impl AppEventHandler {
             }
         }
 
+        let key_names = KeyNames::new();
+        let hold = Duration::from_millis(gamepad_cfg.hold_ms);
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
+            bindings: bindings::build(&bindings::load_store(), &key_names),
+            key_names,
             gamepad: Gamepad::new(gamepad_cfg),
-            keyboard: Keyboard::new(),
+            capture: Capture::new(hold, CAPTURE_TIMEOUT),
             touch: super::touch::TouchState::new(),
         })
     }
@@ -65,19 +64,15 @@ impl AppEventHandler {
     /// the controller state machine — used when the settings overlay changes them
     /// live (see [`crate::app::App::apply_config`]).
     pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
+        self.capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
         self.gamepad.set_config(cfg);
     }
 
-    /// Swap in a freshly built gamepad gesture table (the settings overlay
-    /// rebinding controls live; see [`crate::app::App::settings_close`]).
-    pub fn set_bindings(&mut self, bindings: crate::event::bindings::Bindings) {
-        self.gamepad.set_bindings(bindings);
-    }
-
-    /// Swap in a freshly built keyboard shortcut table (the keyboard half of
-    /// rebinding; the gamepad half is [`Self::set_bindings`]).
-    pub fn set_key_bindings(&mut self, bindings: crate::event::bindings::KeyBindings) {
-        self.keyboard.set_bindings(bindings);
+    /// Rebuild both devices' tables from an edited store. The pad forgets what it
+    /// holds, so a press begun under the old table cannot resolve against the new.
+    pub fn set_bindings(&mut self, store: &Store, commands: &mut Vec<AppCommand>) {
+        self.bindings = bindings::build(store, &self.key_names);
+        self.gamepad.reset(commands);
     }
 
     pub fn wait(
@@ -87,14 +82,19 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        // Mirror the overlay's capture state into the pad so its buttons feed the
-        // gesture resolver (instead of dispatching) while a binding is captured.
-        self.gamepad.set_capture(ui.settings.capturing());
+        // The pad drops what it holds either way, so a button held across the
+        // transition cannot resolve as both a gesture to bind and a bound action.
+        let capturing = ui.settings.capturing();
+        if capturing != self.capture.is_on() {
+            self.capture
+                .set(capturing, &self.gamepad.held(), Instant::now());
+            self.gamepad.reset(commands);
+        }
 
         // Block for the next event only when idle. When the gamepad is active or
         // the page is animating, return promptly so the main loop keeps ticking
         // (vsync caps the rate); blocking here would stall cursor/scroll motion.
-        if !browser.is_animating() && !self.gamepad.is_active() {
+        if !browser.is_animating() && !self.gamepad.is_active() && !self.capture.is_on() {
             match ui.take_repain_delay() {
                 Some(delay) => {
                     if let Some(event) =
@@ -116,9 +116,69 @@ impl AppEventHandler {
             self.handle_event(event, window, ui, browser, commands);
         }
 
+        // Capture owns the pad, so no analog state is emitted while it is open.
+        if self.capture.is_on() {
+            match self.capture.tick(Instant::now()) {
+                Tick::Got(captured) => push_capture(commands, captured),
+                Tick::GaveUp => commands.push(AppCommand::Settings(SettingsAction::CaptureCancel)),
+                Tick::Waiting => {}
+            }
+            return;
+        }
         // Emit this frame's analog state as a command for the router to apply,
-        // and fire any `hold:` gesture whose threshold just passed.
+        // and fire any hold or repeat whose deadline just passed.
         self.gamepad.tick(commands);
+    }
+
+    /// A raw event taken before egui sees it, which would eat Tab/arrows/Enter/Esc
+    /// and leave them unbindable. Returns whether capture consumed it.
+    fn on_capture_event(&mut self, event: &Event, commands: &mut Vec<AppCommand>) -> bool {
+        let now = Instant::now();
+        let captured = match event {
+            Event::KeyDown {
+                keycode: Some(kc),
+                keymod,
+                repeat: false,
+                ..
+            } => {
+                // Esc cancels rather than binds: the desktop's way out.
+                if *kc == Keycode::Escape {
+                    commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
+                    return true;
+                }
+                self.capture.on_key(
+                    &key_name(*kc),
+                    mods_for(*kc, *keymod),
+                    is_modifier(*kc),
+                    now,
+                )
+            }
+            Event::KeyUp {
+                keycode: Some(kc), ..
+            } => self.capture.on_key_release(&key_name(*kc)),
+            // Autorepeat and the text edge are swallowed, never bound.
+            Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return true,
+            Event::ControllerButtonDown { button, .. } => {
+                pad_of(*button).and_then(|pad| self.capture.on_press(pad, now))
+            }
+            Event::ControllerButtonUp { button, .. } => {
+                pad_of(*button).and_then(|pad| self.capture.on_release(pad, now))
+            }
+            // Triggers are the one bindable axis; the sticks freeze, consumed so
+            // no cursor moves under the listening screen.
+            Event::ControllerAxisMotion { axis, value, .. } => {
+                match self.gamepad.trigger_edges(*axis, *value) {
+                    (_, Some(pad)) => self.capture.on_press(pad, now),
+                    (Some(pad), None) => self.capture.on_release(pad, now),
+                    (None, None) => None,
+                }
+            }
+            _ => return false,
+        };
+        if let Some(captured) = captured {
+            push_capture(commands, captured);
+        }
+        true
     }
 
     fn handle_event(
@@ -129,35 +189,8 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        // Settings is capturing a binding: take raw key events before egui or the
-        // shortcut table sees them (egui would eat Tab/arrows/Enter/Esc, so they
-        // couldn't be bound). A non-modifier KeyDown is the captured combo; Esc
-        // cancels; bare modifiers and the key-up / text edge are swallowed so
-        // nothing leaks to the page. (The gamepad half is captured in the pad's
-        // own capture mode, synced in `wait`.)
-        if ui.settings.capturing() {
-            match event {
-                Event::KeyDown {
-                    keycode: Some(kc),
-                    keymod,
-                    repeat: false,
-                    ..
-                } => {
-                    if kc == Keycode::Escape {
-                        commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
-                    } else if is_modifier_key(kc) {
-                        return;
-                    } else if let Some(gesture) = crate::event::bindings::format_key(kc, keymod) {
-                        commands.push(AppCommand::Settings(SettingsAction::CaptureBinding {
-                            gesture,
-                            keyboard: true,
-                        }));
-                    }
-                    return;
-                }
-                Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return,
-                _ => {}
-            }
+        if self.capture.is_on() && self.on_capture_event(&event, commands) {
+            return;
         }
 
         let consumed = ui.handle_event(window, &event);
@@ -285,7 +318,7 @@ impl AppEventHandler {
                 // Remember the input came from the keyboard so hint mode picks
                 // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
                 ui.note_input_keyboard(true);
-                self.keyboard.on_key(&key, ui, browser, commands);
+                super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -301,18 +334,20 @@ impl AppEventHandler {
                     repeat,
                     pressed: false,
                 };
-                self.keyboard.on_key(&key, ui, browser, commands);
+                super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {
-                self.gamepad.on_axis(axis, value, commands);
+                self.gamepad.on_axis(axis, value, &self.bindings, commands);
             }
             Event::ControllerButtonDown { button, .. } => {
                 // A pad press reclaims hint badges as button combos (see KeyDown).
                 ui.note_input_keyboard(false);
-                self.gamepad.on_button(button, true, commands);
+                self.gamepad
+                    .on_button(button, true, &self.bindings, commands);
             }
             Event::ControllerButtonUp { button, .. } => {
-                self.gamepad.on_button(button, false, commands);
+                self.gamepad
+                    .on_button(button, false, &self.bindings, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {
@@ -328,4 +363,16 @@ impl AppEventHandler {
             _ => {}
         }
     }
+}
+
+/// `keyboard` tells the tables apart: their gesture text collides (`"a"` is both).
+fn push_capture(commands: &mut Vec<AppCommand>, captured: Captured) {
+    let (gesture, keyboard) = match captured {
+        Captured::Pad(gesture) => (gesture.to_text(), false),
+        Captured::Key(gesture) => (gesture.to_text(), true),
+    };
+    commands.push(AppCommand::Settings(SettingsAction::CaptureBinding {
+        gesture,
+        keyboard,
+    }));
 }

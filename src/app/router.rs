@@ -90,7 +90,7 @@ impl App {
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
                 // B saves the draft and closes (same as the close button).
-                Focus::Settings => self.settings_close(),
+                Focus::Settings => self.settings_close(out),
                 // B drops a half-typed combo first, then exits hint mode.
                 Focus::Hints => {
                     if self.ui.hints.has_typed() {
@@ -418,7 +418,7 @@ impl App {
                 let (x, y) = self
                     .ui
                     .hints
-            .selected_center()
+                    .selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
                 self.browser.scroll(0.0, dy, x, y);
                 self.ui.notify_page_scroll(dy);

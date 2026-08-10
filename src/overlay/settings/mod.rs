@@ -21,11 +21,13 @@ mod controls;
 mod fields;
 
 pub use about::about_info;
-pub use controls::CtrlRow;
+pub use controls::RESET_ROWS;
 pub use fields::{Field, Kind};
 
 use crate::config::AppConfig;
-use crate::event::bindings::{self, Action, Store};
+use crate::event::bindings::{self, Action, GROUPS, SURFACES};
+use inputbind::editor::Controls;
+use inputbind::Store;
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
@@ -88,9 +90,9 @@ pub struct Settings {
     draft: AppConfig,
     /// The active section (one tab of the bar).
     section: SettingsSection,
-    /// Focused row. In a config section it's a [`fields::FIELDS`] index; in the
-    /// Controls section it's an index into [`Self::controls_rows`] (the active
-    /// section decides which, since focus only moves within it).
+    /// Focused row in a config section, a [`fields::FIELDS`] index. The Controls
+    /// section keeps its own inside [`Self::controls`], which spans the reset
+    /// rows after the editor's own.
     selected: usize,
     /// The bindings being edited (the Controls section), a clone of the on-disk
     /// store taken on [`Self::open`]. Kept independent of `draft` so a config-only
@@ -100,10 +102,10 @@ pub struct Settings {
     /// — so `bindings.toml` is only rewritten when the controls actually changed
     /// (a config-only edit leaves the file, and any hand-written comments, alone).
     bindings_orig: Store,
-    /// While `Some`, the overlay is listening for a gesture (gamepad button or key
-    /// combo) to add to this action. The event loop routes raw input here instead
-    /// of dispatching it (see [`crate::event::handler`] / [`crate::event::gamepad`]).
-    capturing: Option<Action>,
+    /// The Controls section's rows and its pending capture (see [`controls`]).
+    controls: Controls<Action>,
+    /// Why the last binding edit was refused; cleared by the next one.
+    controls_note: Option<String>,
 }
 
 impl Settings {
@@ -115,7 +117,8 @@ impl Settings {
             selected: 0,
             bindings_draft: Store::default(),
             bindings_orig: Store::default(),
-            capturing: None,
+            controls: Controls::new(GROUPS, SURFACES, RESET_ROWS),
+            controls_note: None,
         }
     }
 
@@ -131,23 +134,14 @@ impl Settings {
     }
 
     /// Open the overlay, seeding both drafts from disk and focusing the first row
-    /// of the first section. Each bindings table is filled from its defaults when
-    /// empty so the Controls list shows the *effective* (running) bindings; since
-    /// the file is only rewritten when the draft actually changes, a fresh/empty
-    /// file with comments is left intact.
+    /// of the first section.
     pub fn open(&mut self, config: &AppConfig) {
         self.draft = config.clone();
         self.bindings_draft = bindings::load_store();
-        if self.bindings_draft.gamepad.is_empty() {
-            self.bindings_draft.gamepad = bindings::default_gamepad_bindings();
-        }
-        if self.bindings_draft.keyboard.is_empty() {
-            self.bindings_draft.keyboard = bindings::default_keyboard_bindings();
-        }
         self.bindings_orig = self.bindings_draft.clone();
+        self.show_controls();
         self.section = SettingsSection::Browser;
         self.selected = 0;
-        self.capturing = None;
         self.visible = true;
     }
 
@@ -155,7 +149,7 @@ impl Settings {
         self.visible = false;
         // Drop any pending capture — otherwise `capturing()` would keep the event
         // loop swallowing input after the overlay is gone.
-        self.capturing = None;
+        self.controls.close();
     }
 
     /// The edited config (cloned out by the app on close to save + apply).
@@ -178,9 +172,15 @@ impl Settings {
         (self.bindings_draft != self.bindings_orig).then(|| self.bindings_draft.clone())
     }
 
+    /// The focused row. In the Controls section the editor owns the cursor, so
+    /// there is only ever one; elsewhere it is a [`fields::FIELDS`] index.
     #[inline]
     pub fn selected(&self) -> usize {
-        self.selected
+        if self.is_controls_section() {
+            self.controls_cursor()
+        } else {
+            self.selected
+        }
     }
 
     #[inline]
@@ -220,7 +220,7 @@ impl Settings {
     /// the active section to it).
     pub fn set_selected(&mut self, i: usize) {
         if self.is_controls_section() {
-            self.selected = i;
+            self.controls_set_cursor(i);
         } else if let Some(field) = fields::FIELDS.get(i) {
             self.section = field.section;
             self.selected = i;
@@ -230,14 +230,14 @@ impl Settings {
     /// Jump straight to a section (clicking its tab), focusing its first row.
     pub fn set_section(&mut self, section: SettingsSection) {
         self.section = section;
-        self.selected = if section == SettingsSection::Controls {
-            self.first_controls_selectable()
-        } else {
-            fields::FIELDS
-                .iter()
-                .position(|f| f.section == section)
-                .unwrap_or(0)
-        };
+        if section == SettingsSection::Controls {
+            self.focus_first_control();
+            return;
+        }
+        self.selected = fields::FIELDS
+            .iter()
+            .position(|f| f.section == section)
+            .unwrap_or(0);
     }
 
     /// Switch the active section by `delta` (L1/R1; clamped, no wrap).
@@ -257,11 +257,11 @@ impl Settings {
             self.selected = (self.selected as i32 + dy).clamp(0, last.max(0)) as usize;
             return;
         }
-        let rows = if self.is_controls_section() {
-            Self::ctrl_selectable(&self.controls_rows())
-        } else {
-            self.section_indices()
-        };
+        if self.is_controls_section() {
+            self.controls_move(dy);
+            return;
+        }
+        let rows = self.section_indices();
         let Some(pos) = rows.iter().position(|&g| g == self.selected) else {
             return;
         };

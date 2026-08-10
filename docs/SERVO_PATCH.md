@@ -8,10 +8,6 @@ the published crates come from, is kept as the fallback.) Each pinned rev is
 tagged in the fork (`retsurf-main-1`, ...), and `patches/` in this repo mirrors the
 diff as plain files (8 KB) so the change is readable without fetching the fork.
 
-`docs/SERVO_WORKFLOW.md` is the procedure around them: where a fix is authored,
-how it reaches this repo, how to build against unreleased Servo, and how the
-patches are sent upstream and retired.
-
 ## 1. `components/paint`: optional surfman connection
 
 Lets Servo start on handhelds whose GL driver is EGL 1.4. The change lives in
@@ -108,7 +104,7 @@ after it, it runs at the same frame rate as `contents=0`.
 
 `[patch.crates-io]` pins retsurf to one Servo revision, and a fresh clone can no
 longer build offline — cargo needs the fork (~1.7 GB, cached once per machine).
-Each Servo bump means rebasing the fork branch and moving the pinned `rev`;
-`docs/SERVO_WORKFLOW.md` has the procedure and the exit condition for dropping a
-patch once it lands upstream. See `docs/HANDHELD_PORT.md` for the broader GLES
-port and the related dual-GL-context pitfalls.
+Each Servo bump means rebasing the fork branch and moving the pinned `rev`, and a
+patch is dropped once it lands upstream — when nothing is left to carry,
+`[patch.crates-io]` goes away entirely. See `docs/HANDHELD_PORT.md` for the
+broader GLES port and the related dual-GL-context pitfalls.

@@ -1,34 +1,28 @@
-//! Rebindable gamepad buttons, loaded from `bindings.toml` in the user data
-//! dir (a template with the defaults is written on first run, like the main
-//! config). A binding maps a *gesture* to a semantic [`Action`]:
+//! retsurf's bindable vocabulary and its `bindings.toml`, over [`inputbind`].
+//! The gesture machine, the file, capture and the editor model all live there;
+//! this supplies the three things it asks of a host — an [`Action`] set, the
+//! default [`Store`], and a key-name resolver.
 //!
 //! ```toml
 //! [gamepad]
 //! a = "confirm"             # tap
-//! "hold:start" = "bookmark" # hold the button past [gamepad] hold_ms
-//! "l1+r1" = "reload"        # chord: press one while holding the other
+//! "hold:start" = "reload"   # hold past [input] hold_ms
+//! "l1+r1" = "zoom_reset"    # chord: press R1 while holding L1
+//!
+//! [keyboard]
+//! "ctrl+r" = "reload"
 //! ```
 //!
-//! Buttons that carry a hold or chord binding can't dispatch their tap on the
-//! press edge (the gesture is still ambiguous), so their tap fires on release —
-//! see [`crate::event::gamepad`] for the state machine. `confirm` is the one
-//! action needing both edges (page clicks/drags), so hold/chord gestures on its
-//! button are rejected at load. Unknown names are logged and skipped, never
-//! silently dropped.
-//!
-//! The same file carries a `[keyboard]` table mapping shortcuts to the same
-//! actions ([`KeyBindings`]): modifier combos (`"ctrl+r"`) always fire, while
-//! plain keys (`"f"`, Vimium-style) are suppressed whenever a text input — on
-//! the page or the address bar — holds focus, so typing stays intact.
+//! Plain key gestures (no Ctrl/Alt, Vimium-style) are muted while a text input
+//! holds focus; see [`crate::event::keyboard`].
 
 use crate::app::{AppCommand, InputCommand, MenuAction, SettingsAction};
 use crate::browser::BrowserCommand;
 use crate::config;
 use crate::overlay::osk::OskCommand;
-use sdl2::controller::Button;
-use sdl2::keyboard::{Keycode, Mod};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use inputbind::editor::{Groups, Requirement};
+use inputbind::sdl::KeyNames;
+use inputbind::{Action as Bindable, Bindings, Store};
 
 /// What a gesture does — semantic actions, mapped onto the same commands the
 /// hardcoded layout used to emit (so contextual behavior is unchanged).
@@ -60,9 +54,8 @@ pub enum Action {
     Menu,
     /// Open the settings overlay (see [`crate::overlay::settings`]).
     Settings,
-    /// Quit the app immediately. Not bound by default — the stock layout exits
-    /// via a second Select+Start while settings is open (see
-    /// [`default_gamepad_bindings`]) — but available to bind directly.
+    /// Quit immediately. Unbound by default: the stock exit is a second
+    /// Select+Start while settings is open (see [`default_store`]).
     Quit,
     /// Switch to the next open tab (wraps around).
     TabNext,
@@ -81,58 +74,41 @@ pub enum Action {
     NavDown,
     NavLeft,
     NavRight,
-    /// Toggle the D-pad / left stick between moving the cursor and scrolling
-    /// the page — the scroll fallback for devices without a right analog
-    /// stick. Handled inside the gamepad (it changes how the aim vector is
-    /// read), so it never becomes a command.
+    /// Toggle the D-pad / left stick between cursor and page scroll, for devices
+    /// with no right stick. Latched inside the gamepad, never a command.
     Scroll,
-    /// Explicitly unbound.
-    None,
 }
 
-impl Action {
-    /// Every action, in Controls display order (`None` last — the list drops it).
-    pub(crate) const ALL: [Action; 25] = [
-        Action::Confirm,
-        Action::Cancel,
-        Action::Osk,
-        Action::Reload,
-        Action::Prev,
-        Action::Next,
-        Action::Hints,
-        Action::Bookmark,
-        Action::Home,
-        Action::Reader,
-        Action::Menu,
-        Action::Settings,
-        Action::Quit,
-        Action::TabNext,
-        Action::TabPrev,
-        Action::NewTab,
-        Action::ZoomIn,
-        Action::ZoomOut,
-        Action::ZoomReset,
-        Action::NavUp,
-        Action::NavDown,
-        Action::NavLeft,
-        Action::NavRight,
-        Action::Scroll,
-        Action::None,
-    ];
+/// Every action. [`GROUPS`] decides display order, so this only has to be complete.
+const ALL: [Action; 24] = [
+    Action::Confirm,
+    Action::Cancel,
+    Action::Osk,
+    Action::Reload,
+    Action::Prev,
+    Action::Next,
+    Action::Hints,
+    Action::Bookmark,
+    Action::Home,
+    Action::Reader,
+    Action::Menu,
+    Action::Settings,
+    Action::Quit,
+    Action::TabNext,
+    Action::TabPrev,
+    Action::NewTab,
+    Action::ZoomIn,
+    Action::ZoomOut,
+    Action::ZoomReset,
+    Action::NavUp,
+    Action::NavDown,
+    Action::NavLeft,
+    Action::NavRight,
+    Action::Scroll,
+];
 
-    /// Whether this is an overlay-navigation step (see [`Action::NavUp`]):
-    /// these fire only while an overlay is open (otherwise the key goes to the
-    /// page) and, unlike other shortcuts, auto-repeat while held.
-    pub fn is_nav(self) -> bool {
-        matches!(
-            self,
-            Action::NavUp | Action::NavDown | Action::NavLeft | Action::NavRight
-        )
-    }
-
-    /// The config-file name of this action; [`Action::parse`] is its inverse,
-    /// so typed code (e.g. the default bindings) never spells raw strings.
-    pub fn name(self) -> &'static str {
+impl Bindable for Action {
+    fn name(&self) -> &'static str {
         match self {
             Action::Confirm => "confirm",
             Action::Cancel => "cancel",
@@ -158,17 +134,19 @@ impl Action {
             Action::NavLeft => "nav_left",
             Action::NavRight => "nav_right",
             Action::Scroll => "scroll",
-            Action::None => "none",
         }
     }
 
-    pub(crate) fn parse(name: &str) -> Option<Action> {
-        Self::ALL.into_iter().find(|action| action.name() == name)
+    fn parse(name: &str) -> Option<Action> {
+        ALL.into_iter().find(|action| action.name() == name)
     }
 
-    /// Friendly label for the settings UI (the controls rows). `None` reads as
-    /// "(unbound)" since that's what an explicit `none` binding means.
-    pub(crate) fn display(self) -> &'static str {
+    fn all() -> &'static [Action] {
+        &ALL
+    }
+
+    /// Friendly label for the settings UI (the Controls rows).
+    fn display(&self) -> &'static str {
         match self {
             Action::Confirm => "Confirm",
             Action::Cancel => "Cancel",
@@ -194,15 +172,38 @@ impl Action {
             Action::NavLeft => "Nav left",
             Action::NavRight => "Nav right",
             Action::Scroll => "Scroll toggle",
-            Action::None => "(unbound)",
         }
     }
 
-    /// Emit this action as a one-shot gesture (keyboard shortcuts): Confirm
-    /// sends its press+release pair, everything else fires once.
+    fn repeats(&self) -> bool {
+        self.is_nav()
+    }
+
+    fn is_held(&self) -> bool {
+        *self == Action::Confirm
+    }
+
+    fn needs_press_edge(&self) -> bool {
+        self.is_held() || self.is_nav()
+    }
+}
+
+impl Action {
+    /// Whether this is an overlay-navigation step (see [`Action::NavUp`]):
+    /// these fire only while an overlay is open (otherwise the key goes to the
+    /// page) and, unlike other shortcuts, auto-repeat while held.
+    pub fn is_nav(self) -> bool {
+        matches!(
+            self,
+            Action::NavUp | Action::NavDown | Action::NavLeft | Action::NavRight
+        )
+    }
+
+    /// For the key path, which has no gesture machine to pair the edges: a held
+    /// action sends both at once.
     pub fn push_tap(self, commands: &mut Vec<AppCommand>) {
         commands.extend(self.command(true));
-        if self == Action::Confirm {
+        if self.is_held() {
             commands.extend(self.command(false));
         }
     }
@@ -238,126 +239,106 @@ impl Action {
             Action::NavLeft => AppCommand::Input(InputCommand::Nav(-1, 0)),
             Action::NavRight => AppCommand::Input(InputCommand::Nav(1, 0)),
             // Scroll is resolved inside the gamepad, not routed.
-            Action::Scroll | Action::None => return None,
+            Action::Scroll => return None,
         })
     }
 }
 
-/// Bindable physical buttons (the D-pad feeds the aim vector and L2/R2 are
-/// axes with their own contextual roles, so neither is listed).
-pub fn parse_button(name: &str) -> Option<Button> {
-    Some(match name {
-        "a" => Button::A,
-        "b" => Button::B,
-        "x" => Button::X,
-        "y" => Button::Y,
-        "l1" => Button::LeftShoulder,
-        "r1" => Button::RightShoulder,
-        "l3" => Button::LeftStick,
-        "r3" => Button::RightStick,
-        "start" => Button::Start,
-        "select" => Button::Back,
-        _ => return None,
-    })
-}
+/// The Controls screen's sections, in display order (actions sort by name
+/// within each). Every [`ALL`] entry belongs to exactly one — a test checks it.
+pub const GROUPS: Groups<Action> = &[
+    (
+        "General",
+        &[
+            Action::Confirm,
+            Action::Cancel,
+            Action::Menu,
+            Action::Settings,
+            Action::Osk,
+            Action::Quit,
+        ],
+    ),
+    (
+        "Navigation",
+        &[
+            Action::Prev,
+            Action::Next,
+            Action::Home,
+            Action::Hints,
+            Action::Scroll,
+            Action::NavUp,
+            Action::NavDown,
+            Action::NavLeft,
+            Action::NavRight,
+        ],
+    ),
+    (
+        "Page",
+        &[
+            Action::Reload,
+            Action::Reader,
+            Action::Bookmark,
+            Action::ZoomIn,
+            Action::ZoomOut,
+            Action::ZoomReset,
+        ],
+    ),
+    ("Tabs", &[Action::TabNext, Action::TabPrev, Action::NewTab]),
+];
 
-/// The `bindings.toml` name of a bindable button — the inverse of [`parse_button`],
-/// used to format a captured gamepad gesture back into a gesture string. `None`
-/// for non-bindable buttons (D-pad, which is the aim vector).
-pub(crate) fn button_name(button: Button) -> Option<&'static str> {
-    Some(match button {
-        Button::A => "a",
-        Button::B => "b",
-        Button::X => "x",
-        Button::Y => "y",
-        Button::LeftShoulder => "l1",
-        Button::RightShoulder => "r1",
-        Button::LeftStick => "l3",
-        Button::RightStick => "r3",
-        Button::Start => "start",
-        Button::Back => "select",
-        _ => return None,
-    })
-}
+/// What the pad must keep, whatever else is rebound: a handheld has no keyboard
+/// or mouse, so losing these strands the user on the screen that took them away.
+pub const REQUIRED: &[Requirement<Action>] = &[
+    ("Confirm", &[Action::Confirm]),
+    ("Cancel", &[Action::Cancel]),
+    ("Opening settings", &[Action::Settings]),
+];
 
-/// Format a two-button chord gesture (`"l1+r1"`), buttons ordered like
-/// [`normalize`] so the stored string is stable regardless of press order.
-pub(crate) fn chord_gesture(a: Button, b: Button) -> Option<String> {
-    if a == b {
-        return None;
-    }
-    let (a, b) = normalize(a, b);
-    Some(format!("{}+{}", button_name(a)?, button_name(b)?))
-}
+/// Per-surface override tables (`[surface.<name>]`). None: the router is what
+/// makes an action contextual, so a binding means the same thing everywhere.
+pub const SURFACES: &[&str] = &[];
 
-/// On-disk shape of `bindings.toml`: one table per input device. BTreeMap so
-/// the written template is sorted stably. The settings overlay clones one as a
-/// draft, edits the `gamepad` table, and hands it back on close (see
-/// [`crate::overlay::settings`]).
-#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Store {
-    #[serde(default)]
-    pub(crate) gamepad: BTreeMap<String, String>,
-    #[serde(default)]
-    pub(crate) keyboard: BTreeMap<String, String>,
-}
-
-/// The stock layout, spelled with the typed [`Action`]s (no raw strings to
-/// typo): frequent actions on taps — hints on Y — with reload and bookmark
-/// behind holds (hold:Start, hold:Y).
-pub(crate) fn default_gamepad_bindings() -> BTreeMap<String, String> {
+/// The stock layout. Chords are ordered and a two-shoulder squeeze is not, so
+/// both orders are bound — which also defers both pads, as the old chord did.
+fn default_gamepad_bindings() -> inputbind::Table {
     [
         ("a", Action::Confirm),
         ("b", Action::Cancel),
-        // Holding B jumps home; its tap (cancel/back) defers to release as a
-        // result — a small cost on a frequent button, but the only free hold
-        // slot that isn't a stickless-unfriendly stick-click.
+        // The only free hold slot that isn't a stickless-unfriendly stick click.
         ("hold:b", Action::Home),
         ("x", Action::Osk),
         ("y", Action::Hints),
         ("l1", Action::Prev),
         ("r1", Action::Next),
-        // Holds on the shoulders defer their taps to release (the gesture is
-        // ambiguous until then) — back/forward survive that fine.
+        // These defer their taps to release; back/forward survive that fine.
         ("hold:l1", Action::ZoomOut),
         ("hold:r1", Action::ZoomIn),
-        // Both shoulders together reset zoom — completes the zoom set (out/in on
-        // the holds). The chord is free: l1/r1 already defer their taps, like
-        // select+start. ZoomReset was otherwise gamepad-unreachable (ctrl+0 only).
+        // Completes the zoom set; otherwise gamepad-unreachable (ctrl+0 only).
         ("l1+r1", Action::ZoomReset),
+        ("r1+l1", Action::ZoomReset),
         ("l3", Action::Hints),
-        // R3 opens settings: a one-press route in on stick-equipped pads (the ⚙
-        // toolbar button and Ctrl+, cover the rest). Reader moves fully onto
-        // hold:X below — R3 was only ever a duplicate of it.
         ("r3", Action::Settings),
-        // Start taps toggle the D-pad/stick scroll mode — the main way stickless
-        // devices scroll; holding Start reloads. Both gestures defer to release.
+        // Scroll mode is how stickless devices scroll; both gestures defer.
         ("start", Action::Scroll),
         ("hold:start", Action::Reload),
-        // Reader lives on a hold so stickless devices (no R3) have it out of the
-        // box; the OSK tap moves to X's release as a side effect.
+        // On a hold so stickless devices (no R3) have reader out of the box.
         ("hold:x", Action::Reader),
-        // Bookmark on hold:Y — Y taps for hints, holds to bookmark the page.
         ("hold:y", Action::Bookmark),
         ("select", Action::Menu),
-        // Tap Select opens the menu; holding it opens settings (its tap defers
-        // to release, like the shoulders' — opening the menu on release is fine).
         ("hold:select", Action::Settings),
-        // Select+Start opens settings; pressing the chord again while settings
-        // is open quits retsurf (the second press is the confirm) — the only
-        // gamepad exit on a handheld. Both buttons are already deferred, so the
-        // chord is free. Bind `quit` directly for a one-press exit instead.
+        // Pressed again while settings is open this quits — the only gamepad
+        // exit on a handheld. Bind `quit` directly for a one-press exit.
         ("select+start", Action::Settings),
+        ("start+select", Action::Settings),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
     .collect()
 }
 
-/// The stock keyboard shortcuts. Ctrl combos always fire; the Vimium-style plain
-/// keys (`f`, `enter`, `backspace`, `hjkl`) are muted whenever a text input holds
-/// focus, so they can't collide with typing into the page.
-pub(crate) fn default_keyboard_bindings() -> BTreeMap<String, String> {
+/// The stock keyboard shortcuts. Ctrl combos always fire; the plain keys are
+/// muted while a text input holds focus, so they can't collide with typing.
+fn default_keyboard_bindings() -> inputbind::Table {
     [
         ("ctrl+r", Action::Reload),
         ("ctrl+b", Action::Bookmark),
@@ -392,316 +373,117 @@ pub(crate) fn default_keyboard_bindings() -> BTreeMap<String, String> {
     .collect()
 }
 
+pub fn default_store() -> Store {
+    Store {
+        gamepad: default_gamepad_bindings(),
+        keyboard: default_keyboard_bindings(),
+        surface: Default::default(),
+    }
+}
+
 fn bindings_path() -> String {
     format!("{}bindings.toml", config::data_dir())
 }
 
-/// Load `bindings.toml`. A missing file yields the defaults (and the template
-/// is written so there's a file to edit); a malformed one is logged and falls
-/// back to the defaults too.
-pub(crate) fn load_store() -> Store {
-    let path = bindings_path();
-    match std::fs::read_to_string(&path) {
-        Ok(text) => match toml::from_str(&text) {
-            Ok(store) => store,
-            Err(e) => {
-                log::error!("invalid bindings `{path}`: {e}; using defaults");
-                Store::default()
-            }
-        },
-        Err(_) => {
-            let store = Store {
-                gamepad: default_gamepad_bindings(),
-                keyboard: default_keyboard_bindings(),
-            };
-            match toml::to_string_pretty(&store) {
-                Ok(text) => {
-                    if let Err(e) = std::fs::write(&path, text) {
-                        log::warn!("could not write default bindings `{path}`: {e}");
-                    }
-                }
-                Err(e) => log::warn!("could not serialize default bindings: {e}"),
-            }
-            store
-        }
-    }
+/// Load `bindings.toml`, writing the defaults as a template on first run.
+pub fn load_store() -> Store {
+    Store::load(bindings_path(), default_store)
 }
 
-/// Write an edited [`Store`] back to `bindings.toml` (the settings overlay
-/// saving the controls draft on close). Errors are logged, not surfaced — a
-/// failed write just means the change doesn't persist past this run.
-pub(crate) fn save(store: &Store) {
-    let path = bindings_path();
-    match toml::to_string_pretty(store) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(&path, text) {
-                log::warn!("could not write bindings `{path}`: {e}");
-            }
-        }
-        Err(e) => log::warn!("could not serialize bindings: {e}"),
-    }
+/// Write an edited store back (the settings overlay saving on close).
+pub fn save(store: &Store) {
+    store.save(bindings_path());
 }
 
-/// The parsed binding tables, ready for per-press lookup.
-pub struct Bindings {
-    tap: HashMap<Button, Action>,
-    hold: HashMap<Button, Action>,
-    /// Chords, keyed by the normalized (ordered) button pair.
-    chord: HashMap<(Button, Button), Action>,
-    /// Buttons whose tap must wait for release: they carry a hold binding or
-    /// take part in a chord, so a press alone doesn't identify the gesture yet.
-    deferred: HashSet<Button>,
+/// Parse a store into the runtime tables; `keys` comes from SDL once at startup.
+pub fn build(store: &Store, keys: &KeyNames) -> Bindings<Action> {
+    Bindings::new(store, SURFACES, |name| keys.code(name))
 }
 
-impl Bindings {
-    /// Load and parse the gamepad table of `bindings.toml`. An empty table
-    /// (fresh file without `[gamepad]`) falls back to the defaults — an
-    /// unbound pad would be unusable on a handheld.
-    pub fn load() -> Self {
-        Self::from_store(&load_store())
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    /// Build the gamepad bindings from a [`Store`] — startup (via [`Self::load`])
-    /// and the settings overlay's live reload share this, so the empty-table
-    /// fallback and the confirm / deferred-set rules in [`Self::from_map`] stay
-    /// identical between them.
-    pub(crate) fn from_store(store: &Store) -> Self {
-        if store.gamepad.is_empty() {
-            Self::from_map(&default_gamepad_bindings())
-        } else {
-            Self::from_map(&store.gamepad)
-        }
-    }
-
-    /// Parse a gesture → action map. Invalid entries are logged and skipped;
-    /// the resulting table is whatever parsed cleanly.
-    fn from_map(map: &BTreeMap<String, String>) -> Self {
-        let mut bindings = Self {
-            tap: HashMap::new(),
-            hold: HashMap::new(),
-            chord: HashMap::new(),
-            deferred: HashSet::new(),
-        };
-
-        for (gesture, action_name) in map {
-            let Some(action) = Action::parse(action_name) else {
-                log::warn!("bindings: unknown action `{action_name}` for `{gesture}`");
-                continue;
-            };
-            let gesture = gesture.trim().to_ascii_lowercase();
-            if let Some(button) = gesture.strip_prefix("hold:").and_then(parse_button) {
-                bindings.hold.insert(button, action);
-            } else if let Some((first, second)) = gesture.split_once('+') {
-                match (parse_button(first.trim()), parse_button(second.trim())) {
-                    (Some(a), Some(b)) if a != b => {
-                        bindings.chord.insert(normalize(a, b), action);
-                    }
-                    _ => log::warn!("bindings: invalid chord `{gesture}`"),
-                }
-            } else if let Some(button) = parse_button(&gesture) {
-                bindings.tap.insert(button, action);
-            } else {
-                log::warn!("bindings: unknown gesture `{gesture}`");
-            }
-        }
-
-        // `confirm` needs the press edge immediately (clicks, drags): holds and
-        // chords on its button would defer it, so they lose and are dropped.
-        let confirm: Vec<Button> = bindings
-            .tap
-            .iter()
-            .filter(|(_, action)| **action == Action::Confirm)
-            .map(|(button, _)| *button)
-            .collect();
-        for button in confirm {
-            if bindings.hold.remove(&button).is_some() {
-                log::warn!("bindings: ignoring hold on the confirm button {button:?}");
-            }
-            let conflicted: Vec<_> = bindings
-                .chord
-                .keys()
-                .filter(|(a, b)| *a == button || *b == button)
-                .copied()
+    #[test]
+    fn every_action_is_listed_in_exactly_one_group() {
+        for action in ALL {
+            let groups: Vec<&str> = GROUPS
+                .iter()
+                .filter(|(_, members)| members.contains(&action))
+                .map(|(name, _)| *name)
                 .collect();
-            for pair in conflicted {
-                log::warn!("bindings: ignoring chord {pair:?} involving the confirm button");
-                bindings.chord.remove(&pair);
-            }
-        }
-
-        for button in bindings.hold.keys() {
-            bindings.deferred.insert(*button);
-        }
-        for (a, b) in bindings.chord.keys() {
-            bindings.deferred.insert(*a);
-            bindings.deferred.insert(*b);
-        }
-        bindings
-    }
-
-    pub fn tap(&self, button: Button) -> Option<Action> {
-        self.tap.get(&button).copied()
-    }
-
-    pub fn hold(&self, button: Button) -> Option<Action> {
-        self.hold.get(&button).copied()
-    }
-
-    pub fn chord(&self, a: Button, b: Button) -> Option<Action> {
-        self.chord.get(&normalize(a, b)).copied()
-    }
-
-    /// Whether this button's tap waits for release (hold/chord candidate).
-    pub fn is_deferred(&self, button: Button) -> bool {
-        self.deferred.contains(&button)
-    }
-}
-
-/// Chords are order-independent: key them by the (numerically) ordered pair.
-fn normalize(a: Button, b: Button) -> (Button, Button) {
-    if (a as i32) <= (b as i32) {
-        (a, b)
-    } else {
-        (b, a)
-    }
-}
-
-/// Modifier bitmask for keyboard shortcuts (left/right variants folded).
-const CTRL: u8 = 1;
-const ALT: u8 = 2;
-const SHIFT: u8 = 4;
-
-fn mods_of(keymod: Mod) -> u8 {
-    let mut mods = 0;
-    if keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) {
-        mods |= CTRL;
-    }
-    if keymod.intersects(Mod::LALTMOD | Mod::RALTMOD) {
-        mods |= ALT;
-    }
-    if keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD) {
-        mods |= SHIFT;
-    }
-    mods
-}
-
-/// Keyboard shortcuts from the `[keyboard]` table: `"ctrl+shift+t"`-style
-/// gestures over the same [`Action`]s. Matching is strict (the pressed
-/// modifiers must equal the bound ones), so `f` won't fire while Shift is down.
-pub struct KeyBindings {
-    map: HashMap<(Keycode, u8), Action>,
-}
-
-impl KeyBindings {
-    /// Load and parse the keyboard table of `bindings.toml`; an empty/absent
-    /// table falls back to the defaults.
-    pub fn load() -> Self {
-        Self::from_store(&load_store())
-    }
-
-    /// Build the keyboard bindings from a [`Store`] — startup and the settings
-    /// overlay's live reload share this (and the empty-table fallback), like
-    /// [`Bindings::from_store`].
-    pub(crate) fn from_store(store: &Store) -> Self {
-        if store.keyboard.is_empty() {
-            Self::from_map(&default_keyboard_bindings())
-        } else {
-            Self::from_map(&store.keyboard)
+            assert_eq!(
+                groups.len(),
+                1,
+                "`{}` is in {groups:?}, not exactly one group",
+                action.name()
+            );
         }
     }
 
-    fn from_map(map: &BTreeMap<String, String>) -> Self {
-        let mut table = HashMap::new();
-        for (gesture, action_name) in map {
-            let Some(action) = Action::parse(action_name) else {
-                log::warn!("key bindings: unknown action `{action_name}` for `{gesture}`");
-                continue;
+    #[test]
+    fn every_action_round_trips_through_its_config_name() {
+        for action in ALL {
+            assert_eq!(Action::parse(action.name()), Some(action));
+        }
+        assert_eq!(Action::parse("fly"), None);
+        // `none` is the store's unbound sentinel, never an action.
+        assert_eq!(Action::parse(inputbind::UNBOUND), None);
+    }
+
+    /// A gesture the tables would drop at load must fail here, not on-device.
+    #[test]
+    fn the_default_gamepad_layout_survives_the_gesture_rules() {
+        let store = default_store();
+        // A stub resolver: only the gamepad table is under test.
+        let bindings = Bindings::new(&store, SURFACES, |name| name.bytes().next().map(u32::from));
+        for (text, name) in &store.gamepad {
+            let gesture = inputbind::PadGesture::parse(text)
+                .unwrap_or_else(|| panic!("`{text}` is not a gesture"));
+            let action = Action::parse(name).unwrap_or_else(|| panic!("`{name}` is not an action"));
+            let bound = match gesture {
+                inputbind::PadGesture::Tap(pad) => bindings.tap(pad, None),
+                inputbind::PadGesture::Hold(pad) => bindings.hold(pad),
+                inputbind::PadGesture::Chord(a, b) => bindings.chord(a, b),
             };
-            if action == Action::Scroll {
-                log::warn!("key bindings: `scroll` is gamepad-only; ignoring `{gesture}`");
-                continue;
-            }
-            let mut mods = 0u8;
-            let mut key = None;
-            for token in gesture.trim().to_ascii_lowercase().split('+') {
-                match token.trim() {
-                    "ctrl" => mods |= CTRL,
-                    "alt" => mods |= ALT,
-                    "shift" => mods |= SHIFT,
-                    token => match (parse_key(token), key) {
-                        (Some(parsed), None) => key = Some(parsed),
-                        _ => {
-                            key = None;
-                            break;
-                        }
-                    },
-                }
-            }
-            match key {
-                Some(key) => _ = table.insert((key, mods), action),
-                None => log::warn!("key bindings: invalid shortcut `{gesture}`"),
-            }
+            assert_eq!(bound, Some(action), "`{text}` was dropped at load");
         }
-        Self { map: table }
     }
 
-    /// The bound action for this key event, plus whether the binding is a
-    /// *plain* one (no Ctrl/Alt) — those are only safe outside text inputs.
-    pub fn lookup(&self, key: Keycode, keymod: Mod) -> Option<(Action, bool)> {
-        let mods = mods_of(keymod);
-        self.map
-            .get(&(key, mods))
-            .map(|action| (*action, mods & (CTRL | ALT) == 0))
+    #[test]
+    fn the_defaults_meet_every_requirement() {
+        assert!(inputbind::editor::meets_every_requirement(
+            &default_store().gamepad,
+            REQUIRED
+        ));
     }
-}
 
-/// Format a captured key event back into a gesture string (`"ctrl+shift+t"`) —
-/// the inverse of [`parse_key`] + [`mods_of`], used when the settings overlay
-/// captures a keyboard shortcut. Returns `None` for an unnamed key (the caller
-/// already filters bare modifiers out before this).
-pub(crate) fn format_key(kc: Keycode, keymod: Mod) -> Option<String> {
-    let name = kc.name();
-    if name.is_empty() {
-        return None;
+    /// An unknown key name is only logged, so a typo would ship as a dead shortcut.
+    #[test]
+    fn every_default_key_gesture_resolves_through_sdl() {
+        let names = KeyNames::new();
+        let store = default_store();
+        let bindings = build(&store, &names);
+        for (text, name) in &store.keyboard {
+            let gesture = inputbind::KeyGesture::parse(text)
+                .unwrap_or_else(|| panic!("`{text}` is not a key gesture"));
+            let code = names
+                .code(&gesture.name)
+                .unwrap_or_else(|| panic!("SDL has no key `{}` (`{text}`)", gesture.name));
+            let action = Action::parse(name).unwrap_or_else(|| panic!("`{name}` is not an action"));
+            assert_eq!(bindings.key(code, gesture.mods), Some(action), "`{text}`");
+        }
     }
-    // Mirror parse_key's friendly aliases so the written gesture round-trips.
-    let key = match name.as_str() {
-        "Escape" => "esc".to_string(),
-        "Return" => "enter".to_string(),
-        "PageUp" => "pageup".to_string(),
-        "PageDown" => "pagedown".to_string(),
-        other => other.to_ascii_lowercase(),
-    };
-    let mods = mods_of(keymod);
-    let mut out = String::new();
-    if mods & CTRL != 0 {
-        out.push_str("ctrl+");
-    }
-    if mods & ALT != 0 {
-        out.push_str("alt+");
-    }
-    if mods & SHIFT != 0 {
-        out.push_str("shift+");
-    }
-    out.push_str(&key);
-    Some(out)
-}
 
-/// Resolve a key name: a few friendly aliases, then SDL's own key names
-/// (case-normalized, so `f`, `left`, and `f5` all work).
-fn parse_key(name: &str) -> Option<Keycode> {
-    let name = match name {
-        "esc" => "Escape",
-        "enter" => "Return",
-        "pageup" => "PageUp",
-        "pagedown" => "PageDown",
-        other => other,
-    };
-    Keycode::from_name(name)
-        .or_else(|| Keycode::from_name(&name.to_ascii_uppercase()))
-        .or_else(|| {
-            let mut chars = name.chars();
-            let first = chars.next()?.to_ascii_uppercase();
-            Keycode::from_name(&format!("{first}{}", chars.as_str()))
-        })
+    /// `scroll` latches inside the pad, so a key bound to it would do nothing.
+    #[test]
+    fn no_default_keyboard_binding_is_a_no_op() {
+        for (text, name) in &default_store().keyboard {
+            let action = Action::parse(name).unwrap_or_else(|| panic!("`{name}` is not an action"));
+            assert!(
+                action.command(true).is_some(),
+                "`{text}` is bound to `{name}`, which does nothing from a key"
+            );
+        }
+    }
 }

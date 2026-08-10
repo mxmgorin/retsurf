@@ -1,8 +1,8 @@
 <h1 align="center">
-  <img src="docs/images/retsurf-wordmark.png" alt="retsurf" width="320">
+  <img src="resources/images/retsurf-wordmark.png" alt="retsurf" width="320">
 </h1>
 
-<p align="center">A gamepad-native web browser.</p>
+<p align="center">A gamepad-native web browser for unconventional devices.</p>
 
 <div align="center">
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg" alt="Linux ARM"></a>
@@ -13,9 +13,9 @@
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg" alt="Dependencies"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust: [Servo](https://github.com/servo/servo) renders, SDL2 handles windowing and input, egui draws the UI.
+retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. [Servo](https://github.com/servo/servo) handles web rendering, SDL2 handles windowing and input, and egui provides the UI.
 
-It runs **without X11 or Wayland** — OpenGL ES straight on KMS/DRM — with full gamepad control, targeting PortMaster-compatible Linux handhelds (Knulli, muOS, ROCKNIX), regular desktops, and Android (touch + system keyboard).
+The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical. retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets PortMaster-compatible Linux handhelds (Knulli, muOS, ROCKNIX), as well as regular desktops and Android (touch + system keyboard).
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -23,15 +23,17 @@ It runs **without X11 or Wayland** — OpenGL ES straight on KMS/DRM — with fu
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/retsurf-trimui-smart-pro.jpg" alt="retsurf on a TrimUI Smart Pro" width="260"></td>
-    <td align="center"><img src="docs/images/retsurf-rgb30.jpg" alt="retsurf on a Powkiddy RGB30" width="260"></td>
-    <td align="center"><img src="docs/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
+    <td align="center"><img src="resources/images/retsurf-trimui-smart-pro.jpg" alt="retsurf on a TrimUI Smart Pro" width="260"></td>
+    <td align="center"><img src="resources/images/retsurf-rgb30.jpg" alt="retsurf on a Powkiddy RGB30" width="260"></td>
+    <td align="center"><img src="resources/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
   </tr>
 </table>
 
 ## Why?
 
-Handheld Linux distros lack a usable browser: lightweight options can't render modern JS-heavy sites, and desktop browsers assume a windowing setup and pointer input these devices don't have. retsurf targets that gap — a modern engine, native gamepad navigation, no compositor.
+Handheld Linux devices have no good browser options. Lightweight browsers often struggle with modern, JavaScript-heavy sites, while desktop browsers depend on a windowing system, mouse and keyboard, and hardware that these devices do not have.
+
+retsurf is an attempt to fill that gap: a modern web engine, gamepad-first controls, and direct rendering without a compositor.
 
 ## Features
 

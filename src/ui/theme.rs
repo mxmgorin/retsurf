@@ -15,6 +15,9 @@ pub const PANEL_FILL: egui::Color32 = egui::Color32::from_rgb(0x18, 0x18, 0x1c);
 /// Secondary / label text: hints, dates, statuses, mouse-only actions.
 pub const DIM: egui::Color32 = egui::Color32::from_gray(0x99);
 
+/// A refused action: the success teal cannot read as "this did not happen".
+pub const WARN: egui::Color32 = egui::Color32::from_rgb(0xe8, 0x73, 0x5a);
+
 /// Row / section-bar font size shared across the full-screen overlays.
 pub const ROW_FONT: f32 = 15.0;
 

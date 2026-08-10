@@ -81,6 +81,11 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 adblock = "0.13"
 content-security-policy = "0.8"
 keyboard-types = "0.8.1"
+# Rebindable input: the gesture machine (tap/hold/chord), `bindings.toml`, gesture
+# capture and the editor model. Not on crates.io, so it is pinned by rev like the
+# Servo fork. Its `sdl2` feature is the default and resolves to the same sdl2 as
+# ours, so the pad and key types are one set.
+inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "523a8055575e01adee345bc16f8ed42c20014781" }
 egui-sdl2 = { version = "0.8.1", default-features = false, features = ["glow-backend"] }
 sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
@@ -106,7 +111,7 @@ android_logger = "0.15"
 
 # The engine comes from our Servo fork: `retsurf-main` is upstream `main` plus the
 # two fixes in `patches/`, with `retsurf-0.4` (the released line) as the fallback.
-# See docs/SERVO_PATCH.md and docs/SERVO_WORKFLOW.md.
+# See docs/SERVO_PATCH.md.
 #
 # Every entry must name one source: the Servo crates depend on each other by path,
 # so a mixed graph ends up with two of every crate. Pin a `rev`, never a branch —

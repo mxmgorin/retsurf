@@ -460,7 +460,7 @@ impl AppUi {
     /// Close the settings overlay, handing back its edited config and bindings
     /// drafts so the app can save them and re-apply what changes live.
     #[inline]
-    pub fn settings_close(&mut self) -> (AppConfig, Option<crate::event::bindings::Store>) {
+    pub fn settings_close(&mut self) -> (AppConfig, Option<inputbind::Store>) {
         let drafts = (self.settings.draft(), self.settings.changed_bindings());
         self.settings.close();
         drafts
