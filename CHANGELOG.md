@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A tab could stay "loading" forever — reload greyed out for good — on any page
+  whose scripts insert a `<body>` after the load: Servo reports that as
+  `LoadStatus::HeadParsed`, with no `Complete` to follow (wikipedia does it). The
+  flag now follows the document's ready state only, and loads we start ourselves
+  arm it directly, since Servo announces `Started` only for page-initiated ones.
 - A page click held while the bindings were saved, or while binding capture
   opened, could leave the mouse button stuck down on the page: the press was
   sent and its release never was. The gesture machine now closes what it owes.

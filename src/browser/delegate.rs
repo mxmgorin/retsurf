@@ -50,9 +50,19 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
     }
 
+    /// `HeadParsed` is dropped: Servo sends it from `HTMLBodyElement::bind_to_tree`
+    /// (measured on 0.5), so a script inserting a `<body>` after the load emits one
+    /// with no `Complete` to follow — that left the tab busy forever on wikipedia.
+    /// `Started` covers only page-initiated navigations; ours arm the flag
+    /// themselves (see [`super::AppBrowser::mark_loading`]).
     fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
+        let loading = match status {
+            servo::LoadStatus::Started => true,
+            servo::LoadStatus::Complete => false,
+            servo::LoadStatus::HeadParsed => return,
+        };
         if let Some(i) = self.tab_index(webview.id()) {
-            self.tabs.borrow_mut()[i].state.load_status = status;
+            self.tabs.borrow_mut()[i].state.loading = loading;
         }
     }
 
