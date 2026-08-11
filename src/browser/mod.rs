@@ -62,12 +62,14 @@ pub struct AppBrowser {
 
 pub struct BrowserState {
     location: String,
-    load_status: servo::LoadStatus,
+    /// Set when a load starts, cleared on ready state complete. Not Servo's
+    /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
+    loading: bool,
 }
 
 impl BrowserState {
     pub fn is_loading(&self) -> bool {
-        self.load_status != servo::LoadStatus::Complete
+        self.loading
     }
 
     pub fn get_location_mut(&mut self) -> &mut String {
@@ -77,13 +79,21 @@ impl BrowserState {
     pub fn get_location(&self) -> &str {
         &self.location
     }
+
+    /// For a tab whose webview was built already fetching a URL.
+    fn loading() -> Self {
+        Self {
+            loading: true,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for BrowserState {
     fn default() -> Self {
         Self {
             location: "".into(),
-            load_status: servo::LoadStatus::Complete,
+            loading: false,
         }
     }
 }
@@ -246,7 +256,8 @@ impl AppBrowserInner {
         if theme.is_forced_dark() {
             self.user_content.add_stylesheet(self.forced_dark.clone());
         } else {
-            self.user_content.remove_stylesheet(self.forced_dark.clone());
+            self.user_content
+                .remove_stylesheet(self.forced_dark.clone());
         }
     }
 
@@ -431,8 +442,9 @@ impl AppBrowser {
             return;
         }
         self.inner.sync_forced_dark(theme);
-        for tab in self.inner.tabs.borrow().iter() {
+        for tab in self.inner.tabs.borrow_mut().iter_mut() {
             tab.webview.notify_theme_change(engine::theme(theme));
+            tab.state.loading = true;
             tab.webview.reload();
         }
     }
@@ -581,7 +593,7 @@ impl AppBrowser {
         let mut tabs = self.inner.tabs.borrow_mut();
         tabs.push(Tab {
             webview,
-            state: BrowserState::default(),
+            state: BrowserState::loading(),
             images_loaded: Cell::new(0),
         });
         self.inner.active.set(tabs.len() - 1);
@@ -599,7 +611,7 @@ impl AppBrowser {
         };
         self.inner.tabs.borrow_mut().push(Tab {
             webview,
-            state: BrowserState::default(),
+            state: BrowserState::loading(),
             images_loaded: Cell::new(0),
         });
     }
@@ -718,7 +730,12 @@ impl AppBrowser {
         match command {
             BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
             BrowserCommand::Forward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
-            BrowserCommand::Reload => _ = self.inner.active_webview().map(|x| x.reload()),
+            BrowserCommand::Reload => {
+                if let Some(webview) = self.inner.active_webview() {
+                    self.mark_loading();
+                    webview.reload();
+                }
+            }
             BrowserCommand::Reader => self.toggle_reader(),
             BrowserCommand::Zoom(delta) => self.zoom(*delta),
             BrowserCommand::Load => {
@@ -733,6 +750,7 @@ impl AppBrowser {
                 };
                 let webview = tab.webview.clone();
                 drop(tabs);
+                self.mark_loading();
                 webview.load(url);
             }
             BrowserCommand::Home => {
@@ -743,8 +761,20 @@ impl AppBrowser {
                     log::warn!("failed to parse home_page `{}`", config.home_page);
                     return;
                 };
+                self.mark_loading();
                 webview.load(url);
             }
+        }
+    }
+
+    /// Arm the active tab's loading flag; `Complete` clears it. Needed because
+    /// Servo sends `LoadStatus::Started` only for page-initiated navigations. Not
+    /// for back / forward: those reuse the session-history document with no load
+    /// at all, so nothing would clear the flag.
+    fn mark_loading(&self) {
+        let active = self.inner.active.get();
+        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
+            tab.state.loading = true;
         }
     }
 
