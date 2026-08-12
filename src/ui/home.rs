@@ -35,6 +35,24 @@ pub(super) const TILE_W: f32 = 96.0;
 pub(super) const TILE_H: f32 = 84.0;
 pub(super) const GAP: f32 = 12.0;
 
+/// Wordmark type size (logical px); the wave band and the reserved height
+/// derive from it.
+const WORDMARK_SIZE: f32 = 36.0;
+/// Letter spacing, matching the SVG wordmark's tracking.
+const WORDMARK_TRACKING: f32 = WORDMARK_SIZE * 0.1;
+/// The wave band below the text. Ratios track the SVG, nudged up so the thin
+/// stroke stays legible on a handheld.
+const WAVE_GAP: f32 = WORDMARK_SIZE * 0.2; // text bottom to wave centerline
+const WAVE_AMP: f32 = WORDMARK_SIZE * 0.08; // crest height
+const WAVE_STROKE: f32 = WORDMARK_SIZE * 0.045;
+const WAVE_BAND: f32 = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
+
+/// Hint bar geometry: centerline [`HINT_BASE`] off the page's foot, [`HINT_BAND`]
+/// the strip content must stay out of.
+const HINT_BASE: f32 = 18.0;
+const HINT_PILL_H: f32 = 18.0;
+const HINT_BAND: f32 = HINT_BASE + HINT_PILL_H / 2.0 + 8.0;
+
 /// Draw the start-page overlay over the (blank) web view — confined to the
 /// `webview` rect (the window minus the toolbar strip), so the address bar and
 /// toolbar buttons stay usable. Any activation is pushed as a command for the
@@ -64,32 +82,46 @@ pub(super) fn add_home(
                     // keep centering against the stale landscape width.
                     ui.set_min_size(area.size());
                     ui.set_max_size(area.size());
-                    // Field/grid width: the artifact's min(620, 90%).
-                    let field_w = (area.width() * 0.9).min(620.0);
-                    let cols = (((field_w + GAP) / (TILE_W + GAP)).floor() as usize).max(1);
+                    // Columns first, then the field takes the grid's width: sized the
+                    // other way round, the grid came out up to 92px narrower.
+                    let max_w = (area.width() * 0.9).min(620.0);
+                    let cols = (((max_w + GAP) / (TILE_W + GAP)).floor() as usize).max(1);
+                    let block_w = (cols as f32 * TILE_W + (cols - 1) as f32 * GAP).min(max_w);
                     home.set_cols(cols);
 
-                    // Vertically center the whole block (wordmark + field + grid),
-                    // like the original page did, by padding the top by half the
-                    // slack. Heights below are the laid-out sizes plus the gaps.
-                    const WORDMARK_H: f32 = 46.0; // text + wave band
-                    const FIELD_H: f32 = 44.0;
-                    const GAP_TOP: f32 = 28.0; // wordmark to field
+                    // The field anchors the page. Centering the whole block moved the
+                    // mark and the field whenever a pin added a grid row.
+                    const FIELD_ANCHOR: f32 = 0.3; // field top, share of the height
                     const GAP_MID: f32 = 36.0; // field to grid
-                                               // One tile per pin plus the trailing "+ Add" tile.
-                    let tiles = pins.len() + 1;
-                    let rows = tiles.div_ceil(cols);
-                    let grid_h = rows as f32 * TILE_H + (rows.saturating_sub(1)) as f32 * GAP;
-                    let content_h = WORDMARK_H + GAP_TOP + FIELD_H + GAP_MID + grid_h;
-                    let top = ((ui.available_height() - content_h) / 2.0).max(8.0);
+                    const GAP_TOP_RATIO: f32 = 0.6; // mark to field, of the mark's own height
+
+                    let mark_h = wordmark_height(ui);
+                    let gap_top = mark_h * GAP_TOP_RATIO;
+                    let head_h = mark_h + gap_top; // above the field
+
+                    // Content stops above the hint bar; the grid scrolls in what is
+                    // left, so a long dial can't hide rows off the page.
+                    let floor = area.bottom() - HINT_BAND;
+                    let top = ((floor - area.top()) * FIELD_ANCHOR - head_h).max(8.0);
 
                     ui.vertical_centered(|ui| {
                         ui.add_space(top);
                         add_wordmark(ui);
-                        ui.add_space(GAP_TOP);
-                        add_search(ui, home, field_w, osk_caret);
+                        ui.add_space(gap_top);
+                        add_search(ui, home, block_w, osk_caret);
                         ui.add_space(GAP_MID);
-                        add_dial(ui, home, pins, field_w, cols, commands);
+                        let rest = (floor - ui.cursor().top()).max(TILE_H);
+                        // The viewport spans the page and the grid centers inside it:
+                        // shrunk to its content, the scrollbar's width would push the
+                        // tiles off the page's centerline.
+                        egui::ScrollArea::vertical()
+                            .max_height(rest)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.vertical_centered(|ui| {
+                                    add_dial(ui, home, pins, block_w, cols, commands);
+                                });
+                            });
                     });
                     add_hint_bar(ui, area);
                 });
@@ -101,7 +133,6 @@ pub(super) fn add_home(
 /// stays pinned to the bottom regardless of how many tiles there are.
 fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     const HINTS: &[(&str, &str)] = &[("A", "Open"), (bold::LIST, "Menu")];
-    const PILL_H: f32 = 18.0;
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
     const GAP_KL: f32 = 6.0; // key pill to its label
     const GAP_SEG: f32 = 18.0; // between hint segments
@@ -122,11 +153,13 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
         .collect();
     let total: f32 = segs.iter().map(|s| s.3).sum::<f32>() + GAP_SEG * (segs.len() - 1) as f32;
 
-    let cy = area.bottom() - 18.0;
+    let cy = area.bottom() - HINT_BASE;
     let mut x = area.center().x - total / 2.0;
     for (kg, lg, pill_w, seg_w) in segs {
-        let pill =
-            egui::Rect::from_min_size(egui::pos2(x, cy - PILL_H / 2.0), egui::vec2(pill_w, PILL_H));
+        let pill = egui::Rect::from_min_size(
+            egui::pos2(x, cy - HINT_PILL_H / 2.0),
+            egui::vec2(pill_w, HINT_PILL_H),
+        );
         painter.rect_filled(pill, 5.0, SURFACE);
         painter.rect_stroke(
             pill,
@@ -148,36 +181,38 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
 /// coral), matching the SVG wordmark. egui has no gradient text fill, so the `surf`
 /// glyphs are tagged with a marker color ([`ACCENT`]), tessellated here, and
 /// recolored by height.
-fn add_wordmark(ui: &mut egui::Ui) {
-    const SIZE: f32 = 30.0;
-    const TRACKING: f32 = 3.0;
+fn wordmark_job() -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
     // body `font()` (Ubuntu-Light).
     let fmt = |color: egui::Color32| egui::TextFormat {
-        font_id: egui::FontId::monospace(SIZE),
+        font_id: egui::FontId::monospace(WORDMARK_SIZE),
         color,
-        extra_letter_spacing: TRACKING,
+        extra_letter_spacing: WORDMARK_TRACKING,
         ..Default::default()
     };
     job.append("ret", 0.0, fmt(INK));
     // Leading space: epaint skips extra_letter_spacing on a section's first glyph,
     // so the ret/surf joint needs it added back to match the other gaps. ACCENT
     // here is a marker recolored to the gradient below.
-    job.append("surf", TRACKING, fmt(ACCENT));
+    job.append("surf", WORDMARK_TRACKING, fmt(ACCENT));
+    job
+}
 
-    let galley = ui.ctx().fonts_mut(|f| f.layout_job(job));
+/// The mark's laid-out height, wave band included — the layout needs it before
+/// anything is drawn.
+fn wordmark_height(ui: &egui::Ui) -> f32 {
+    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job()));
+    galley.size().y + WAVE_BAND
+}
+
+fn add_wordmark(ui: &mut egui::Ui) {
+    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job()));
     let gsize = galley.size();
-
-    // Reserve a band below the text for the brand wave (the teal underline from
-    // the wordmark PNG). Ratios track the SVG (amp/cap-height ~0.11, stroke ~0.05),
-    // nudged up a touch so the thin stroke stays legible on a handheld screen.
-    const WAVE_GAP: f32 = SIZE * 0.2; // text bottom to wave centerline
-    const WAVE_AMP: f32 = SIZE * 0.08; // crest height
-    const WAVE_STROKE: f32 = SIZE * 0.045;
-    let band = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(gsize.x, gsize.y + band), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(gsize.x, gsize.y + WAVE_BAND),
+        egui::Sense::hover(),
+    );
 
     // Tessellate the galley into a mesh and recolor the `surf` (marker-colored)
     // vertices by their height: teal over the lower ~55%, warming to coral along
@@ -349,7 +384,11 @@ pub(super) fn tile_grid(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
-            for row_start in (0..total).step_by(cols) {
+            for (row, row_start) in (0..total).step_by(cols).enumerate() {
+                // Between rows only: a trailing gap would pad the grid's foot.
+                if row > 0 {
+                    ui.add_space(GAP);
+                }
                 let n = (total - row_start).min(cols);
                 let row_w = n as f32 * TILE_W + (n.saturating_sub(1)) as f32 * GAP;
                 ui.allocate_ui_with_layout(
@@ -362,7 +401,6 @@ pub(super) fn tile_grid(
                         }
                     },
                 );
-                ui.add_space(GAP);
             }
         },
     );
@@ -377,8 +415,17 @@ pub(super) const GLYPH: f32 = 52.0;
 /// click response.
 fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
+    keep_visible(ui, rect, selected);
     paint_tile(ui.painter(), rect, url, selected || resp.hovered());
     resp
+}
+
+/// Scroll a selected tile into view. No-op outside a scroll area, where the clip
+/// rect is the whole page.
+fn keep_visible(ui: &egui::Ui, rect: egui::Rect, selected: bool) {
+    if selected && !ui.clip_rect().contains_rect(rect) {
+        ui.scroll_to_rect(rect, None);
+    }
 }
 
 /// Paint a speed-dial tile's visuals (glyph square + brand initial + name) into
@@ -437,6 +484,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
 /// real tile but unfilled so it reads as an action slot. Opens the dial editor.
 fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
+    keep_visible(ui, rect, selected);
     let active = selected || resp.hovered();
     let painter = ui.painter();
 

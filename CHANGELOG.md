@@ -42,6 +42,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rows is now the part you read first, and it is the tail that truncates.
 - A page that is loading paints an accent line along the toolbar's page-facing
   edge. Static, not a spinner: it costs no repaints of its own.
+- The start page's wordmark is a fifth larger. Its wave, tracking and the height
+  the page reserves for it all derive from the type size now, so the mark scales
+  as one piece.
+- The start page hangs off its search field rather than centering everything at
+  once: the field keeps the same place on screen (just under a third of the way
+  down) and the tiles flow below it. Pinning or unpinning a site used to add a
+  grid row and shove the mark and the field with it.
+- The start page's field and speed dial are one width now. Columns were counted
+  off the field, so the grid landed up to 92px narrower and their edges never
+  matched; the field takes the grid's width instead.
+- A long speed dial scrolls. Past three rows the tiles used to slide under the
+  control hints and then off the page entirely, with no way to reach them: the
+  grid now lives in a scroll area that stops above the hints, and moving the
+  selection into a hidden tile scrolls it into view.
 
 ### Fixed
 
