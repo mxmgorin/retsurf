@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now the list's top row, like History's "Clear all".
 - Link-hint badges covered the first characters of the element they label; they
   now sit just above it.
+- Every toolbar button sat two pixels above the address bar's center, so the
+  reader icon inside the field broke the icon row. egui resolves `Align::Center`
+  against the row height known so far, and the field — the tallest item — is
+  added last, leaving everything before it top-aligned. The row now declares its
+  height up front.
+- Text in every single-line field (address bar, start page, pin editor, prompts)
+  hugged the top of its box rather than its center: egui's TextEdit defaults to
+  the top, and these boxes are sized by the icon slot or the frame's margins, not
+  by the line.
+- The start page and pin editor drew their placeholder in the default text size
+  while typing switched to the field's own, so the line grew on the first
+  keystroke. Both now take one font.
 - A page click held while the bindings were saved, or while binding capture
   opened, could leave the mouse button stuck down on the page: the press was
   sent and its release never was. The gesture machine now closes what it owes.

@@ -44,9 +44,8 @@ glow = "0.17"
 surfman = "0.13"
 log = "0.4.28"
 env_logger = "0.11.8"
-# The four Servo crates name the fork directly instead of a crates.io version left to
-# `[patch.crates-io]` below: nothing on crates.io satisfies 0.5 (0.4.0 is the newest
-# published), so a version requirement reads as unresolvable to tools like deps.rs.
+# Named straight off the fork: no 0.5 exists on crates.io, so a version requirement
+# plus `[patch.crates-io]` reads as unresolvable to tools like deps.rs.
 #
 # bundled_freetype: a Servo default lost to default-features = false. Without it
 # freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
@@ -126,8 +125,7 @@ android_logger = "0.15"
 # `retsurf-main` is rebased onto upstream, so each rev needs its `retsurf-main-<n>`
 # tag to stay reachable.
 #
-# Now that `[dependencies]` names the fork itself, this section only catches a transitive
-# crates-io reference to a Servo crate. Both lists carry the rev, so a bump moves both.
+# Only catches transitive crates-io references now; a rev bump moves both lists.
 [patch.crates-io]
 servo = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
 servo-base = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }

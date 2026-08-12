@@ -267,13 +267,17 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
         ));
     frame.show(ui, |ui| {
         ui.set_width(width);
+        // One binding for both, or the hint renders smaller than what is typed.
+        let field_font = font(20.0);
         let edit = egui::TextEdit::singleline(home.input_mut())
             .id(edit_id)
-            .hint_text("Search or enter address")
+            .hint_text(egui::RichText::new("Search or enter address").font(field_font.clone()))
             .frame(egui::Frame::NONE)
             .background_color(egui::Color32::TRANSPARENT)
             .desired_width(f32::INFINITY)
-            .font(font(20.0))
+            .font(field_font)
+            // egui puts the text at the top; the frame's margins make the box taller.
+            .vertical_align(egui::Align::Center)
             .text_color(INK);
         let resp = ui.add(edit);
         // Clicking the field selects it (so the highlight follows the mouse).
