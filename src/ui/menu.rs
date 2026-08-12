@@ -3,11 +3,12 @@
 //! section lists (Tabs / Bookmarks / History / Downloads).
 
 use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, DIM, ROW_FONT};
+use super::theme::{self, ACCENT, DIM, ROW_FONT};
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
 use crate::overlay::menu::{Menu, Section};
+use egui_phosphor::{bold, fill};
 use egui_sdl2::egui;
 
 /// Shared list-row height — taller than egui's default so rows stay legible on a
@@ -21,21 +22,21 @@ fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui:
     let color = if selected { ACCENT } else { dim };
     ui.add_sized(
         [DEL_W, ROW_H],
-        egui::Button::new(egui::RichText::new("✖").color(color)).corner_radius(ROW_RADIUS),
+        egui::Button::new(theme::icon(bold::X).color(color)).corner_radius(ROW_RADIUS),
     )
 }
 
 /// A row's bookmark toggle (Tabs / History), sized like [`delete_button`] so the
 /// trailing buttons line up across rows.
 fn bookmark_button(ui: &mut egui::Ui, bookmarked: bool, dim: egui::Color32) -> egui::Response {
-    let (glyph, color) = if bookmarked {
-        ("★", ACCENT)
+    let star = if bookmarked {
+        theme::icon_fill(fill::STAR).color(ACCENT)
     } else {
-        ("☆", dim)
+        theme::icon(bold::STAR).color(dim)
     };
     ui.add_sized(
         [DEL_W, ROW_H],
-        egui::Button::new(egui::RichText::new(glyph).color(color)).corner_radius(ROW_RADIUS),
+        egui::Button::new(star).corner_radius(ROW_RADIUS),
     )
 }
 
@@ -95,9 +96,11 @@ pub(super) fn add_menu(
             Section::History | Section::Tabs => "   Y bookmark",
             Section::Downloads => "",
         };
+        let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
+        let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
         ui.label(
             egui::RichText::new(format!(
-                "⏴⏵ section   ⏶⏷ select   A open   X delete{y_hint}   B close"
+                "{left}{right} section   {up}{down} select   A open   X delete{y_hint}   B close"
             ))
             .color(dim),
         );
@@ -192,7 +195,13 @@ fn add_bookmarks_section(
 ) {
     let bookmarks = menu.bookmarks();
     if bookmarks.urls().is_empty() {
-        ui.label(egui::RichText::new("No bookmarks yet — press ★ to add this page.").color(dim));
+        ui.label(
+            egui::RichText::new(format!(
+                "No bookmarks yet — press {} to add this page.",
+                bold::STAR
+            ))
+            .color(dim),
+        );
         return;
     }
 
@@ -203,10 +212,10 @@ fn add_bookmarks_section(
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, url) in bookmarks.urls().iter().enumerate() {
             let selected = i == bookmarks.selected();
-            // A leading 📌 marks a row pinned to the start-page dial; Y toggles
+            // A leading pin marks a row pinned to the start-page dial; Y toggles
             // the pin (see the legend).
             let label = if menu.dial.contains(url) {
-                format!("📌 {url}")
+                format!("{} {url}", bold::PUSH_PIN)
             } else {
                 url.clone()
             };

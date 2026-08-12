@@ -60,7 +60,9 @@ impl Download {
                 format_size(self.received),
                 history::format_time(self.time)
             ),
-            State::Failed(e) => format!("✖ {e}"),
+            // The menu renders this in the Proportional family, which falls back
+            // to the icon font (see `crate::ui::theme`), so the marker resolves.
+            State::Failed(e) => format!("{} {e}", egui_phosphor::bold::X),
         }
     }
 }

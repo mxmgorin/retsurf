@@ -87,6 +87,10 @@ keyboard-types = "0.8.1"
 # ours, so the pad and key types are one set.
 inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "523a8055575e01adee345bc16f8ed42c20014781" }
 egui-sdl2 = { version = "0.8.1", default-features = false, features = ["glow-backend"] }
+# Every chrome icon comes from this font (see `src/ui/theme.rs`). `bold` is the base
+# weight — the lighter ones wash out at the 15px icons the handhelds draw — and `fill`
+# supplies the solid halves of on/off pairs. Version tracks egui: 0.13 = egui 0.35.
+egui-phosphor = { version = "0.13.0", default-features = false, features = ["bold", "fill"] }
 sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
 # version already in the tree (pulled in via servo), so it adds no new resolve.

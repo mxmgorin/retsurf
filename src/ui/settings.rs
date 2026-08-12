@@ -4,11 +4,12 @@
 //! A edit, B save & close — all of it without an analog stick.
 
 use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, DIM, ROW_FONT, WARN};
+use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::app::{AppCommand, SettingsAction};
 use crate::data::downloads::format_size;
 use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 use inputbind::editor::{Bound, Row};
 use inputbind::Action as _;
@@ -53,7 +54,7 @@ fn step_button(
     let color = if selected { ACCENT } else { dim };
     ui.add_sized(
         [STEP_W, ROW_H],
-        egui::Button::new(egui::RichText::new(glyph).color(color)).corner_radius(ROW_RADIUS),
+        egui::Button::new(theme::icon(glyph).color(color)).corner_radius(ROW_RADIUS),
     )
 }
 
@@ -388,8 +389,13 @@ fn add_controls(
                     gestures,
                     open,
                 } => {
-                    // The glyphs the section hint uses, so egui's fonts have them.
-                    let marker = if *open { "⏷" } else { "⏵" };
+                    // The carets the section hint uses, so the row reads as the
+                    // same open/closed affordance.
+                    let marker = if *open {
+                        bold::CARET_DOWN
+                    } else {
+                        bold::CARET_RIGHT
+                    };
                     (
                         format!("{marker} {}", action.display()),
                         gesture_summary(gestures),
@@ -450,14 +456,19 @@ pub(super) fn add_settings(
         if let Some(section) = clicked {
             commands.push(AppCommand::Settings(SettingsAction::SetSection(section)));
         }
+        let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
+        let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
         let hint = if settings.capturing() {
-            "Press a button or key to bind      Esc cancel"
+            "Press a button or key to bind      Esc cancel".to_string()
         } else if settings.is_info_section() {
-            "L1/R1 section   ⏶⏷ move   A select   B close"
+            format!("L1/R1 section   {up}{down} move   A select   B close")
         } else if settings.is_controls_section() {
-            "L1/R1 section   ⏶⏷ move   A open / bind / remove   B save & close"
+            format!("L1/R1 section   {up}{down} move   A open / bind / remove   B save & close")
         } else {
-            "L1/R1 section   ⏶⏷ move   ⏴⏵ adjust   A edit   B save & close      * needs restart"
+            format!(
+                "L1/R1 section   {up}{down} move   {left}{right} adjust   A edit   \
+                 B save & close      * needs restart"
+            )
         };
         ui.label(egui::RichText::new(hint).color(dim));
         if let Some(note) = settings.controls_note() {
@@ -526,11 +537,11 @@ pub(super) fn add_settings(
                         commands.push(AppCommand::Settings(SettingsAction::Activate));
                     }
                     if steppable {
-                        if step_button(ui, "⏴", selected, dim).clicked() {
+                        if step_button(ui, bold::CARET_LEFT, selected, dim).clicked() {
                             commands.push(AppCommand::Settings(SettingsAction::Select(i)));
                             commands.push(AppCommand::Settings(SettingsAction::Adjust(-1)));
                         }
-                        if step_button(ui, "⏵", selected, dim).clicked() {
+                        if step_button(ui, bold::CARET_RIGHT, selected, dim).clicked() {
                             commands.push(AppCommand::Settings(SettingsAction::Select(i)));
                             commands.push(AppCommand::Settings(SettingsAction::Adjust(1)));
                         }

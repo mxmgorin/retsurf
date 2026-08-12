@@ -6,13 +6,14 @@
 use super::theme::{ACCENT, DIM, PANEL_FILL};
 use crate::app::{AppCommand, PromptAction};
 use crate::overlay::prompt::Prompt;
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 use servo::{EmbedderControl, SelectElement, SelectElementOption, SimpleDialog};
 
 const ROW_H: f32 = 26.0;
 
 /// Draw the front pending control as a modal: a dimmed backdrop and a centered
-/// panel. Gamepad/keyboard: ▲▼ move, A/Enter activate, B/Esc dismiss; the
+/// panel. Gamepad/keyboard: up/down move, A/Enter activate, B/Esc dismiss; the
 /// mouse clicks rows and buttons directly.
 pub(super) fn add_prompt(
     ctx: &egui::Context,
@@ -145,8 +146,8 @@ fn add_select(
 }
 
 /// One option row. Enabled options take the next slot; disabled ones render
-/// dim and unclickable. The chosen state is marked with ☑/☐ (multi) or •
-/// (single) — all cmap-verified in egui's bundled fonts.
+/// dim and unclickable. The chosen state is marked with a check box (multi) or a
+/// radio dot (single).
 #[allow(clippy::too_many_arguments)]
 fn add_option_row(
     ui: &mut egui::Ui,
@@ -160,9 +161,14 @@ fn add_option_row(
 ) {
     let chosen = prompt.is_chosen(option.id);
     let label = if multiple {
-        format!("{} {}", if chosen { "☑" } else { "☐" }, option.label)
+        let box_glyph = if chosen {
+            bold::CHECK_SQUARE
+        } else {
+            bold::SQUARE
+        };
+        format!("{box_glyph} {}", option.label)
     } else if chosen {
-        format!("• {}", option.label)
+        format!("{} {}", bold::RADIO_BUTTON, option.label)
     } else {
         option.label.clone()
     };
