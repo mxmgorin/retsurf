@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Every chrome icon is now a [Phosphor](https://phosphoricons.com/) glyph (bold
+  weight, filled for the "on" half of a pair) instead of whatever icon-ish
+  character egui's bundled fonts happened to carry: one optical weight across the
+  toolbar, menu, settings and prompts. The hand-painted home button is gone, and
+  new icons no longer have to be cmap-checked against three fonts first.
 - Input moved onto the [inputbind](https://github.com/mxmgorin/inputbind) crate:
   the gesture machine, `bindings.toml`, gesture capture and the rebinding screen
   now live there instead of in retsurf.

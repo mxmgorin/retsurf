@@ -1638,6 +1638,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui-phosphor"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "249826f9529c1757d71dbbb3a22ec101b21110ab663c45fb771c2b86121379e4"
+dependencies = [
+ "egui",
+]
+
+[[package]]
 name = "egui-sdl2"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5084,6 +5093,7 @@ dependencies = [
  "base64 0.23.1",
  "content-security-policy",
  "dpi",
+ "egui-phosphor",
  "egui-sdl2",
  "env_logger",
  "euclid",

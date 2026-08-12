@@ -10,6 +10,7 @@ use super::theme::ACCENT;
 use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -97,10 +98,9 @@ pub(super) fn add_home(
 
 /// The bottom control-hint bar: little key-cap pills with their action, centered
 /// near the foot of the page. Painted (not laid out in the centered flow) so it
-/// stays pinned to the bottom regardless of how many tiles there are. Plain
-/// ASCII letters in pills sidestep egui's gappy gamepad-glyph coverage.
+/// stays pinned to the bottom regardless of how many tiles there are.
 fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
-    const HINTS: &[(&str, &str)] = &[("A", "Open"), ("☰", "Menu")];
+    const HINTS: &[(&str, &str)] = &[("A", "Open"), (bold::LIST, "Menu")];
     const PILL_H: f32 = 18.0;
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
     const GAP_KL: f32 = 6.0; // key pill to its label
@@ -400,7 +400,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
     // The settings sentinel isn't a real address: show a gear glyph and "Settings"
     // rather than the garbage `brand_label` would derive from `retsurf:settings`.
     let (glyph_text, name) = if url == SETTINGS_PIN {
-        ("⚙".to_string(), "Settings".to_string())
+        (bold::GEAR.to_string(), "Settings".to_string())
     } else {
         let label = brand_label(url);
         let initial = label
@@ -428,8 +428,8 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
     );
 }
 
-/// The trailing "Edit" tile: an empty (fill-less) glyph square holding a ✏, with
-/// "Edit" beneath — accent-ringed and brightened when selected or hovered, like a
+/// The trailing "Edit" tile: an empty (fill-less) glyph square holding a pencil,
+/// with "Edit" beneath — accent-ringed and brightened when selected or hovered, like a
 /// real tile but unfilled so it reads as an action slot. Opens the dial editor.
 fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
@@ -452,7 +452,7 @@ fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     painter.text(
         glyph.center(),
         egui::Align2::CENTER_CENTER,
-        "✏",
+        bold::PENCIL_SIMPLE,
         font(24.0),
         if active { ACCENT } else { MUTED },
     );

@@ -8,6 +8,7 @@ use super::theme::{ACCENT, CLOSE_SIZE};
 use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::dial_edit::DialEdit;
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 
 const BG: egui::Color32 = egui::Color32::from_rgb(0x16, 0x17, 0x1a);
@@ -121,7 +122,7 @@ fn add_settings_tile(ui: &mut egui::Ui, selected: bool, pinned: bool) -> bool {
         painter.text(
             glyph.center(),
             egui::Align2::CENTER_CENTER,
-            "⚙",
+            bold::GEAR,
             egui::FontId::proportional(24.0),
             if active { ACCENT } else { MUTED },
         );
@@ -165,7 +166,7 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
     ui.painter().text(
         badge.center(),
         egui::Align2::CENTER_CENTER,
-        "✖",
+        bold::X,
         egui::FontId::proportional(11.0),
         INK,
     );
@@ -231,10 +232,11 @@ fn add_close_button(ui: &mut egui::Ui, screen: egui::Rect, commands: &mut Vec<Ap
 
 /// A dim one-line control hint pinned near the bottom of the panel.
 fn add_hint_bar(ui: &egui::Ui, screen: egui::Rect) {
+    let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
     ui.painter().text(
         egui::pos2(screen.center().x, screen.bottom() - 22.0),
         egui::Align2::CENTER_CENTER,
-        "⏶⏷ select   A type   X delete   B back",
+        format!("{up}{down} select   A type   X delete   B back"),
         egui::FontId::proportional(12.0),
         MUTED,
     );
