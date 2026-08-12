@@ -483,8 +483,9 @@ thread_local! {
     static BRAND_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
-/// A short label for a tile (memoized wrapper over [`compute_brand_label`]).
-fn brand_label(url: &str) -> String {
+/// A short label for a tile or a menu URL row (memoized wrapper over
+/// [`compute_brand_label`]).
+pub(super) fn brand_label(url: &str) -> String {
     BRAND_LABELS.with(|cache| {
         if let Some(label) = cache.borrow().get(url) {
             return label.clone();

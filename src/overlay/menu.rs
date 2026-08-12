@@ -149,10 +149,15 @@ impl Menu {
         self.tab_selected
     }
 
-    /// Whether the History section's "Clear all" top row is highlighted (A then
-    /// clears, mirroring how A on the Tabs "+ New tab" row opens a tab).
-    pub fn history_clear_selected(&self) -> bool {
-        self.section == Section::History && self.history.clear_selected()
+    /// Whether the active section's leading clear row is highlighted — History's
+    /// "Clear all" or Downloads' "Clear finished" (A then clears, mirroring how A
+    /// on the Tabs "+ New tab" row opens a tab).
+    pub fn clear_selected(&self) -> bool {
+        match self.section {
+            Section::History => self.history.clear_selected(),
+            Section::Downloads => self.downloads.clear_selected(),
+            Section::Tabs | Section::Bookmarks => false,
+        }
     }
 
     /// Refresh the known tab count (the tab list lives in the browser), keeping the

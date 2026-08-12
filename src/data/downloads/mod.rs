@@ -85,7 +85,9 @@ impl Downloads {
             items: store::load(),
             dir: cfg.resolve_dir(),
             user_agent,
-            cursor: crate::data::ListCursor::new(0),
+            // Row 0 is the "Clear finished" action (like History's "Clear all"),
+            // so it stays reachable without a mouse; entries follow it.
+            cursor: crate::data::ListCursor::new(1),
         }
     }
 
@@ -208,6 +210,12 @@ impl Downloads {
 
     pub fn has_finished(&self) -> bool {
         self.items.iter().any(|d| !d.is_active())
+    }
+
+    /// Whether the "Clear finished" top row (cursor index 0) is highlighted. Only
+    /// meaningful while there are entries (the row isn't shown otherwise).
+    pub fn clear_selected(&self) -> bool {
+        self.cursor.on_reserved_row(self.items.len())
     }
 
     /// Reset the highlight to the top (called when the menu opens).

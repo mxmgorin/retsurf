@@ -278,6 +278,31 @@ fn toolbar_contents(
     );
 }
 
+/// Thickness of the loading edge (logical px).
+const LOADING_EDGE: f32 = 2.0;
+
+/// Accent line along the toolbar's page-facing edge while the tab loads — the
+/// "busy" signal we can afford: static, so it repaints only when the load status
+/// flips, unlike a spinner.
+fn paint_loading_edge(ctx: &egui::Context, bar: egui::Rect, position: ToolbarPosition) {
+    let top = match position {
+        ToolbarPosition::Top => bar.bottom() - LOADING_EDGE,
+        ToolbarPosition::Bottom => bar.top(),
+    };
+    let edge = egui::Rect::from_min_size(
+        egui::pos2(bar.left(), top),
+        Vec2 {
+            x: bar.width(),
+            y: LOADING_EDGE,
+        },
+    );
+    ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("loading_edge"),
+    ))
+    .rect_filled(edge, 0.0, theme::ACCENT);
+}
+
 /// Draw the toolbar as a space-reserving panel anchored to `position`'s edge
 /// (the central panel takes whatever's left). Returns the panel's screen rect.
 #[allow(clippy::too_many_arguments)]
@@ -300,7 +325,7 @@ pub(super) fn add_toolbar(
         ToolbarPosition::Top => egui::Panel::top("toolbar"),
         ToolbarPosition::Bottom => egui::Panel::bottom("toolbar"),
     };
-    panel
+    let rect = panel
         .frame(frame)
         .show(ui, |ui| {
             toolbar_contents(
@@ -316,7 +341,11 @@ pub(super) fn add_toolbar(
             )
         })
         .response
-        .rect
+        .rect;
+    if state.is_loading() {
+        paint_loading_edge(ui.ctx(), rect, position);
+    }
+    rect
 }
 
 /// Draw the toolbar as a floating overlay pinned to `position`'s edge — for
@@ -344,7 +373,7 @@ pub(super) fn add_toolbar_overlay(
         ToolbarPosition::Top => egui::Align2::CENTER_TOP,
         ToolbarPosition::Bottom => egui::Align2::CENTER_BOTTOM,
     };
-    egui::Area::new(egui::Id::new("toolbar_overlay"))
+    let rect = egui::Area::new(egui::Id::new("toolbar_overlay"))
         .order(egui::Order::Foreground)
         .anchor(align, egui::vec2(0.0, 0.0))
         .show(ctx, |ui| {
@@ -366,5 +395,9 @@ pub(super) fn add_toolbar_overlay(
                 .response
                 .rect
         })
-        .inner
+        .inner;
+    if state.is_loading() {
+        paint_loading_edge(ctx, rect, position);
+    }
+    rect
 }

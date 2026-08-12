@@ -1,6 +1,6 @@
 //! Rendering of the full-screen menu overlay (state lives in [`crate::overlay::menu`]):
-//! the section bar with the close and contextual clear actions, and the four
-//! section lists (Tabs / Bookmarks / History / Downloads).
+//! the section bar with the close action, and the four section lists
+//! (Tabs / Bookmarks / History / Downloads).
 
 use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT};
@@ -9,7 +9,7 @@ use crate::browser::TabInfo;
 use crate::data::history;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};
-use egui_sdl2::egui;
+use egui_sdl2::egui::{self, AtomExt as _};
 
 /// Shared list-row height — taller than egui's default so rows stay legible on a
 /// handheld; radius, gap, and padding come from [`super::panel`].
@@ -50,12 +50,57 @@ fn row_button(
     selected: bool,
     text: egui::RichText,
 ) -> egui::Response {
+    row_atoms(
+        ui,
+        width,
+        selected,
+        (text.size(ROW_FONT), egui::Atom::grow()),
+    )
+}
+
+/// [`row_button`] over pre-built atoms (a multi-color label). Mark one atom
+/// `shrink` — truncation eats that one; egui otherwise picks the leading run.
+fn row_atoms<'a>(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    atoms: impl egui::IntoAtoms<'a>,
+) -> egui::Response {
     ui.add_sized(
         [width, ROW_H],
-        egui::Button::selectable(selected, (text.size(ROW_FONT), egui::Atom::grow()))
+        egui::Button::selectable(selected, atoms)
             .corner_radius(ROW_RADIUS)
             .truncate(),
     )
+}
+
+/// A URL row's label: site name in white, rest of the URL dim. Leading with the
+/// name makes the list scannable — raw URLs share the same `https://` prefix.
+fn url_atoms<'a>(url: &'a str, pinned: bool) -> egui::Atoms<'a> {
+    let brand = egui::RichText::new(super::home::brand_label(url))
+        .size(ROW_FONT)
+        .color(egui::Color32::WHITE);
+    let tail = egui::RichText::new(url_tail(url)).size(ROW_FONT).color(DIM);
+    let mut atoms = egui::Atoms::new((brand, tail.atom_shrink(true), egui::Atom::grow()));
+    if pinned {
+        atoms.push_left(
+            egui::RichText::new(bold::PUSH_PIN)
+                .size(ROW_FONT)
+                .color(ACCENT),
+        );
+    }
+    atoms
+}
+
+/// Path, query and fragment of `url`; empty for a bare host.
+fn url_tail(url: &str) -> &str {
+    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let tail = after_scheme.find('/').map_or("", |i| &after_scheme[i..]);
+    if tail == "/" {
+        ""
+    } else {
+        tail
+    }
 }
 
 /// Draw the menu overlay: the section bar over the active section's list, plus a
@@ -76,16 +121,9 @@ pub(super) fn add_menu(
             Section::ALL,
             menu.section(),
             Section::label,
-            |ui| {
-                // Downloads clears from the bar; History's "Clear all" is the top
-                // row of its list instead (see `add_history_section`).
-                if menu.section() == Section::Downloads && menu.downloads.has_finished() {
-                    let clear = egui::Button::new(egui::RichText::new("Clear finished").color(dim));
-                    if ui.add(clear).clicked() {
-                        commands.push(AppCommand::Menu(MenuAction::Clear));
-                    }
-                }
-            },
+            // Both clear actions are the top row of their list, not a bar button:
+            // a gamepad can reach a row.
+            |_| {},
         );
         if let Some(section) = clicked {
             commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
@@ -212,16 +250,9 @@ fn add_bookmarks_section(
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, url) in bookmarks.urls().iter().enumerate() {
             let selected = i == bookmarks.selected();
-            // A leading pin marks a row pinned to the start-page dial; Y toggles
-            // the pin (see the legend).
-            let label = if menu.dial.contains(url) {
-                format!("{} {url}", bold::PUSH_PIN)
-            } else {
-                url.clone()
-            };
+            // A leading pin marks a row pinned to the start-page dial (Y toggles).
             ui.horizontal(|ui| {
-                let text = egui::RichText::new(label).color(egui::Color32::WHITE);
-                let resp = row_button(ui, row_w, selected, text);
+                let resp = row_atoms(ui, row_w, selected, url_atoms(url, menu.dial.contains(url)));
                 if selected {
                     resp.scroll_to_me(Some(egui::Align::Center));
                 }
@@ -256,8 +287,27 @@ fn add_downloads_section(
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
+        // Clear row (cursor index 0), like History's; muted further with nothing
+        // finished to clear, since it is then a no-op.
+        let clear_color = if downloads.has_finished() {
+            dim
+        } else {
+            egui::Color32::from_gray(0x66)
+        };
+        let clear = row_button(
+            ui,
+            screen.width() - SIDES,
+            downloads.selected() == 0,
+            egui::RichText::new("Clear finished").color(clear_color),
+        );
+        if downloads.selected() == 0 {
+            clear.scroll_to_me(Some(egui::Align::Center));
+        }
+        if clear.clicked() {
+            commands.push(AppCommand::Menu(MenuAction::Clear));
+        }
         for (i, item) in downloads.items().iter().enumerate() {
-            let selected = i == downloads.selected();
+            let selected = downloads.selected() == i + 1; // index 0 is "Clear finished"
             ui.horizontal(|ui| {
                 let resp = row_button(
                     ui,
@@ -285,8 +335,8 @@ fn add_downloads_section(
     });
 }
 
-/// History section: visited URLs (most-recent first) with their visit date.
-/// "Clear all" sits in the menu's top bar.
+/// History section: visited URLs (most-recent first) with their visit date, over
+/// a leading "Clear all" row.
 fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -324,8 +374,7 @@ fn add_history_section(
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
-                let text = egui::RichText::new(&entry.url).color(egui::Color32::WHITE);
-                let resp = row_button(ui, row_w, selected, text);
+                let resp = row_atoms(ui, row_w, selected, url_atoms(&entry.url, false));
                 if selected {
                     resp.scroll_to_me(Some(egui::Align::Center));
                 }

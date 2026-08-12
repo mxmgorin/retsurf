@@ -72,16 +72,25 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect,
         // Only the live targets carry a readable badge; faded hints drop it.
         // With combos disabled, no badges at all — just the spatial frames.
         if badges && matched {
-            draw_badge(&painter, rect, hints.code(i), typed.len());
+            draw_badge(&painter, rect, webview, hints.code(i), typed.len());
         }
     }
 }
 
-/// Draw the hint code as a row of label cells at the rect's top-left corner.
+/// Draw the hint code as a row of label cells, sitting just above the element's
+/// top-left corner so it doesn't cover the element's own first characters. Falls
+/// back to overlapping when the element is at the top of the view (no room).
 /// `done` is how many leading cells are already typed (drawn muted).
-fn draw_badge(painter: &egui::Painter, rect: egui::Rect, code: &[Label], done: usize) {
+fn draw_badge(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    webview: egui::Rect,
+    code: &[Label],
+    done: usize,
+) {
     let mut x = rect.left();
-    let top = rect.top();
+    // The selected hint's frame is drawn 2px outside the rect; clear it too.
+    let top = (rect.top() - CELL_H - 3.0).max(webview.top());
     let last = code.len().saturating_sub(1);
     for (j, &label) in code.iter().enumerate() {
         let w = cell_width(label);
