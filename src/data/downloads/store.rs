@@ -59,7 +59,7 @@ pub(super) fn save(items: &[Download]) {
 
 fn into_download(entry: DiskEntry) -> Download {
     Download {
-        filename: super::file_name_of(&entry.path),
+        filename: entry_filename(&entry),
         url: entry.url,
         received: entry.size,
         total: entry.size,
@@ -70,5 +70,17 @@ fn into_download(entry: DiskEntry) -> Download {
         },
         path: entry.path,
         shared: None,
+    }
+}
+
+/// Row name for a restored entry. A download that failed before its file existed
+/// was saved with an empty path, so falling back to the URL keeps the row from
+/// coming back nameless.
+fn entry_filename(entry: &DiskEntry) -> String {
+    let from_path = super::file_name_of(&entry.path);
+    if from_path.is_empty() {
+        super::worker::filename_from_url(&entry.url)
+    } else {
+        from_path
     }
 }

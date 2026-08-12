@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     now means "nothing bound" rather than silently falling back to the defaults.
     A missing file still gets the defaults written to it.
 
+- Bookmark and history rows lead with the site name, with the rest of the URL dim
+  behind it, instead of the raw `https://...` — the part that distinguishes two
+  rows is now the part you read first, and it is the tail that truncates.
+- A page that is loading paints an accent line along the toolbar's page-facing
+  edge. Static, not a spinner: it costs no repaints of its own.
+
 ### Fixed
 
 - A tab could stay "loading" forever — reload greyed out for good — on any page
@@ -44,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LoadStatus::HeadParsed`, with no `Complete` to follow (wikipedia does it). The
   flag now follows the document's ready state only, and loads we start ourselves
   arm it directly, since Servo announces `Started` only for page-initiated ones.
+- A download that failed before its file existed came back from
+  `downloads.toml` nameless; its row now falls back to the URL's name.
+- Downloads' "Clear finished" was a bar button, reachable only with a mouse. It
+  is now the list's top row, like History's "Clear all".
+- Link-hint badges covered the first characters of the element they label; they
+  now sit just above it.
 - A page click held while the bindings were saved, or while binding capture
   opened, could leave the mouse button stuck down on the page: the press was
   sent and its release never was. The gesture machine now closes what it owes.

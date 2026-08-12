@@ -116,8 +116,8 @@ impl App {
                 self.browser.switch_to(sel - 1);
                 self.ui.menu.close();
             }
-        } else if self.ui.menu.history_clear_selected() {
-            // History's "Clear all" top row (index 0): wipe the list, stay open.
+        } else if self.ui.menu.clear_selected() {
+            // The section's clear row (index 0): wipe the list, stay open.
             self.ui.menu.clear();
         } else if let Some(url) = self.ui.menu.selected_url() {
             self.open_url(url);

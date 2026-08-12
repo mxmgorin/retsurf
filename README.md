@@ -13,9 +13,9 @@
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg" alt="Dependencies"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. [Servo](https://github.com/servo/servo) handles web rendering, SDL2 handles windowing and input, and egui provides the UI.
+retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical.
 
-The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical. retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets PortMaster-compatible Linux handhelds (Knulli, muOS, ROCKNIX), as well as regular desktops and Android (touch + system keyboard).
+retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets PortMaster-compatible Linux handhelds (Knulli, muOS, ROCKNIX), as well as regular desktops and Android (touch + system keyboard). Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 for windowing and input and egui for the UI.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -45,7 +45,7 @@ retsurf is an attempt to fill that gap: a modern web engine, gamepad-first contr
 - **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy), compiled and cached locally so warm starts are instant and work offline.
 - **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), controller-navigable like every other overlay.
 - **In-app updates** — checks GitHub, shows release notes inline, and installs in place on PortMaster handhelds and Linux desktops (elsewhere it opens the release page). Stable, beta, and dev channels.
-- **Web Audio** — custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and decodeAudioData() for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate. <audio>/<video> are not supported (no demuxing media player).
+- **Web Audio** — custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and decodeAudioData for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
 - **Modern rendering** — Servo's WebRender on OpenGL ES 3.x: a single GL context and zero CPU readback, Servo drawing straight into the on-screen framebuffer.
 
 ## Building & running

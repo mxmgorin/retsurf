@@ -44,18 +44,22 @@ glow = "0.17"
 surfman = "0.13"
 log = "0.4.28"
 env_logger = "0.11.8"
+# The four Servo crates name the fork directly instead of a crates.io version left to
+# `[patch.crates-io]` below: nothing on crates.io satisfies 0.5 (0.4.0 is the newest
+# published), so a version requirement reads as unresolvable to tools like deps.rs.
+#
 # bundled_freetype: a Servo default lost to default-features = false. Without it
 # freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
-servo = { version = "0.5", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = "0.5"
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
 # WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
 # device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
 # types. Must resolve to the fork like `servo` does, or the backend registers into a
 # second copy of these crates.
-servo-media = "0.5"
-servo-media-dummy = "0.5"
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -121,6 +125,9 @@ android_logger = "0.15"
 # so a mixed graph ends up with two of every crate. Pin a `rev`, never a branch —
 # `retsurf-main` is rebased onto upstream, so each rev needs its `retsurf-main-<n>`
 # tag to stay reachable.
+#
+# Now that `[dependencies]` names the fork itself, this section only catches a transitive
+# crates-io reference to a Servo crate. Both lists carry the rev, so a bump moves both.
 [patch.crates-io]
 servo = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
 servo-base = { git = "https://github.com/mxmgorin/servo", rev = "042fa6f5c9b970851af5a834561852e02b7ddca9" }
