@@ -235,6 +235,7 @@ fn add_dialog(
         ui.add(
             egui::TextEdit::singleline(prompt.input_mut())
                 .desired_width(f32::INFINITY)
+                .vertical_align(egui::Align::Center)
                 .id(edit_id),
         );
         ui.add_space(8.0);

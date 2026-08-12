@@ -11,18 +11,34 @@ use crate::overlay::settings::SettingsSection;
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, Vec2};
 
+/// Side of a toolbar icon slot (logical px).
+const SLOT: f32 = 20.0;
+
+/// The address-bar frame's inner margin: across, then down.
+const FIELD_MARGIN_X: i8 = 4;
+const FIELD_MARGIN_Y: i8 = 2;
+
+/// Row height every item centers against: `Align::Center` only knows the height
+/// laid out so far, and the tallest item (the field) comes last. Keep it equal to
+/// the field's own height.
+const ROW_H: f32 = SLOT + 2.0 * FIELD_MARGIN_Y as f32;
+
 /// Create a frameless button with square sizing, as used in the toolbar. Takes
 /// icon text from [`theme::icon`] as readily as a plain label (the zoom chip).
 #[inline]
 fn new_toolbar_button<'a>(text: impl egui::IntoAtoms<'a>) -> egui::Button<'a> {
     egui::Button::new(text)
         .frame(false)
-        .min_size(Vec2 { x: 20.0, y: 20.0 })
+        .min_size(Vec2 { x: SLOT, y: SLOT })
 }
 
+/// Vertically centered: egui puts a TextEdit's text at the top of its box, and
+/// this box is the icon slot's height, not the text's.
 #[inline]
 fn new_text_edit<'a>(text: &'a mut String, id: &str) -> egui::TextEdit<'a> {
-    egui::TextEdit::singleline(text).id(egui::Id::new(id))
+    egui::TextEdit::singleline(text)
+        .id(egui::Id::new(id))
+        .vertical_align(egui::Align::Center)
 }
 
 /// A frameless toolbar button painting a rounded square outline with the tab
@@ -30,7 +46,7 @@ fn new_text_edit<'a>(text: &'a mut String, id: &str) -> egui::TextEdit<'a> {
 /// than a bracketed label) so the square reads as an icon, not a selection.
 /// Brightens on hover; returns its click response.
 fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 22.0, y: 20.0 }, egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 22.0, y: SLOT }, egui::Sense::click());
     let color = ui.style().interact(&resp).fg_stroke.color;
     let painter = ui.painter();
 
@@ -63,7 +79,7 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
 
 /// "Update available" chip: a painted accent dot (can't tofu). Brightens on hover.
 fn add_update_dot(ui: &mut egui::Ui) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: 20.0, y: 20.0 }, egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: SLOT, y: SLOT }, egui::Sense::click());
     let color = theme::ACCENT;
     let color = if resp.hovered() {
         color.gamma_multiply(1.25)
@@ -109,6 +125,7 @@ fn toolbar_contents(
         egui::vec2(ui.available_size().x, 0.0),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
+            ui.set_min_height(ROW_H);
             if ui
                 .add(new_toolbar_button(theme::icon(bold::ARROW_LEFT)))
                 .clicked()
@@ -163,6 +180,8 @@ fn toolbar_contents(
                 ui.available_size(),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
+                    // A freshly allocated ui does not inherit the row's floor.
+                    ui.set_min_height(ROW_H);
                     // Update chip: far-right accent dot when a newer build is found; opens Settings -> About.
                     if update_available && add_update_dot(ui).clicked() {
                         commands.push(AppCommand::Settings(SettingsAction::Open));
@@ -227,12 +246,12 @@ fn toolbar_contents(
                         .fill(ui.visuals().text_edit_bg_color())
                         .stroke(ui.visuals().widgets.inactive.bg_stroke)
                         .corner_radius(radius)
-                        .inner_margin(egui::Margin::symmetric(4, 2))
+                        .inner_margin(egui::Margin::symmetric(FIELD_MARGIN_X, FIELD_MARGIN_Y))
                         .show(ui, |ui| {
                             // Fill the toolbar's remaining width (minus the
                             // frame's own margins) so the bar spans the gap;
                             // height stays natural (one text row).
-                            ui.set_min_width(avail.x - 8.0);
+                            ui.set_min_width(avail.x - 2.0 * FIELD_MARGIN_X as f32);
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 // Reader toggle — its own slot at the field's
                                 // right edge.

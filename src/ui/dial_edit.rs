@@ -194,13 +194,15 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Opti
         ));
     frame.show(ui, |ui| {
         ui.set_width(width);
+        let field_font = egui::FontId::proportional(18.0);
         let edit_widget = egui::TextEdit::singleline(edit.input_mut())
             .id(edit_id)
-            .hint_text("Type or paste a URL")
+            .hint_text(egui::RichText::new("Type or paste a URL").font(field_font.clone()))
             .frame(egui::Frame::NONE)
             .background_color(egui::Color32::TRANSPARENT)
             .desired_width(f32::INFINITY)
-            .font(egui::FontId::proportional(18.0))
+            .font(field_font)
+            .vertical_align(egui::Align::Center)
             .text_color(INK);
         let resp = ui.add(edit_widget);
         if resp.gained_focus() {
