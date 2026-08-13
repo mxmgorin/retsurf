@@ -19,6 +19,7 @@ pub(super) fn add_prompt(
     ctx: &egui::Context,
     prompt: &mut Prompt,
     osk_caret: Option<usize>,
+    osk_lift: f32,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -44,10 +45,11 @@ pub(super) fn add_prompt(
     };
 
     // Tooltip order puts the modal above the Foreground overlays (menu, OSK,
-    // the dim layer painted above).
+    // the dim layer painted above), so `osk_lift` recenters it clear of the keys.
+    let offset = egui::vec2(0.0, -osk_lift / 2.0);
     egui::Area::new(egui::Id::new("prompt"))
         .order(egui::Order::Tooltip)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .anchor(egui::Align2::CENTER_CENTER, offset)
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(PANEL_FILL)

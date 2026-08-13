@@ -708,6 +708,30 @@ impl AppBrowser {
         }
     }
 
+    /// Empty the page's focused field (the keyboard's Clr key), notifying the
+    /// page as a real edit would.
+    pub fn clear_focused_field(&self) {
+        let Some(webview) = self.inner.active_webview() else {
+            return;
+        };
+        webview.evaluate_javascript(CLEAR_FIELD_JS, |_| {});
+    }
+
+    /// Scroll the page so its focused element clears the bottom `covered`
+    /// fraction of the viewport — the on-screen keyboard, which the page knows
+    /// nothing about. A no-op when the element is already above it.
+    ///
+    /// Done in the page rather than by the compositor: only the document knows
+    /// where its focused element is. Servo's IME rect can't answer that (its own
+    /// FIXME: it reports a frame-relative CSS box, not a viewport position).
+    pub fn lift_focus_above(&self, covered: f32) {
+        let Some(webview) = self.inner.active_webview() else {
+            return;
+        };
+        let js = LIFT_FOCUS_JS.replace("COVERED", &format!("{covered:.4}"));
+        webview.evaluate_javascript(js, |_| {});
+    }
+
     /// Scroll the active page by a device-pixel delta at `(x, y)`. Positive `dy`
     /// reveals content lower on the page. This is the native compositor scroll
     /// (`InputEvent::Wheel` only fires the DOM `wheel` event, it does not scroll).
@@ -831,6 +855,36 @@ impl AppBrowser {
         }
     }
 }
+
+/// Empty the focused field, firing the events a page listens for.
+const CLEAR_FIELD_JS: &str = r#"
+(function () {
+    const el = document.activeElement;
+    if (!el) return;
+    if ('value' in el) {
+        el.value = '';
+    } else if (el.isContentEditable) {
+        el.textContent = '';
+    } else {
+        return;
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+})()
+"#;
+
+/// Scroll the focused element clear of the viewport's bottom `COVERED` fraction
+/// (substituted by [`AppBrowser::lift_focus_above`]). A fraction, not a pixel
+/// count, so it needs no CSS-px / logical-px conversion.
+const LIFT_FOCUS_JS: &str = r#"
+(function () {
+    const el = document.activeElement;
+    if (!el || !el.getBoundingClientRect) return;
+    const limit = window.innerHeight * (1 - COVERED) - 8;
+    const over = el.getBoundingClientRect().bottom - limit;
+    if (over > 0) window.scrollBy({ left: 0, top: over });
+})()
+"#;
 
 /// Collect the visible clickable elements as a flat `[x, y, w, h, …]` array
 /// (viewport-relative CSS px). Skips off-viewport, zero-size, hidden, and

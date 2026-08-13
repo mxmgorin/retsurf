@@ -74,6 +74,8 @@ pub enum Key {
     Enter,
     /// Cycle to the next enabled layout; labeled with the current one's name.
     Lang,
+    /// Empty the field being typed into.
+    Clear,
     /// Hides the keyboard.
     Hide,
 }
@@ -145,7 +147,7 @@ impl Layout {
             [Tab].into_iter().chain(chars(1)).collect(),
             [Caps].into_iter().chain(chars(2)).chain([Enter]).collect(),
             [Shift].into_iter().chain(chars(3)).chain([Shift]).collect(),
-            vec![Lang, Space, Left, Up, Down, Right, Hide],
+            vec![Lang, Clear, Space, Left, Up, Down, Right, Hide],
         ];
         let mut shift_map = HashMap::new();
         for (row, shifted) in def.rows.iter().zip(def.shift_rows) {
@@ -229,8 +231,10 @@ impl Osk {
             shift_held: false,
             shift_once: false,
             caret: 0,
-            row: 0,
-            col: 0,
+            // Start on `a` (the home row's first letter), not the top-left
+            // backtick; the cell then persists across hide/show.
+            row: 2,
+            col: 1,
             layouts,
             lang: 0,
         }
@@ -260,6 +264,7 @@ impl Osk {
             Right => ">".to_string(),
             Enter => "Enter".to_string(),
             Lang => self.layout().name.to_uppercase(),
+            Clear => "Clr".to_string(),
             Hide => "Hide".to_string(),
         }
     }
@@ -377,8 +382,23 @@ impl Osk {
                 // layouts — keep the selection on a valid cell.
                 self.col = self.col.min(self.layout().keys[self.row].len() - 1);
             }
+            Clear => self.clear_field(target, browser),
             Hide => self.visible = false,
         }
+    }
+
+    /// Empty the field being typed into (the **Clr** key): our own buffers
+    /// directly, a page field through the DOM.
+    fn clear_field(&mut self, target: OskTarget, browser: &AppBrowser) {
+        match target {
+            OskTarget::AddressBar => browser.get_state_mut().get_location_mut().clear(),
+            OskTarget::Prompt(buf)
+            | OskTarget::Home(buf)
+            | OskTarget::DialEdit(buf)
+            | OskTarget::Settings(buf) => buf.clear(),
+            OskTarget::Page => browser.clear_focused_field(),
+        }
+        self.caret = 0;
     }
 
     /// Type a space (the **Space** key or **Y**).
