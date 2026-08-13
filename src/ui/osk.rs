@@ -25,24 +25,27 @@ fn button_hint(key: &Key) -> Option<&'static str> {
 /// `bottom_inset` lifts the keyboard off the bottom edge by that many points —
 /// used to clear a bottom toolbar so the address bar being typed into stays
 /// visible just below the keys (0 for a top toolbar).
-pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) {
+///
+/// Returns the drawn height (logical px) — what the page has to scroll past to
+/// keep a field it owns visible.
+pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
     let selected = osk.selected();
     let shift = osk.shift();
     let highlight = ACCENT;
     let key_fill = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
     let hint = egui::Color32::from_gray(150);
     // Char keys are 36 wide with 4px gaps, so the 14-key top rows span 574px
-    // (≈598 with the frame margin, inside the 640px window). Enter and Shift are
-    // sized to make their (shorter) rows fill that same width.
+    // (≈598 with the frame margin, inside the 640px window). Space, Enter and
+    // Shift are sized to make their (shorter) rows fill that same width.
     let key_width = |key: &Key| match key {
-        Key::Space => 298.0,
+        Key::Space => 240.0,
         Key::Shift => 85.0,
         Key::Enter => 76.0,
-        Key::Tab | Key::Caps | Key::Backspace | Key::Lang | Key::Hide => 54.0,
+        Key::Tab | Key::Caps | Key::Backspace | Key::Lang | Key::Clear | Key::Hide => 54.0,
         _ => 36.0,
     };
 
-    egui::Area::new(egui::Id::new("osk"))
+    let area = egui::Area::new(egui::Id::new("osk"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -bottom_inset))
         .show(ctx, |ui| {
@@ -102,4 +105,5 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) {
                     }
                 });
         });
+    area.response.rect.height()
 }

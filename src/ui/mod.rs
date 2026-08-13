@@ -154,6 +154,11 @@ pub struct AppUi {
     /// the auto-hide overlay's slid position (off-screen when hidden). Used by the
     /// hit-tests to tell "this points at the chrome" from "this points at the page".
     toolbar_rect: egui::Rect,
+    /// The on-screen keyboard's drawn height (logical px), measured while it is up.
+    osk_height: f32,
+    /// The keyboard was opened over a page field: scroll the page so the field
+    /// clears the keys, once [`Self::osk_height`] is known (see [`AppUi::update`]).
+    osk_lift_pending: bool,
     repaint_pending: bool,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     browser_tex_id: egui::TextureId,
@@ -258,6 +263,8 @@ impl AppUi {
             webview_rect: egui::Rect::ZERO,
             toolbar_height: 0.0,
             toolbar_rect: egui::Rect::NOTHING,
+            osk_height: 0.0,
+            osk_lift_pending: false,
             repaint_pending: false,
             browser_tex_id,
             browser_viewport: (0, 0),
@@ -447,7 +454,14 @@ impl AppUi {
         } else {
             OskTarget::Page
         };
+        let to_page = matches!(target, OskTarget::Page);
         self.osk.handle(cmd, target, browser, commands);
+        // A page field can sit under the keyboard, and only the page can scroll
+        // it out — the lift is applied once the keyboard's height is known (see
+        // `update`).
+        if to_page && matches!(cmd, OskCommand::Show) {
+            self.osk_lift_pending = true;
+        }
     }
 
     /// Open the menu. It takes over the stick and A, so the other user
@@ -1166,10 +1180,17 @@ impl AppUi {
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
+                    // Last frame's height; the OSK is drawn after this.
+                    let osk_lift = if self.osk.visible {
+                        self.osk_height
+                    } else {
+                        0.0
+                    };
                     prompt::add_prompt(
                         ctx,
                         &mut self.prompt,
                         caret_for(OskField::Prompt),
+                        osk_lift,
                         commands,
                     );
                 }
@@ -1183,7 +1204,7 @@ impl AppUi {
                         ToolbarPosition::Bottom => self.toolbar_height,
                         ToolbarPosition::Top => 0.0,
                     };
-                    osk::add_osk(ctx, &self.osk, bottom_inset);
+                    self.osk_height = osk::add_osk(ctx, &self.osk, bottom_inset) + bottom_inset;
                 } else if self.hints.visible {
                     hints::add_hints(ctx, &self.hints, self.webview_rect, self.hint_badges);
                 } else if cursor_visible.is_some() {
@@ -1228,6 +1249,14 @@ impl AppUi {
                 self.browser_viewport = size;
                 browser.resize(size.0, size.1);
             }
+        }
+
+        // The keyboard just opened over a page field: now that it has been drawn
+        // (so its height is known), ask the page to scroll the field clear of it.
+        if self.osk_lift_pending && self.osk_height > 0.0 {
+            let covered = (self.osk_height / self.webview_rect.height()).clamp(0.0, 0.9);
+            browser.lift_focus_above(covered);
+            self.osk_lift_pending = false;
         }
 
         // Fold in egui's own repaint timing. A freshly shown anchored `Area`

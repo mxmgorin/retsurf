@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   control hints and then off the page entirely, with no way to reach them: the
   grid now lives in a scroll area that stops above the hints, and moving the
   selection into a hidden tile scrolls it into view.
+- A field on the *page* is scrolled clear of the keyboard when it opens, since
+  the page is the only one that can move it.
+- A modal page prompt recenters above the keyboard while it is up: the dialog
+  draws over the keys, so it used to cover the top key row.
+- The keyboard has a **Clr** key that empties the field (page fields included),
+  instead of holding Backspace down a URL's length.
 - Focusing the address bar selects the whole URL, so typing replaces it instead
   of appending to it.
 - Clearing history or the finished downloads takes two presses now: the row arms
