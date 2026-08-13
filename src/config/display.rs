@@ -17,6 +17,8 @@ pub struct DisplayConfig {
     pub cursor_linger_ms: u64,
     /// Which edge the toolbar (address bar + nav buttons) sits on.
     pub toolbar_position: ToolbarPosition,
+    /// Whether the toolbar is available. Disable it for kiosk-style displays.
+    pub toolbar_visible: bool,
     /// Hide the toolbar while scrolling down, reveal it on scrolling up. A top
     /// toolbar reserves space when shown (the page reflows below it, so the bar
     /// never covers content); a bottom toolbar floats over the page and slides away.
@@ -31,8 +33,20 @@ impl Default for DisplayConfig {
             use_gles: true,
             cursor_linger_ms: 1500,
             toolbar_position: ToolbarPosition::Top,
+            toolbar_visible: true,
             toolbar_autohide: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DisplayConfig;
+
+    #[test]
+    fn toolbar_can_be_disabled() {
+        let config: DisplayConfig = toml::from_str("toolbar_visible = false").unwrap();
+        assert!(!config.toolbar_visible);
     }
 }
 

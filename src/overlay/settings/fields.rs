@@ -216,6 +216,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
     f(S::Display,  "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
     f(S::Display,  "Display",     "Cursor linger (ms)",     int!(display.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
+    f(S::Display,  "Display",     "Show toolbar",           flag!(display.toolbar_visible), false),
     f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
 

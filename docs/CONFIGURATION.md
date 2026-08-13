@@ -73,6 +73,7 @@ width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
+toolbar_visible = true     # false hides browser chrome for kiosk-style displays
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (top reflows, bottom overlays)
 
