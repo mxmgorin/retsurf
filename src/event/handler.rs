@@ -193,9 +193,11 @@ impl AppEventHandler {
             return;
         }
 
-        let consumed = ui.handle_event(window, &event);
-
-        if consumed {
+        // egui reports *every* key consumed while a text field holds focus, which
+        // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
+        // while the caret sat in the address bar. Modified keys stay ours (egui
+        // still saw the event above, so typing is unaffected).
+        if ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
 
@@ -366,6 +368,16 @@ impl AppEventHandler {
 }
 
 /// `keyboard` tells the tables apart: their gesture text collides (`"a"` is both).
+/// A key event carrying Ctrl or Alt — a shortcut, not typing.
+fn is_shortcut_key(event: &Event) -> bool {
+    let keymod = match event {
+        Event::KeyDown { keymod, .. } | Event::KeyUp { keymod, .. } => keymod,
+        _ => return false,
+    };
+    use sdl2::keyboard::Mod;
+    keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD)
+}
+
 fn push_capture(commands: &mut Vec<AppCommand>, captured: Captured) {
     let (gesture, keyboard) = match captured {
         Captured::Pad(gesture) => (gesture.to_text(), false),

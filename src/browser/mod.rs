@@ -61,7 +61,11 @@ pub struct AppBrowser {
 }
 
 pub struct BrowserState {
+    /// Address bar text: an edit buffer, not necessarily the loaded page.
     location: String,
+    /// The tab's loaded URL. Apart from `location` so a half-typed draft can't
+    /// pass for the current page (it hid the start page and got bookmarked).
+    page_url: String,
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
@@ -80,6 +84,11 @@ impl BrowserState {
         &self.location
     }
 
+    /// What the tab has loaded, as opposed to [`Self::get_location`].
+    pub fn page_url(&self) -> &str {
+        &self.page_url
+    }
+
     /// For a tab whose webview was built already fetching a URL.
     fn loading() -> Self {
         Self {
@@ -93,6 +102,7 @@ impl Default for BrowserState {
     fn default() -> Self {
         Self {
             location: "".into(),
+            page_url: "".into(),
             loading: false,
         }
     }
@@ -321,7 +331,7 @@ impl AppBrowser {
     pub fn on_home_page(&self) -> bool {
         let tabs = self.inner.tabs.borrow();
         tabs.get(self.inner.active.get())
-            .is_some_and(|t| t.state.location == home::HOME_URL)
+            .is_some_and(|t| t.state.page_url == home::HOME_URL)
     }
 
     /// The active tab's toolbar state (address bar text + load status). Panics if
@@ -358,7 +368,7 @@ impl AppBrowser {
             let referer = self
                 .inner
                 .tab_index(webview.id())
-                .and_then(|i| delegate::referer_for(&self.inner.tabs.borrow()[i].state.location));
+                .and_then(|i| delegate::referer_for(&self.inner.tabs.borrow()[i].state.page_url));
             webview.evaluate_javascript(blob_download::TAKE_JS, move |result| {
                 match result {
                     Ok(servo::JSValue::String(taken)) => match blob_download::parse_taken(&taken) {
@@ -537,11 +547,11 @@ impl AppBrowser {
                     .webview
                     .page_title()
                     .filter(|t| !t.is_empty())
-                    .or_else(|| Some(tab.state.location.clone()).filter(|l| !l.is_empty()))
+                    .or_else(|| Some(tab.state.page_url.clone()).filter(|l| !l.is_empty()))
                     .unwrap_or_else(|| "New tab".to_string());
                 TabInfo {
                     title,
-                    url: tab.state.location.clone(),
+                    url: tab.state.page_url.clone(),
                     active: i == active,
                 }
             })

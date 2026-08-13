@@ -98,7 +98,7 @@ impl App {
 
     /// Toggle the current page in saved bookmarks (the bookmark button / Start).
     fn toggle_current_bookmark(&mut self) {
-        let url = self.browser.get_state_mut().get_location().to_string();
+        let url = self.browser.get_state_mut().page_url().to_string();
         if !url.is_empty() {
             self.ui.menu.toggle_bookmark(&url);
         }

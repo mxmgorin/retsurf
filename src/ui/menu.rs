@@ -74,13 +74,23 @@ fn row_atoms<'a>(
     )
 }
 
-/// A URL row's label: site name in white, rest of the URL dim. Leading with the
-/// name makes the list scannable — raw URLs share the same `https://` prefix.
-fn url_atoms<'a>(url: &'a str, pinned: bool) -> egui::Atoms<'a> {
-    let brand = egui::RichText::new(super::home::brand_label(url))
+/// A URL row's label: site name in white, rest of the URL dim and middle-elided
+/// to `width`. Leading with the name makes the list scannable; keeping both ends
+/// of the path keeps what differs between two rows of the same site.
+fn url_atoms(ui: &egui::Ui, url: &str, pinned: bool, width: f32) -> egui::Atoms<'static> {
+    let font = egui::FontId::proportional(ROW_FONT);
+    let brand_text = super::home::brand_label(url);
+    // Row padding, the gap after the brand, and the pin when there is one.
+    let mut budget = width - text_width(ui, &brand_text, &font) - 24.0;
+    if pinned {
+        budget -= text_width(ui, bold::PUSH_PIN, &font) + 4.0;
+    }
+    let brand = egui::RichText::new(brand_text)
         .size(ROW_FONT)
         .color(egui::Color32::WHITE);
-    let tail = egui::RichText::new(url_tail(url)).size(ROW_FONT).color(DIM);
+    let tail = egui::RichText::new(elide_middle(ui, url_tail(url), &font, budget))
+        .size(ROW_FONT)
+        .color(DIM);
     let mut atoms = egui::Atoms::new((brand, tail.atom_shrink(true), egui::Atom::grow()));
     if pinned {
         atoms.push_left(
@@ -90,6 +100,45 @@ fn url_atoms<'a>(url: &'a str, pinned: bool) -> egui::Atoms<'a> {
         );
     }
     atoms
+}
+
+/// Rendered width of `text` in `font` (logical px).
+fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+    ui.ctx().fonts_mut(|f| {
+        f.layout_no_wrap(text.to_owned(), font.clone(), DIM)
+            .size()
+            .x
+    })
+}
+
+/// Shorten `text` to `budget` px by cutting its middle. egui truncates at the
+/// end only, which drops the part of a URL that identifies the page.
+fn elide_middle(ui: &egui::Ui, text: &str, font: &egui::FontId, budget: f32) -> String {
+    if budget <= 0.0 || text_width(ui, text, font) <= budget {
+        return text.to_owned();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    // Binary search the number of kept chars: the width is monotonic in it.
+    let (mut lo, mut hi) = (0, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        if text_width(ui, &join_around_ellipsis(&chars, mid), font) <= budget {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    join_around_ellipsis(&chars, lo)
+}
+
+/// `keep` chars around a central ellipsis: a third leading, the rest trailing.
+fn join_around_ellipsis(chars: &[char], keep: usize) -> String {
+    let head = keep / 3;
+    let tail = keep - head;
+    let mut out: String = chars[..head].iter().collect();
+    out.push('…');
+    out.extend(&chars[chars.len() - tail..]);
+    out
 }
 
 /// The leading clear row of History / Downloads. Two presses: the first arms it
@@ -280,7 +329,8 @@ fn add_bookmarks_section(
             let selected = i == bookmarks.selected();
             // A leading pin marks a row pinned to the start-page dial (Y toggles).
             ui.horizontal(|ui| {
-                let resp = row_atoms(ui, row_w, selected, url_atoms(url, menu.dial.contains(url)));
+                let atoms = url_atoms(ui, url, menu.dial.contains(url), row_w);
+                let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     resp.scroll_to_me(Some(egui::Align::Center));
                 }
@@ -389,7 +439,8 @@ fn add_history_section(
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
-                let resp = row_atoms(ui, row_w, selected, url_atoms(&entry.url, false));
+                let atoms = url_atoms(ui, &entry.url, false, row_w);
+                let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     resp.scroll_to_me(Some(egui::Align::Center));
                 }
