@@ -199,6 +199,19 @@ fn on_key_down(
             commands.push(AppCommand::Input(InputCommand::Cancel));
             return;
         }
+        // Tab / Shift+Tab reorder the focused pin, like L1/R1 (and like the
+        // section switch they drive in the menu and settings).
+        if matches!(key.kc, Keycode::Tab) {
+            if !key.repeat {
+                let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+                let delta = if shift { -1 } else { 1 };
+                commands.push(AppCommand::Input(InputCommand::Shoulder(delta)));
+            }
+            return;
+        }
+        // Ctrl+arrows fall through to the bindings (`prev`/`next`, i.e. the same
+        // reorder); only the plain ones move the selection.
+        let ctrl = key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
         if ui.dial_edit_field_editing() {
             if matches!(key.kc, Keycode::Up) {
                 commands.push(AppCommand::Input(InputCommand::Nav(0, -1)));
@@ -216,7 +229,7 @@ fn on_key_down(
                 return;
             }
         } else {
-            if let Some((dx, dy)) = arrow_nav(key.kc) {
+            if let Some((dx, dy)) = arrow_nav(key.kc).filter(|_| !ctrl) {
                 commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
                 return;
             }

@@ -80,6 +80,11 @@ impl DialEdit {
         self.item = EditItem::Field;
     }
 
+    /// Focus a grid tile, so the selection can follow a pin that moved.
+    pub fn select_tile(&mut self, slot: usize) {
+        self.item = EditItem::Tile(slot);
+    }
+
     /// The focused tile's index, if a tile (not the field / Add) is focused.
     pub fn tile(&self) -> Option<usize> {
         match self.item {

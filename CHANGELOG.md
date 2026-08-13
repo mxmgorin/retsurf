@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A URL row that doesn't fit is now cut in its middle rather than at its end, so
   the part that tells two pages of one site apart survives.
+- Speed-dial pins can be reordered: **L1/R1** (Tab / Shift+Tab or Ctrl+arrows on a
+  keyboard) move the focused tile in the editor and the selection follows it. The
+  order was whatever order things were pinned in.
 
 ### Fixed
 

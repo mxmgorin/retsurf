@@ -101,6 +101,15 @@ impl Dial {
         }
     }
 
+    /// Swap the pins at `a` and `b`; persists. The editor reorders with this, so
+    /// the indices may straddle the settings sentinel — it keeps its own slot.
+    pub fn swap(&mut self, a: usize, b: usize) {
+        if a != b && a < self.urls.len() && b < self.urls.len() {
+            self.urls.swap(a, b);
+            self.save();
+        }
+    }
+
     /// Pin `url` if absent, otherwise unpin it; persists either way.
     pub fn toggle(&mut self, url: &str) {
         if let Some(i) = self.urls.iter().position(|u| u == url) {
