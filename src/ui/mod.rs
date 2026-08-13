@@ -764,6 +764,22 @@ impl AppUi {
         }
     }
 
+    /// Move the editor's focused pin by `delta` slots (L1/R1), taking the
+    /// selection with it. The settings tile isn't a pin, so it never moves.
+    pub fn dial_edit_move_selected(&mut self, delta: i32) {
+        let Some(slot) = self.dial_edit.tile() else {
+            return;
+        };
+        let indices = self.dial_edit_pin_indices();
+        let target = slot as i32 + delta;
+        if target < 0 || target as usize >= indices.len() || slot >= indices.len() {
+            return;
+        }
+        let target = target as usize;
+        self.menu.dial.swap(indices[slot], indices[target]);
+        self.dial_edit.select_tile(target);
+    }
+
     /// Whether a start-page tile (not the search field) is focused.
     #[inline]
     pub fn home_tile_selected(&self) -> bool {

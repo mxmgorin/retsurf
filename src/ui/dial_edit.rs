@@ -238,7 +238,7 @@ fn add_hint_bar(ui: &egui::Ui, screen: egui::Rect) {
     ui.painter().text(
         egui::pos2(screen.center().x, screen.bottom() - 22.0),
         egui::Align2::CENTER_CENTER,
-        format!("{up}{down} select   A type   X delete   B back"),
+        format!("{up}{down} select   A type   X delete   L1/R1 move   B back"),
         egui::FontId::proportional(12.0),
         MUTED,
     );

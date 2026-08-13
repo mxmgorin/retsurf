@@ -212,6 +212,9 @@ impl App {
                 Focus::Menu => self.ui.menu.switch_section(*delta),
                 // L1/R1 switch the settings section (Left/Right edits values).
                 Focus::Settings => self.ui.settings.switch_section(*delta),
+                // In the dial editor they reorder the focused pin (Left/Right
+                // moves the selection there).
+                Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
                 // In hint mode L1/R1 are combo symbols; with combos off they fall
                 // through to the page back/forward below.
                 Focus::Hints if self.config.input.hint_badges => {
