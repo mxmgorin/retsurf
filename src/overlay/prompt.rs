@@ -95,8 +95,6 @@ impl Prompt {
         )
     }
 
-    /// The `prompt()` dialog's edit buffer (bound to the overlay's text field).
-    #[inline]
     pub fn input_mut(&mut self) -> &mut String {
         &mut self.input
     }

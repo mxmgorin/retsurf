@@ -65,6 +65,18 @@ pub(super) fn park_caret(ctx: &egui::Context, id: egui::Id, pos: usize, char_cou
     egui::TextEdit::store_state(ctx, id, state);
 }
 
+/// Select a `TextEdit`'s whole text, the way a desktop browser's address bar does
+/// on focus — otherwise typing appends to the URL already there.
+pub(super) fn select_all(ctx: &egui::Context, id: egui::Id, char_count: usize) {
+    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    let range = egui::text::CCursorRange::two(
+        egui::text::CCursor::new(0),
+        egui::text::CCursor::new(char_count),
+    );
+    state.cursor.set_char_range(Some(range));
+    egui::TextEdit::store_state(ctx, id, state);
+}
+
 /// Gamepad cursor overlay: circle radius and outline width (logical px).
 const CURSOR_RADIUS: f32 = 5.0;
 const CURSOR_STROKE: f32 = 1.5;
@@ -114,8 +126,8 @@ struct ToolbarLayout {
 /// [`AppUi::frame_snapshot`]), as owned copies — so the browser borrow doesn't
 /// leak into `egui.run` (which borrows `self`).
 struct FrameInputs {
-    /// 1-based active tab index and tab count, shown in the toolbar.
-    tab_pos: (usize, usize),
+    /// Open tab count, shown in the toolbar's tab chip.
+    tab_count: usize,
     /// Page-zoom chip percentage (`None` at the default zoom).
     zoom_pct: Option<u16>,
     /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
@@ -937,7 +949,7 @@ impl AppUi {
     /// tab list and can't overlap. `osk_field`/`osk_caret` are pure `self` reads,
     /// gathered here too since the closure can't take all of `self`.
     fn frame_snapshot(&mut self, browser: &mut AppBrowser) -> FrameInputs {
-        let tab_pos = (browser.active_tab() + 1, browser.tab_count());
+        let tab_count = browser.tab_count();
         let zoom_pct = browser.zoom_chip();
         let tab_infos = if self.menu.visible {
             self.menu.set_tab_count(browser.tab_count());
@@ -946,7 +958,7 @@ impl AppUi {
             Vec::new()
         };
         FrameInputs {
-            tab_pos,
+            tab_count,
             zoom_pct,
             tab_infos,
             osk_field: self.osk_target_field(),
@@ -1010,7 +1022,7 @@ impl AppUi {
             // parks each `TextEdit`'s cursor at the OSK caret for the field it
             // types into; the toolbar layout was decided in `toolbar_layout`.
             let FrameInputs {
-                tab_pos,
+                tab_count,
                 zoom_pct,
                 tab_infos,
                 osk_field,
@@ -1050,7 +1062,7 @@ impl AppUi {
                         &mut state,
                         commands,
                         bookmarked,
-                        tab_pos,
+                        tab_count,
                         active_downloads,
                         update_available,
                         zoom_pct,
@@ -1102,7 +1114,7 @@ impl AppUi {
                             &mut state,
                             commands,
                             bookmarked,
-                            tab_pos,
+                            tab_count,
                             active_downloads,
                             update_available,
                             zoom_pct,

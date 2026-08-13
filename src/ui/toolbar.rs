@@ -1,6 +1,6 @@
 //! The toolbar (top or bottom, per the display config): navigation buttons, the
 //! address bar, bookmark toggle, and the chips that jump into menu sections (tab
-//! position, active downloads).
+//! count, active downloads).
 
 use super::theme;
 use crate::app::{AppCommand, MenuAction, SettingsAction};
@@ -106,8 +106,8 @@ fn toolbar_contents(
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     bookmarked: bool,
-    // 1-based active tab index and total tab count, e.g. `(2, 3)` → "2/3".
-    tab_pos: (usize, usize),
+    // Open tabs, shown in the tab chip.
+    tab_count: usize,
     // Downloads still in flight; shown as a download-icon + count chip that jumps
     // to the section.
     active_downloads: usize,
@@ -213,7 +213,7 @@ fn toolbar_contents(
                     // inside, beside the menu button. Always shown (even at
                     // "1"); clicking it opens the menu's Tabs section (like
                     // the download chip for downloads).
-                    if add_tabs_button(ui, tab_pos.1).clicked() {
+                    if add_tabs_button(ui, tab_count).clicked() {
                         commands.push(AppCommand::Menu(MenuAction::Open));
                         commands.push(AppCommand::Menu(MenuAction::SetSection(Section::Tabs)));
                     }
@@ -269,11 +269,22 @@ fn toolbar_contents(
                                         state.get_location().chars().count(),
                                     );
                                 }
+                                let char_count = state.get_location().chars().count();
                                 let location = ui.add_sized(
                                     ui.available_size(),
                                     new_text_edit(state.get_location_mut(), "location")
                                         .frame(egui::Frame::new()),
                                 );
+                                // Focusing the bar selects the URL, so typing
+                                // replaces it. Skipped while the OSK types here:
+                                // it owns the caret (parked just above).
+                                if location.gained_focus() && osk_caret.is_none() {
+                                    super::select_all(
+                                        ui.ctx(),
+                                        egui::Id::new("location"),
+                                        char_count,
+                                    );
+                                }
                                 if is_key_pressed(ui, location.clone(), egui::Key::Enter) {
                                     commands.push(AppCommand::Browser(BrowserCommand::Load));
                                 }
@@ -330,7 +341,7 @@ pub(super) fn add_toolbar(
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     bookmarked: bool,
-    tab_pos: (usize, usize),
+    tab_count: usize,
     active_downloads: usize,
     update_available: bool,
     zoom_pct: Option<u16>,
@@ -352,7 +363,7 @@ pub(super) fn add_toolbar(
                 state,
                 commands,
                 bookmarked,
-                tab_pos,
+                tab_count,
                 active_downloads,
                 update_available,
                 zoom_pct,
@@ -378,7 +389,7 @@ pub(super) fn add_toolbar_overlay(
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     bookmarked: bool,
-    tab_pos: (usize, usize),
+    tab_count: usize,
     active_downloads: usize,
     update_available: bool,
     zoom_pct: Option<u16>,
@@ -404,7 +415,7 @@ pub(super) fn add_toolbar_overlay(
                         state,
                         commands,
                         bookmarked,
-                        tab_pos,
+                        tab_count,
                         active_downloads,
                         update_available,
                         zoom_pct,

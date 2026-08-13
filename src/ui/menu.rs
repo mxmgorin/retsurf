@@ -3,7 +3,7 @@
 //! (Tabs / Bookmarks / History / Downloads).
 
 use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{self, ACCENT, DIM, ROW_FONT};
+use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
 use crate::data::history;
@@ -90,6 +90,34 @@ fn url_atoms<'a>(url: &'a str, pinned: bool) -> egui::Atoms<'a> {
         );
     }
     atoms
+}
+
+/// The leading clear row of History / Downloads. Two presses: the first arms it
+/// (the label says so, in the warn color), the second wipes the list. `enabled`
+/// dims it further when there is nothing to clear.
+fn clear_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    label: &str,
+    selected: bool,
+    armed: bool,
+    enabled: bool,
+    commands: &mut Vec<AppCommand>,
+) {
+    let text = if armed {
+        egui::RichText::new(format!("{label} — press again to confirm")).color(WARN)
+    } else if enabled {
+        egui::RichText::new(label).color(DIM)
+    } else {
+        egui::RichText::new(label).color(egui::Color32::from_gray(0x66))
+    };
+    let resp = row_button(ui, width, selected, text);
+    if selected {
+        resp.scroll_to_me(Some(egui::Align::Center));
+    }
+    if resp.clicked() {
+        commands.push(AppCommand::Menu(MenuAction::Clear));
+    }
 }
 
 /// Path, query and fragment of `url`; empty for a bare host.
@@ -287,25 +315,15 @@ fn add_downloads_section(
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        // Clear row (cursor index 0), like History's; muted further with nothing
-        // finished to clear, since it is then a no-op.
-        let clear_color = if downloads.has_finished() {
-            dim
-        } else {
-            egui::Color32::from_gray(0x66)
-        };
-        let clear = row_button(
+        clear_row(
             ui,
             screen.width() - SIDES,
+            "Clear finished",
             downloads.selected() == 0,
-            egui::RichText::new("Clear finished").color(clear_color),
+            menu.clear_armed(),
+            downloads.has_finished(),
+            commands,
         );
-        if downloads.selected() == 0 {
-            clear.scroll_to_me(Some(egui::Align::Center));
-        }
-        if clear.clicked() {
-            commands.push(AppCommand::Menu(MenuAction::Clear));
-        }
         for (i, item) in downloads.items().iter().enumerate() {
             let selected = downloads.selected() == i + 1; // index 0 is "Clear finished"
             ui.horizontal(|ui| {
@@ -356,21 +374,18 @@ fn add_history_section(
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - date_w - 18.0;
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        // "Clear all" as the top row (cursor index 0, mirroring Tabs' "+ New
-        // tab"): drops every entry, by mouse or A. Dim, to read as a secondary/
-        // destructive action set apart from the URL rows.
-        let clear = row_button(
+        // Top row (cursor index 0, mirroring Tabs' "+ New tab"): drops every
+        // entry, by mouse or A. Dim, to read as a secondary/destructive action
+        // set apart from the URL rows.
+        clear_row(
             ui,
             screen.width() - SIDES,
+            "Clear all",
             hist.selected() == 0,
-            egui::RichText::new("Clear all").color(dim),
+            menu.clear_armed(),
+            true,
+            commands,
         );
-        if hist.selected() == 0 {
-            clear.scroll_to_me(Some(egui::Align::Center));
-        }
-        if clear.clicked() {
-            commands.push(AppCommand::Menu(MenuAction::Clear));
-        }
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {

@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   control hints and then off the page entirely, with no way to reach them: the
   grid now lives in a scroll area that stops above the hints, and moving the
   selection into a hidden tile scrolls it into view.
+- Focusing the address bar selects the whole URL, so typing replaces it instead
+  of appending to it.
+- Clearing history or the finished downloads takes two presses now: the row arms
+  first and says so. Neither can be undone.
 
 ### Fixed
 
