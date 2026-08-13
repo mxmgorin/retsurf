@@ -67,8 +67,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clearing history or the finished downloads takes two presses now: the row arms
   first and says so. Neither can be undone.
 
+- A URL row that doesn't fit is now cut in its middle rather than at its end, so
+  the part that tells two pages of one site apart survives.
+
 ### Fixed
 
+- The address bar was unusable on the start page: its search field claimed egui
+  focus back every frame, so a click there did nothing. Typing also blanked the
+  start page, because "the tab's URL" and "the address bar's text" were one
+  string — they are separate now (which also stops a half-typed address from
+  being bookmarked or sent as a Referer).
+- Ctrl shortcuts were dead while any text field held focus — egui reports every
+  key consumed then, so ctrl+m / ctrl+r / ctrl+, never reached the bindings.
+- A bookmark or history row for an address labelled it "0" (`127.0.0.1` has no
+  registrable domain to shorten to).
 - A tab could stay "loading" forever — reload greyed out for good — on any page
   whose scripts insert a `<body>` after the load: Servo reports that as
   `LoadStatus::HeadParsed`, with no `Complete` to follow (wikipedia does it). The

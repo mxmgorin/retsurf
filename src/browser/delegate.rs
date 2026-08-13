@@ -43,7 +43,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // only log to history when it's the tab the user is actually viewing.
         if let Some(i) = self.tab_index(webview.id()) {
             let url = url.to_string();
-            self.tabs.borrow_mut()[i].state.location = url.clone();
+            let mut tabs = self.tabs.borrow_mut();
+            tabs[i].state.location = url.clone();
+            tabs[i].state.page_url = url.clone();
+            drop(tabs);
             if i == self.active.get() {
                 self.visited.borrow_mut().push(url);
             }
@@ -79,7 +82,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         request.deny();
         let referer = self
             .tab_index(webview.id())
-            .and_then(|i| referer_for(&self.tabs.borrow()[i].state.location));
+            .and_then(|i| referer_for(&self.tabs.borrow()[i].state.page_url));
         self.download_requests
             .borrow_mut()
             .push(super::DownloadRequest {

@@ -331,8 +331,10 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
             // field still focuses, and the IME appears, when the user taps it
             // (the `gained_focus` branch above). Desktop/handheld keep the
             // type-immediately behavior.
+            // Only claim focus when nothing else holds it: re-claiming it every
+            // frame made the address bar unclickable on the start page.
             #[cfg(not(target_os = "android"))]
-            if !resp.has_focus() {
+            if ui.ctx().memory(|m| m.focused()).is_none() {
                 resp.request_focus();
             }
         } else if resp.has_focus() {
@@ -551,12 +553,18 @@ pub(super) fn brand_label(url: &str) -> String {
 /// A short label for a tile: the registrable domain name (`en.wikipedia.org` ->
 /// `wikipedia`, `bbc.co.uk` -> `bbc`), falling back to the host, then the raw string.
 fn compute_brand_label(url: &str) -> String {
-    let Some(host) = url::Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(str::to_string))
-    else {
+    let Ok(parsed) = url::Url::parse(url) else {
         return url.to_string();
     };
+    let Some(host) = parsed.host() else {
+        return url.to_string();
+    };
+    // An address has no registrable domain to shorten to — splitting on dots
+    // would label `127.0.0.1` as "0".
+    if !matches!(host, url::Host::Domain(_)) {
+        return host.to_string();
+    }
+    let host = host.to_string();
     let host = host.trim_start_matches("www.");
     let parts: Vec<&str> = host.split('.').filter(|s| !s.is_empty()).collect();
     let n = parts.len();
@@ -569,4 +577,34 @@ fn compute_brand_label(url: &str) -> String {
         1
     };
     parts[n - suffix_len - 1].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_brand_label;
+
+    #[test]
+    fn brand_label_takes_the_registrable_domain() {
+        assert_eq!(
+            compute_brand_label("https://en.wikipedia.org/wiki/X"),
+            "wikipedia"
+        );
+        assert_eq!(compute_brand_label("https://www.google.com/"), "google");
+        assert_eq!(compute_brand_label("https://bbc.co.uk"), "bbc");
+        assert_eq!(compute_brand_label("http://localhost:8099/x"), "localhost");
+    }
+
+    /// An address has no registrable domain; splitting on dots used to yield "0".
+    #[test]
+    fn brand_label_keeps_addresses_whole() {
+        assert_eq!(compute_brand_label("http://127.0.0.1:8099/x"), "127.0.0.1");
+        assert_eq!(compute_brand_label("http://[::1]:8099/x"), "[::1]");
+    }
+
+    /// The internal pages (and anything unparseable) fall back to the raw string.
+    #[test]
+    fn brand_label_falls_back_to_the_input() {
+        assert_eq!(compute_brand_label("retsurf:home"), "retsurf:home");
+        assert_eq!(compute_brand_label("not a url"), "not a url");
+    }
 }
