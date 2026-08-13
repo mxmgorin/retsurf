@@ -15,7 +15,7 @@
 
 retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical.
 
-retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets PortMaster-compatible Linux handhelds (Knulli, muOS, ROCKNIX), as well as regular desktops and Android (touch + system keyboard). Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 for windowing and input and egui for the UI.
+retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets [PortMaster-compatible](https://portmaster.games/supported-devices.html) Linux handhelds, as well as regular desktops and Android (touch + system keyboard). Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 for windowing and input and egui for the UI.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -28,6 +28,14 @@ retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KM
     <td align="center"><img src="resources/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
   </tr>
 </table>
+
+| Start page | Browsing | Link hints | Keyboard |
+|:---:|:---:|:---:|:---:|
+| ![The built-in start page: a search field over a speed-dial grid of pinned sites](resources/images/retsurf-start-page.png) | ![Hacker News rendered by Servo in its mobile layout, the toolbar above it](resources/images/retsurf-page.png) | ![Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it](resources/images/retsurf-hints.png) | ![The on-screen keyboard raised under the start page's search field, which shows what has been typed](resources/images/retsurf-keyboard.png) |
+
+| Tabs | Downloads | Reader mode | Settings |
+|:---:|:---:|:---:|:---:|
+| ![The menu's Tabs section: open tabs by title, each with a bookmark and close button](resources/images/retsurf-tabs.png) | ![The Downloads section: one file downloading with percentage and size, one finished](resources/images/retsurf-downloads.png) | ![A Wikipedia article stripped to its text by reader mode](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
 
 ## Why?
 
