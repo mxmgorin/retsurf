@@ -66,7 +66,7 @@ impl App {
             MenuAction::SetSection(section) => self.ui.menu.set_section(*section),
             MenuAction::OpenSelected => self.menu_open_selected(),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
-            MenuAction::Clear => self.ui.menu.clear(),
+            MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
             MenuAction::ToggleBookmark(url) => self.ui.menu.toggle_bookmark(url),
             MenuAction::DialEdit => self.ui.open_pins_editor(),
@@ -117,8 +117,8 @@ impl App {
                 self.ui.menu.close();
             }
         } else if self.ui.menu.clear_selected() {
-            // The section's clear row (index 0): wipe the list, stay open.
-            self.ui.menu.clear();
+            // The section's clear row (index 0): arms, then wipes; stays open.
+            self.ui.menu.clear_or_arm();
         } else if let Some(url) = self.ui.menu.selected_url() {
             self.open_url(url);
         } else if self.ui.menu.section() != Section::Downloads {

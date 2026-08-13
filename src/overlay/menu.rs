@@ -57,6 +57,9 @@ pub struct Menu {
     /// shown. The row at index `tab_count` is the "+ New tab" entry.
     tab_selected: usize,
     tab_count: usize,
+    /// The clear row was activated once and awaits confirmation. Clearing history
+    /// or the download list can't be undone, so it takes two presses.
+    clear_armed: bool,
 }
 
 impl Menu {
@@ -74,6 +77,7 @@ impl Menu {
             downloads: Downloads::load(downloads_cfg, user_agent),
             tab_selected: 0,
             tab_count: 0,
+            clear_armed: false,
         }
     }
 
@@ -86,6 +90,7 @@ impl Menu {
         self.history.reset();
         self.downloads.reset();
         self.tab_selected = 1;
+        self.clear_armed = false;
     }
 
     pub fn close(&mut self) {
@@ -122,15 +127,31 @@ impl Menu {
         let last = Section::ALL.len() as i32 - 1;
         let i = (self.section.index() as i32 + delta).clamp(0, last) as usize;
         self.section = Section::ALL[i];
+        self.clear_armed = false;
     }
 
     /// Jump straight to a section (clicking its tab).
     pub fn set_section(&mut self, section: Section) {
         self.section = section;
+        self.clear_armed = false;
+    }
+
+    /// Whether the clear row is awaiting its confirming second press.
+    pub fn clear_armed(&self) -> bool {
+        self.clear_armed
+    }
+
+    /// Activate the clear row: the first press arms, the second clears.
+    pub fn clear_or_arm(&mut self) {
+        if std::mem::replace(&mut self.clear_armed, true) {
+            self.clear_armed = false;
+            self.clear();
+        }
     }
 
     /// Move the active section's selection by `dy` rows.
     pub fn move_sel(&mut self, dy: i32) {
+        self.clear_armed = false;
         match self.section {
             Section::Bookmarks => self.bookmarks.move_sel(dy),
             Section::History => self.history.move_sel(dy),
@@ -202,8 +223,8 @@ impl Menu {
     }
 
     /// Clear the active section's list: all history entries, or all finished
-    /// downloads (active ones stay).
-    pub fn clear(&mut self) {
+    /// downloads (active ones stay). Goes through [`Self::clear_or_arm`].
+    fn clear(&mut self) {
         match self.section {
             Section::History => self.history.clear(),
             Section::Downloads => self.downloads.clear_finished(),
