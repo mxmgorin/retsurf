@@ -158,11 +158,13 @@ update_days = 7            # re-download lists when the cached engine is older; 
 block_images = false       # skip <img>, CSS backgrounds, favicons
 block_media = false        # skip audio/video/track loads
 block_fonts = false        # skip web-font downloads (fall back to system fonts)
-# Cap on images loaded per page (0 = unlimited). Servo loads/decodes every image
+# Cap on distinct images per page (0 = unlimited). Servo loads/decodes every image
 # eagerly (no lazy-loading), so a client-rendered grid of hundreds of thumbnails
-# can freeze a handheld. Past the cap, image loads are soft-blocked; the counter
-# resets each navigation. Lower it on weak boards; raise it for image galleries.
-max_images_per_page = 48
+# can freeze a handheld. Past the cap, image loads are soft-blocked; the count
+# resets each navigation. Off by default — an ordinary page carries 40-90 images,
+# so a cap that helps a thumbnail grid mostly just guts normal sites. Set it on
+# weak boards, or when a specific page stalls.
+max_images_per_page = 0
 
 [audio]
 # Web Audio output. retsurf renders the Web Audio graph itself and plays it through
