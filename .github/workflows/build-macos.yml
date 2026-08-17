@@ -106,12 +106,25 @@ jobs:
         run: |
           set -eux
           rm -rf target
+          du -sm dist
           df -h /
 
       # A dmg survives both the artifact pipeline and a browser download with
       # permissions and signature intact (zip via upload-artifact would not).
+      #
+      # `-size` with headroom instead of hdiutil's own estimate: for a bundle this
+      # large the estimate under-sizes the image, and the copy into it then dies
+      # with "hdiutil: create failed - No space left on device" — the image filling
+      # up, not the runner's disk, which the step above shows free.
       - name: Create dmg
-        run: hdiutil create -volname Retsurf -srcfolder dist -ov -format UDZO retsurf-macos-aarch64.dmg
+        run: |
+          set -eux
+          hdiutil create -volname Retsurf -srcfolder dist -ov -format UDZO \
+            -size $(( $(du -sm dist | cut -f1) + DMG_MARGIN_MB ))m \
+            retsurf-macos-aarch64.dmg
+          ls -la retsurf-macos-aarch64.dmg
+        env:
+          DMG_MARGIN_MB: 200
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
