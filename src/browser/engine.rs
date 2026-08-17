@@ -190,8 +190,10 @@ mod tests {
     /// Nothing spills without a memory cache, so the low tiers get a small one.
     #[test]
     fn disk_cache_revives_a_disabled_memory_cache() {
-        let mut prefs = servo::Preferences::default();
-        prefs.network_http_cache_disabled = true;
+        let mut prefs = servo::Preferences {
+            network_http_cache_disabled: true,
+            ..Default::default()
+        };
         apply_http_disk_cache(&mut prefs, 8, "/tmp/cache/");
 
         assert!(!prefs.network_http_cache_disabled);
