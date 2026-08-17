@@ -54,8 +54,9 @@ pub fn servo_data_dir() -> String {
     dir
 }
 
-/// Subdirectory of [`data_dir`] for regenerable cache files — currently the
-/// adblock engine (`adblock.dat`). Safe to wipe: anything here is rebuilt or
+/// Subdirectory of [`data_dir`] for regenerable cache files — the adblock engine
+/// (`adblock.dat`) and, when `[performance] http_disk_cache_mb` is set, Servo's
+/// HTTP cache (`http-cache.sqlite3`). Safe to wipe: anything here is rebuilt or
 /// re-downloaded on demand. Created on demand. See [`crate::browser::adblock`].
 pub fn cache_dir() -> String {
     let dir = format!("{}cache/", data_dir());

@@ -21,6 +21,11 @@ pub struct PerformanceConfig {
     /// storage, WebRender workers). `0` = keep the memory profile's choice;
     /// non-zero overrides every pool with this value.
     pub worker_pool_max: u32,
+    /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
+    /// A spill store, not a second level: it takes what the in-memory cache
+    /// evicts, and a hit moves the entry back into memory and off disk. Off by
+    /// default because the writes land on the SD card. Applies at startup.
+    pub http_disk_cache_mb: u32,
 }
 
 token_enum! {

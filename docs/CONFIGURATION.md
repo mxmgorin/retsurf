@@ -103,6 +103,15 @@ memory_profile = "auto"
 layout_threads = 0         # Stylo/layout threads
 worker_pool_max = 0        # cap applied to every worker pool (image cache, async
                            # runtime, storage, WebRender)
+# Servo's on-disk HTTP cache, in MB; 0 (the default) is off. It is a spill store for
+# the in-memory cache, not a second level: an entry the memory cache evicts is written
+# to `cache/http-cache.sqlite3`, and a hit moves it back into memory and off disk. So
+# it widens the cache and keeps whatever spilled across a restart, but it is not a
+# durable archive of visited pages. Every spill is a write to the SD card, which is why
+# it is opt-in; on `embedded`/`tight` (which switch the memory cache off, leaving
+# nothing to spill) turning this on also revives a 16-entry memory cache. Needs a
+# restart. Safe to delete the file at any time.
+http_disk_cache_mb = 0
 
 [history]
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)

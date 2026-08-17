@@ -5,7 +5,7 @@
 
 use crate::{
     browser::memory,
-    config::{BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig},
+    config::{self, BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig},
 };
 
 /// Servo options: with `persist_site_data` on, point `config_dir` at the
@@ -68,6 +68,11 @@ pub(super) fn build_preferences(
         prefs.thread_pool_webrender_workers_max = n;
     }
 
+    // Guarded so an off knob doesn't create the cache dir.
+    if perf.http_disk_cache_mb != 0 {
+        apply_http_disk_cache(&mut prefs, perf.http_disk_cache_mb, &config::cache_dir());
+    }
+
     if let Some(ua) = resolve_user_agent(&config.user_agent) {
         log::info!("user agent: {ua}");
         prefs.user_agent = ua;
@@ -81,6 +86,28 @@ pub(super) fn build_preferences(
         prefs.js_mem_max,
     );
     prefs
+}
+
+const BYTES_PER_MB: u64 = 1024 * 1024;
+
+/// Memory-cache entry count for a tier that switched the cache off: the disk
+/// store only ever gets what the memory cache evicts, so zero means zero.
+const SPILL_MEMORY_CACHE_ENTRIES: u64 = 16;
+
+/// Size Servo's on-disk HTTP cache and point it at a file in `cache_dir`.
+fn apply_http_disk_cache(prefs: &mut servo::Preferences, budget_mb: u32, cache_dir: &str) {
+    // The pref is the SQLite file itself, not a directory.
+    prefs.network_http_disk_cache = format!("{cache_dir}http-cache.sqlite3");
+    prefs.network_http_disk_cache_size = u64::from(budget_mb) * BYTES_PER_MB;
+    if prefs.network_http_cache_disabled {
+        prefs.network_http_cache_disabled = false;
+        prefs.network_http_cache_size = SPILL_MEMORY_CACHE_ENTRIES;
+    }
+    log::info!(
+        "http disk cache: {budget_mb} MB at {}, memory cache weight {}",
+        prefs.network_http_disk_cache,
+        prefs.network_http_cache_size,
+    );
 }
 
 /// The `prefers-color-scheme` value a `[browser] page_theme` reports to pages.
@@ -140,5 +167,34 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
 pub(super) fn set_experimental_prefs(servo: &servo::Servo, exp: &ExperimentalConfig) {
     for (pref, on) in experimental_pref_values(exp) {
         servo.set_preference(pref, servo::PrefValue::Bool(on));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A tier that kept its memory cache only gains the disk file and budget.
+    #[test]
+    fn disk_cache_sizes_and_keeps_the_memory_cache() {
+        let mut prefs = servo::Preferences::default();
+        let weight = prefs.network_http_cache_size;
+        apply_http_disk_cache(&mut prefs, 64, "/tmp/cache/");
+
+        assert_eq!(prefs.network_http_disk_cache, "/tmp/cache/http-cache.sqlite3");
+        assert_eq!(prefs.network_http_disk_cache_size, 64 * BYTES_PER_MB);
+        assert!(!prefs.network_http_cache_disabled);
+        assert_eq!(prefs.network_http_cache_size, weight);
+    }
+
+    /// Nothing spills without a memory cache, so the low tiers get a small one.
+    #[test]
+    fn disk_cache_revives_a_disabled_memory_cache() {
+        let mut prefs = servo::Preferences::default();
+        prefs.network_http_cache_disabled = true;
+        apply_http_disk_cache(&mut prefs, 8, "/tmp/cache/");
+
+        assert!(!prefs.network_http_cache_disabled);
+        assert_eq!(prefs.network_http_cache_size, SPILL_MEMORY_CACHE_ENTRIES);
     }
 }

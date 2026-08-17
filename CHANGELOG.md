@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `[performance] http_disk_cache_mb` turns on Servo's new on-disk HTTP cache with
+  that budget in MB (`0`, off, is the default). It is a spill store rather than a
+  second cache level: an entry the in-memory cache evicts lands in
+  `cache/http-cache.sqlite3`, and a hit moves it back into memory and off disk —
+  so it widens the cache and keeps what spilled across a restart, without
+  becoming an archive of everything visited. Every spill is an SD-card write,
+  hence opt-in; on the `embedded` and `tight` profiles, which switch the memory
+  cache off entirely, turning it on also revives a 16-entry memory cache, since
+  otherwise nothing would ever reach the disk.
+
 ### Changed
 
 - The engine moved up to Servo `main` as of 2026-08-17 (93 upstream commits).
