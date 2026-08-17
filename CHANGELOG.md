@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-08-17
+## [0.5.1] - 2026-08-17
+
+Supersedes 0.5.0, which was pulled over the image-cap bug below; everything it
+carried is listed here.
 
 ### Added
 
@@ -24,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The per-page image limit (`[data_saving] max_images_per_page`) is off by
+  default. Measured over ordinary pages, it cost under 3% of resident memory
+  while dropping a third to a half of their pictures: wikipedia and the Steam
+  store carry 75 and 84 distinct images, so a cap of 48 blocked 37 and 36 of
+  them for 3 MB and 22 MB. It stays available for weak boards and for the
+  thumbnail grids it was written for (PortMaster's game list).
 - The engine moved up to Servo `main` as of 2026-08-17 (93 upstream commits).
   Pages get `<meta name="color-scheme">` and a Stylo that honours the
   `color-scheme` property, `text-transform: full-width | full-size-kana |
@@ -101,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A page showed no pictures at all once the image limit was set (the default at
+  the time), most visibly on Steam and Reddit. The limit counted image *loads*,
+  and Servo fetches once per `<img>` element even when the URL repeats, so a
+  page's spacer gifs spent the whole allowance before any real picture was
+  reached — on the Steam store one 1x1 `trans.gif` took 30 of 48 slots. It now
+  counts distinct images, and a repeat of one already allowed is free.
 - The loading edge drew over the menu, settings and every other overlay: a teal
   line struck through their top row while a tab loaded. It painted into a
   `Foreground` layer of its own, above everything; it now goes in the toolbar's
@@ -285,8 +300,8 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...v0.5.0
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mxmgorin/retsurf/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mxmgorin/retsurf/compare/v0.2.0...v0.3.0
