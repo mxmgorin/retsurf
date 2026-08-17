@@ -174,6 +174,8 @@ pub struct AppUi {
     cursor_linger: Duration,
     /// Which edge the toolbar renders on (from the display config). Applied live.
     toolbar_position: ToolbarPosition,
+    /// Whether the toolbar is available (from the display config).
+    toolbar_visible: bool,
     /// Whether the toolbar hides on scroll-down / reveals on scroll-up (config).
     toolbar_autohide: bool,
     /// Auto-hide target visibility: shown after a scroll up, hidden after a scroll
@@ -275,6 +277,7 @@ impl AppUi {
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(display.cursor_linger_ms),
             toolbar_position: display.toolbar_position,
+            toolbar_visible: display.toolbar_visible,
             toolbar_autohide: display.toolbar_autohide,
             toolbar_shown: true,
             scroll_accum: 0.0,
@@ -536,6 +539,12 @@ impl AppUi {
     #[inline]
     pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {
         self.toolbar_position = pos;
+    }
+
+    /// Enable/disable the toolbar (the app calls this on a live config change).
+    #[inline]
+    pub fn set_toolbar_visible(&mut self, visible: bool) {
+        self.toolbar_visible = visible;
     }
 
     /// Enable/disable scroll-driven auto-hide (the app calls this on a live config
@@ -921,7 +930,9 @@ impl AppUi {
         // A bottom auto-hide bar floats as an overlay, so the web view is
         // full-height; every other case reserves a strip (and the measured height
         // is already 0 when a top auto-hide bar is hidden away).
-        let overlay = self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom;
+        let overlay = self.toolbar_visible
+            && self.toolbar_autohide
+            && self.toolbar_position == ToolbarPosition::Bottom;
         let toolbar_px = if overlay {
             0
         } else {
@@ -1024,8 +1035,10 @@ impl AppUi {
         let typing = self.focus() != Focus::Page;
         ToolbarLayout {
             position: self.toolbar_position,
-            shown: !self.toolbar_autohide || self.toolbar_shown || typing,
-            overlay: self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom,
+            shown: self.toolbar_visible && (!self.toolbar_autohide || self.toolbar_shown || typing),
+            overlay: self.toolbar_visible
+                && self.toolbar_autohide
+                && self.toolbar_position == ToolbarPosition::Bottom,
         }
     }
 

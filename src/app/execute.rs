@@ -282,6 +282,8 @@ impl App {
         self.ui
             .set_toolbar_position(self.config.display.toolbar_position);
         self.ui
+            .set_toolbar_visible(self.config.display.toolbar_visible);
+        self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
         self.ui.menu.history_mut().set_config(&self.config.history);
