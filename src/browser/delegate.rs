@@ -8,7 +8,7 @@ use super::{AppBrowserInner, BrowserState, Tab};
 use crate::event::user::UserEvent;
 use content_security_policy::Destination;
 use servo::WebView;
-use std::cell::Cell;
+use std::cell::RefCell;
 use url::Url;
 
 impl AppBrowserInner {
@@ -151,7 +151,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         tabs.push(Tab {
             webview,
             state: BrowserState::default(),
-            images_loaded: Cell::new(0),
+            page_images: RefCell::default(),
         });
         self.active.set(tabs.len() - 1);
         drop(tabs);
@@ -190,17 +190,25 @@ impl servo::WebViewDelegate for AppBrowserInner {
 
         // Per-page image cap: soft-block images past the limit so a huge grid
         // doesn't freeze the device (Servo loads them all eagerly, no lazy-load).
+        // Counted per distinct image: Servo fetches once per element, and pages
+        // reuse one spacer gif dozens of times.
         if let Some(i) = self.tab_index(webview.id()) {
             let tabs = self.tabs.borrow();
-            let images_loaded = &tabs[i].images_loaded;
+            let images = &tabs[i].page_images;
             if req.is_for_main_frame {
-                images_loaded.set(0);
+                images.borrow_mut().clear();
             } else if is_subresource && !block && req.destination == Destination::Image {
-                let loaded = images_loaded.get();
-                if filter.image_cap_reached(loaded) {
-                    block = true;
-                } else {
-                    images_loaded.set(loaded + 1);
+                if let Some(cap) = filter.image_cap() {
+                    let mut images = images.borrow_mut();
+                    let key = image_key(&url);
+                    if !images.contains(&key) {
+                        if images.len() >= cap {
+                            log::debug!("image cap: blocked {url}");
+                            block = true;
+                        } else {
+                            images.insert(key);
+                        }
+                    }
                 }
             }
         }
@@ -220,6 +228,15 @@ impl servo::WebViewDelegate for AppBrowserInner {
             finish_intercepted(load, response, Vec::new());
         }
     }
+}
+
+/// Image identity for the per-page cap. Hashed, not stored verbatim: inline `data:`
+/// images run to hundreds of kilobytes each. A collision costs one image's slot.
+fn image_key(url: &Url) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::hash::DefaultHasher::new();
+    url.as_str().hash(&mut hasher);
+    hasher.finish()
 }
 
 /// The linking page as a Referer: http(s) only, fragment and credentials stripped.

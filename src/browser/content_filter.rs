@@ -31,10 +31,11 @@ impl ContentFilter {
         }
     }
 
-    /// Per-page image cap: block once `loaded` reaches the limit (0 = unlimited).
-    /// Counter lives on the tab, reset on each of its navigations.
-    pub fn image_cap_reached(&self, loaded: usize) -> bool {
-        self.max_images != 0 && loaded >= self.max_images
+    /// Per-page cap on distinct images, `None` when unlimited. Counted per image,
+    /// not per load: a spacer gif reused thirty times must not eat thirty slots.
+    /// The allowed set lives on the tab, cleared on each of its navigations.
+    pub fn image_cap(&self) -> Option<usize> {
+        (self.max_images != 0).then_some(self.max_images)
     }
 
     /// Whether a load to this destination should be blocked under the current
@@ -55,21 +56,18 @@ mod tests {
     use super::*;
     use crate::config::DataSavingConfig;
 
-    /// Default config caps at 48: index 48 blocks, earlier pass; blocks() stays off.
+    /// The default config caps nothing: no image limit, no category blocked.
     #[test]
-    fn default_image_cap() {
+    fn default_lets_images_through() {
         let f = ContentFilter::from_config(&DataSavingConfig::default());
-        assert!(!f.image_cap_reached(0));
-        assert!(!f.image_cap_reached(47));
-        assert!(f.image_cap_reached(48));
+        assert_eq!(f.image_cap(), None);
         assert!(!f.blocks(Destination::Image));
     }
 
-    /// A cap of 0 means unlimited — never reached.
+    /// A configured cap is reported as-is; 0 stays unlimited.
     #[test]
-    fn zero_cap_is_unlimited() {
-        let cfg = DataSavingConfig { max_images_per_page: 0, ..DataSavingConfig::default() };
-        let f = ContentFilter::from_config(&cfg);
-        assert!(!f.image_cap_reached(10_000));
+    fn configured_image_cap() {
+        let cfg = DataSavingConfig { max_images_per_page: 48, ..DataSavingConfig::default() };
+        assert_eq!(ContentFilter::from_config(&cfg).image_cap(), Some(48));
     }
 }

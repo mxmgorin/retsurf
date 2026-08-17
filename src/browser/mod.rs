@@ -32,6 +32,7 @@ use servo::{EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
 use std::{
     cell::{Cell, RefCell, RefMut},
+    collections::HashSet,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -114,10 +115,10 @@ impl Default for BrowserState {
 struct Tab {
     webview: WebView,
     state: BrowserState,
-    /// Images allowed on this tab's current page, for the per-page cap; reset on
-    /// its own top-level navigations in [`delegate`]. Per tab so a background tab
-    /// loading in parallel can't spend the visible page's budget.
-    images_loaded: Cell<usize>,
+    /// Images allowed on this tab's current page, hashed for the per-page cap (see
+    /// `delegate::image_key`); cleared on its own top-level navigations. Per tab so
+    /// a background load can't spend the visible page's budget.
+    page_images: RefCell<HashSet<u64>>,
 }
 
 /// A denied download navigation or an `a[download]` link, for
@@ -598,7 +599,7 @@ impl AppBrowser {
         tabs.push(Tab {
             webview,
             state: BrowserState::loading(),
-            images_loaded: Cell::new(0),
+            page_images: RefCell::default(),
         });
         self.inner.active.set(tabs.len() - 1);
         drop(tabs);
@@ -616,7 +617,7 @@ impl AppBrowser {
         self.inner.tabs.borrow_mut().push(Tab {
             webview,
             state: BrowserState::loading(),
-            images_loaded: Cell::new(0),
+            page_images: RefCell::default(),
         });
     }
 
