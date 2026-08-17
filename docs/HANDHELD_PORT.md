@@ -134,6 +134,13 @@ The fix has two parts:
 WebGL on EGL 1.4 would need a surfman patch to fall back to `eglGetDisplay` (EGL 1.0), or
 to wrap SDL's current EGL display.
 
+Since 2026-08-17 Servo also has a `webgl` cargo feature, so the handheld build leaves the
+engine's WebGL out of the binary instead of shipping a WebGL that can never get a
+connection: retsurf's own `webgl` feature (default on, off under `--no-default-features`)
+enables `servo/webgl`. The patch above still matters for the *default* build on a device
+whose driver can't provide a connection — an Android GPU, or a desktop build run on
+EGL 1.4.
+
 ## Running it
 
 ```sh

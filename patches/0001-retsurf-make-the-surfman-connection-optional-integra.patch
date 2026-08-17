@@ -1,18 +1,18 @@
-From ef1ddf10defbdeabcfecf8f53b999f0d673db102 Mon Sep 17 00:00:00 2001
+From 2ba4e8a249ecadcc18e71f04ade1847d390b3245 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:18 +0300
 Subject: [PATCH 1/2] retsurf: make the surfman connection optional
  (integration only, do not send upstream)
 
 ---
- components/paint/paint.rs | 32 +++++++++++++++++++-------------
- 1 file changed, 19 insertions(+), 13 deletions(-)
+ components/paint/paint.rs | 36 +++++++++++++++++++++++-------------
+ 1 file changed, 23 insertions(+), 13 deletions(-)
 
 diff --git a/components/paint/paint.rs b/components/paint/paint.rs
-index df7311ca1a0..f5efa7857c3 100644
+index 4deb0802d5c..308e3278552 100644
 --- a/components/paint/paint.rs
 +++ b/components/paint/paint.rs
-@@ -238,19 +238,25 @@ impl Paint {
+@@ -272,19 +272,29 @@ impl Paint {
          }
  
          let painter = Painter::new(rendering_context.clone(), self);
@@ -39,13 +39,17 @@ index df7311ca1a0..f5efa7857c3 100644
 +                Ok(adapter) => {
 +                    self.painter_surfman_details_map.insert(
 +                        painter.painter_id,
-+                        PainterSurfmanDetails { connection, adapter },
++                        PainterSurfmanDetails {
++                            connection,
++                            adapter,
++                        },
 +                    );
-+                }
++                },
 +                // Connection succeeded but no usable adapter — WebGL stays off and
 +                // the page still renders. Seen on some Android GPUs; log so a
 +                // connects-but-can't-adapt device is diagnosable.
-+                Err(e) => warn!("surfman connection has no adapter; WebGL disabled: {e:?}"),
++                // `log::warn!` spelled out: the `warn` import is `webgl`-gated upstream.
++                Err(e) => log::warn!("surfman connection has no adapter; WebGL disabled: {e:?}"),
 +            }
 +        }
  

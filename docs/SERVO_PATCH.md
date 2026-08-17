@@ -1,12 +1,15 @@
 # The Servo patches
 
 retsurf carries two small changes to Servo. They live as commits on the
-`retsurf-main` branch of our fork (`mxmgorin/servo`), which `[patch.crates-io]` in
-`Cargo.toml` pins by `rev` — so the engine retsurf builds is Servo's unreleased
+`retsurf-main-0.5` branch of our fork (`mxmgorin/servo`) — one branch per retsurf
+minor, rebased onto upstream `main` as it moves — which `[patch.crates-io]` in
+`Cargo.toml` pins by `rev`, so the engine retsurf builds is Servo's unreleased
 `main` plus exactly these two fixes. (`retsurf-0.5`, off the `release/v0.5` line
 the published crates come from, is kept as the fallback.) Each pinned rev is
-tagged in the fork (`retsurf-main-1`, ...), and `patches/` in this repo mirrors the
-diff as plain files (8 KB) so the change is readable without fetching the fork.
+tagged after the retsurf release that ships it (`retsurf-main-0.5.0`; the first
+four pins predate the scheme and are numbered `retsurf-main-1..4`), and
+`patches/` in this repo mirrors the diff as plain files (8 KB) so the change is
+readable without fetching the fork.
 
 ## 1. `components/paint`: optional surfman connection
 
@@ -85,7 +88,7 @@ near-identical walk in `process_scroll_container_query` already does.
 - **A boxless element can never be a containing block**, so skipping it and
   continuing the walk is also the correct answer, not just a livelock guard.
 
-Upstream `main` still has the same code (checked 2026-07-28).
+Upstream `main` still has the same code (checked 2026-08-17).
 
 ### Reproducing
 

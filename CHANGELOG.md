@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The engine moved up to Servo `main` as of 2026-08-17 (93 upstream commits).
+  Pages get `<meta name="color-scheme">` and a Stylo that honours the
+  `color-scheme` property, `text-transform: full-width | full-size-kana |
+  math-auto`, `<link>` source sets, a synchronous `about:blank`, and a pile of
+  layout, script and WebCrypto fixes. Upstream also grew an on-disk HTTP cache;
+  retsurf does not turn it on yet.
+- WebGL is no longer compiled into the handheld build. Servo made its WebGL
+  thread and script API a cargo feature, so the build that can't obtain a
+  surfman connection anyway (`--no-default-features`, the handheld and PortMaster
+  builds) now leaves both out instead of carrying dead code. Desktop and Android
+  builds are unchanged.
 - Every chrome icon is now a [Phosphor](https://phosphoricons.com/) glyph (bold
   weight, filled for the "on" half of a pair) instead of whatever icon-ish
   character egui's bundled fonts happened to carry: one optical weight across the
