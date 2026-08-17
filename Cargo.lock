@@ -5105,7 +5105,7 @@ dependencies = [
 
 [[package]]
 name = "retsurf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "adblock",
  "android_logger",

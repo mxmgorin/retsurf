@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-17
+
 ### Added
 
 - **HTTP disk cache**, off by default: **Settings > Advanced > Performance**
@@ -279,7 +281,8 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mxmgorin/retsurf/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mxmgorin/retsurf/compare/v0.2.0...v0.3.0
