@@ -99,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The loading edge drew over the menu, settings and every other overlay: a teal
+  line struck through their top row while a tab loaded. It painted into a
+  `Foreground` layer of its own, above everything; it now goes in the toolbar's
+  own layer, so whatever covers the bar covers the line too.
 - The address bar was unusable on the start page: its search field claimed egui
   focus back every frame, so a click there did nothing. Typing also blanked the
   start page, because "the tab's URL" and "the address bar's text" were one

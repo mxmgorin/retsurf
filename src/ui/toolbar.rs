@@ -314,7 +314,15 @@ const LOADING_EDGE: f32 = 2.0;
 /// Accent line along the toolbar's page-facing edge while the tab loads — the
 /// "busy" signal we can afford: static, so it repaints only when the load status
 /// flips, unlike a spinner.
-fn paint_loading_edge(ctx: &egui::Context, bar: egui::Rect, position: ToolbarPosition) {
+///
+/// Painted into the bar's own `layer`, not a `Foreground` one of its own: an
+/// overlay that covers the toolbar (menu, settings) must cover the line too.
+fn paint_loading_edge(
+    ctx: &egui::Context,
+    layer: egui::LayerId,
+    bar: egui::Rect,
+    position: ToolbarPosition,
+) {
     let top = match position {
         ToolbarPosition::Top => bar.bottom() - LOADING_EDGE,
         ToolbarPosition::Bottom => bar.top(),
@@ -326,11 +334,7 @@ fn paint_loading_edge(ctx: &egui::Context, bar: egui::Rect, position: ToolbarPos
             y: LOADING_EDGE,
         },
     );
-    ctx.layer_painter(egui::LayerId::new(
-        egui::Order::Foreground,
-        egui::Id::new("loading_edge"),
-    ))
-    .rect_filled(edge, 0.0, theme::ACCENT);
+    ctx.layer_painter(layer).rect_filled(edge, 0.0, theme::ACCENT);
 }
 
 /// Draw the toolbar as a space-reserving panel anchored to `position`'s edge
@@ -355,7 +359,7 @@ pub(super) fn add_toolbar(
         ToolbarPosition::Top => egui::Panel::top("toolbar"),
         ToolbarPosition::Bottom => egui::Panel::bottom("toolbar"),
     };
-    let rect = panel
+    let response = panel
         .frame(frame)
         .show(ui, |ui| {
             toolbar_contents(
@@ -370,10 +374,10 @@ pub(super) fn add_toolbar(
                 osk_caret,
             )
         })
-        .response
-        .rect;
+        .response;
+    let rect = response.rect;
     if state.is_loading() {
-        paint_loading_edge(ui.ctx(), rect, position);
+        paint_loading_edge(ui.ctx(), response.layer_id, rect, position);
     }
     rect
 }
@@ -403,7 +407,7 @@ pub(super) fn add_toolbar_overlay(
         ToolbarPosition::Top => egui::Align2::CENTER_TOP,
         ToolbarPosition::Bottom => egui::Align2::CENTER_BOTTOM,
     };
-    let rect = egui::Area::new(egui::Id::new("toolbar_overlay"))
+    let area = egui::Area::new(egui::Id::new("toolbar_overlay"))
         .order(egui::Order::Foreground)
         .anchor(align, egui::vec2(0.0, 0.0))
         .show(ctx, |ui| {
@@ -424,10 +428,10 @@ pub(super) fn add_toolbar_overlay(
                 })
                 .response
                 .rect
-        })
-        .inner;
+        });
+    let rect = area.inner;
     if state.is_loading() {
-        paint_loading_edge(ctx, rect, position);
+        paint_loading_edge(ctx, area.response.layer_id, rect, position);
     }
     rect
 }
