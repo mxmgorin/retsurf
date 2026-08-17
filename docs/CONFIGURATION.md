@@ -110,7 +110,8 @@ worker_pool_max = 0        # cap applied to every worker pool (image cache, asyn
 # durable archive of visited pages. Every spill is a write to the SD card, which is why
 # it is opt-in; on `embedded`/`tight` (which switch the memory cache off, leaving
 # nothing to spill) turning this on also revives a 16-entry memory cache. Needs a
-# restart. Safe to delete the file at any time.
+# restart. Safe to delete the file at any time. Also in the settings overlay
+# (Advanced tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
 http_disk_cache_mb = 0
 
 [history]

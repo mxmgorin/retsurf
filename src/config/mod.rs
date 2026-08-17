@@ -165,6 +165,11 @@ impl AppConfig {
             &mut self.performance.worker_pool_max,
             b::WORKER_POOL_MAX,
         );
+        fix_u32(
+            "performance.http_disk_cache_mb",
+            &mut self.performance.http_disk_cache_mb,
+            b::HTTP_DISK_CACHE_MB,
+        );
     }
 }
 

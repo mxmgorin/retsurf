@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `[performance] http_disk_cache_mb` turns on Servo's new on-disk HTTP cache with
-  that budget in MB (`0`, off, is the default). It is a spill store rather than a
+- **HTTP disk cache**, off by default: **Settings > Advanced > Performance**
+  ("HTTP disk cache (MB)", or `[performance] http_disk_cache_mb`) gives Servo's
+  new on-disk HTTP cache a budget in MB. It is a spill store rather than a
   second cache level: an entry the in-memory cache evicts lands in
   `cache/http-cache.sqlite3`, and a hit moves it back into memory and off disk —
   so it widens the cache and keeps what spilled across a restart, without
