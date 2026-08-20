@@ -1,13 +1,15 @@
-//! servo-media backend: real WebAudio output through SDL2.
+//! servo-media backend: real WebAudio and `<audio>` output through SDL2.
 //!
 //! Servo's only real backend needs GStreamer, absent from the handheld firmwares,
 //! so retsurf registers its own before Servo installs the dummy. The audio graph is
-//! backend-independent, so all this adds is somewhere for the rendered blocks to go
-//! (see [`sink`]) and a decoder for `decodeAudioData` (see [`decoder`]). The rest keeps
-//! the dummy types: `<audio>` wants a demuxing `Player`, MediaStream/WebRTC a capture
-//! stack, neither of them SDL2's job — so [`Backend::can_play_type`] answers no.
+//! backend-independent, so WebAudio only needed somewhere for the rendered blocks to
+//! go (see [`sink`]) and a decoder for `decodeAudioData` (see [`decoder`]);
+//! `<audio>` gets a demuxing [`Player`] on symphonia (see [`player`]). MediaStream/
+//! WebRTC would need a capture stack, not SDL2's job — those keep the dummy types.
 
 mod decoder;
+mod device;
+mod player;
 mod sink;
 
 use std::collections::HashMap;
@@ -34,6 +36,7 @@ use servo_media_dummy::{
 };
 
 use decoder::SymphoniaAudioDecoder;
+use player::SdlAudioPlayer;
 use sink::SdlAudioSink;
 
 /// A static because `make_sink`/`make_decoder` are associated functions with no
@@ -96,8 +99,13 @@ pub fn init(sdl: &Sdl, config: &crate::config::AudioConfig) -> Option<AudioSubsy
 /// reach them. `Weak`: an entry never keeps a closed context alive.
 type Contexts = Vec<Weak<Mutex<AudioContext>>>;
 
+/// Live `<audio>` players of one Servo pipeline, same lifecycle rules as
+/// [`Contexts`].
+type Players = Vec<Weak<Mutex<dyn Player>>>;
+
 struct SdlMediaBackend {
     contexts: Mutex<HashMap<ClientContextId, Contexts>>,
+    players: Mutex<HashMap<ClientContextId, Players>>,
     /// Media-instance ids (`MediaInstance::get_id`), unique across the process.
     next_id: AtomicUsize,
 }
@@ -117,12 +125,28 @@ impl SdlMediaBackend {
             None => false,
         });
     }
+
+    /// Same walk for players; a background tab must quiet its `<audio>` too.
+    fn with_players(&self, id: &ClientContextId, f: impl Fn(&dyn Player)) {
+        let mut players = self.players.lock().expect("no panics under this lock");
+        let Some(entry) = players.get_mut(id) else {
+            return;
+        };
+        entry.retain(|weak| match weak.upgrade() {
+            Some(player) => {
+                f(&*player.lock().expect("no panics under this lock"));
+                true
+            }
+            None => false,
+        });
+    }
 }
 
 impl BackendInit for SdlMediaBackend {
     fn init() -> Box<dyn Backend> {
         Box::new(SdlMediaBackend {
             contexts: Mutex::new(HashMap::new()),
+            players: Mutex::new(HashMap::new()),
             next_id: AtomicUsize::new(0),
         })
     }
@@ -162,6 +186,9 @@ impl Backend for SdlMediaBackend {
         self.with_contexts(id, |context| {
             let _ = context.mute(val);
         });
+        self.with_players(id, |player| {
+            let _ = MediaInstance::mute(player, val);
+        });
     }
 
     /// Document no longer fully active: stopping the render thread pauses the device,
@@ -170,29 +197,62 @@ impl Backend for SdlMediaBackend {
         self.with_contexts(id, |context| {
             let _ = context.suspend();
         });
+        self.with_players(id, |player| {
+            let _ = player.suspend();
+        });
     }
 
     fn resume(&self, id: &ClientContextId) {
         self.with_contexts(id, |context| {
             let _ = context.resume();
         });
+        self.with_players(id, |player| {
+            let _ = player.resume();
+        });
     }
 
-    /// No `Player`, so a page gets a fallback instead of a load that never completes.
-    fn can_play_type(&self, _media_type: &str) -> SupportsMediaType {
-        SupportsMediaType::No
+    /// With audio off there is no `Player`, so a page gets its documented
+    /// no-audio fallback instead of a load that never completes.
+    fn can_play_type(&self, media_type: &str) -> SupportsMediaType {
+        if !settings().output {
+            return SupportsMediaType::No;
+        }
+        player::can_play_type(media_type)
     }
 
     fn create_player(
         &self,
-        _id: &ClientContextId,
-        _: StreamType,
-        _: GenericCallback<PlayerEvent>,
+        id: &ClientContextId,
+        stream_type: StreamType,
+        observer: GenericCallback<PlayerEvent>,
         _: Option<Arc<Mutex<dyn video::VideoFrameRenderer>>>,
-        _: Option<Arc<Mutex<dyn audio::AudioRenderer>>>,
+        audio_renderer: Option<Arc<Mutex<dyn audio::AudioRenderer>>>,
         _: Box<dyn PlayerGLContext>,
     ) -> Arc<Mutex<dyn Player>> {
-        Arc::new(Mutex::new(DummyPlayer))
+        if !settings().output {
+            return Arc::new(Mutex::new(DummyPlayer));
+        }
+        if audio_renderer.is_some() {
+            // MediaElementAudioSourceNode wants the samples routed into the
+            // WebAudio graph; they go to the device instead, unprocessed.
+            log::warn!("audio: custom audio renderer requested; playing directly");
+        }
+        let player: Arc<Mutex<dyn Player>> = Arc::new(Mutex::new(SdlAudioPlayer::new(
+            self.next_id.fetch_add(1, Ordering::Relaxed),
+            stream_type,
+            observer,
+        )));
+
+        let mut players = self.players.lock().expect("no panics under this lock");
+        players.retain(|_, entry| {
+            entry.retain(|weak| weak.strong_count() > 0);
+            !entry.is_empty()
+        });
+        players
+            .entry(*id)
+            .or_default()
+            .push(Arc::downgrade(&player));
+        player
     }
 
     fn create_audiostream(&self) -> MediaStreamId {

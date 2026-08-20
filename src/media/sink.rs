@@ -3,36 +3,24 @@
 //! Servo's render thread parks as soon as [`AudioSink::has_enough_data`] is true and
 //! only [`AudioRenderThreadMsg::SinkNeedData`] wakes it, so draining the queue must
 //! send that message — the hand-off is the whole protocol.
-//!
-//! The device runs through raw `sdl2::sys`: rust-sdl2's safe `AudioDevice` owns an
-//! `!Send` `AudioSubsystem`, but an `AudioSink` must be `Send`. Keeping
-//! `SDL_INIT_AUDIO` up for the process is [`crate::media::init`]'s job.
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::ffi::{c_int, c_void};
-use std::mem::MaybeUninit;
-use std::ptr;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use sdl2::sys;
-use servo_media::audio::block::Chunk;
 use servo_media::audio::audio_node::ChannelInterpretation;
+use servo_media::audio::block::Chunk;
 use servo_media::audio::render_thread::{AudioRenderThreadMsg, SinkEosCallback};
 use servo_media::audio::sink::{AudioSink, AudioSinkError};
 use servo_media::streams::MediaSocket;
 
-/// Device buffer in frames (SDL wants a power of two). ~23 ms at 44.1 kHz: snappy
-/// without waking a handheld's audio thread every few milliseconds.
-const DEVICE_BUFFER_FRAMES: u16 = 1024;
-
-/// servo-media hardcodes stereo for real-time contexts, so the device matches it.
-const CHANNELS: u8 = 2;
+use super::device::{Device, BUFFER_FRAMES, CHANNELS};
 
 /// Queue depth ahead of the device: the render thread idles above this mark and is
 /// woken below it. Four device buffers (~93 ms) rides out a slow render pass.
-const QUEUE_TARGET_SAMPLES: usize = 4 * DEVICE_BUFFER_FRAMES as usize * CHANNELS as usize;
+const QUEUE_TARGET_SAMPLES: usize = 4 * BUFFER_FRAMES as usize * CHANNELS as usize;
 
 /// Shared between Servo's render thread and SDL's audio thread. One mutex covers
 /// both fields: the callback needs them together and each section is a memcpy.
@@ -76,49 +64,6 @@ unsafe extern "C" fn audio_callback(userdata: *mut c_void, stream: *mut u8, len:
         if let Some(notify) = &queue.notify {
             let _ = notify.send(AudioRenderThreadMsg::SinkNeedData);
         }
-    }
-}
-
-/// An open SDL playback device, identified by nothing but its id so it stays `Send`.
-struct Device {
-    id: sys::SDL_AudioDeviceID,
-}
-
-impl Device {
-    /// Opens the default playback device. SDL keeps `queue`'s address as the
-    /// callback userdata, so that `Arc` must outlive the `Device`.
-    fn open(sample_rate: f32, queue: &Arc<Mutex<Queue>>) -> Result<Self, String> {
-        let desired = sys::SDL_AudioSpec {
-            freq: sample_rate as c_int,
-            format: sys::AUDIO_F32SYS as sys::SDL_AudioFormat,
-            channels: CHANNELS,
-            silence: 0,
-            samples: DEVICE_BUFFER_FRAMES,
-            padding: 0,
-            size: 0,
-            callback: Some(audio_callback),
-            userdata: Arc::as_ptr(queue) as *mut c_void,
-        };
-        let mut obtained = MaybeUninit::uninit();
-        // allowed_changes = 0: SDL converts internally, so the callback always gets
-        // f32 stereo at `sample_rate` whatever the hardware offers.
-        let id =
-            unsafe { sys::SDL_OpenAudioDevice(ptr::null(), 0, &desired, obtained.as_mut_ptr(), 0) };
-        if id == 0 {
-            return Err(sdl2::get_error());
-        }
-        Ok(Self { id })
-    }
-
-    fn set_paused(&self, paused: bool) {
-        unsafe { sys::SDL_PauseAudioDevice(self.id, c_int::from(paused)) };
-    }
-}
-
-impl Drop for Device {
-    fn drop(&mut self) {
-        // Joins SDL's audio thread, so no callback can be in flight afterwards.
-        unsafe { sys::SDL_CloseAudioDevice(self.id) };
     }
 }
 
@@ -176,8 +121,11 @@ impl AudioSink for SdlAudioSink {
         }
         let mut device = self.device.borrow_mut();
         if device.is_none() {
+            // SDL keeps `queue`'s address as the callback userdata; the sink's `Drop`
+            // closes the device before that `Arc` can go away.
+            let userdata = Arc::as_ptr(&self.queue) as *mut c_void;
             *device = Some(
-                Device::open(self.sample_rate.get(), &self.queue).map_err(|e| {
+                Device::open(self.sample_rate.get(), audio_callback, userdata).map_err(|e| {
                     log::warn!("audio: could not open playback device: {e}");
                     AudioSinkError::Backend(e)
                 })?,

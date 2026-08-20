@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>audio element</title>
+<!-- End-to-end test for the <audio> player (src/media/player.rs): loads
+     /tone.wav from tests/serve.py (441 Hz, 3 s), plays it, seeks to 2.5 s at
+     the 1 s mark, and beacons every stage to /report. Run headless with
+     SDL_AUDIODRIVER=disk and check the capture for 441 Hz; read the server's
+     stdout for the event timeline. -->
+<h1>&lt;audio&gt; element: 441 Hz tone, autoplay, seek at 1 s</h1>
+<pre id="log"></pre>
+<audio id="a" src="/tone.wav" preload="auto"></audio>
+<script>
+  var a = document.getElementById('a');
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?' + msg).catch(function () {});
+  }
+  log('stage=canplaytype'
+      + ' mpeg=' + (a.canPlayType('audio/mpeg') || 'no')
+      + ' wav=' + (a.canPlayType('audio/wav') || 'no')
+      + ' opus=' + (a.canPlayType('audio/ogg; codecs=opus') || 'no'));
+  var seeked = false;
+  a.addEventListener('durationchange', function () {
+    log('stage=duration value=' + a.duration.toFixed(2));
+  });
+  a.addEventListener('canplay', function () {
+    log('stage=canplay');
+    a.play();
+  });
+  a.addEventListener('playing', function () {
+    log('stage=playing');
+  });
+  a.addEventListener('timeupdate', function () {
+    if (!seeked && a.currentTime >= 1.0) {
+      seeked = true;
+      log('stage=seek from=' + a.currentTime.toFixed(2));
+      a.currentTime = 2.5;
+    }
+  });
+  a.addEventListener('seeked', function () {
+    log('stage=seeked at=' + a.currentTime.toFixed(2));
+  });
+  a.addEventListener('ended', function () {
+    log('stage=ended at=' + a.currentTime.toFixed(2));
+  });
+  a.addEventListener('error', function () {
+    log('stage=error code=' + (a.error ? a.error.code : 'none'));
+  });
+</script>

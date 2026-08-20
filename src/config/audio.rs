@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// Audio output (`[audio]`). Web Audio plays through SDL2 (see [`crate::media`]);
-/// `<audio>`/`<video>` stay silent either way. Off never opens a device, but
-/// `decodeAudioData` keeps working.
+/// Audio output (`[audio]`). Web Audio and `<audio>` elements play through SDL2
+/// (see [`crate::media`]); `<video>` stays silent. Off never opens a device and
+/// `<audio>` takes the no-audio fallback, but `decodeAudioData` keeps working.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioConfig {
