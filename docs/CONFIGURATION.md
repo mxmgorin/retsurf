@@ -167,12 +167,14 @@ block_fonts = false        # skip web-font downloads (fall back to system fonts)
 max_images_per_page = 0
 
 [audio]
-# Web Audio output. retsurf renders the Web Audio graph itself and plays it through
+# Audio output. retsurf renders the Web Audio graph itself and plays it through
 # SDL2, so oscillators, gain, filters, panners, analysers and JS-filled AudioBuffers
-# all make sound, and decodeAudioData() decodes mp3/wav/flac/ogg/aac. Not covered:
-# <audio>/<video> elements, which need a demuxing player Servo has no backend for.
+# all make sound, decodeAudioData() decodes mp3/wav/flac/ogg-vorbis/aac, and <audio>
+# elements play the same formats (progressive files only - no streaming/MSE, no Opus).
+# <video> stays silent; a video file in an <audio>-style load plays its audio track.
 # Read once at startup (restart to apply). Off means no audio device is ever opened;
-# decodeAudioData() still works, pages are just silent.
+# <audio> reports "can't play" so pages take their no-audio fallback, and
+# decodeAudioData() still works.
 enabled = true
 # Longest clip decodeAudioData() will decode, in seconds (0 = unlimited). A decoded
 # clip costs seconds * rate * channels * 4 bytes in memory, so a 5 min stereo track is

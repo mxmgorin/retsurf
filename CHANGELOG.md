@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`<audio>` elements play.** A servo-media `Player` backed by symphonia demuxes
+  the file as it downloads and plays it through SDL2, so podcast players, audio
+  previews and `new Audio(url)` sound effects work: progressive mp3, wav, flac,
+  ogg-vorbis and aac/m4a files, with seeking (over HTTP `Range` when the server
+  supports it), `currentTime`/`duration`, volume and mute, the `loop` attribute,
+  and `canPlayType()` answering honestly (no Opus, no streaming/MSE). Buffered
+  input is capped at 16 MB — long files stream through the cap instead of living
+  in memory whole. A `<video>` element stays pictureless, but its audio track
+  plays. Backgrounding a tab now also pauses its `<audio>` the way it already
+  suspended WebAudio. The **Settings > Content > Audio** master switch (renamed
+  "Audio output") covers it: off restores the old no-audio fallback behavior.
+
 ## [0.5.1] - 2026-08-17
 
 Supersedes 0.5.0, which was pulled over the image-cap bug below; everything it
