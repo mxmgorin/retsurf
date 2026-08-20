@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// subresource categories to cut bandwidth and memory. Each is blocked at the
 /// network level like the ad blocker, so pages fail soft, and all apply live.
 /// See [`crate::browser::content_filter`].
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DataSavingConfig {
     /// Skip image subresource loads (`<img>`, CSS backgrounds, favicons).
@@ -18,15 +18,4 @@ pub struct DataSavingConfig {
     /// default: ordinary pages run to 80-odd images, and capping them cost under
     /// 3% of resident memory while dropping half the content.
     pub max_images_per_page: usize,
-}
-
-impl Default for DataSavingConfig {
-    fn default() -> Self {
-        Self {
-            block_images: false,
-            block_media: false,
-            block_fonts: false,
-            max_images_per_page: 0,
-        }
-    }
 }
