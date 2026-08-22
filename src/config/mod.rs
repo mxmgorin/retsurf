@@ -24,6 +24,7 @@ mod paths;
 mod performance;
 mod token_enum;
 mod update;
+mod video;
 
 pub use adblock::AdblockConfig;
 pub use audio::AudioConfig;
@@ -39,6 +40,7 @@ pub use osk::OskConfig;
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
 pub use update::{Channel, UpdateConfig};
+pub use video::VideoConfig;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -53,6 +55,7 @@ pub struct AppConfig {
     pub performance: PerformanceConfig,
     pub data_saving: DataSavingConfig,
     pub audio: AudioConfig,
+    pub video: VideoConfig,
     pub osk: OskConfig,
     pub debug: DebugConfig,
     pub update: UpdateConfig,

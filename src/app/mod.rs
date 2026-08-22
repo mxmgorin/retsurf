@@ -68,7 +68,7 @@ impl App {
         log::info!("init: creating window");
         let window = AppWindow::new(sdl, &config.display)?;
         // Before the browser: whichever media backend lands first is the one that sticks.
-        let audio = crate::media::init(sdl, &config.audio);
+        let audio = crate::media::init(sdl, &config.audio, &config.video);
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
