@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`<video>` elements play.** Progressive H.264-in-MP4 files decode in software
+  (OpenH264) and render through WebRender, synced to the audio track (or a
+  wallclock for muted video-only files): playback, seeking, `videoWidth`/
+  `videoHeight`, the last frame held at the end. B-frame streams reorder
+  correctly; a machine that cannot decode in real time drops video to a
+  slideshow while audio stays smooth. No MSE means streaming sites stay dead —
+  this is for direct files and embeds. Off switch: **Settings > Content > Video**
+  (`[video] enabled`); off returns video files to audio-only. OpenH264 is the
+  project's one C dependency, compiled from source.
+
 - **`<audio>` elements play.** A servo-media `Player` backed by symphonia demuxes
   the file as it downloads and plays it through SDL2, so podcast players, audio
   previews and `new Audio(url)` sound effects work: progressive mp3, wav, flac,

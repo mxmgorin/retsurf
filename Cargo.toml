@@ -71,6 +71,14 @@ symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav
 # (no `fft_resampler`, so no FFT crates) is rubato's cheap end, which beats transition-band
 # purity on an A35.
 rubato = { version = "4", default-features = false }
+# `<video>` decode (src/media/video.rs): Cisco's OpenH264 built from source via cc — the
+# one C dependency, chosen because it cross-compiles with a plain toolchain (NEON asm
+# included) where dav1d/libvpx want meson/configure. Software-only; a handheld may not
+# hold real time, which is why [video] has its own switch.
+openh264 = "0.9.8"
+# Decoded YUV 420 -> the BGRA8 WebRender wants. SIMD paths (NEON/SSE) are its default
+# features; the conversion runs once per displayed frame.
+yuv = "0.8"
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"

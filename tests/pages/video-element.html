@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>video element</title>
+<!-- End-to-end test for the <video> path (src/media/video.rs): /tone.mp4 from
+     tests/serve.py is a 3 s testsrc2 pattern (H.264 with B-frames) plus the
+     441 Hz tone (AAC). Same drill as audio-element.html: autoplay, seek to
+     2.5 s at the 1 s mark, beacon every stage; check the audio capture for
+     441 Hz and a screenshot for the moving pattern. -->
+<h1>&lt;video&gt; element: testsrc2 + 441 Hz, autoplay, seek at 1 s</h1>
+<pre id="log"></pre>
+<video id="v" src="/tone.mp4" preload="auto" width="320" height="180"></video>
+<script>
+  var v = document.getElementById('v');
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?' + msg).catch(function () {});
+  }
+  log('stage=canplaytype'
+      + ' mp4=' + (v.canPlayType('video/mp4') || 'no')
+      + ' avc1=' + (v.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || 'no')
+      + ' hevc=' + (v.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') || 'no'));
+  var seeked = false;
+  v.addEventListener('loadedmetadata', function () {
+    log('stage=metadata duration=' + v.duration.toFixed(2)
+        + ' size=' + v.videoWidth + 'x' + v.videoHeight);
+  });
+  v.addEventListener('canplay', function () {
+    log('stage=canplay');
+    v.play();
+  });
+  v.addEventListener('playing', function () {
+    log('stage=playing');
+  });
+  v.addEventListener('timeupdate', function () {
+    if (!seeked && v.currentTime >= 1.0) {
+      seeked = true;
+      log('stage=seek from=' + v.currentTime.toFixed(2));
+      v.currentTime = 2.5;
+    }
+  });
+  v.addEventListener('seeked', function () {
+    log('stage=seeked at=' + v.currentTime.toFixed(2));
+  });
+  v.addEventListener('ended', function () {
+    log('stage=ended at=' + v.currentTime.toFixed(2));
+  });
+  v.addEventListener('error', function () {
+    log('stage=error code=' + (v.error ? v.error.code : 'none'));
+  });
+</script>

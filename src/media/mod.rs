@@ -11,6 +11,7 @@ mod decoder;
 mod device;
 mod player;
 mod sink;
+mod video;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,7 +24,8 @@ use servo_media::audio::decoder::AudioDecoder;
 use servo_media::audio::sink::AudioSinkError;
 use servo_media::audio::{AudioBackend, AudioStreamReader};
 use servo_media::player::context::PlayerGLContext;
-use servo_media::player::{audio, video, Player, PlayerEvent, StreamType};
+use servo_media::player::video::VideoFrameRenderer;
+use servo_media::player::{audio, Player, PlayerEvent, StreamType};
 use servo_media::streams::capture::MediaTrackConstraintSet;
 use servo_media::streams::device_monitor::{MediaDeviceInfo, MediaDeviceMonitor};
 use servo_media::streams::registry::{register_stream, unregister_stream, MediaStreamId};
@@ -48,6 +50,8 @@ pub(crate) struct Settings {
     pub output: bool,
     /// `[audio] max_decode_seconds`; `0` is unlimited.
     pub max_decode_seconds: u32,
+    /// `[video] enabled`: decode H.264 tracks; off plays video files audio-only.
+    pub video: bool,
 }
 
 impl Default for Settings {
@@ -56,6 +60,7 @@ impl Default for Settings {
         Self {
             output: true,
             max_decode_seconds: 0,
+            video: true,
         }
     }
 }
@@ -67,7 +72,11 @@ pub(crate) fn settings() -> &'static Settings {
 /// Registers the WebAudio backend, before Servo is built. The returned subsystem must
 /// stay alive: dropping it closes every device the sinks opened. `None` means pages stay
 /// silent; the backend registers anyway, since decoding needs no device.
-pub fn init(sdl: &Sdl, config: &crate::config::AudioConfig) -> Option<AudioSubsystem> {
+pub fn init(
+    sdl: &Sdl,
+    config: &crate::config::AudioConfig,
+    video: &crate::config::VideoConfig,
+) -> Option<AudioSubsystem> {
     let subsystem = config
         .enabled
         .then(|| sdl.audio())
@@ -86,6 +95,7 @@ pub fn init(sdl: &Sdl, config: &crate::config::AudioConfig) -> Option<AudioSubsy
     let _ = SETTINGS.set(Settings {
         output: subsystem.is_some(),
         max_decode_seconds: config.max_decode_seconds,
+        video: video.enabled,
     });
 
     ServoMedia::init::<SdlMediaBackend>();
@@ -217,7 +227,7 @@ impl Backend for SdlMediaBackend {
         if !settings().output {
             return SupportsMediaType::No;
         }
-        player::can_play_type(media_type)
+        player::can_play_type(media_type, settings().video)
     }
 
     fn create_player(
@@ -225,7 +235,7 @@ impl Backend for SdlMediaBackend {
         id: &ClientContextId,
         stream_type: StreamType,
         observer: GenericCallback<PlayerEvent>,
-        _: Option<Arc<Mutex<dyn video::VideoFrameRenderer>>>,
+        video_renderer: Option<Arc<Mutex<dyn VideoFrameRenderer>>>,
         audio_renderer: Option<Arc<Mutex<dyn audio::AudioRenderer>>>,
         _: Box<dyn PlayerGLContext>,
     ) -> Arc<Mutex<dyn Player>> {
@@ -241,6 +251,7 @@ impl Backend for SdlMediaBackend {
             self.next_id.fetch_add(1, Ordering::Relaxed),
             stream_type,
             observer,
+            video_renderer,
         )));
 
         let mut players = self.players.lock().expect("no panics under this lock");

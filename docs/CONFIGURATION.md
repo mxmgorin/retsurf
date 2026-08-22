@@ -183,6 +183,15 @@ enabled = true
 # Lower it on weak boards; raise it if a page needs long tracks.
 max_decode_seconds = 300
 
+[video]
+# <video> playback: H.264-in-MP4 files, decoded in software (OpenH264) and synced
+# to the audio track. Still no MSE, so streaming sites (YouTube etc.) stay dead;
+# this covers direct .mp4 files and embeds. Decoding is CPU-bound - a weak board
+# that cannot keep up drops video to a slideshow while audio stays smooth, and
+# turning this off makes video files play audio-only (the pre-0.6 behavior).
+# Read once at startup (restart to apply).
+enabled = true
+
 [input]
 deadzone = 0.25            # stick deflection below this is treated as centered
 cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)

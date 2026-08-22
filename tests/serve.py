@@ -12,7 +12,9 @@ Beacons are a no-op against any other static server (they just 404).
 /tone.wav is synthesized at startup (441 Hz, 3 s, stereo, peak 0.5) and served
 with Range support, so audio-element.html exercises the seekable-media path the
 way a real server would; SimpleHTTPRequestHandler alone answers 200 and Servo
-would treat the stream as non-seekable.
+would treat the stream as non-seekable. /tone.mp4 (testsrc2 video + the same
+441 Hz tone, H.264 with B-frames + AAC) is built by ffmpeg on first request and
+cached in the temp dir; without ffmpeg it 404s.
 """
 
 import http.server
@@ -22,7 +24,9 @@ import os
 import re
 import socketserver
 import struct
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 
@@ -55,6 +59,22 @@ def tone_wav():
 TONE = tone_wav()
 
 
+def tone_mp4():
+    path = os.path.join(tempfile.gettempdir(), "retsurf-tone.mp4")
+    if not os.path.exists(path):
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error",
+             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=3",
+             "-f", "lavfi", "-i", f"sine=frequency={int(TONE_HZ)}:duration=3",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-c:a", "aac", "-b:a", "96k", "-ac", "2", "-ar", str(TONE_RATE),
+             "-movflags", "+faststart", path],
+            check=True,
+        )
+    with open(path, "rb") as f:
+        return f.read()
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -68,22 +88,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         if parsed.path == "/tone.wav":
-            self._serve_tone()
+            self._serve_bytes(TONE, "audio/wav")
+            return
+        if parsed.path == "/tone.mp4":
+            try:
+                self._serve_bytes(tone_mp4(), "video/mp4")
+            except (OSError, subprocess.CalledProcessError) as e:
+                self._log(f"tone.mp4 unavailable: {e}")
+                self.send_error(404)
             return
         super().do_GET()
 
-    def _serve_tone(self):
+    def _serve_bytes(self, body, ctype):
+        total = len(body)
         match = re.match(r"bytes=(\d+)-$", self.headers.get("Range") or "")
-        start = min(int(match.group(1)), len(TONE)) if match else 0
-        body = TONE[start:]
+        start = min(int(match.group(1)), total) if match else 0
+        body = body[start:]
         if match:
             self.send_response(206)
-            self.send_header(
-                "Content-Range", f"bytes {start}-{len(TONE) - 1}/{len(TONE)}"
-            )
+            self.send_header("Content-Range", f"bytes {start}-{total - 1}/{total}")
         else:
             self.send_response(200)
-        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
