@@ -10,6 +10,7 @@ mod router;
 pub use command::{AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
 
 use crate::browser::AppBrowser;
+use crate::data::session::Session;
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::ui::AppUi;
@@ -42,10 +43,12 @@ pub struct App {
     /// the hint, hold opens its link in a background tab). `None` when no press
     /// is in flight over a hint.
     hint_press_at: Option<Instant>,
-    /// Last time deferred history was flushed to disk. Bounds buffered-history
-    /// loss to [`HISTORY_FLUSH_INTERVAL`] while browsing, without ever waking the
-    /// idle loop — the flush only fires on frames the loop is already running.
-    last_history_flush: Instant,
+    /// The tabs to reopen at startup (`[browser] restore_tabs`).
+    session: Session,
+    /// Last time the deferred stores (history, tab session) were written. The
+    /// flush only fires on frames the loop is already awake for, so it never
+    /// wakes an idle loop.
+    last_flush: Instant,
     /// Last time a memory report was requested (debug overlay only). Throttles
     /// the requests to [`MEMORY_REPORT_INTERVAL`] since each one walks every reporter.
     last_memory_report: Instant,
@@ -54,10 +57,11 @@ pub struct App {
     _audio: Option<sdl2::AudioSubsystem>,
 }
 
-/// How often the main loop opportunistically flushes deferred history (only on
-/// frames it's already awake for — navigation, paint, input). Coalesces the
-/// per-navigation writes that used to rewrite `history.toml` on every page load.
-const HISTORY_FLUSH_INTERVAL: Duration = Duration::from_secs(5);
+/// How often the main loop opportunistically flushes the deferred stores —
+/// history and the tab session — to disk (only on frames it's already awake
+/// for: navigation, paint, input). Coalesces the per-navigation writes that
+/// used to rewrite `history.toml` on every page load.
+const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 
 /// How often the debug memory overlay (`[debug] memory_overlay`) refreshes its
 /// figures by asking Servo for a new report.
@@ -99,14 +103,15 @@ impl App {
             osk_nav_dir: (0, 0),
             osk_nav_next: Instant::now(),
             hint_press_at: None,
-            last_history_flush: Instant::now(),
+            session: Session::load(),
+            last_flush: Instant::now(),
             last_memory_report: Instant::now(),
             _audio: audio,
         })
     }
 
     pub fn run(mut self) {
-        self.browser.open_tab(&self.config.browser.home_page);
+        self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
         self.ui.update_auto_check(&self.event_sender);
@@ -134,9 +139,10 @@ impl App {
             // on frames the loop is already awake for — it never schedules an idle
             // wake (the blocking wait stays battery-efficient). A clean exit and
             // menu close flush the remainder.
-            if self.last_history_flush.elapsed() >= HISTORY_FLUSH_INTERVAL {
+            if self.last_flush.elapsed() >= FLUSH_INTERVAL {
                 self.ui.menu.flush_history();
-                self.last_history_flush = Instant::now();
+                self.save_session();
+                self.last_flush = Instant::now();
             }
 
             // Debug memory overlay: on a throttle, ask Servo for a fresh report,
@@ -227,9 +233,10 @@ impl App {
             self.draw();
         }
 
-        // Persist history buffered since the last throttle tick — `Drop` won't
+        // Persist what was buffered since the last throttle tick — `Drop` won't
         // run (we `process::exit` below), so this must be explicit.
         self.ui.menu.flush_history();
+        self.save_session();
         self.ui.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage
@@ -244,6 +251,28 @@ impl App {
 
     fn shutdown(&mut self) {
         self.state = AppState::ShuttingDown;
+    }
+
+    /// Fill the empty tab list at startup: the saved session, or the home page
+    /// when there is none. `restore_tabs` off drops the stored session instead.
+    fn open_first_tabs(&mut self) {
+        if !self.config.browser.restore_tabs {
+            self.session.discard();
+        } else if self
+            .browser
+            .restore_tabs(self.session.urls(), self.session.active())
+        {
+            return;
+        }
+        self.browser.open_tab(&self.config.browser.home_page);
+    }
+
+    /// Snapshot the open tabs for the next launch. A no-op with `restore_tabs`
+    /// off, and a tab list unchanged since the last snapshot writes nothing.
+    fn save_session(&mut self) {
+        if self.config.browser.restore_tabs {
+            self.session.record(&self.browser.tabs());
+        }
     }
 
     fn draw(&mut self) {

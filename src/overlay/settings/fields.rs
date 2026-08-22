@@ -196,6 +196,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "User agent",             ua_kind(), true),
     f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
     f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false),
+    f(S::Browser,  "Browser",     "Restore tabs",           flag!(browser.restore_tabs), false),
     f(S::Browser,  "Browser",     "Keep site data",         flag!(browser.persist_site_data), true),
 
     f(S::Browser,  "Experimental", "Web features",          web_features_kind(), false),

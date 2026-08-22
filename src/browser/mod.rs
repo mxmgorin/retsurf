@@ -121,6 +121,17 @@ struct Tab {
     page_images: RefCell<HashSet<u64>>,
 }
 
+impl Tab {
+    /// A tab around a webview that was built already fetching its URL.
+    fn loading(webview: WebView) -> Self {
+        Self {
+            webview,
+            state: BrowserState::loading(),
+            page_images: RefCell::default(),
+        }
+    }
+}
+
 /// A denied download navigation or an `a[download]` link, for
 /// [`crate::data::downloads`] to fetch.
 pub struct DownloadRequest {
@@ -596,11 +607,7 @@ impl AppBrowser {
         webview.focus();
 
         let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.push(Tab {
-            webview,
-            state: BrowserState::loading(),
-            page_images: RefCell::default(),
-        });
+        tabs.push(Tab::loading(webview));
         self.inner.active.set(tabs.len() - 1);
         drop(tabs);
         self.inner.repaint_pending.set(true);
@@ -614,11 +621,40 @@ impl AppBrowser {
         let Some(webview) = self.build_tab(url) else {
             return;
         };
-        self.inner.tabs.borrow_mut().push(Tab {
-            webview,
-            state: BrowserState::loading(),
-            page_images: RefCell::default(),
-        });
+        self.inner.tabs.borrow_mut().push(Tab::loading(webview));
+    }
+
+    /// Reopen a saved session (see [`crate::data::session`]): one tab per URL,
+    /// with the tab at `active` shown and focused. URLs that won't parse are
+    /// skipped, and the shown one falls back to the nearest earlier survivor.
+    /// Returns whether any tab was opened — the caller loads the home page when
+    /// none was. Startup only: it assumes it is filling an empty tab list.
+    pub fn restore_tabs(&mut self, urls: &[String], active: usize) -> bool {
+        let mut kept = Vec::with_capacity(urls.len());
+        let mut built = Vec::with_capacity(urls.len());
+        for (i, url) in urls.iter().enumerate() {
+            match self.build_tab(url) {
+                Some(webview) => {
+                    kept.push(i);
+                    built.push(webview);
+                }
+                None => log::warn!("session: dropping unparseable url `{url}`"),
+            }
+        }
+        if built.is_empty() {
+            return false;
+        }
+        let shown = shown_index(&kept, active);
+        log::info!("session: restoring {} tabs, showing {shown}", built.len());
+
+        let mut tabs = self.inner.tabs.borrow_mut();
+        tabs.extend(built.into_iter().map(Tab::loading));
+        tabs[shown].webview.show();
+        tabs[shown].webview.focus();
+        drop(tabs);
+        self.inner.active.set(shown);
+        self.inner.repaint_pending.set(true);
+        true
     }
 
     /// Switch the shown tab to `index` (no-op if out of range or already active).
@@ -867,6 +903,13 @@ impl AppBrowser {
     }
 }
 
+/// Which restored tab to show: the saved `active` one, or the nearest earlier
+/// survivor when its URL was skipped. `kept` holds the saved position of each
+/// restored tab, ascending, and is never empty here.
+fn shown_index(kept: &[usize], active: usize) -> usize {
+    kept.iter().rposition(|&i| i <= active).unwrap_or(0)
+}
+
 /// Empty the focused field, firing the events a page listens for.
 const CLEAR_FIELD_JS: &str = r#"
 (function () {
@@ -926,3 +969,25 @@ const COLLECT_HINTS_JS: &str = r#"
     return out;
 })()
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The restored tabs keep their saved order, so the shown one is the saved
+    /// index shifted back by however many earlier URLs were dropped.
+    #[test]
+    fn shown_index_follows_the_dropped_tabs() {
+        assert_eq!(shown_index(&[0, 1, 2], 2), 2);
+        assert_eq!(shown_index(&[1, 3], 3), 1);
+        assert_eq!(shown_index(&[0, 2, 4], 4), 2);
+    }
+
+    /// The saved active tab itself may be the one dropped: show the nearest
+    /// earlier survivor, or the first tab when none precedes it.
+    #[test]
+    fn shown_index_falls_back_when_the_active_tab_is_dropped() {
+        assert_eq!(shown_index(&[0, 3], 2), 0);
+        assert_eq!(shown_index(&[2, 3], 1), 0);
+    }
+}

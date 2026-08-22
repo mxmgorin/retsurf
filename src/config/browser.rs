@@ -16,6 +16,10 @@ pub struct BrowserConfig {
     /// (`cookie_jar.json`, `localstorage.json`, …). When false everything is
     /// in-memory only and gone on exit.
     pub persist_site_data: bool,
+    /// Reopen the tabs that were open at exit instead of starting on
+    /// `home_page` (see [`crate::data::session`]). Off also drops the stored
+    /// session, so it can't resurface later.
+    pub restore_tabs: bool,
     /// Default page zoom for every tab (1.0 = 100%). Reflows the layout, so
     /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
     /// `zoom_out` step from here, `zoom_reset` returns.
@@ -34,6 +38,7 @@ impl Default for BrowserConfig {
             search_page: "https://duckduckgo.com/?q=%s".to_string(),
             user_agent: String::new(),
             persist_site_data: true,
+            restore_tabs: true,
             page_zoom: 1.0,
             page_theme: PageTheme::Light,
         }

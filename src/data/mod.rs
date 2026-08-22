@@ -7,6 +7,7 @@ pub mod bookmarks;
 pub mod dial;
 pub mod downloads;
 pub mod history;
+pub mod session;
 
 use crate::config;
 use serde::{de::DeserializeOwned, Serialize};
@@ -43,6 +44,16 @@ fn save_toml<T: Serialize>(file: &str, val: &T, what: &str) -> bool {
             log::warn!("could not write {what}: {e}");
             false
         }
+    }
+}
+
+/// Best-effort delete of a data file (a store whose feature was turned off); a
+/// missing file counts as done, other failures are logged as `what`.
+fn remove(file: &str, what: &str) {
+    match std::fs::remove_file(data_path(file)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("could not remove {what}: {e}"),
     }
 }
 

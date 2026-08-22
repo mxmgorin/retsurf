@@ -297,6 +297,11 @@ impl App {
             .set_experimental_prefs(&self.config.experimental);
         // The page theme needs no reload at all: open tabs restyle in place.
         self.browser.set_page_theme(self.config.browser.page_theme);
+        // Turning tab restore off drops the stored session right away, rather
+        // than leaving it on disk for the next launch to clean up.
+        if !self.config.browser.restore_tabs {
+            self.session.discard();
+        }
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

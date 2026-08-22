@@ -13,9 +13,10 @@ Settings live in `config.toml` in the user data dir (`SDL_GetPrefPath`, e.g.
 points. A template with the defaults is written on first run; missing fields fall back
 to their defaults, so a partial file (just one section, or one key) is valid.
 
-The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmarks.toml`)
-at its root, with Servo's site data (cookies, localStorage, HSTS) under `servo/` and
-regenerable caches (the adblock engine) under `cache/` — the latter is safe to delete.
+The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmarks.toml`,
+`session.toml`) at its root, with Servo's site data (cookies, localStorage, HSTS) under
+`servo/` and regenerable caches (the adblock engine) under `cache/` — the latter is safe
+to delete.
 
 ```toml
 [browser]
@@ -28,6 +29,11 @@ user_agent = ""
 # Keep site data (cookies, localStorage, HSTS) across restarts so logins
 # survive. Stored in the data dir's servo/ subfolder; false = in-memory only, gone on exit.
 persist_site_data = true
+# Reopen the tabs that were open when you last quit, instead of starting on
+# home_page. The list is kept in session.toml in the data dir, rewritten as the
+# tabs change and at exit; turning this off deletes it. Tabs restore as their
+# URLs — page scroll position and form contents are not part of the session.
+restore_tabs = true
 # Default page zoom for every tab (1.0 = 100%). Real zoom — it reflows the
 # layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.

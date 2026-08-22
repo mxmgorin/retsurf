@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The open tabs come back after a restart.** Their URLs and which one was
+  shown are kept in `session.toml`, rewritten as the tabs change and at exit, so
+  quitting is no longer a way to lose a page you were halfway through — worth
+  more on a handheld, where retyping a URL costs a gamepad and an on-screen
+  keyboard. Restored tabs are URLs only: scroll position and form contents are
+  not saved, and a tab that never finished its first load has nothing to
+  restore. Off switch: **Settings > Browser > Restore tabs**
+  (`[browser] restore_tabs`); turning it off starts on the home page again and
+  deletes the stored session.
+
 - **`<video>` elements play.** Progressive H.264-in-MP4 files decode in software
   (OpenH264) and render through WebRender, synced to the audio track (or a
   wallclock for muted video-only files): playback, seeking, `videoWidth`/
