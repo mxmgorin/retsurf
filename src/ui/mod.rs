@@ -56,6 +56,16 @@ pub(super) enum OskField {
 /// externally-edited single-line `TextEdit`, so it tracks the OSK's caret (see
 /// [`OskField`]). Call it *before* the field renders so the caret lands this
 /// frame; egui reloads the state we store here when it draws.
+/// Drop egui's own keyboard focus, so Enter reaches only the overlay's selected
+/// row (see the callers).
+fn drop_egui_focus(ctx: &egui::Context) {
+    ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+}
+
 pub(super) fn park_caret(ctx: &egui::Context, id: egui::Id, pos: usize, char_count: usize) {
     let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
     let at = egui::text::CCursor::new(pos.min(char_count));
@@ -1190,6 +1200,11 @@ impl AppUi {
                 // type into a text field (focus is `Osk` then, painting it here
                 // would put it under the keyboard).
                 if self.settings.visible() {
+                    // Neither overlay has a text field, and both own their own
+                    // row selection — an egui-focused row (Tab, our section
+                    // switch, moves the focus) would take Enter a second time
+                    // and activate twice.
+                    drop_egui_focus(ctx);
                     settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
@@ -1212,6 +1227,7 @@ impl AppUi {
                 }
 
                 if self.menu.visible {
+                    drop_egui_focus(ctx);
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.osk.visible {
                     // Clear a bottom toolbar so its address bar stays visible

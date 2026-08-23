@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suspended WebAudio. The **Settings > Content > Audio** master switch (renamed
   "Audio output") covers it: off restores the old no-audio fallback behavior.
 
+### Fixed
+
+- **Enter no longer activates a settings or menu row twice.** Tab, which switches
+  section, also moved egui's own keyboard focus onto a row, so the next Enter
+  reached both the overlay and that row — a number stepped by two, and an arm-then-
+  confirm row like History's "Clear all" wiped on a single press. The overlays now
+  drop egui's focus; they route every key through their own selection.
+
 ## [0.5.1] - 2026-08-17
 
 Supersedes 0.5.0, which was pulled over the image-cap bug below; everything it
