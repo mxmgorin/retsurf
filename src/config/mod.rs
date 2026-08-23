@@ -123,6 +123,7 @@ impl AppConfig {
         use bounds as b;
 
         fix_f32("browser.page_zoom", &mut self.browser.page_zoom, b::PAGE_ZOOM);
+        fix_u32("browser.max_tabs", &mut self.browser.max_tabs, b::MAX_TABS);
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);
         fix_u32("display.height", &mut self.display.height, b::HEIGHT);

@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>window.open / tab cap</title>
+<!-- Manual test page for the [browser] max_tabs cap: the verdict reads
+     "window" while a tab still fits and "null" once the cap is reached. -->
+<style>
+  body { background: #fff; color: #111; font: 20px sans-serif; padding: 1.5rem; }
+  b { font: 20px monospace; }
+</style>
+<h1>window.open</h1>
+<p>returned: <b id="verdict">no js</b></p>
+<script>
+  // No click first: the popup must fire on load, or a headless run can't reach it.
+  const opened = window.open('/ua.html', '_blank');
+  document.getElementById('verdict').textContent = opened ? 'window' : 'null (refused)';
+</script>

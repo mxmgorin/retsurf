@@ -34,6 +34,12 @@ persist_site_data = true
 # tabs change and at exit; turning this off deletes it. Tabs restore as their
 # URLs — page scroll position and form contents are not part of the session.
 restore_tabs = true
+# How many tabs may be open at once; 0 = unlimited. Every tab is a live Servo
+# webview with no way to suspend it, so a few heavy pages can exhaust a 1 GB
+# board — lower this there. Opening past the cap closes the oldest tab that
+# isn't in view (1 therefore replaces); a tab the *page* opens (window.open,
+# target="_blank") is refused at the cap instead of evicting one of yours.
+max_tabs = 8
 # Default page zoom for every tab (1.0 = 100%). Real zoom — it reflows the
 # layout — so 1.25 makes the whole web bigger on a small screen. zoom_in /
 # zoom_out step a Firefox-style ladder from here, zoom_reset returns.

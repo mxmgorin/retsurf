@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A ceiling on open tabs.** Every tab is a live Servo webview that cannot be
+  suspended, so a handful of heavy pages was enough to exhaust a small board.
+  Opening past **Settings > Browser > Max tabs** (`[browser] max_tabs`, 8 by
+  default, 0 for unlimited) now closes the oldest tab that isn't in view — a cap
+  of 1 turns every new tab into a replacement. A tab a *page* opens is refused
+  at the cap rather than granted an eviction, so `window.open` can't push out
+  what you were reading; a session saved under a looser cap restores its most
+  recent tabs, the one that was in view included.
+
 - **The open tabs come back after a restart.** Their URLs and which one was
   shown are kept in `session.toml`, rewritten as the tabs change and at exit, so
   quitting is no longer a way to lose a page you were halfway through — worth

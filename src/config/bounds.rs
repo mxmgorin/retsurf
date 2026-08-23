@@ -28,6 +28,8 @@ pub struct FloatBounds {
 
 // Browser
 pub const PAGE_ZOOM: FloatBounds = FloatBounds { min: 0.3, max: 3.0, default: 1.0 };
+/// `0` is unlimited; `1` makes every new tab replace the one before it.
+pub const MAX_TABS: IntBounds = IntBounds { min: 0, max: 32 };
 
 // Display
 pub const WIDTH: IntBounds = IntBounds { min: 160, max: 3840 };
