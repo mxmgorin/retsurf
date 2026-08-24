@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-24
+
 ### Added
 
 - **Clear browsing data.** A row under **Settings > Advanced > Data** wipes
@@ -369,7 +371,8 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mxmgorin/retsurf/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mxmgorin/retsurf/compare/v0.3.0...v0.3.1
