@@ -18,6 +18,11 @@ The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmark
 `servo/` and regenerable caches (the adblock engine) under `cache/` — the latter is safe
 to delete.
 
+**Settings > Advanced > Clear browsing data** wipes history, cookies, localStorage, the
+HTTP cache, the saved tab session and the finished downloads, and closes the open tabs
+back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
+speed-dial pins, settings and bindings are left alone.
+
 ```toml
 [browser]
 home_page = "retsurf:home"                     # built-in start page; or any URL

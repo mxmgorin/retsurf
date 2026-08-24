@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Clear browsing data.** A row under **Settings > Advanced > Data** wipes
+  history, cookies, localStorage, the HTTP cache, the saved tab session and the
+  finished downloads in one go, then closes the open tabs back to the home page
+  — no restart, and nothing to delete by hand on the SD card. It takes two
+  presses: the first arms the row, the second clears. Bookmarks, speed-dial
+  pins, settings and key bindings are left alone.
+
 - **A ceiling on open tabs.** Every tab is a live Servo webview that cannot be
   suspended, so a handful of heavy pages was enough to exhaust a small board.
   Opening past **Settings > Browser > Max tabs** (`[browser] max_tabs`, 8 by

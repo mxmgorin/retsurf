@@ -702,6 +702,32 @@ impl AppBrowser {
         true
     }
 
+    /// Drop every tab and open a fresh one at `url` — the tab half of clearing
+    /// browsing data (dropping a `WebView` closes it in Servo).
+    pub fn reset_tabs(&mut self, url: &str) {
+        self.inner.tabs.borrow_mut().clear();
+        self.inner.active.set(0);
+        self.open_tab(url);
+    }
+
+    /// Clear every site's cookies and web storage, and the HTTP cache. The
+    /// on-disk copies follow at exit, when Servo writes the emptied jars.
+    pub fn clear_site_data(&self) {
+        let manager = self.inner.servo.site_data_manager();
+        let storage = servo::StorageType::Local | servo::StorageType::Session;
+        // No wholesale web-storage clear exists, so list the sites and name them.
+        let sites: Vec<String> = manager
+            .site_data(storage)
+            .iter()
+            .map(servo::SiteData::name)
+            .collect();
+        let names: Vec<&str> = sites.iter().map(String::as_str).collect();
+        manager.clear_site_data(&names, storage);
+        manager.clear_cookies(None);
+        self.inner.servo.network_manager().clear_cache();
+        log::info!("cleared cookies, cache, storage of {} sites", sites.len());
+    }
+
     /// Switch the shown tab to `index` (no-op if out of range or already active).
     pub fn switch_to(&self, index: usize) {
         let tabs = self.inner.tabs.borrow();

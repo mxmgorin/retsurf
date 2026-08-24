@@ -20,6 +20,9 @@ pub enum Kind {
         get: fn(&AppConfig) -> bool,
         set: fn(&mut AppConfig, bool),
     },
+    /// A row that runs something instead of holding a value: the first A arms
+    /// it, the second runs it (see [`super::Settings::confirm_action`]).
+    Action { task: Task },
     /// Free text, typed via the on-screen keyboard (Left/Right does nothing; A
     /// opens it). `get_mut` hands the OSK the draft's own buffer.
     Text {
@@ -115,6 +118,15 @@ macro_rules! float {
             set: |c, v| c.$($seg).+ = v as $ty,
         }
     };
+}
+
+/// What a [`Kind::Action`] row runs; the app does the work (see
+/// [`crate::app`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Task {
+    /// Wipe history, site data, the HTTP cache, the saved session and the open
+    /// tabs. Bookmarks, pins and the settings themselves stay.
+    ClearData,
 }
 
 /// A config row in the list. `section` is the tab it lives under; `cat` is a
@@ -251,6 +263,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
     f(S::Advanced, "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::Advanced, "Downloads",   "Save folder",            text!(downloads.dir), true),
+    f(S::Advanced, "Data",        "Clear browsing data",    Kind::Action { task: Task::ClearData }, false),
     f(S::Advanced, "Updates",     "Update channel",         choice!(update.channel: Channel), false),
     f(S::Advanced, "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
@@ -267,6 +280,8 @@ mod tests {
         for field in FIELDS {
             let mut c = AppConfig::default();
             match &field.kind {
+                // No accessors to check — an action row holds no config value.
+                Kind::Action { .. } => {}
                 Kind::Bool { get, set } => {
                     for v in [true, false] {
                         set(&mut c, v);
