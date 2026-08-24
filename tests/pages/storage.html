@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>cookie / localStorage probe</title>
+<!-- Manual test page for Settings > Advanced > Clear browsing data: it reports
+     what it found on arrival, then writes the probe again — so a visit after a
+     clear reads "(none)". -->
+<style>
+  body { background: #fff; color: #111; font: 20px sans-serif; padding: 1.5rem; }
+  b { font: 20px monospace; }
+</style>
+<h1>Site data on arrival</h1>
+<p>cookie: <b id="cookie">no js</b></p>
+<p>localStorage: <b id="local">no js</b></p>
+<script>
+  const KEY = 'retsurf_probe';
+  document.getElementById('cookie').textContent = document.cookie || '(none)';
+  document.getElementById('local').textContent = localStorage.getItem(KEY) || '(none)';
+
+  document.cookie = `${KEY}=1; max-age=86400; path=/`;
+  localStorage.setItem(KEY, 'stored');
+</script>

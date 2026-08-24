@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Clear browsing data.** A row under **Settings > Advanced > Data** wipes
+  history, cookies, localStorage, the HTTP cache, the saved tab session and the
+  finished downloads in one go, then closes the open tabs back to the home page
+  — no restart, and nothing to delete by hand on the SD card. It takes two
+  presses: the first arms the row, the second clears. Bookmarks, speed-dial
+  pins, settings and key bindings are left alone.
+
+- **A ceiling on open tabs.** Every tab is a live Servo webview that cannot be
+  suspended, so a handful of heavy pages was enough to exhaust a small board.
+  Opening past **Settings > Browser > Max tabs** (`[browser] max_tabs`, 8 by
+  default, 0 for unlimited) now closes the oldest tab that isn't in view — a cap
+  of 1 turns every new tab into a replacement. A tab a *page* opens is refused
+  at the cap rather than granted an eviction, so `window.open` can't push out
+  what you were reading; a session saved under a looser cap restores its most
+  recent tabs, the one that was in view included.
+
+- **The open tabs come back after a restart.** Their URLs and which one was
+  shown are kept in `session.toml`, rewritten as the tabs change and at exit, so
+  quitting is no longer a way to lose a page you were halfway through — worth
+  more on a handheld, where retyping a URL costs a gamepad and an on-screen
+  keyboard. Restored tabs are URLs only: scroll position and form contents are
+  not saved, and a tab that never finished its first load has nothing to
+  restore. Off switch: **Settings > Browser > Restore tabs**
+  (`[browser] restore_tabs`); turning it off starts on the home page again and
+  deletes the stored session.
+
 - **`<video>` elements play.** Progressive H.264-in-MP4 files decode in software
   (OpenH264) and render through WebRender, synced to the audio track (or a
   wallclock for muted video-only files): playback, seeking, `videoWidth`/
@@ -30,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plays. Backgrounding a tab now also pauses its `<audio>` the way it already
   suspended WebAudio. The **Settings > Content > Audio** master switch (renamed
   "Audio output") covers it: off restores the old no-audio fallback behavior.
+
+### Fixed
+
+- **Enter no longer activates a settings or menu row twice.** Tab, which switches
+  section, also moved egui's own keyboard focus onto a row, so the next Enter
+  reached both the overlay and that row — a number stepped by two, and an arm-then-
+  confirm row like History's "Clear all" wiped on a single press. The overlays now
+  drop egui's focus; they route every key through their own selection.
 
 ## [0.5.1] - 2026-08-17
 

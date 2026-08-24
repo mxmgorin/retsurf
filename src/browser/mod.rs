@@ -121,6 +121,17 @@ struct Tab {
     page_images: RefCell<HashSet<u64>>,
 }
 
+impl Tab {
+    /// A tab around a webview that was built already fetching its URL.
+    fn loading(webview: WebView) -> Self {
+        Self {
+            webview,
+            state: BrowserState::loading(),
+            page_images: RefCell::default(),
+        }
+    }
+}
+
 /// A denied download navigation or an `a[download]` link, for
 /// [`crate::data::downloads`] to fetch.
 pub struct DownloadRequest {
@@ -190,6 +201,9 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
+    /// `[browser] max_tabs` (`0` unlimited); a `Cell` so a settings save can
+    /// change it live.
+    max_tabs: Cell<usize>,
     /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
     /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
@@ -255,6 +269,7 @@ impl AppBrowserInner {
             dismissed_controls: RefCell::new(vec![]),
             user_content,
             default_zoom,
+            max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             forced_dark,
             mem_report: Arc::new(Mutex::new(None)),
@@ -283,6 +298,13 @@ impl AppBrowserInner {
     /// Index of the tab owning `id`, if any.
     fn tab_index(&self, id: servo::WebViewId) -> Option<usize> {
         self.tabs.borrow().iter().position(|t| t.webview.id() == id)
+    }
+
+    /// Whether another tab fits under `[browser] max_tabs`. Only page-opened
+    /// tabs ask: they are declined at the cap, never granted an eviction.
+    fn has_tab_room(&self) -> bool {
+        let cap = self.max_tabs.get();
+        cap == 0 || self.tabs.borrow().len() < cap
     }
 }
 
@@ -596,14 +618,11 @@ impl AppBrowser {
         webview.focus();
 
         let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.push(Tab {
-            webview,
-            state: BrowserState::loading(),
-            page_images: RefCell::default(),
-        });
+        tabs.push(Tab::loading(webview));
         self.inner.active.set(tabs.len() - 1);
         drop(tabs);
         self.inner.repaint_pending.set(true);
+        self.trim_tabs();
     }
 
     /// Open `url` in a new background tab: built and loading, but left unshown
@@ -614,11 +633,99 @@ impl AppBrowser {
         let Some(webview) = self.build_tab(url) else {
             return;
         };
-        self.inner.tabs.borrow_mut().push(Tab {
-            webview,
-            state: BrowserState::loading(),
-            page_images: RefCell::default(),
-        });
+        self.inner.tabs.borrow_mut().push(Tab::loading(webview));
+        self.trim_tabs();
+    }
+
+    /// Trim to `[browser] max_tabs` after a push (`0` is unlimited): close the
+    /// oldest tabs that aren't in view, so a cap of one replaces instead.
+    fn trim_tabs(&self) {
+        let cap = self.inner.max_tabs.get();
+        if cap == 0 {
+            return;
+        }
+        while self.tab_count() > cap {
+            let active = self.inner.active.get();
+            let Some(oldest) = (0..self.tab_count()).find(|i| *i != active) else {
+                return;
+            };
+            log::info!("tab cap {cap} reached: closing tab {oldest}");
+            self.close_tab(oldest);
+        }
+    }
+
+    /// Adopt an edited cap (settings overlay); it bounds later opens only.
+    #[inline]
+    pub fn set_max_tabs(&self, max_tabs: u32) {
+        self.inner.max_tabs.set(max_tabs as usize);
+    }
+
+    /// Reopen a saved session (see [`crate::data::session`]): a tab per URL,
+    /// with `active` shown, cut down to `max_tabs` and past URLs that won't
+    /// parse. `false` when nothing was restored (the caller then loads the home
+    /// page). Startup only: it assumes an empty tab list.
+    pub fn restore_tabs(&mut self, urls: &[String], active: usize) -> bool {
+        let window = session_window(urls.len(), active, self.inner.max_tabs.get());
+        if window.len() < urls.len() {
+            log::info!(
+                "session: {} of {} tabs fit the cap",
+                window.len(),
+                urls.len()
+            );
+        }
+        let active = active - window.start;
+
+        let mut kept = Vec::with_capacity(window.len());
+        let mut built = Vec::with_capacity(window.len());
+        for (i, url) in urls[window].iter().enumerate() {
+            match self.build_tab(url) {
+                Some(webview) => {
+                    kept.push(i);
+                    built.push(webview);
+                }
+                None => log::warn!("session: dropping unparseable url `{url}`"),
+            }
+        }
+        if built.is_empty() {
+            return false;
+        }
+        let shown = shown_index(&kept, active);
+        log::info!("session: restoring {} tabs, showing {shown}", built.len());
+
+        let mut tabs = self.inner.tabs.borrow_mut();
+        tabs.extend(built.into_iter().map(Tab::loading));
+        tabs[shown].webview.show();
+        tabs[shown].webview.focus();
+        drop(tabs);
+        self.inner.active.set(shown);
+        self.inner.repaint_pending.set(true);
+        true
+    }
+
+    /// Drop every tab and open a fresh one at `url` — the tab half of clearing
+    /// browsing data (dropping a `WebView` closes it in Servo).
+    pub fn reset_tabs(&mut self, url: &str) {
+        self.inner.tabs.borrow_mut().clear();
+        self.inner.active.set(0);
+        self.open_tab(url);
+    }
+
+    /// Clear every site's cookies and web storage, and the HTTP cache. The
+    /// on-disk copies follow at exit, when Servo writes the emptied jars.
+    pub fn clear_site_data(&self) {
+        let manager = self.inner.servo.site_data_manager();
+        let storage = servo::StorageType::Local | servo::StorageType::Session;
+        // No wholesale web-storage clear exists, so list the sites and name them.
+        let sites: Vec<String> = manager
+            .site_data(storage)
+            .iter()
+            .map(servo::SiteData::name)
+            .collect();
+        let names: Vec<&str> = sites.iter().map(String::as_str).collect();
+        manager.clear_site_data(&names, storage);
+        manager.clear_cookies(None);
+        self.inner.servo.network_manager().clear_cache();
+        log::info!("cleared cookies, cache, storage of {} sites", sites.len());
     }
 
     /// Switch the shown tab to `index` (no-op if out of range or already active).
@@ -867,6 +974,22 @@ impl AppBrowser {
     }
 }
 
+/// Which restored tab to show: the saved `active` one, or the nearest earlier
+/// survivor when its URL was skipped. `kept` holds their saved positions.
+fn shown_index(kept: &[usize], active: usize) -> usize {
+    kept.iter().rposition(|&i| i <= active).unwrap_or(0)
+}
+
+/// The stretch of a saved session that fits `cap` (`0` is unlimited): oldest
+/// tabs go first, but the window always covers `active`, so `start <= active`.
+fn session_window(len: usize, active: usize, cap: usize) -> std::ops::Range<usize> {
+    if cap == 0 || len <= cap {
+        return 0..len;
+    }
+    let start = (len - cap).min(active);
+    start..start + cap
+}
+
 /// Empty the focused field, firing the events a page listens for.
 const CLEAR_FIELD_JS: &str = r#"
 (function () {
@@ -926,3 +1049,43 @@ const COLLECT_HINTS_JS: &str = r#"
     return out;
 })()
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The restored tabs keep their saved order, so the shown one is the saved
+    /// index shifted back by however many earlier URLs were dropped.
+    #[test]
+    fn shown_index_follows_the_dropped_tabs() {
+        assert_eq!(shown_index(&[0, 1, 2], 2), 2);
+        assert_eq!(shown_index(&[1, 3], 3), 1);
+        assert_eq!(shown_index(&[0, 2, 4], 4), 2);
+    }
+
+    /// The saved active tab itself may be the one dropped: show the nearest
+    /// earlier survivor, or the first tab when none precedes it.
+    #[test]
+    fn shown_index_falls_back_when_the_active_tab_is_dropped() {
+        assert_eq!(shown_index(&[0, 3], 2), 0);
+        assert_eq!(shown_index(&[2, 3], 1), 0);
+    }
+
+    /// A session within the cap (or with no cap at all) restores whole.
+    #[test]
+    fn session_window_keeps_everything_that_fits() {
+        assert_eq!(session_window(3, 1, 8), 0..3);
+        assert_eq!(session_window(3, 1, 3), 0..3);
+        assert_eq!(session_window(50, 49, 0), 0..50);
+    }
+
+    /// Over the cap the oldest tabs go — unless the one in view is among them,
+    /// which pins the window to it.
+    #[test]
+    fn session_window_drops_the_oldest_but_keeps_the_active_tab() {
+        assert_eq!(session_window(10, 9, 4), 6..10);
+        assert_eq!(session_window(10, 6, 4), 6..10);
+        assert_eq!(session_window(10, 2, 4), 2..6);
+        assert_eq!(session_window(10, 0, 1), 0..1);
+    }
+}

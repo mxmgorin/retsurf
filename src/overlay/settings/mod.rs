@@ -22,7 +22,7 @@ mod fields;
 
 pub use about::about_info;
 pub use controls::RESET_ROWS;
-pub use fields::{Field, Kind};
+pub use fields::{Field, Kind, Task};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, GROUPS, SURFACES};
@@ -102,6 +102,9 @@ pub struct Settings {
     /// — so `bindings.toml` is only rewritten when the controls actually changed
     /// (a config-only edit leaves the file, and any hand-written comments, alone).
     bindings_orig: Store,
+    /// The action row awaiting its confirming second press, as a
+    /// [`fields::FIELDS`] index. Any move or section change disarms it.
+    armed: Option<usize>,
     /// The Controls section's rows and its pending capture (see [`controls`]).
     controls: Controls<Action>,
     /// Why the last binding edit was refused; cleared by the next one.
@@ -117,6 +120,7 @@ impl Settings {
             selected: 0,
             bindings_draft: Store::default(),
             bindings_orig: Store::default(),
+            armed: None,
             controls: Controls::new(GROUPS, SURFACES, RESET_ROWS),
             controls_note: None,
         }
@@ -142,11 +146,13 @@ impl Settings {
         self.show_controls();
         self.section = SettingsSection::Browser;
         self.selected = 0;
+        self.armed = None;
         self.visible = true;
     }
 
     pub fn close(&mut self) {
         self.visible = false;
+        self.armed = None;
         // Drop any pending capture — otherwise `capturing()` would keep the event
         // loop swallowing input after the overlay is gone.
         self.controls.close();
@@ -219,6 +225,9 @@ impl Settings {
     /// [`Self::controls_rows`]; otherwise it's a [`fields::FIELDS`] index (and syncs
     /// the active section to it).
     pub fn set_selected(&mut self, i: usize) {
+        if self.armed != Some(i) {
+            self.armed = None;
+        }
         if self.is_controls_section() {
             self.controls_set_cursor(i);
         } else if let Some(field) = fields::FIELDS.get(i) {
@@ -230,6 +239,7 @@ impl Settings {
     /// Jump straight to a section (clicking its tab), focusing its first row.
     pub fn set_section(&mut self, section: SettingsSection) {
         self.section = section;
+        self.armed = None;
         if section == SettingsSection::Controls {
             self.focus_first_control();
             return;
@@ -251,6 +261,7 @@ impl Settings {
     /// skipping the Controls section's non-selectable headers. `update_rows` is the
     /// About tab's live update-block row count (ignored in other sections).
     pub fn move_sel(&mut self, dy: i32, update_rows: usize) {
+        self.armed = None;
         if self.is_info_section() {
             // About: a flat list (update rows, then links), all selectable.
             let last = self.about_row_count(update_rows) as i32 - 1;
@@ -306,6 +317,23 @@ impl Settings {
         }
     }
 
+    /// A on the focused row: `Some` when it is an action row pressed a second
+    /// time — the first press only arms it (and [`Self::adjust`], which the
+    /// caller falls through to, is a no-op on this kind).
+    pub fn confirm_action(&mut self) -> Option<Task> {
+        if !self.is_field_section() {
+            return None;
+        }
+        let Kind::Action { task } = &fields::FIELDS[self.selected].kind else {
+            return None;
+        };
+        if self.armed.replace(self.selected) == Some(self.selected) {
+            self.armed = None;
+            return Some(*task);
+        }
+        None
+    }
+
     /// Adjust the focused config field by `dx` (◀ = -1, ▶ = +1): toggle a bool,
     /// cycle a choice, or step a number within its bounds. No-op outside config
     /// sections (Controls edits via A; About is read-only).
@@ -314,7 +342,7 @@ impl Settings {
             return;
         }
         match &fields::FIELDS[self.selected].kind {
-            Kind::Text { .. } => {}
+            Kind::Text { .. } | Kind::Action { .. } => {}
             Kind::Bool { get, set } => {
                 let v = !get(&self.draft);
                 set(&mut self.draft, v);
@@ -354,6 +382,12 @@ impl Settings {
     /// The display string for config row `i`'s current value.
     pub fn value_str(&self, i: usize) -> String {
         match &fields::FIELDS[i].kind {
+            Kind::Action { .. } => if self.armed == Some(i) {
+                "press again to confirm"
+            } else {
+                "Clear"
+            }
+            .to_string(),
             Kind::Bool { get, .. } => if get(&self.draft) { "On" } else { "Off" }.to_string(),
             Kind::Text { get, .. } => {
                 let t = get(&self.draft);
@@ -411,5 +445,42 @@ mod tests {
         );
         settings.close();
         assert!(settings.pending_update().is_none());
+    }
+
+    /// The [`fields::FIELDS`] index of the row that clears browsing data.
+    fn clear_row() -> usize {
+        let clears = |f: &Field| matches!(f.kind, Kind::Action { task } if task == Task::ClearData);
+        fields::FIELDS
+            .iter()
+            .position(clears)
+            .expect("FIELDS lists the clear-data row")
+    }
+
+    /// One press must never wipe anything: it only arms the row.
+    #[test]
+    fn an_action_runs_on_the_second_press() {
+        let mut settings = Settings::new();
+        settings.open(&AppConfig::default());
+        settings.set_selected(clear_row());
+
+        assert_eq!(settings.confirm_action(), None);
+        assert_eq!(settings.value_str(clear_row()), "press again to confirm");
+        assert_eq!(settings.confirm_action(), Some(Task::ClearData));
+        // Run, so the row is disarmed again.
+        assert_eq!(settings.confirm_action(), None);
+    }
+
+    /// Moving off the armed row cancels it — otherwise a stray A elsewhere in
+    /// the section would come back to wipe.
+    #[test]
+    fn moving_off_an_armed_action_disarms_it() {
+        let mut settings = Settings::new();
+        settings.open(&AppConfig::default());
+        settings.set_selected(clear_row());
+        settings.confirm_action();
+
+        settings.move_sel(-1, 0);
+        settings.set_selected(clear_row());
+        assert_eq!(settings.confirm_action(), None);
     }
 }

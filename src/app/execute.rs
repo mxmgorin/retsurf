@@ -10,6 +10,7 @@ use crate::config::AppConfig;
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
+use crate::overlay::settings::Task;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
@@ -228,8 +229,8 @@ impl App {
     }
 
     /// A / Enter on the focused settings row: add/remove a binding in the Controls
-    /// section, open the on-screen keyboard on a text field, or step every other
-    /// kind forward (Left/Right does the rest).
+    /// section, run a confirmed action row, open the on-screen keyboard on a text
+    /// field, or step every other kind forward (Left/Right does the rest).
     pub(super) fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
         if self.ui.settings.is_info_section() {
             // About tab: A activates the focused row (update action or a link);
@@ -239,11 +240,27 @@ impl App {
             }
         } else if self.ui.settings.is_controls_section() {
             self.ui.settings.controls_activate();
+        } else if let Some(task) = self.ui.settings.confirm_action() {
+            match task {
+                Task::ClearData => self.clear_browsing_data(),
+            }
         } else if self.ui.settings.selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         } else {
             self.ui.settings.adjust(1);
         }
+    }
+
+    /// Wipe the browsing data: history, the finished downloads, the saved
+    /// session and the open tabs, plus Servo's cookies, web storage and HTTP
+    /// cache. Bookmarks, pins and the settings stay.
+    fn clear_browsing_data(&mut self) {
+        self.ui.menu.history_mut().clear();
+        self.ui.menu.downloads.clear_finished();
+        self.session.discard();
+        self.browser.clear_site_data();
+        self.browser.reset_tabs(&self.config.browser.home_page);
+        log::info!("cleared browsing data");
     }
 
     /// Close the settings overlay (B / close button): adopt its edited drafts
@@ -297,6 +314,12 @@ impl App {
             .set_experimental_prefs(&self.config.experimental);
         // The page theme needs no reload at all: open tabs restyle in place.
         self.browser.set_page_theme(self.config.browser.page_theme);
+        // Off drops the stored session now, not on the next launch.
+        if !self.config.browser.restore_tabs {
+            self.session.discard();
+        }
+        // Binds later opens; the tabs already open stay.
+        self.browser.set_max_tabs(self.config.browser.max_tabs);
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial
