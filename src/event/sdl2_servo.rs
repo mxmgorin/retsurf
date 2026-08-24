@@ -36,9 +36,9 @@ pub fn into_mouse_button_event(
     };
     let button = match button {
         sdl2::mouse::MouseButton::Unknown => servo::MouseButton::Other(0),
-        sdl2::mouse::MouseButton::Left => servo::MouseButton::Left,
-        sdl2::mouse::MouseButton::Middle => servo::MouseButton::Middle,
-        sdl2::mouse::MouseButton::Right => servo::MouseButton::Right,
+        sdl2::mouse::MouseButton::Left => servo::MouseButton::Primary,
+        sdl2::mouse::MouseButton::Middle => servo::MouseButton::Auxiliary,
+        sdl2::mouse::MouseButton::Right => servo::MouseButton::Secondary,
         sdl2::mouse::MouseButton::X1 => servo::MouseButton::Back,
         sdl2::mouse::MouseButton::X2 => servo::MouseButton::Forward,
     };

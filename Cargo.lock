@@ -3895,9 +3895,9 @@ dependencies = [
 
 [[package]]
 name = "mozjs"
-version = "0.21.3"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29596ccede272dfd26a6377d65be42dc8da3d6f41916d29a9ce8a7945b0a235b"
+checksum = "89b0250ec78781bceb8c3bf523771654583e4db2625e815138bc65fa2b1ec7fe"
 dependencies = [
  "bindgen",
  "cc",
@@ -3910,9 +3910,9 @@ dependencies = [
 
 [[package]]
 name = "mozjs_sys"
-version = "140.13.0-3"
+version = "140.14.0-1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a7f303ebd1ccc07f1748a8ed9048df7dd88e23ac706b63fb89af82c80145fa8"
+checksum = "4cb5edb8729da5f2b09939fcad2559ba1c54e55d222f14d485b88c7d645890d5"
 dependencies = [
  "bindgen",
  "cc",
@@ -5579,7 +5579,7 @@ dependencies = [
 [[package]]
 name = "selectors"
 version = "0.40.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "bitflags 2.13.1",
  "cssparser",
@@ -5684,7 +5684,7 @@ dependencies = [
 [[package]]
 name = "servo"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
  "arboard",
@@ -5747,7 +5747,7 @@ dependencies = [
 [[package]]
 name = "servo-allocator"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -5756,7 +5756,7 @@ dependencies = [
 [[package]]
 name = "servo-background-hang-monitor"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "backtrace",
  "crossbeam-channel",
@@ -5771,7 +5771,7 @@ dependencies = [
 [[package]]
 name = "servo-background-hang-monitor-api"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "serde",
  "servo-base",
@@ -5780,7 +5780,7 @@ dependencies = [
 [[package]]
 name = "servo-base"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
  "crossbeam-channel",
@@ -5805,7 +5805,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "bytemuck",
  "crossbeam-channel",
@@ -5831,7 +5831,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "crossbeam-channel",
  "euclid",
@@ -5854,7 +5854,7 @@ dependencies = [
 [[package]]
 name = "servo-config"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "num_enum",
  "serde",
@@ -5867,7 +5867,7 @@ dependencies = [
 [[package]]
 name = "servo-config-macro"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5878,7 +5878,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
  "backtrace",
@@ -5922,7 +5922,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "base64 0.23.1",
  "content-security-policy",
@@ -5957,7 +5957,7 @@ dependencies = [
 [[package]]
 name = "servo-deny-public-fields"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -5967,7 +5967,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "atomic_refcell",
  "base64 0.23.1",
@@ -5997,7 +5997,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "http 1.4.2",
  "malloc_size_of_derive",
@@ -6014,7 +6014,7 @@ dependencies = [
 [[package]]
 name = "servo-dom-struct"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -6025,7 +6025,7 @@ dependencies = [
 [[package]]
 name = "servo-embedder-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
  "bitflags 2.13.1",
@@ -6059,7 +6059,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6118,7 +6118,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "atomic_refcell",
  "dwrote",
@@ -6143,7 +6143,7 @@ dependencies = [
 [[package]]
 name = "servo-geometry"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "app_units",
  "euclid",
@@ -6156,7 +6156,7 @@ dependencies = [
 [[package]]
 name = "servo-hyper-serde"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "cookie 0.18.1",
  "headers",
@@ -6170,7 +6170,7 @@ dependencies = [
 [[package]]
 name = "servo-jstraceable-derive"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -6180,7 +6180,7 @@ dependencies = [
 [[package]]
 name = "servo-layout"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
  "app_units",
@@ -6240,7 +6240,7 @@ dependencies = [
 [[package]]
 name = "servo-layout-api"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6274,7 +6274,7 @@ dependencies = [
 [[package]]
 name = "servo-malloc-size-of"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6319,7 +6319,7 @@ dependencies = [
 [[package]]
 name = "servo-media"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "servo-base",
  "servo-media-audio",
@@ -6332,7 +6332,7 @@ dependencies = [
 [[package]]
 name = "servo-media-audio"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "byte-slice-cast",
  "euclid",
@@ -6356,7 +6356,7 @@ dependencies = [
 [[package]]
 name = "servo-media-derive"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6366,7 +6366,7 @@ dependencies = [
 [[package]]
 name = "servo-media-dummy"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "servo-base",
  "servo-media",
@@ -6380,7 +6380,7 @@ dependencies = [
 [[package]]
 name = "servo-media-ohos"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "crossbeam-channel",
  "libc",
@@ -6403,7 +6403,7 @@ dependencies = [
 [[package]]
 name = "servo-media-player"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -6416,7 +6416,7 @@ dependencies = [
 [[package]]
 name = "servo-media-streams"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "malloc_size_of_derive",
  "servo-malloc-size-of",
@@ -6426,7 +6426,7 @@ dependencies = [
 [[package]]
 name = "servo-media-thread"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -6445,7 +6445,7 @@ dependencies = [
 [[package]]
 name = "servo-media-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "malloc_size_of_derive",
  "servo-malloc-size-of",
@@ -6454,7 +6454,7 @@ dependencies = [
 [[package]]
 name = "servo-media-webrtc"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "log",
  "servo-media-streams",
@@ -6464,7 +6464,7 @@ dependencies = [
 [[package]]
 name = "servo-metrics"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "malloc_size_of_derive",
  "servo-base",
@@ -6479,7 +6479,7 @@ dependencies = [
 [[package]]
 name = "servo-net"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "async-compression",
  "async-recursion",
@@ -6556,7 +6556,7 @@ dependencies = [
 [[package]]
 name = "servo-net-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "content-security-policy",
  "cookie 0.18.1",
@@ -6598,7 +6598,7 @@ dependencies = [
 [[package]]
 name = "servo-paint"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "bitflags 2.13.1",
  "crossbeam-channel",
@@ -6634,7 +6634,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-api"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "bitflags 2.13.1",
  "crossbeam-channel",
@@ -6669,7 +6669,7 @@ dependencies = [
 [[package]]
 name = "servo-pixels"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "euclid",
  "image",
@@ -6684,7 +6684,7 @@ dependencies = [
 [[package]]
 name = "servo-profile"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "libc",
  "log",
@@ -6702,7 +6702,7 @@ dependencies = [
 [[package]]
 name = "servo-profile-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "crossbeam-channel",
  "ipc-channel",
@@ -6718,7 +6718,7 @@ dependencies = [
 [[package]]
 name = "servo-script"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -6860,7 +6860,7 @@ dependencies = [
 [[package]]
 name = "servo-script-bindings"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -6901,9 +6901,10 @@ dependencies = [
 [[package]]
 name = "servo-script-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "accesskit",
+ "bitflags 2.13.1",
  "crossbeam-channel",
  "euclid",
  "keyboard-types",
@@ -6935,7 +6936,7 @@ dependencies = [
 [[package]]
 name = "servo-storage"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "libc",
  "log",
@@ -6960,7 +6961,7 @@ dependencies = [
 [[package]]
 name = "servo-storage-traits"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -6974,7 +6975,7 @@ dependencies = [
 [[package]]
 name = "servo-timers"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "crossbeam-channel",
  "malloc_size_of_derive",
@@ -6984,7 +6985,7 @@ dependencies = [
 [[package]]
 name = "servo-tracing"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6994,7 +6995,7 @@ dependencies = [
 [[package]]
 name = "servo-url"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "encoding_rs",
  "malloc_size_of_derive",
@@ -7008,7 +7009,7 @@ dependencies = [
 [[package]]
 name = "servo-wakelock"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "serde",
  "servo-embedder-traits",
@@ -7017,7 +7018,7 @@ dependencies = [
 [[package]]
 name = "servo-webgl"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "bitflags 2.13.1",
  "byteorder",
@@ -7041,7 +7042,7 @@ dependencies = [
 [[package]]
 name = "servo-webvtt"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "html5ever",
  "markup5ever",
@@ -7051,7 +7052,7 @@ dependencies = [
 [[package]]
 name = "servo-webxr-api"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -7067,7 +7068,7 @@ dependencies = [
 [[package]]
 name = "servo-xpath"
 version = "0.5.0"
-source = "git+https://github.com/mxmgorin/servo?rev=c6ff9f607d3750422ba8d03f9ae0fc334451bb3a#c6ff9f607d3750422ba8d03f9ae0fc334451bb3a"
+source = "git+https://github.com/mxmgorin/servo?rev=2381d2f39c6f040cb991e5ac382a54d050e4aa89#2381d2f39c6f040cb991e5ac382a54d050e4aa89"
 dependencies = [
  "log",
  "malloc_size_of_derive",
@@ -7078,7 +7079,7 @@ dependencies = [
 [[package]]
 name = "servo_arc"
 version = "0.4.3"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "serde",
  "stable_deref_trait",
@@ -7414,7 +7415,7 @@ dependencies = [
 [[package]]
 name = "stylo"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "app_units",
  "arrayvec",
@@ -7470,7 +7471,7 @@ dependencies = [
 [[package]]
 name = "stylo_atoms"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "string_cache",
  "string_cache_codegen",
@@ -7479,7 +7480,7 @@ dependencies = [
 [[package]]
 name = "stylo_derive"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -7491,7 +7492,7 @@ dependencies = [
 [[package]]
 name = "stylo_dom"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "bitflags 2.13.1",
  "stylo_malloc_size_of",
@@ -7500,7 +7501,7 @@ dependencies = [
 [[package]]
 name = "stylo_malloc_size_of"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "app_units",
  "cssparser",
@@ -7517,7 +7518,7 @@ dependencies = [
 [[package]]
 name = "stylo_static_prefs"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "toml",
 ]
@@ -7525,7 +7526,7 @@ dependencies = [
 [[package]]
 name = "stylo_traits"
 version = "0.20.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "app_units",
  "bitflags 2.13.1",
@@ -7998,7 +7999,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "to_shmem"
 version = "0.5.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "cssparser",
  "servo_arc",
@@ -8011,7 +8012,7 @@ dependencies = [
 [[package]]
 name = "to_shmem_derive"
 version = "0.1.0"
-source = "git+https://github.com/servo/stylo?rev=e6b0b9dd4233237d13e28a8a8d0e484992a1a572#e6b0b9dd4233237d13e28a8a8d0e484992a1a572"
+source = "git+https://github.com/servo/stylo?rev=800d90bf8018da8d596e3cb50d0df5491bf1df78#800d90bf8018da8d596e3cb50d0df5491bf1df78"
 dependencies = [
  "darling",
  "proc-macro2",

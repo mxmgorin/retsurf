@@ -57,6 +57,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suspended WebAudio. The **Settings > Content > Audio** master switch (renamed
   "Audio output") covers it: off restores the old no-audio fallback behavior.
 
+### Changed
+
+- The engine moved up to Servo `main` as of 2026-08-24 (110 upstream commits).
+  Pages get `TextEvent`, autofocus inside `<dialog>`, the `insertLineBreak` and
+  `indent` editing commands, `@font-face` descriptors readable from the CSSOM,
+  italic synthesized from a variable font's `ital`/`slnt` axis, sticky
+  positioning measured against its scroll container's overflow, and SpiderMonkey
+  140.14. Upstream also split WebCrypto out into a cargo feature; retsurf keeps
+  it compiled in, since it gates the whole of `window.crypto` rather than just
+  `crypto.subtle`.
+
 ### Fixed
 
 - **Enter no longer activates a settings or menu row twice.** Tab, which switches
