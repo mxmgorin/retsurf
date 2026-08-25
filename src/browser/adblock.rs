@@ -7,13 +7,16 @@
 //! The engine is not thread-safe (the crate's faster single-thread build), so
 //! it never leaves the main thread: a background thread downloads the filter
 //! lists, builds its own engine, and hands back the *serialized* DAT (also
-//! cached to `cache/adblock.dat` in the user data dir); the main thread deserializes
-//! it lazily on the next request check. With a cache present, startup loads it
-//! directly and only refreshes in the background once it's older than
-//! `update_days`.
+//! cached to `cache/adblock-net.dat` in the user data dir); the main thread
+//! deserializes it lazily on the next request check. With a cache present,
+//! startup loads it directly and only refreshes in the background once it's
+//! older than `update_days`.
+//!
+//! Only network rules are parsed: the hook this drives is a request filter, and
+//! EasyList's cosmetic half would be resident for nothing.
 
 use crate::config::{self, AdblockConfig};
-use adblock::lists::{FilterSet, ParseOptions};
+use adblock::lists::{FilterSet, ParseOptions, RuleTypes};
 use adblock::request::Request;
 use adblock::Engine;
 use content_security_policy::Destination;
@@ -109,8 +112,12 @@ impl Adblock {
     }
 }
 
+/// Named apart from the `adblock.dat` that held cosmetic rules too, so an engine
+/// built before that changed is rebuilt rather than loaded.
 fn cache_path() -> String {
-    format!("{}adblock.dat", config::cache_dir())
+    let dir = config::cache_dir();
+    let _ = std::fs::remove_file(format!("{dir}adblock.dat"));
+    format!("{dir}adblock-net.dat")
 }
 
 fn deserialize(dat: &[u8]) -> Option<Engine> {
@@ -153,11 +160,15 @@ fn cache_is_stale(path: &str, update_days: u64) -> bool {
 /// download are skipped; with none at all, the existing engine stays as is.
 fn build_engine(lists: Vec<String>, cache: String, out: Arc<Mutex<Option<Vec<u8>>>>) {
     let mut filter_set = FilterSet::new(false);
+    let opts = ParseOptions {
+        rule_types: RuleTypes::NetworkOnly,
+        ..ParseOptions::default()
+    };
     let mut fetched = 0usize;
     for url in &lists {
         match fetch_list(url) {
             Ok(text) => {
-                filter_set.add_filter_list(text, ParseOptions::default());
+                filter_set.add_filter_list(text, opts);
                 fetched += 1;
                 log::info!("adblock: fetched list `{url}`");
             }
