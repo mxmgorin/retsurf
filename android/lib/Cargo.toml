@@ -1,0 +1,16 @@
+[package]
+name = "retsurf-android"
+version = "0.6.0"
+edition = "2021"
+license = "GPL-3.0"
+publish = false
+
+# Its own crate rather than a second crate-type on the main package: the armhf
+# build links non-PIC objects (`relocation-model=static`), which no shared object
+# can be made of, so that build must not produce one at all.
+[lib]
+name = "retsurf" # SDL's Java shell dlopens `libretsurf.so` by this name
+crate-type = ["cdylib"]
+
+[dependencies]
+retsurf = { path = "../.." }

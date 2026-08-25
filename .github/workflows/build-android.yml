@@ -114,8 +114,10 @@ jobs:
           export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
           # WebGL ON for Android (surfman's hardware_buffer backend works on EGL 1.5);
           # do NOT pass --no-default-features here.
+          # `-p`: the cdylib is its own crate (android/lib), so a plain build in
+          # the workspace root would produce the desktop binary instead.
           cargo ndk -t "${ABI}" -P "${ANDROID_API}" \
-            -o android/app/src/main/jniLibs build --release
+            -o android/app/src/main/jniLibs build --release -p retsurf-android
 
       # Restore a STABLE signing key from a repo secret so every release APK is
       # signed with the same key and `adb install -r` updates in place. Without the

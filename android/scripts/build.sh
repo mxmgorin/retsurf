@@ -75,7 +75,9 @@ echo "INPUT(-lunwind)" > "$repo/target/ndk-libgcc-stub/libgcc.a"
 # --- build cdylib -------------------------------------------------------------
 echo "==> cross-compiling libretsurf.so ($profile)"
 cd "$repo"
-ndk_flags=(-t "$abi" -P "$api" -o android/app/src/main/jniLibs build)
+# `-p`: the cdylib is its own crate (android/lib), so a plain build in the
+# workspace root would produce the desktop binary instead.
+ndk_flags=(-t "$abi" -P "$api" -o android/app/src/main/jniLibs build -p retsurf-android)
 [ "$profile" = "release" ] && ndk_flags+=(--release)
 # WebGL stays ON (do NOT pass --no-default-features): surfman works on Android EGL.
 cargo ndk "${ndk_flags[@]}"

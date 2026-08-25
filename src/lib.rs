@@ -25,8 +25,8 @@ const BUILD_ID: &str = concat!(
 );
 
 /// Shared startup used by both the desktop `main` binary and the Android
-/// `SDL_main` entry point. Everything platform-specific is `cfg`-gated here so the
-/// two callers stay trivial.
+/// `SDL_main` entry point (`android/lib`). Everything platform-specific is
+/// `cfg`-gated here so the two callers stay trivial.
 pub fn run_app() {
     // Capture panics before anything else can panic. On the handheld the launcher
     // usually discards stderr, so a bare panic leaves no trace beyond exit code 101;
@@ -86,18 +86,6 @@ pub fn run_app() {
     let app = App::new(&mut sdl, app_config).unwrap();
 
     app.run();
-}
-
-/// SDL's Android shell (`SDLActivity`) `dlopen`s our cdylib and calls this C
-/// entry point on SDL's dedicated thread. We just hand off to `run_app`.
-#[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn SDL_main(
-    _argc: std::os::raw::c_int,
-    _argv: *const *const std::os::raw::c_char,
-) -> std::os::raw::c_int {
-    run_app();
-    0
 }
 
 #[cfg(target_os = "android")]

@@ -4,11 +4,15 @@ version = "0.6.0"
 edition = "2021"
 license = "GPL-3.0"
 
-# `cdylib` is the `libretsurf.so` SDL's Android shell loads (named in
-# RetsurfActivity.getLibraries()); `lib` keeps `src/main.rs` and the tests linkable.
+# The Android `libretsurf.so` is built from `android/lib`, not from a second
+# crate-type here: the armhf build compiles non-PIC (see tools/armhf/build.sh) and
+# cannot link a shared object at all.
+[workspace]
+members = ["android/lib"]
+
 [lib]
 name = "retsurf"
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 
 [features]
 default = ["webgl"]

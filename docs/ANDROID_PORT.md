@@ -14,7 +14,7 @@ entries, so the Linux, macOS, Windows, and handheld builds are unchanged.
 
 | Area | State |
 | --- | --- |
-| cdylib + `SDL_main` entry point (`src/lib.rs`) | done |
+| cdylib + `SDL_main` entry point (`android/lib`) | done |
 | Storage paths (internal data + external Download via env) | done |
 | Gradle/SDL APK shell (`android/`) | done |
 | CI (`.github/workflows/build-android.yml`) | done |
@@ -155,8 +155,10 @@ cd android && ./gradlew assembleRelease
 
 ## How the pieces fit
 
-- Entry point: `src/lib.rs` exposes `run_app()` (shared with the desktop `src/main.rs`)
-  and, on Android, `#[no_mangle] extern "C" fn SDL_main(...)`.
+- Entry point: `src/lib.rs` exposes `run_app()` (shared with the desktop `src/main.rs`);
+  the `android/lib` crate wraps it in `#[no_mangle] extern "C" fn SDL_main(...)` and is
+  the only cdylib in the workspace, since the armhf build compiles non-PIC and cannot
+  link one (`tools/armhf/build.sh`).
   `RetsurfActivity.getLibraries()` returns `{"SDL2", "retsurf"}`, so SDL loads
   `libretsurf.so` and calls our `SDL_main`.
 - Storage: `RetsurfActivity.onCreate` sets the following before SDL starts.
