@@ -26,7 +26,9 @@ speed-dial pins, settings and bindings are left alone.
 ```toml
 [browser]
 home_page = "retsurf:home"                     # built-in start page; or any URL
-search_page = "https://duckduckgo.com/?q=%s"   # %s is replaced with the query
+# %s is replaced with the query. The default is DuckDuckGo's no-JS endpoint: it
+# renders the results server-side, so they show without running a script.
+search_page = "https://lite.duckduckgo.com/lite/?q=%s"
 # The User-Agent sites see. Empty = Servo's platform default. The keywords
 # "desktop", "mobile" (or "android"), and "ios" pick a stock UA — "mobile"
 # makes sites serve their phone layouts, which fit a small screen far better;

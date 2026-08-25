@@ -18,9 +18,13 @@ pub const SETTINGS_PIN: &str = "retsurf:settings";
 
 /// Shipped on first run so the start page isn't empty before anything is pinned.
 const DEFAULTS: &[&str] = &[
-    "https://google.com",
-    "https://en.wikipedia.org",
-    "https://github.com",
+    // The mobile host, whose layout fits a handheld screen without zooming out.
+    "https://en.m.wikipedia.org",
+    "https://retrohandhelds.gg",
+    // The old front end: server-rendered, where the new one grows its feed
+    // through fragment-parsed shadow roots that Servo 0.4 drops.
+    "https://old.reddit.com/r/SBCGaming/",
+    "https://github.com/mxmgorin/retsurf",
     "https://servo.org",
     SETTINGS_PIN,
 ];

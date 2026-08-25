@@ -37,7 +37,9 @@ impl Default for BrowserConfig {
         Self {
             // The built-in start page (crate::browser::home::HOME_URL).
             home_page: "retsurf:home".to_string(),
-            search_page: "https://duckduckgo.com/?q=%s".to_string(),
+            // DuckDuckGo's no-JS endpoint: results come rendered in the HTML,
+            // where the main site builds them with a script.
+            search_page: "https://lite.duckduckgo.com/lite/?q=%s".to_string(),
             user_agent: String::new(),
             persist_site_data: true,
             restore_tabs: true,

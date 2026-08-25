@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Closing the last tab now replaces it with a fresh one at the home page instead
   of doing nothing; the closed page's document and history go away with it.
+- Fresh speed-dial defaults: mobile Wikipedia, Retro Handhelds, r/SBCGaming on
+  old reddit, the retsurf repository, servo.org and the settings tile. The
+  search tile is gone —
+  the start page has a search field, and it goes through `search_page` anyway.
+  Only a first run seeds these; an existing `dial.toml` is untouched.
+- The default `search_page` is DuckDuckGo's no-JS endpoint
+  (`lite.duckduckgo.com/lite/`), which ships the results in the HTML instead of
+  building them with a script — a quarter of the page weight and no wait for JS
+  on a slow board. Existing `config.toml` files keep their current value.
 - Bumped `egui-sdl2` to 0.11, which brings egui 0.36. `egui-phosphor` comes from
   a fork by rev until upstream releases for 0.36.
 - Bumped `rubato` to 5 (audioadapter 5).
