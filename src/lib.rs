@@ -137,11 +137,19 @@ fn install_panic_hook() {
         let path =
             std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
         let backtrace = std::backtrace::Backtrace::force_capture();
-        // Build first: the panic file is usually the only thing a bug report carries.
-        let _ = std::fs::write(
-            &path,
-            format!("retsurf {BUILD_ID}\n\n{info}\n\nbacktrace:\n{backtrace}\n"),
-        );
+        // Appended, not written: a device that crashes twice a session should
+        // say so, and the first crash is usually the one that explains it.
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut file| {
+                use std::io::Write;
+                writeln!(file, "retsurf {BUILD_ID} at {at}\n\n{info}\n\nbacktrace:\n{backtrace}\n")
+            });
         default(info);
     }));
 }
