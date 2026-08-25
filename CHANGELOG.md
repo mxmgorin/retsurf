@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped `egui-sdl2` to 0.11, which brings egui 0.36. `egui-phosphor` comes from
+  a fork by rev until upstream releases for 0.36.
+- Bumped `rubato` to 5 (audioadapter 5).
+
 ## [0.6.0] - 2026-08-24
 
 ### Added

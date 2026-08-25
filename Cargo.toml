@@ -73,7 +73,7 @@ symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav
 # Files come at their own rate, `AudioBuffer` wants the context's. Polynomial resampling
 # (no `fft_resampler`, so no FFT crates) is rubato's cheap end, which beats transition-band
 # purity on an A35.
-rubato = { version = "4", default-features = false }
+rubato = { version = "5", default-features = false }
 # `<video>` decode (src/media/video.rs): Cisco's OpenH264 built from source via cc — the
 # one C dependency, chosen because it cross-compiles with a plain toolchain (NEON asm
 # included) where dav1d/libvpx want meson/configure. Software-only; a handheld may not
@@ -104,11 +104,14 @@ keyboard-types = "0.8.1"
 # Servo fork. Its `sdl2` feature is the default and resolves to the same sdl2 as
 # ours, so the pad and key types are one set.
 inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "523a8055575e01adee345bc16f8ed42c20014781" }
-egui-sdl2 = { version = "0.8.1", default-features = false, features = ["glow-backend"] }
+egui-sdl2 = { version = "0.11.0", default-features = false, features = ["glow-backend"] }
 # Every chrome icon comes from this font (see `src/ui/theme.rs`). `bold` is the base
 # weight — the lighter ones wash out at the 15px icons the handhelds draw — and `fill`
-# supplies the solid halves of on/off pairs. Version tracks egui: 0.13 = egui 0.35.
-egui-phosphor = { version = "0.13.0", default-features = false, features = ["bold", "fill"] }
+# supplies the solid halves of on/off pairs. Version tracks egui: 0.14 = egui 0.36.
+#
+# From the fork by rev: upstream's newest release is still on egui 0.35, and a second
+# egui in the graph would make `add_to_fonts` take a `FontDefinitions` we can't hand it.
+egui-phosphor = { git = "https://github.com/mxmgorin/egui-phosphor", rev = "2450b628806faca64859caae129972852216c2b1", default-features = false, features = ["bold", "fill"] }
 sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
 # version already in the tree (pulled in via servo), so it adds no new resolve.
