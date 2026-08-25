@@ -83,7 +83,7 @@ impl App {
                 self.ui.menu.close();
             }
             MenuAction::CloseTab(index) => {
-                self.browser.close_tab(*index);
+                self.browser.close_tab(*index, &self.config.browser.home_page);
                 self.ui.menu.set_tab_count(self.browser.tab_count());
             }
             MenuAction::NewTab => self.new_tab(),
@@ -136,7 +136,8 @@ impl App {
             // Index 0 is the "+ New tab" button (nothing to delete); tabs are 1.. .
             let sel = self.ui.menu.tab_selected();
             if sel > 0 {
-                self.browser.close_tab(sel - 1);
+                self.browser
+                    .close_tab(sel - 1, &self.config.browser.home_page);
                 self.ui.menu.set_tab_count(self.browser.tab_count());
             }
         } else {

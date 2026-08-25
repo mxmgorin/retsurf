@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Closing the last tab now replaces it with a fresh one at the home page instead
+  of doing nothing; the closed page's document and history go away with it.
 - Bumped `egui-sdl2` to 0.11, which brings egui 0.36. `egui-phosphor` comes from
   a fork by rev until upstream releases for 0.36.
 - Bumped `rubato` to 5 (audioadapter 5).

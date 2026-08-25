@@ -650,7 +650,7 @@ impl AppBrowser {
                 return;
             };
             log::info!("tab cap {cap} reached: closing tab {oldest}");
-            self.close_tab(oldest);
+            self.remove_tab(oldest);
         }
     }
 
@@ -758,9 +758,36 @@ impl AppBrowser {
         self.switch_to(next);
     }
 
-    /// Close the tab at `index`. Keeps at least one tab open. If the active tab is
-    /// closed, the next tab becomes active and is shown.
-    pub fn close_tab(&self, index: usize) {
+    /// Close the tab at `index`. Closing the last one leaves a fresh tab at
+    /// `home` instead of no tab at all. If the active tab is closed, the next
+    /// tab becomes active and is shown.
+    pub fn close_tab(&self, index: usize, home: &str) {
+        if self.tab_count() == 1 && index == 0 {
+            self.replace_last_tab(home);
+            return;
+        }
+        self.remove_tab(index);
+    }
+
+    /// Swap the sole open tab for a new one at `home`: dropping the old WebView
+    /// closes it in Servo, so its document and history go with it.
+    fn replace_last_tab(&self, home: &str) {
+        let Some(webview) = self.build_tab(home) else {
+            log::warn!("failed to parse home_page `{home}`");
+            return;
+        };
+        let mut tabs = self.inner.tabs.borrow_mut();
+        tabs.clear();
+        webview.show();
+        webview.focus();
+        tabs.push(Tab::loading(webview));
+        self.inner.active.set(0);
+        drop(tabs);
+        self.inner.repaint_pending.set(true);
+    }
+
+    /// Drop the tab at `index`, keeping at least one open.
+    fn remove_tab(&self, index: usize) {
         let mut tabs = self.inner.tabs.borrow_mut();
         if index >= tabs.len() || tabs.len() == 1 {
             return;
