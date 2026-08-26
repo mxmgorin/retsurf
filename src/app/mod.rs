@@ -52,6 +52,8 @@ pub struct App {
     /// Last time a memory report was requested (debug overlay only). Throttles
     /// the requests to [`MEMORY_REPORT_INTERVAL`] since each one walks every reporter.
     last_memory_report: Instant,
+    /// When to hand the allocator's free memory back (see [`HEAP_TRIM_DELAY`]).
+    heap_trim_at: Option<Instant>,
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
     /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
     _audio: Option<sdl2::AudioSubsystem>,
@@ -66,6 +68,10 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 /// How often the debug memory overlay (`[debug] memory_overlay`) refreshes its
 /// figures by asking Servo for a new report.
 const MEMORY_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// How long after a navigation the allocator is asked for its free memory back:
+/// long enough that the document being replaced has finished going away.
+const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
@@ -106,6 +112,7 @@ impl App {
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
+            heap_trim_at: None,
             _audio: audio,
         })
     }
@@ -132,6 +139,14 @@ impl App {
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
                 self.ui.menu.record_history(&url);
+                self.heap_trim_at = Some(Instant::now() + HEAP_TRIM_DELAY);
+            }
+
+            // A closed document leaves its memory with the allocator rather than
+            // the kernel; here that is 200 MB the device swaps around for nothing.
+            if self.heap_trim_at.is_some_and(|at| at <= Instant::now()) {
+                crate::platform::heap::trim();
+                self.heap_trim_at = None;
             }
 
             // Recording only marks history dirty; flush it on a throttle so a busy
