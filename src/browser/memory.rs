@@ -208,8 +208,11 @@ fn tight() -> Preferences {
     p.js_ion_enabled = false;
     p.js_wasm_ion_enabled = false;
 
-    // Back-forward cache: keep almost nothing.
-    p.session_history_max_length = 3;
+    // Back-forward cache: one step back. Three was priced on synthetic pages and
+    // is far too generous on real ones — measured on a 960 MB A55 handheld, two
+    // navigated-away Wikipedia articles held 54.1 and 53.7 MB of layout tree each
+    // while GitHub was open, and the kernel OOM-killed the process.
+    p.session_history_max_length = 1;
 
     // No in-memory HTTP cache.
     p.network_http_cache_disabled = true;
