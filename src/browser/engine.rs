@@ -78,6 +78,8 @@ pub(super) fn build_preferences(
         prefs.user_agent = ua;
     }
 
+    apply_pref_overrides(&mut prefs);
+
     log::info!(
         "servo: {cores} cores, memory profile `{}` -> layout={}, webrender pool={}, js_mem_max={}",
         profile.as_str(),
@@ -86,6 +88,50 @@ pub(super) fn build_preferences(
         prefs.js_mem_max,
     );
     prefs
+}
+
+/// `RETSURF_SERVO_PREFS=name=value[,name=value...]` sets engine prefs the config
+/// does not expose, for a measurement that would otherwise need a rebuild
+/// (`expose_servointernals_globally=true` is what `navigator.servo` needs). The
+/// name is checked against `Preferences::all_fields` first — Servo's setter panics
+/// on an unknown one — and the value is parsed to the pref's own type.
+fn apply_pref_overrides(prefs: &mut servo::Preferences) {
+    let Ok(spec) = std::env::var("RETSURF_SERVO_PREFS") else {
+        return;
+    };
+    for entry in spec.split(',').filter(|e| !e.trim().is_empty()) {
+        let Some((name, value)) = entry.split_once('=') else {
+            log::warn!("pref override `{entry}` is not name=value");
+            continue;
+        };
+        let (name, value) = (name.trim(), value.trim());
+        if !servo::Preferences::all_fields().contains(&name) {
+            log::warn!("pref override `{name}` is not a servo preference");
+            continue;
+        }
+        let Some(parsed) = pref_value(name, value) else {
+            log::warn!(
+                "pref override `{name}` wants {}, got `{value}`",
+                servo::Preferences::type_of(name)
+            );
+            continue;
+        };
+        prefs.set_value(name, parsed);
+        log::info!("pref override: {name} = {value}");
+    }
+}
+
+/// Parse `value` as the type `name` holds. Servo's setter unwraps the conversion,
+/// so a mismatch has to be caught here.
+fn pref_value(name: &str, value: &str) -> Option<servo::PrefValue> {
+    match servo::Preferences::type_of(name) {
+        "bool" => value.parse().ok().map(servo::PrefValue::Bool),
+        "i64" => value.parse().ok().map(servo::PrefValue::Int),
+        "u64" => value.parse().ok().map(servo::PrefValue::UInt),
+        "f64" => value.parse().ok().map(servo::PrefValue::Float),
+        "alloc::string::String" => Some(servo::PrefValue::Str(value.to_owned())),
+        _ => None,
+    }
 }
 
 const BYTES_PER_MB: u64 = 1024 * 1024;
