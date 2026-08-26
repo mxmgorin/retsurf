@@ -71,6 +71,10 @@ pub fn apply(ctx: &egui::Context) {
     visuals.selection.stroke = egui::Stroke::new(1.0, ACCENT);
     visuals.hyperlink_color = ACCENT;
     visuals.text_cursor.stroke.color = ACCENT;
+    // A blinking caret asks egui for a frame twice a second, and on a device
+    // with no GPU one frame is a full software rasterization of the chrome —
+    // 80 ms on a Miyoo, spent to toggle a one-pixel line. It stays solid.
+    visuals.text_cursor.blink = false;
     ctx.set_visuals(visuals);
 }
 
