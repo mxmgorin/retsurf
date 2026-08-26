@@ -32,7 +32,7 @@ use servo::{EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
 use std::{
     cell::{Cell, RefCell, RefMut},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -115,10 +115,13 @@ impl Default for BrowserState {
 struct Tab {
     webview: WebView,
     state: BrowserState,
-    /// Images allowed on this tab's current page, hashed for the per-page cap (see
-    /// `delegate::image_key`); cleared on its own top-level navigations. Per tab so
-    /// a background load can't spend the visible page's budget.
-    page_images: RefCell<HashSet<u64>>,
+    /// Images allowed on this tab, hashed for the per-page cap (see
+    /// `delegate::image_key`), bucketed by the document that asked for them so an
+    /// iframe cannot spend the page's budget and never give it back. Keyed by the
+    /// load's referrer, which is the closest thing to a frame identity the
+    /// embedder API offers. Cleared wholesale on the tab's top-level navigations;
+    /// per tab so a background load can't spend the visible page's budget.
+    page_images: RefCell<HashMap<u64, HashSet<u64>>>,
 }
 
 impl Tab {

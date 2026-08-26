@@ -206,13 +206,15 @@ impl servo::WebViewDelegate for AppBrowserInner {
             } else if is_subresource && !block && req.destination == Destination::Image {
                 if let Some(cap) = filter.image_cap() {
                     let mut images = images.borrow_mut();
+                    let owner = owner_key(req.referrer_url.as_ref());
+                    let bucket = images.entry(owner).or_default();
                     let key = image_key(&url);
-                    if !images.contains(&key) {
-                        if images.len() >= cap {
+                    if !bucket.contains(&key) {
+                        if bucket.len() >= cap {
                             log::debug!("image cap: blocked {url}");
                             block = true;
                         } else {
-                            images.insert(key);
+                            bucket.insert(key);
                         }
                     }
                 }
@@ -234,6 +236,15 @@ impl servo::WebViewDelegate for AppBrowserInner {
             finish_intercepted(load, response, Vec::new());
         }
     }
+}
+
+/// Which document a subresource load belongs to, for the per-document image
+/// budget. The referrer is the requesting document, so an iframe's images land in
+/// their own bucket and a page whose iframe reloads does not lose slots to it.
+/// A load with no referrer shares the one bucket, which is what the main document
+/// gets.
+fn owner_key(referrer: Option<&Url>) -> u64 {
+    referrer.map_or(0, image_key)
 }
 
 /// Image identity for the per-page cap. Hashed, not stored verbatim: inline `data:`
