@@ -139,7 +139,7 @@ impl App {
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
                 self.ui.menu.record_history(&url);
-                self.heap_trim_at = Some(Instant::now() + HEAP_TRIM_DELAY);
+                self.schedule_heap_trim();
             }
 
             // A closed document leaves its memory with the allocator rather than
@@ -280,6 +280,12 @@ impl App {
             return;
         }
         self.browser.open_tab(&self.config.browser.home_page);
+    }
+
+    /// Ask the allocator for its free memory back once the document being torn
+    /// down has finished going away (see [`HEAP_TRIM_DELAY`]).
+    fn schedule_heap_trim(&mut self) {
+        self.heap_trim_at = Some(Instant::now() + HEAP_TRIM_DELAY);
     }
 
     /// Snapshot the open tabs for the next launch. A no-op with `restore_tabs`

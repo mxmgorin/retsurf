@@ -82,6 +82,11 @@ pub fn run_app() {
     #[cfg(target_os = "android")]
     std::env::set_var("SDL_ANDROID_TRAP_BACK_BUTTON", "1");
 
+    // Before SDL and Servo allocate anything: the knobs only bind what comes after.
+    platform::heap::tune(browser::memory::resolve(
+        app_config.performance.memory_profile,
+    ));
+
     let mut sdl = sdl2::init().unwrap();
     let app = App::new(&mut sdl, app_config).unwrap();
 

@@ -85,6 +85,7 @@ impl App {
             MenuAction::CloseTab(index) => {
                 self.browser.close_tab(*index, &self.config.browser.home_page);
                 self.ui.menu.set_tab_count(self.browser.tab_count());
+                self.schedule_heap_trim();
             }
             MenuAction::NewTab => self.new_tab(),
         }
