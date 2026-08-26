@@ -25,3 +25,6 @@ target
 .idea/
 .vscode
 .lapce
+
+# Build output of tools/armhf/package-allium.sh
+/dist
