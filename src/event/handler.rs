@@ -9,7 +9,7 @@ use crate::{
     platform::window::AppWindow,
     ui::AppUi,
 };
-use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames};
+use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames, Keymap};
 use inputbind::{Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -28,6 +28,14 @@ pub struct AppEventHandler {
     key_names: KeyNames,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
+    /// Whether the keys arriving from this device *are* the pad. The Miyoo's
+    /// SDL2 offers no controller mapping and sends keys instead, so there they
+    /// feed the pad machine and answer to the `[gamepad]` table like any button.
+    keymap: Keymap,
+    /// MENU is the launcher's key nearly everywhere — OnionOS hands it to the
+    /// firmware's own kill helper — so the app answers it only where the
+    /// launcher says it keeps none (`RETSURF_MENU_QUIT`, which Allium sets).
+    menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
@@ -38,6 +46,15 @@ impl AppEventHandler {
     pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
+        // `RETSURF_KEYMAP=miyoo|desktop` wins over the driver name, and has to:
+        // the Miyoo SDL2 this package bundles calls its driver `Mini`, which is
+        // not the `mmiyoo` the detection knows.
+        let keymap = Keymap::detect(
+            sdl.video()?.current_video_driver(),
+            std::env::var("RETSURF_KEYMAP").ok().as_deref(),
+        );
+        log::info!("keyboard layout: {keymap:?}");
+        let menu_quits = std::env::var_os("RETSURF_MENU_QUIT").is_some_and(|v| v != "0");
 
         for id in 0..game_controller_subsystem.num_joysticks()? {
             if game_controller_subsystem.is_game_controller(id) {
@@ -55,6 +72,8 @@ impl AppEventHandler {
             bindings: bindings::build(&bindings::load_store(), &key_names),
             key_names,
             gamepad: Gamepad::new(gamepad_cfg),
+            keymap,
+            menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             touch: super::touch::TouchState::new(),
         })
@@ -146,16 +165,24 @@ impl AppEventHandler {
                     commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
                     return true;
                 }
-                self.capture.on_key(
-                    &key_name(*kc),
-                    mods_for(*kc, *keymod),
-                    is_modifier(*kc),
-                    now,
-                )
+                // Where the pad arrives as keys, it binds as the pad it is.
+                if let Some(pad) = self.keymap.pad(*kc) {
+                    self.capture.on_press(pad, now)
+                } else {
+                    self.capture.on_key(
+                        &key_name(*kc),
+                        mods_for(*kc, *keymod),
+                        is_modifier(*kc),
+                        now,
+                    )
+                }
             }
             Event::KeyUp {
                 keycode: Some(kc), ..
-            } => self.capture.on_key_release(&key_name(*kc)),
+            } => match self.keymap.pad(*kc) {
+                Some(pad) => self.capture.on_release(pad, now),
+                None => self.capture.on_key_release(&key_name(*kc)),
+            },
             // Autorepeat and the text edge are swallowed, never bound.
             Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return true,
             Event::ControllerButtonDown { button, .. } => {
@@ -197,7 +224,12 @@ impl AppEventHandler {
         // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
         // while the caret sat in the address bar. Modified keys stay ours (egui
         // still saw the event above, so typing is unaffected).
-        if ui.handle_event(window, &event) && !is_shortcut_key(&event) {
+        // Where the pad arrives as keys, the text edge of those keys is not
+        // text anyone typed — letting egui have it would put a space in the
+        // address bar every time A is pressed.
+        let types_nothing = self.keymap != Keymap::Desktop
+            && matches!(event, Event::TextInput { .. } | Event::TextEditing { .. });
+        if !types_nothing && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
 
@@ -317,6 +349,18 @@ impl AppEventHandler {
                     repeat,
                     pressed: true,
                 };
+                // MENU, on a device that sends it as Esc and a launcher that
+                // has handed it over. Not a binding: it is the only way out
+                // there, so it must survive whatever the tables are edited to.
+                if self.menu_quits && kc == Keycode::Escape && self.keymap != Keymap::Desktop {
+                    commands.push(AppCommand::Shutdown);
+                    return;
+                }
+                if let Some(pad) = self.keymap.pad(kc) {
+                    ui.note_input_keyboard(false);
+                    self.gamepad.on_pad(pad, true, &self.bindings, commands);
+                    return;
+                }
                 // Remember the input came from the keyboard so hint mode picks
                 // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
                 ui.note_input_keyboard(true);
@@ -336,6 +380,10 @@ impl AppEventHandler {
                     repeat,
                     pressed: false,
                 };
+                if let Some(pad) = self.keymap.pad(kc) {
+                    self.gamepad.on_pad(pad, false, &self.bindings, commands);
+                    return;
+                }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {
