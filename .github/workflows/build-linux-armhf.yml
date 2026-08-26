@@ -193,7 +193,7 @@ jobs:
           CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux
-          cargo build --release --no-default-features --target "$TARGET"
+          cargo build --release --no-default-features --features software --target "$TARGET"
           df -h /
 
       - name: Stage binary

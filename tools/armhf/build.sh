@@ -26,11 +26,20 @@ mkdir -p "$cache/target" "$cache/cargo"
 # and the bridge is not always a route out.
 docker build -q -t "$image" --network host -f "$here/Dockerfile" "$here" >/dev/null
 
+# A local Servo checkout, mounted at the path a `[patch]` in Cargo.toml names, so
+# a fix can be built for the device before it reaches the fork. Unset normally.
+servo_mount=()
+if [ -n "${RETSURF_SERVO_SRC:-}" ]; then
+  src=$(cd "$RETSURF_SERVO_SRC" && pwd)
+  servo_mount=(-v "$src":"$src")
+fi
+
 # --network host: the Servo fork and inputbind are fetched from git.
 # The container script arrives on stdin under a quoted heredoc rather than as a
 # quoted argument, so an apostrophe in a comment cannot end it early.
 docker run --rm -i --network host \
   -v "$repo":/repo \
+  "${servo_mount[@]}" \
   -v "$cache/target":/target \
   -v "$cache/cargo":/cargo \
   -e CARGO_TARGET_DIR=/target -e CARGO_HOME=/cargo -e RUSTUP_HOME=/cargo \
@@ -39,7 +48,10 @@ docker run --rm -i --network host \
   -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
   -e "CARGO_ARGS=$*" \
   "$image" bash -euxs <<'CONTAINER'
-    export PATH="/cargo/bin:/opt/miyoomini-toolchain/bin:$PATH"
+    # /opt/cc-shims first: it holds one g++ wrapper that respells `-std=c++20`
+    # for GCC 8.3 (see the Dockerfile). Shimming by name rather than by `CXX_*`
+    # keeps the compiler every build script records unchanged.
+    export PATH="/cargo/bin:/opt/cc-shims:/opt/miyoomini-toolchain/bin:$PATH"
     command -v cargo >/dev/null || curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --no-modify-path --default-toolchain none
     # build.rs stamps the About screen from git; without this the mounted repo
@@ -105,7 +117,7 @@ docker run --rm -i --network host \
     # unwind tables with it. Same trade as the aarch64 handheld build.
     export CARGO_PROFILE_RELEASE_PANIC=abort
 
-    cargo build --release --no-default-features --target "$TARGET" $CARGO_ARGS
+    cargo build --release --no-default-features --features software --target "$TARGET" $CARGO_ARGS
     out="/target/$TARGET/release/retsurf"
     file "$out"
     arm-linux-gnueabihf-readelf -d "$out" | grep NEEDED

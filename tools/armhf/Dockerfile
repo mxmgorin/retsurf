@@ -48,6 +48,25 @@ RUN curl --retry 5 -fsSL \
  && /opt/miyoomini-toolchain/bin/arm-linux-gnueabihf-gcc --version | head -1 \
  && /opt/miyoomini-toolchain/bin/arm-linux-gnueabihf-gcc -print-sysroot
 
+# swgl's build.rs asks cc-rs for `-std=c++20`, which GCC 8.3 spells `-std=c++2a`
+# and rejects outright — before it reaches any later `-std=`, so `CXXFLAGS`
+# cannot correct it. This shim does, and nothing else: every other argument goes
+# through untouched. `build.sh` points `CXX_*` at it.
+RUN mkdir -p /opt/cc-shims \
+ && printf '%s\n' \
+      '#!/bin/sh' \
+      '# GCC 8.3 knows C++20 as c++2a; see the Dockerfile.' \
+      'for arg do' \
+      '  case "$arg" in' \
+      '    -std=c++20) set -- "$@" -std=c++2a ;;' \
+      '    *) set -- "$@" "$arg" ;;' \
+      '  esac' \
+      '  shift' \
+      'done' \
+      'exec /opt/miyoomini-toolchain/bin/arm-linux-gnueabihf-g++ "$@"' \
+    > /opt/cc-shims/arm-linux-gnueabihf-g++ \
+ && chmod 755 /opt/cc-shims/arm-linux-gnueabihf-g++
+
 # SDL2 and fontconfig for the link step; the toolchain's sysroot carries the
 # device's own libraries but neither of these. Only their symbols matter — the
 # device loads its own SDL2, and fontconfig ships in the app.
