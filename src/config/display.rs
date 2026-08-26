@@ -11,6 +11,10 @@ pub struct DisplayConfig {
     /// Request an OpenGL ES context (required on Mali handhelds) instead of
     /// desktop GL. Can be overridden at startup via `RETSURF_GLES=0`.
     pub use_gles: bool,
+    /// Render the page and the chrome on the CPU, with no GL context at all —
+    /// the only thing that draws on a GPU-less device (Miyoo Mini). Needs the
+    /// `software` build feature; overridden at startup via `RETSURF_SOFTWARE=1`.
+    pub software_render: bool,
     /// How long the virtual cursor stays visible after the last movement, in ms.
     /// It hides when idle (nothing to hover) but lingers so you can see where it
     /// landed before clicking.
@@ -29,6 +33,7 @@ impl Default for DisplayConfig {
             width: 640,
             height: 480,
             use_gles: true,
+            software_render: false,
             cursor_linger_ms: 1500,
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,

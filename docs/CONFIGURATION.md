@@ -91,6 +91,7 @@ permissions = false           # Permissions API                      — full on
 width = 640
 height = 480
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
+software_render = false    # draw everything on the CPU, with no GL at all (see below)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (top reflows, bottom overlays)
@@ -281,6 +282,7 @@ files.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
+| `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
 | `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
@@ -294,3 +296,13 @@ files.
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.
+
+## Software rendering
+
+`software_render` swaps both renderers for CPU ones: the page is rasterized by
+swgl (WebRender's own software backend) and the chrome is drawn by SDL's 2D
+renderer, so nothing needs a GL driver. It exists for devices that have no GPU —
+the Miyoo Mini family — and needs a build with the `software` cargo feature; a
+build without it logs a warning and stays on GL. Builds that do have it fall back
+to software on their own when no GL context can be created, so the switch is only
+for forcing it on a machine that has both.

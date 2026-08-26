@@ -77,7 +77,7 @@ impl AppEventHandler {
 
     pub fn wait(
         &mut self,
-        window: &AppWindow,
+        window: &mut AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
@@ -184,7 +184,7 @@ impl AppEventHandler {
     fn handle_event(
         &mut self,
         event: Event,
-        window: &AppWindow,
+        window: &mut AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,

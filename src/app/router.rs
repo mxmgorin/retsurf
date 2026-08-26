@@ -353,7 +353,7 @@ impl App {
             self.browser
                 .handle_input(servo::InputEvent::MouseButton(event));
         } else {
-            self.ui.click_ui(pressed, &self.window);
+            self.ui.click_ui(pressed, &mut self.window);
         }
     }
 

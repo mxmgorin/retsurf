@@ -43,6 +43,15 @@ pub fn run_app() {
     if let Ok(v) = std::env::var("RETSURF_GLES") {
         app_config.display.use_gles = v != "0";
     }
+    if let Ok(v) = std::env::var("RETSURF_SOFTWARE") {
+        app_config.display.software_render = v != "0";
+    }
+    if app_config.display.software_render && !cfg!(feature = "software") {
+        log::warn!(
+            "software rendering asked for, but this build has no `software` feature; using GL"
+        );
+        app_config.display.software_render = false;
+    }
     // Android GPUs (Mali/Adreno/PowerVR) only expose GLES; desktop GL is never an
     // option there, so the config/RETSURF_GLES toggle can't select it.
     #[cfg(target_os = "android")]
@@ -54,7 +63,7 @@ pub fn run_app() {
         std::env::set_var("SDL_TOUCH_MOUSE_EVENTS", "0");
     }
 
-    if app_config.display.use_gles {
+    if app_config.display.use_gles && !app_config.display.software_render {
         // SDL creates a GLES context (sets the thread's EGL API to ES). Servo's
         // surfman context must use the same API or context creation fails, so
         // force surfman to GLES too. Must be set before any surfman/SDL GL init.

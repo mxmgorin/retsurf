@@ -1,7 +1,9 @@
-//! The egui layer: [`AppUi`] owns the egui context, the gamepad cursor, and the
-//! overlay state holders ([`crate::overlay::menu`], [`crate::overlay::osk`]), and composites
-//! Servo's FBO texture under the chrome. The actual widgets are rendered by the
-//! submodules: [`toolbar`], [`menu`] (the full-screen overlay), and [`osk`].
+//! The egui layer: [`AppUi`] owns the gamepad cursor and the overlay state
+//! holders ([`crate::overlay::menu`], [`crate::overlay::osk`]), and lays the
+//! chrome out over the page. egui itself lives in
+//! [`crate::platform::window::AppWindow`], which owns the renderer it belongs
+//! to. The actual widgets are rendered by the submodules: [`toolbar`], [`menu`]
+//! (the full-screen overlay), and [`osk`].
 
 mod dial_edit;
 mod hints;
@@ -34,8 +36,21 @@ use crate::{
     update::{UpdateState, Updater},
 };
 use egui_sdl2::egui;
-use egui_sdl2::EguiGlow;
 use std::time::{Duration, Instant};
+
+/// Style a freshly built [`egui::Context`]: the shared accent theme (see
+/// [`theme`]) plus the device's UI zoom. Handed to the window, which applies it
+/// to every context it creates.
+pub fn init_egui_ctx(ctx: &egui::Context) {
+    theme::apply(ctx);
+    // egui-sdl2 derives pixels-per-point from the drawable/window ratio (1.0 on
+    // Android), then multiplies by this — so on a phone the toolbar/overlays
+    // render at a readable size instead of 1:1 pixels. Desktop scale is 1.0.
+    let scale = crate::config::device_scale();
+    if scale != 1.0 {
+        ctx.set_zoom_factor(scale);
+    }
+}
 
 /// The text field the OSK currently types into, so its renderer can park egui's
 /// caret at the buffer end. The OSK only appends / backspaces, but egui keeps its
@@ -149,7 +164,10 @@ struct FrameInputs {
 }
 
 pub struct AppUi {
-    egui: EguiGlow,
+    /// The window's egui context, cached so the focus/scale queries scattered
+    /// across the UI and the event handler don't each need the window. Refreshed
+    /// every frame: the software backend builds a fresh context on a resize.
+    egui_ctx: egui::Context,
     repaint_delay: Option<Duration>,
     /// The web view's rect (logical px), measured from the central panel each
     /// frame. With a top toolbar it sits below the bar; with a bottom toolbar it
@@ -170,8 +188,12 @@ pub struct AppUi {
     /// clears the keys, once [`Self::osk_height`] is known (see [`AppUi::update`]).
     osk_lift_pending: bool,
     repaint_pending: bool,
+    /// Force the next frame onto the screen whatever else says, for the changes
+    /// egui cannot report: the first frame, a resize, an explicit repaint.
+    force_redraw: bool,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
-    browser_tex_id: egui::TextureId,
+    /// `None` in software mode, where the window composites the page itself.
+    browser_tex_id: Option<egui::TextureId>,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
@@ -249,26 +271,8 @@ impl AppUi {
         update: &UpdateConfig,
         user_agent: String,
     ) -> Self {
-        let mut egui = EguiGlow::new(window.sdl2_window(), window.glow_ctx(), None, false);
-        // Install the shared accent theme so every selectable widget, text
-        // selection, and link picks up the brand green (see [`theme`]).
-        theme::apply(&egui.ctx);
-        // Scale the whole UI for high-DPI displays. egui-sdl2 derives pixels-per-
-        // point from the drawable/window ratio (1.0 on Android), then multiplies by
-        // this zoom factor — so on a phone the toolbar/overlays render at a readable
-        // size instead of 1:1 pixels. Desktop scale is 1.0 (no change).
-        let scale = crate::config::device_scale();
-        if scale != 1.0 {
-            egui.ctx.set_zoom_factor(scale);
-        }
-        // Register the FBO color texture once; its GL name is stable across
-        // resizes, so this TextureId stays valid for the program's lifetime.
-        let browser_tex_id = egui
-            .painter
-            .register_native_texture(window.rendering_color_texture());
-
         Self {
-            egui,
+            egui_ctx: window.egui_ctx().clone(),
             repaint_delay: None,
             webview_rect: egui::Rect::ZERO,
             toolbar_height: 0.0,
@@ -276,7 +280,8 @@ impl AppUi {
             osk_height: 0.0,
             osk_lift_pending: false,
             repaint_pending: false,
-            browser_tex_id,
+            force_redraw: true,
+            browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
             cursor: {
                 let (w, h) = window.size();
@@ -330,7 +335,7 @@ impl AppUi {
     /// input. Used on Android to show/hide the system soft keyboard.
     #[allow(dead_code)] // only called on Android
     pub fn wants_keyboard(&self) -> bool {
-        self.egui.ctx.egui_wants_keyboard_input()
+        self.egui_ctx.egui_wants_keyboard_input()
     }
 
     #[inline]
@@ -346,6 +351,24 @@ impl AppUi {
     #[inline]
     pub fn request_repaint(&mut self) {
         self.repaint_delay = Some(Duration::ZERO);
+        self.force_redraw = true;
+    }
+
+    /// Whether the frame just built differs from the one already on the panel.
+    ///
+    /// Composing and presenting is the whole cost of a frame on a GPU-less
+    /// device — some 90 ms at 752x560, against under a millisecond for a page
+    /// that did not repaint — so a frame that would come out identical is worth
+    /// not drawing at all. egui reporting `MAX` means it is idle and would draw
+    /// the same picture again; an event it consumed, an animation it is running,
+    /// or the lingering cursor overlay all say otherwise.
+    pub fn take_frame_dirty(&mut self, window: &AppWindow) -> bool {
+        let dirty = self.force_redraw
+            || self.repaint_pending
+            || window.repaint_delay() < Duration::MAX
+            || self.cursor_visible_for().is_some();
+        self.force_redraw = false;
+        dirty
     }
 
     /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
@@ -374,11 +397,10 @@ impl AppUi {
     /// Click the egui UI element under the cursor by feeding the backend a
     /// synthetic mouse button event (egui never sees the gamepad otherwise).
     /// `pressed` mirrors the A button's press/release so egui registers a click.
-    pub fn click_ui(&mut self, pressed: bool, window: &AppWindow) {
-        let ppp = self.egui.ctx.pixels_per_point();
+    pub fn click_ui(&mut self, pressed: bool, window: &mut AppWindow) {
+        let ppp = self.egui_ctx.pixels_per_point();
         let (x, y) = ((self.cursor.0 * ppp) as i32, (self.cursor.1 * ppp) as i32);
-        let win = window.sdl2_window();
-        let window_id = win.id();
+        let window_id = window.sdl2_window().id();
         let event = if pressed {
             sdl2::event::Event::MouseButtonDown {
                 timestamp: 0,
@@ -400,7 +422,7 @@ impl AppUi {
                 y,
             }
         };
-        let _ = self.egui.state.on_event(win, &event);
+        let _ = window.on_event(&event);
         self.repaint_pending = true;
     }
 
@@ -870,8 +892,7 @@ impl AppUi {
     /// Whether the address-bar text field currently holds keyboard focus (also
     /// guards plain-key keyboard shortcuts in the event handler).
     pub fn address_bar_focused(&self) -> bool {
-        self.egui
-            .ctx
+        self.egui_ctx
             .memory(|m| m.has_focus(egui::Id::new("location")))
     }
 
@@ -899,8 +920,7 @@ impl AppUi {
     /// click into it). While it does, arrow keys edit text rather than moving the
     /// start-page selection, and plain-key shortcuts are muted.
     pub fn home_field_editing(&self) -> bool {
-        self.egui
-            .ctx
+        self.egui_ctx
             .memory(|m| m.has_focus(egui::Id::new("home_search")))
     }
 
@@ -908,8 +928,7 @@ impl AppUi {
     /// like [`Self::home_field_editing`], but for the editor's `dial_edit_url`
     /// field.
     pub fn dial_edit_field_editing(&self) -> bool {
-        self.egui
-            .ctx
+        self.egui_ctx
             .memory(|m| m.has_focus(egui::Id::new("dial_edit_url")))
     }
 
@@ -935,11 +954,12 @@ impl AppUi {
         let toolbar_px = if overlay {
             0
         } else {
-            (self.toolbar_height * self.egui.ctx.pixels_per_point()).round() as u32
+            (self.toolbar_height * self.egui_ctx.pixels_per_point()).round() as u32
         };
         let size = (dw, dh.saturating_sub(toolbar_px).max(1));
         if size != self.browser_viewport {
             self.browser_viewport = size;
+            self.force_redraw = true;
             browser.resize(size.0, size.1);
         }
     }
@@ -950,16 +970,16 @@ impl AppUi {
     /// out for the previous orientation — e.g. a landscape home page shown in
     /// portrait).
     #[cfg(target_os = "android")]
-    pub fn sync_window_size(&mut self, window: &AppWindow) {
-        self.egui.state.sync_window_size(window.sdl2_window());
+    pub fn sync_window_size(&mut self, window: &mut AppWindow) {
+        window.sync_egui_window_size();
     }
 
     /// Handles the event and returns whether it is consumed
-    pub fn handle_event(&mut self, window: &AppWindow, event: &sdl2::event::Event) -> bool {
-        let resp = self.egui.state.on_event(window.sdl2_window(), event);
+    pub fn handle_event(&mut self, window: &mut AppWindow, event: &sdl2::event::Event) -> bool {
+        let resp = window.on_event(event);
         self.repaint_pending = resp.repaint;
         // don't consume when pointer over browser area
-        resp.consumed & self.is_pointer_over_toolbar()
+        resp.consumed & self.is_pointer_over_toolbar(window)
     }
 
     /// Fold the idle-repaint sources into `repaint_delay` so the blocking wait
@@ -1039,8 +1059,18 @@ impl AppUi {
         }
     }
 
-    pub fn update(&mut self, browser: &mut AppBrowser, commands: &mut Vec<AppCommand>) {
+    pub fn update(
+        &mut self,
+        window: &mut AppWindow,
+        browser: &mut AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
         let mut desired_px: Option<(u32, u32)> = None;
+        // A software resize (handled in the previous frame's paint) leaves a
+        // fresh context behind; adopt it before anything queries it.
+        if self.egui_ctx != *window.egui_ctx() {
+            self.egui_ctx = window.egui_ctx().clone();
+        }
 
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
@@ -1080,7 +1110,7 @@ impl AppUi {
             // Toolbar update chip: shown only once a background/manual check has
             // found a newer build.
             let update_available = matches!(update, UpdateState::Available { .. });
-            self.egui.run(|ctx| {
+            window.run_ui(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
                     ctx.clone(),
@@ -1133,11 +1163,16 @@ impl AppUi {
                             (rect.height() * ppp).round().max(1.0) as u32,
                         ));
 
-                        // WebRender renders bottom-up into the FBO, so flip V.
-                        let uv =
-                            egui::Rect::from_min_max(egui::pos2(0.0, 1.0), egui::pos2(1.0, 0.0));
-                        ui.painter()
-                            .image(self.browser_tex_id, rect, uv, egui::Color32::WHITE);
+                        // In software mode the page is composited under the chrome
+                        // by the window itself, and this rect stays empty.
+                        if let Some(tex) = self.browser_tex_id {
+                            // WebRender renders bottom-up into the FBO, so flip V.
+                            let uv = egui::Rect::from_min_max(
+                                egui::pos2(0.0, 1.0),
+                                egui::pos2(1.0, 0.0),
+                            );
+                            ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+                        }
                     });
 
                 // 3) Floating overlay toolbar (bottom auto-hide): slides over the
@@ -1296,30 +1331,28 @@ impl AppUi {
         // egui for an immediate follow-up to paint it positioned — without this
         // the loop blocks on input and the overlay only appears after the next
         // keypress. `MAX` means egui is idle, so it never shortens our wait.
-        let egui_delay = self.egui.repaint_delay();
+        let egui_delay = window.repaint_delay();
         if egui_delay < Duration::MAX {
             self.repaint_delay = Some(self.repaint_delay.map_or(egui_delay, |d| d.min(egui_delay)));
         }
     }
 
-    /// Paints the UI (toolbar + browser texture) and presents to the window.
-    pub fn draw(&mut self, window: &AppWindow) {
-        // Servo's software context made its own GL context current while rendering;
-        // restore SDL2's context before egui issues any GL calls.
-        window.make_current();
-        window.bind_default_framebuffer();
-        self.egui.paint();
-        window.present();
+    /// Paints the UI (toolbar over the page) and presents to the window.
+    pub fn draw(&mut self, window: &mut AppWindow) {
+        // Where the software backend composites the page frame; the GL backend
+        // draws it as a texture in the same rect and ignores this.
+        let ppp = self.egui_ctx.pixels_per_point();
+        let page_at = (
+            (self.webview_rect.left() * ppp).round() as i32,
+            (self.webview_rect.top() * ppp).round() as i32,
+        );
+        window.paint(page_at);
         self.repaint_pending = false;
     }
 
-    pub fn destroy(&mut self) {
-        self.egui.destroy();
-    }
-
     #[inline]
-    fn is_pointer_over_toolbar(&self) -> bool {
-        let Some(pos) = self.egui.state.get_pointer_pos_in_points() else {
+    fn is_pointer_over_toolbar(&self, window: &AppWindow) -> bool {
+        let Some(pos) = window.pointer_pos_in_points() else {
             return false;
         };
         self.toolbar_rect.contains(pos)
@@ -1332,7 +1365,7 @@ impl AppUi {
     /// points, so scale it up to compare against the pixel coordinate.
     #[inline]
     pub fn point_over_webview(&self, y_px: f32) -> bool {
-        let y = y_px / self.egui.ctx.pixels_per_point();
+        let y = y_px / self.egui_ctx.pixels_per_point();
         !self.toolbar_rect.y_range().contains(y)
     }
 }

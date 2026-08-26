@@ -178,9 +178,8 @@ at runtime on the device, so they aren't bundled.
 
 ## Building for armhf (Miyoo Mini)
 
-A different device family — SSD202D, armv7, no GPU at all — and so far only a build, not a
-port: nothing here renders on that hardware yet. The job of this toolchain is to find out
-early whether the dependency graph survives 32-bit.
+A different device family — SSD202D, armv7, no GPU at all. The renderer for it is the
+`software` feature below; what is still missing is the device-side packaging.
 
 ```sh
 tools/armhf/build.sh              # prints the binary's path
@@ -210,4 +209,26 @@ than loudly:
 
 The sysroot in the image carries SDL2 and fontconfig from Debian for the link step only; the
 toolchain's own sysroot has neither. On the device both have to come from somewhere else —
-its SDL2 is a Miyoo-specific build — which is why the binary is not runnable yet.
+its SDL2 is a Miyoo-specific build.
+
+## Rendering without a GPU
+
+The `software` cargo feature (on for the armhf build, off everywhere else) replaces both
+renderers with CPU ones, so no GL driver is needed at all:
+
+- the page is rasterized by [swgl](https://crates.io/crates/swgl), WebRender's own software
+  backend — the same version as the `webrender` in our graph, because WebRender selects its
+  software paths off the renderer name string rather than a build flag;
+- the chrome is drawn by SDL's 2D renderer into an offscreen surface, over the page frame,
+  and the composed frame reaches the panel as one texture copy — the only presentation path
+  the Miyoo's `mmiyoo` driver shows.
+
+swgl's `GL_RGBA8` framebuffer is BGRA in memory, which is SDL's `ARGB8888`, so the page
+crosses into the composition surface as a plain row copy; only the row order is reversed,
+because WebRender still draws bottom-up. There is no vsync on this path, so the main loop
+caps itself at 30 fps.
+
+`[display] software_render` (or `RETSURF_SOFTWARE=1`) forces it. A build that has the
+feature also falls back to it on its own when no GL context can be created, so a device with
+no driver lands there without being told to. `[debug] frame_timing` logs the per-frame cost,
+split into the page and everything after it.

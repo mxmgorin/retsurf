@@ -10,4 +10,8 @@ pub struct DebugConfig {
     /// rolled up by subsystem (image-cache, layout, JS, ...). For measuring where
     /// RAM goes on a target device. See [`crate::ui`]'s memory overlay.
     pub memory_overlay: bool,
+    /// Log how long each frame's paint takes, averaged over a second. The one
+    /// number that decides whether software rendering is usable on a given
+    /// device; see [`crate::app::FrameTimer`].
+    pub frame_timing: bool,
 }
