@@ -1,0 +1,228 @@
+name: Linux ARMhf
+
+# The Miyoo Mini (SSD202D, armv7, OnionOS) build. Its own workflow rather than a
+# job in `Linux ARM`: that one runs natively on arm64 runners and this one
+# cross-compiles from x86_64, so they share no runner, no cache and no wall
+# clock. Nothing here can slow the aarch64 build down.
+#
+# The binary is not shipped yet — the software-rendering path and the OnionOS
+# package are still ahead of it. What this job buys today is early warning on
+# 32-bit breakage in the dependency graph.
+#
+# Kept in step with tools/armhf/, which builds the same thing locally; the
+# reasoning behind the toolchain choice lives in that Dockerfile.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+env:
+  TARGET: armv7-unknown-linux-gnueabihf
+  LIBDIR: arm-linux-gnueabihf
+  TOOLCHAIN: /opt/miyoomini-toolchain
+  TOOLCHAIN_VERSION: v0.0.3
+  # The oldest userland we target: OnionOS is glibc 2.28, which is also the
+  # toolchain's own libc, so the floor holds by construction. Keep in step with
+  # tools/armhf/glibc-floor.
+  GLIBC_FLOOR: "2.28"
+  # Debian bookworm, mirroring tools/armhf/Dockerfile.
+  SDL_VERSION: "2.26.5+dfsg-1"
+  FONTCONFIG_VERSION: "2.14.1-4"
+  FREETYPE_VERSION: "2.12.1+dfsg-5+deb12u4"
+  EXPAT_VERSION: "2.5.0-1+deb12u2"
+  ZLIB_VERSION: "1.2.13.dfsg-1"
+  LIBPNG_VERSION: "1.6.39-2+deb12u5"
+  BROTLI_VERSION: "1.0.9-2+b6"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host build tools
+        run: |
+          set -eux
+          # Host-side only: Servo brings real C/C++, SpiderMonkey drives its own
+          # configure/make (python3), and bindgen wants libclang. The target
+          # libraries come from the two sysroots below, not from apt.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang libclang-dev llvm-dev cmake gperf pkg-config \
+            python3 python3-pip python3-setuptools file
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          # rust-toolchain.toml pins the channel; rustup honors it.
+          rustup target add "$TARGET"
+          rustc --version
+
+      - name: Miyoo Mini toolchain
+        run: |
+          set -eux
+          # ARM's A-profile GCC 8.3 over a sysroot built for this device. Its
+          # glibc is the 2.28 floor and it links libstdc++ dynamically, which
+          # SpiderMonkey's configure insists on. See tools/armhf/Dockerfile.
+          curl --retry 5 -fsSL \
+            "https://github.com/shauninman/miyoomini-toolchain-buildroot/releases/download/$TOOLCHAIN_VERSION/miyoomini-toolchain.tar.xz" \
+            | sudo tar -xJ -C /opt
+          echo "$TOOLCHAIN/bin" >> "$GITHUB_PATH"
+          "$TOOLCHAIN/bin/arm-linux-gnueabihf-gcc" --version | head -1
+
+      - name: armhf sysroot
+        run: |
+          set -eux
+          # SDL2 and fontconfig for the link step; the toolchain's sysroot
+          # carries the device's own libraries but neither of these. Only their
+          # symbols matter — the device loads its own SDL2, and fontconfig ships
+          # in the app. Ubuntu's SDL2 is 2.0.20, which predates
+          # SDL_RenderGeometry, the call the software renderer draws through, so
+          # take Debian's.
+          #
+          # zlib is here for its headers too: freetype-sys builds libpng, which
+          # includes <zlib.h>, and it never looks at libz-sys's vendored copy
+          # (build.rs hardcodes a relative path that does not exist in the
+          # published crate). On a host build the system header covers that up.
+          #
+          # libpng and brotli are neither linked nor included — they are here
+          # because pkg-config refuses to answer for fontconfig until every .pc
+          # in the chain resolves, and Debian's freetype2.pc names them under
+          # Requires.private. The probe at the end is that same question, asked
+          # before the build rather than twenty minutes into it.
+          pool=http://deb.debian.org/debian/pool/main
+          sudo mkdir -p /opt/sysroot
+          cd "$(mktemp -d)"
+          for deb in \
+            "libs/libsdl2/libsdl2-2.0-0_${SDL_VERSION}_armhf.deb" \
+            "libs/libsdl2/libsdl2-dev_${SDL_VERSION}_armhf.deb" \
+            "f/fontconfig/libfontconfig1_${FONTCONFIG_VERSION}_armhf.deb" \
+            "f/fontconfig/libfontconfig-dev_${FONTCONFIG_VERSION}_armhf.deb" \
+            "f/freetype/libfreetype6_${FREETYPE_VERSION}_armhf.deb" \
+            "f/freetype/libfreetype-dev_${FREETYPE_VERSION}_armhf.deb" \
+            "e/expat/libexpat1_${EXPAT_VERSION}_armhf.deb" \
+            "e/expat/libexpat1-dev_${EXPAT_VERSION}_armhf.deb" \
+            "z/zlib/zlib1g_${ZLIB_VERSION}_armhf.deb" \
+            "z/zlib/zlib1g-dev_${ZLIB_VERSION}_armhf.deb" \
+            "libp/libpng1.6/libpng16-16_${LIBPNG_VERSION}_armhf.deb" \
+            "libp/libpng1.6/libpng-dev_${LIBPNG_VERSION}_armhf.deb" \
+            "b/brotli/libbrotli1_${BROTLI_VERSION}_armhf.deb" \
+            "b/brotli/libbrotli-dev_${BROTLI_VERSION}_armhf.deb" \
+          ; do
+            curl --retry 5 -fsSLO "$pool/$deb"
+            sudo dpkg -x "$(basename "$deb")" /opt/sysroot
+          done
+          PKG_CONFIG_LIBDIR="/opt/sysroot/usr/lib/$LIBDIR/pkgconfig" \
+            PKG_CONFIG_SYSROOT_DIR=/opt/sysroot \
+            pkg-config --libs --cflags fontconfig sdl2
+
+      # The engine is a git dependency (our Servo fork), so a cold runner clones
+      # ~1.7 GB before it can resolve. Cargo home only: a Servo release target/
+      # would blow the 10 GB cache budget. Its own `shared-key`, separate from
+      # the aarch64 workflow's — one entry per architecture, so neither evicts
+      # the other.
+      - name: Cache cargo home
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+          shared-key: cargo-home-armhf
+
+      - name: Build
+        env:
+          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
+          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
+          AR_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-ar
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          # The SSD202D is always a Cortex-A7. On the Rust side +neon is not
+          # redundant with target-cpu: the target spec disables NEON outright and
+          # target-cpu does not undo that (verified in the emitted asm), so
+          # dropping it silently costs vectorisation. It warns about being
+          # unstable, once per crate.
+          # --allow-shlib-undefined: this SDL2 pulls in X11/wayland/alsa/gbm,
+          # which neither sysroot has and we never call.
+          RUSTFLAGS: >-
+            -L /opt/sysroot/usr/lib/arm-linux-gnueabihf
+            -C link-arg=-Wl,--allow-shlib-undefined
+            -C target-cpu=cortex-a7 -C target-feature=+neon
+          # -mtune, never -mcpu: cc-rs passes -march=armv7-a of its own, and GCC
+          # warns that -mcpu conflicts with it. That warning is fatal in a way
+          # that looks like nothing — cc-rs reads any stderr from a flag probe as
+          # "unsupported", so one warning makes it drop every flag_if_supported
+          # flag in the graph. mozjs_sys asks for -fno-rtti and
+          # -fno-sized-deallocation that way: the first breaks the link against
+          # SpiderMonkey's own no-rtti build, the second is a silent ABI mismatch
+          # on operator delete.
+          # -mfpu comes last and overrides cc-rs's vfpv3-d16, which has no NEON;
+          # swgl without NEON falls back to scalar.
+          # -I: the Debian sysroot headers (zlib for libpng, see above). The
+          # toolchain finds its own headers without help.
+          CFLAGS_armv7_unknown_linux_gnueabihf: "-mtune=cortex-a7 -mfpu=neon-vfpv4 -I/opt/sysroot/usr/include"
+          CXXFLAGS_armv7_unknown_linux_gnueabihf: "-mtune=cortex-a7 -mfpu=neon-vfpv4 -I/opt/sysroot/usr/include"
+          # bindgen runs the host libclang against target headers, so it needs
+          # pointing at both sysroots by hand — it inherits nothing from the
+          # cross gcc.
+          BINDGEN_EXTRA_CLANG_ARGS_armv7_unknown_linux_gnueabihf: >-
+            --target=armv7-unknown-linux-gnueabihf
+            --sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc
+            -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include/c++/8.3.0
+            -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include/c++/8.3.0/arm-linux-gnueabihf
+            -isystem /opt/miyoomini-toolchain/lib/gcc/arm-linux-gnueabihf/8.3.0/include
+            -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include
+            -isystem /opt/sysroot/usr/include
+          # SpiderMonkey builds tools that run on the build machine, and its
+          # configure falls back to the target compiler when these are unset.
+          HOST_CC: clang
+          HOST_CXX: clang++
+          # Only fontconfig is probed; everything else in the graph builds from
+          # source once the probe fails, which is why the sysroot carries so little.
+          PKG_CONFIG_ALLOW_CROSS: "1"
+          PKG_CONFIG_SYSROOT_DIR: /opt/sysroot
+          PKG_CONFIG_LIBDIR: /opt/sysroot/usr/lib/arm-linux-gnueabihf/pkgconfig
+          # CI performance build, kept out of Cargo.toml so local release builds
+          # stay fast to compile.
+          CARGO_PROFILE_RELEASE_LTO: "fat"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          # webgl off, so the surfman probe — our only catch_unwind — is gone and
+          # unwind tables with it. Same trade as the aarch64 handheld build.
+          CARGO_PROFILE_RELEASE_PANIC: "abort"
+        run: |
+          set -eux
+          cargo build --release --no-default-features --target "$TARGET"
+          df -h /
+
+      - name: Stage binary
+        run: |
+          set -eux
+          mkdir -p dist
+          cp "target/$TARGET/release/retsurf" dist/retsurf-linux-armhf
+          arm-linux-gnueabihf-strip dist/retsurf-linux-armhf
+          file dist/retsurf-linux-armhf
+          arm-linux-gnueabihf-readelf -d dist/retsurf-linux-armhf | grep NEEDED
+          ls -la dist/
+
+      - name: Check the glibc floor
+        run: |
+          set -eux
+          # Above the floor the loader refuses the binary on the device. Fail
+          # here instead of there.
+          arm-linux-gnueabihf-readelf -V dist/retsurf-linux-armhf \
+            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV
+          newer=$(arm-linux-gnueabihf-readelf -V dist/retsurf-linux-armhf \
+            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV \
+            | awk -F. -v f="${GLIBC_FLOOR#2.}" '$2 > f' | tr '\n' ' ')
+          if [ -n "$newer" ]; then
+            echo "binary requires $newer; the floor is GLIBC_$GLIBC_FLOOR" >&2
+            exit 1
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-linux-armhf
+          path: dist/retsurf-linux-armhf

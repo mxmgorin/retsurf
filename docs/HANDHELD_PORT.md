@@ -175,3 +175,39 @@ which is more than a typical C/SDL port pulls in, especially `mozjs_sys` and `mo
 `cargo build --release` runs as a native arm64 build under qemu, so the first build is slow,
 with SpiderMonkey and ANGLE the long poles. `libGLESv2` and `libEGL` (the Mali blob) resolve
 at runtime on the device, so they aren't bundled.
+
+## Building for armhf (Miyoo Mini)
+
+A different device family — SSD202D, armv7, no GPU at all — and so far only a build, not a
+port: nothing here renders on that hardware yet. The job of this toolchain is to find out
+early whether the dependency graph survives 32-bit.
+
+```sh
+tools/armhf/build.sh              # prints the binary's path
+RETSURF_ARM_LTO=thin tools/armhf/build.sh   # lighter link when RAM is short
+```
+
+It cross-compiles from x86_64 in a container, unlike the aarch64 build above, which runs
+natively under qemu. The compiler is the Miyoo Mini community toolchain (ARM A-profile GCC
+8.3 over a buildroot sysroot); `tools/armhf/Dockerfile` records why that one and not zig,
+which the sibling handheld repos use. `.github/workflows/build-linux-armhf.yml` is the same
+recipe in CI, kept as its own workflow so it shares nothing with the aarch64 one.
+
+Three things about this target cost a build each to find, and all three fail quietly rather
+than loudly:
+
+- **`-mtune=cortex-a7`, never `-mcpu`.** cc-rs passes `-march=armv7-a` of its own, GCC warns
+  that `-mcpu` conflicts with it, and cc-rs treats *any* stderr from a flag probe as "flag
+  unsupported" — so one warning silently drops every `flag_if_supported` flag in the graph.
+  `mozjs_sys` asks for `-fno-rtti` and `-fno-sized-deallocation` that way; losing the first
+  breaks the link against SpiderMonkey, losing the second is an ABI mismatch on
+  `operator delete` that would only show up as heap corruption on the device.
+- **NEON is off unless asked for twice.** `-mfpu=neon-vfpv4` for the C/C++ half (it has to
+  come after cc-rs's `-mfpu=vfpv3-d16`), and `-C target-feature=+neon` for the Rust half —
+  the rustc target spec disables NEON outright and `-C target-cpu` does not undo that.
+- **`HOST_CC`/`HOST_CXX` must be set.** SpiderMonkey builds tools that run on the build
+  machine, and its configure otherwise falls back to the cross compiler and rejects it.
+
+The sysroot in the image carries SDL2 and fontconfig from Debian for the link step only; the
+toolchain's own sysroot has neither. On the device both have to come from somewhere else —
+its SDL2 is a Miyoo-specific build — which is why the binary is not runnable yet.
