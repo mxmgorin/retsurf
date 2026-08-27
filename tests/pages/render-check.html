@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>render check</title>
+<style>
+  body { font: 16px/1.4 sans-serif; margin: 0; padding: 12px; background: #ffffff; color: #101010 }
+  h1 { font-size: 20px; margin: 0 0 8px }
+  .row { display: flex; gap: 6px; margin-bottom: 8px }
+  .sw { width: 64px; height: 40px; border: 1px solid #000; font: 11px monospace; color: #fff }
+  .grad { height: 40px; background: linear-gradient(90deg, #000, #fff) }
+  .alpha { height: 40px; background: rgba(255, 0, 0, .5) }
+  .round { border-radius: 12px; background: #3fb8a0; height: 40px; width: 120px }
+  .tiny { font-size: 9px }
+</style>
+<h1>swgl render check</h1>
+<div class="row">
+  <div class="sw" style="background:#ff0000">R</div>
+  <div class="sw" style="background:#00ff00">G</div>
+  <div class="sw" style="background:#0000ff">B</div>
+  <div class="sw" style="background:#ffffff;color:#000">W</div>
+  <div class="sw" style="background:#000000">K</div>
+</div>
+<div class="grad"></div>
+<div class="row"><div class="alpha" style="flex:1"></div><div class="round"></div></div>
+<p>Antialiasing and hinting: <b>bold</b>, <i>italic</i>, <span class="tiny">9px text</span>.</p>
+<p>The quick brown fox jumps over the lazy dog. 0123456789</p>
+<div class="row">
+  <img src="swatch.png" width="48" height="48" alt="png">
+  <img src="swatch.svg" width="135" height="20" alt="svg">
+  <svg width="120" height="40"><circle cx="20" cy="20" r="18" fill="#e2725b"/><rect x="45" y="4" width="70" height="32" fill="none" stroke="#3fb8a0" stroke-width="3"/></svg>
+</div>
