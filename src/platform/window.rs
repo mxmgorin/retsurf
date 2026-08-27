@@ -7,6 +7,7 @@ use sdl2::{Sdl, VideoSubsystem};
 use servo::RenderingContext;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "software")]
 use crate::platform::render::{SwglRenderingContext, BYTES_PER_PIXEL};
@@ -30,10 +31,34 @@ const COMPOSE_FORMAT: PixelFormatEnum = PixelFormatEnum::ARGB8888;
 #[cfg(feature = "software")]
 const CLEAR_COLOR: Color = Color::BLACK;
 
+/// Where a software frame's time went. Four steps over the same 1.7 MB surface,
+/// and which of them dominates decides what is worth optimising next — so the
+/// split is measured rather than guessed (`[debug] frame_timing`).
+#[derive(Default, Clone, Copy)]
+pub struct CompositeTiming {
+    /// Copying the page under the chrome, and clearing what it does not cover.
+    pub page: Duration,
+    /// egui, rasterized by SDL's software renderer.
+    pub chrome: Duration,
+    /// The composed surface into the presentation texture.
+    pub upload: Duration,
+    /// That texture onto the panel.
+    pub present: Duration,
+}
+
+impl CompositeTiming {
+    pub fn add(&mut self, other: Self) {
+        self.page += other.page;
+        self.chrome += other.chrome;
+        self.upload += other.upload;
+        self.present += other.present;
+    }
+}
+
 /// 30 fps, the software path's ceiling. Nothing here blocks the way a GL swap
 /// does, so without a cap a scrolling frame would run the CPU flat out.
 #[cfg(feature = "software")]
-const SOFTWARE_FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
+const SOFTWARE_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 
 /// The window, the renderer that puts pixels in it, and the egui that draws the
 /// chrome — one bundle, because which renderer came up decides all three.
@@ -128,7 +153,7 @@ impl AppWindow {
     }
 
     /// How long until egui wants another frame, from the last [`Self::run_ui`].
-    pub fn repaint_delay(&self) -> std::time::Duration {
+    pub fn repaint_delay(&self) -> Duration {
         match &self.backend {
             Backend::Gl(b) => b.egui.repaint_delay(),
             #[cfg(feature = "software")]
@@ -167,21 +192,26 @@ impl AppWindow {
     /// Paint the last [`Self::run_ui`] and present it. `page_at` is where the web
     /// view's top-left sits in physical pixels; the software backend composites
     /// the page frame there, under the chrome.
-    pub fn paint(&mut self, page_at: (i32, i32)) {
+    /// Returns where the time went, on the backend that has anything to say
+    /// about it; the GL one leaves it to the driver.
+    pub fn paint(&mut self, page_at: (i32, i32)) -> Option<CompositeTiming> {
         // The GL backend draws the page as a texture in the same rect, so only
         // the software one has any use for where that rect is.
         #[cfg(not(feature = "software"))]
         let _ = page_at;
         match &mut self.backend {
-            Backend::Gl(b) => b.paint(),
+            Backend::Gl(b) => {
+                b.paint();
+                None
+            }
             #[cfg(feature = "software")]
-            Backend::Software(b) => b.paint(page_at, self.ctx_init),
+            Backend::Software(b) => Some(b.paint(page_at, self.ctx_init)),
         }
     }
 
     /// The shortest a frame may take, or `None` when presenting already paces the
     /// loop itself — which GL does, through the swap interval.
-    pub fn frame_interval(&self) -> Option<std::time::Duration> {
+    pub fn frame_interval(&self) -> Option<Duration> {
         match &self.backend {
             Backend::Gl(_) => None,
             #[cfg(feature = "software")]
@@ -374,7 +404,7 @@ impl SoftwareBackend {
         })
     }
 
-    fn paint(&mut self, page_at: (i32, i32), ctx_init: fn(&egui::Context)) {
+    fn paint(&mut self, page_at: (i32, i32), ctx_init: fn(&egui::Context)) -> CompositeTiming {
         self.resize_compose_targets(ctx_init);
 
         let Self {
@@ -385,14 +415,21 @@ impl SoftwareBackend {
             rendering_ctx,
             ..
         } = self;
+        let mut timing = CompositeTiming::default();
+        let at = Instant::now();
 
         // Only what the page does not cover: on this device the surface is
         // 1.7 MB and clearing all of it before overwriting most of it again is
         // a fifth of the frame's memory traffic for nothing.
         let covered = blit_page(offscreen, rendering_ctx, page_at);
         clear_around(offscreen, covered);
-        egui.paint(offscreen);
+        timing.page = at.elapsed();
 
+        let at = Instant::now();
+        egui.paint(offscreen);
+        timing.chrome = at.elapsed();
+
+        let at = Instant::now();
         let surface = offscreen.surface();
         let pitch = surface.pitch() as usize;
         match surface.without_lock() {
@@ -403,10 +440,15 @@ impl SoftwareBackend {
             }
             None => log::error!("composition surface has no readable pixels"),
         }
+        timing.upload = at.elapsed();
+
+        let at = Instant::now();
         if let Err(e) = canvas.copy(present, None, None) {
             log::error!("could not blit the composed frame: {e}");
         }
         canvas.present();
+        timing.present = at.elapsed();
+        timing
     }
 
     /// Keep the composition targets the size of the window. Rebuilding the

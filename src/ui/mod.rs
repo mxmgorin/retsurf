@@ -1338,7 +1338,10 @@ impl AppUi {
     }
 
     /// Paints the UI (toolbar over the page) and presents to the window.
-    pub fn draw(&mut self, window: &mut AppWindow) {
+    pub fn draw(
+        &mut self,
+        window: &mut AppWindow,
+    ) -> Option<crate::platform::window::CompositeTiming> {
         // Where the software backend composites the page frame; the GL backend
         // draws it as a texture in the same rect and ignores this.
         let ppp = self.egui_ctx.pixels_per_point();
@@ -1346,8 +1349,9 @@ impl AppUi {
             (self.webview_rect.left() * ppp).round() as i32,
             (self.webview_rect.top() * ppp).round() as i32,
         );
-        window.paint(page_at);
+        let timing = window.paint(page_at);
         self.repaint_pending = false;
+        timing
     }
 
     #[inline]

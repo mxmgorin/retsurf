@@ -262,6 +262,7 @@ impl App {
             }
 
             self.draw(page_painted);
+            self.frame_timer.tick();
             self.pace_frame();
         }
 
@@ -321,8 +322,8 @@ impl App {
             return;
         }
         let at = self.frame_timer.mark();
-        self.ui.draw(&mut self.window);
-        self.frame_timer.chrome_done(at);
+        let timing = self.ui.draw(&mut self.window);
+        self.frame_timer.chrome_done(at, timing);
     }
 
     /// Hold the loop to the window's frame interval when presenting doesn't pace
@@ -351,6 +352,9 @@ struct FrameTimer {
     frames: u32,
     page: Duration,
     chrome: Duration,
+    /// The software backend's own split of `chrome`; `None` on GL, which leaves
+    /// the work to the driver and has nothing to report.
+    composite: Option<crate::platform::window::CompositeTiming>,
     since: Instant,
 }
 
@@ -361,6 +365,7 @@ impl FrameTimer {
             frames: 0,
             page: Duration::ZERO,
             chrome: Duration::ZERO,
+            composite: None,
             since: Instant::now(),
         }
     }
@@ -380,19 +385,51 @@ impl FrameTimer {
     }
 
     #[inline]
-    fn chrome_done(&mut self, at: Option<Instant>) {
+    fn chrome_done(
+        &mut self,
+        at: Option<Instant>,
+        composite: Option<crate::platform::window::CompositeTiming>,
+    ) {
         let Some(at) = at else { return };
         self.chrome += at.elapsed();
+        if let Some(split) = composite {
+            self.composite
+                .get_or_insert_with(Default::default)
+                .add(split);
+        }
         self.frames += 1;
-        if self.since.elapsed() < FRAME_REPORT_INTERVAL {
+    }
+
+    /// Report the interval just ended. Driven once per loop pass rather than per
+    /// frame, so a browser that has stopped drawing still reports the frames it
+    /// drew — seeing that number reach zero is the whole point of it.
+    fn tick(&mut self) {
+        if !self.enabled || self.since.elapsed() < FRAME_REPORT_INTERVAL {
+            return;
+        }
+        if self.frames == 0 {
+            // Idle is the expected state and does not need a line a second
+            // written to an SD card to say so.
+            self.since = Instant::now();
             return;
         }
         let per = |total: Duration| total.as_secs_f32() * 1000.0 / self.frames as f32;
+        let split = match self.composite {
+            Some(c) => format!(
+                " [page {:.1} chrome {:.1} upload {:.1} present {:.1}]",
+                per(c.page),
+                per(c.chrome),
+                per(c.upload),
+                per(c.present)
+            ),
+            None => String::new(),
+        };
         log::info!(
-            "frame timing: page {:.1} ms, chrome+present {:.1} ms ({} frames)",
+            "frame timing: page {:.1} ms, chrome+present {:.1} ms ({} frames){}",
             per(self.page),
             per(self.chrome),
-            self.frames
+            self.frames,
+            split
         );
         *self = Self::new(self.enabled);
     }
