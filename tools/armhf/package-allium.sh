@@ -119,9 +119,10 @@ install -m 755 "$bin" "$app/retsurf"
 chmod 755 "$app/launch.sh" "$app/ports/Retsurf.port/launch.sh"
 
 # The tier `auto` would pick anyway on 128 MB, pinned so a device reporting an
-# odd MemTotal cannot choose a heavier one.
-mkdir -p "$app/data"
-cat > "$app/data/config.toml" <<'EOF'
+# odd MemTotal cannot choose a heavier one. A template, not `data/config.toml`:
+# the launcher installs it only when there is no config to keep, so updating the
+# package never costs the user their settings.
+cat > "$app/etc/config.toml" <<'EOF'
 [performance]
 memory_profile = "embedded"
 

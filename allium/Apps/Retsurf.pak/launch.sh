@@ -5,6 +5,11 @@ cd "$gamedir" || exit 1
 
 mkdir -p "$gamedir/data" "$gamedir/downloads"
 
+# Settings the device wants but the browser cannot guess, installed once. Not
+# shipped as `data/config.toml` directly: `data/` is the user's, and an update
+# that overwrote it would take their settings with it.
+[ -f "$gamedir/data/config.toml" ] || cp "$gamedir/etc/config.toml" "$gamedir/data/config.toml"
+
 # Our SDL2 first, preloaded like every SDL2 port here; the libmi_* are the
 # firmware's. `lib/fallback` goes last: stubs for what an Onion card carries and
 # this one does not (lib/README.md).
