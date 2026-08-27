@@ -94,11 +94,14 @@ impl AppWindow {
     ) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
         let backend = build_backend(&video_subsystem, config)?;
-        ctx_init(match &backend {
+        let software = !matches!(backend, Backend::Gl(_));
+        let ctx = match &backend {
             Backend::Gl(b) => &b.egui.ctx,
             #[cfg(feature = "software")]
             Backend::Software(b) => &b.egui.ctx,
-        });
+        };
+        ctx_init(ctx);
+        apply_feathering(ctx, software);
         Ok(Self {
             _video_subsystem: video_subsystem,
             backend,
@@ -237,6 +240,20 @@ impl AppWindow {
     pub fn drawable_size(&self) -> (u32, u32) {
         self.sdl2_window().drawable_size()
     }
+}
+
+/// egui smooths a shape's edges by tessellating extra triangles for them. On a
+/// GPU those are free; on a software rasterizer they are what the frame is made
+/// of, so the default follows the renderer. Text is unaffected either way —
+/// glyphs carry their own antialiasing. `RETSURF_FEATHERING=0|1` overrides it,
+/// which is how the two are compared on one page.
+fn apply_feathering(ctx: &egui::Context, software: bool) {
+    let on = match std::env::var("RETSURF_FEATHERING") {
+        Ok(v) => v != "0",
+        Err(_) => !software,
+    };
+    ctx.tessellation_options_mut(|o| o.feathering = on);
+    log::info!("egui feathering: {on}");
 }
 
 /// GL unless the config asks for software, and software when GL doesn't come up
@@ -469,6 +486,7 @@ impl SoftwareBackend {
         self.egui =
             EguiCanvas::for_surface_with_format(self.canvas.window(), &offscreen, COMPOSE_FORMAT);
         ctx_init(&self.egui.ctx);
+        apply_feathering(&self.egui.ctx, true);
         self.offscreen = offscreen;
         // `unsafe_textures` (the canvas backend's) makes textures outlive their
         // creator, so the old one has to go by hand.
