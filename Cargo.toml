@@ -115,7 +115,7 @@ keyboard-types = "0.8.1"
 # capture and the editor model. Not on crates.io, so it is pinned by rev like the
 # Servo fork. Its `sdl2` feature is the default and resolves to the same sdl2 as
 # ours, so the pad and key types are one set.
-inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "523a8055575e01adee345bc16f8ed42c20014781" }
+inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "e33376b103bc49ea450eec54c251dfcdb251eb8b" }
 # By rev, not by version: the software backend needs two things 0.11 does not
 # have — the frame's run output, so this crate can paint it in steps of its own,
 # and a damage rect on the painter. Back to a release once 0.12 is published.

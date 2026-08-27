@@ -3418,7 +3418,7 @@ dependencies = [
 [[package]]
 name = "inputbind"
 version = "0.1.0"
-source = "git+https://github.com/mxmgorin/inputbind?rev=523a8055575e01adee345bc16f8ed42c20014781#523a8055575e01adee345bc16f8ed42c20014781"
+source = "git+https://github.com/mxmgorin/inputbind?rev=e33376b103bc49ea450eec54c251dfcdb251eb8b#e33376b103bc49ea450eec54c251dfcdb251eb8b"
 dependencies = [
  "log",
  "sdl2",
