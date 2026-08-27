@@ -48,6 +48,38 @@ export SSL_CERT_FILE="$gamedir/etc/ssl/cacert.pem"
 sed "s|@GAMEDIR@|$gamedir|g" "$gamedir/etc/fonts/fonts.conf.in" > "$gamedir/data/fonts.conf"
 export FONTCONFIG_FILE="$gamedir/data/fonts.conf"
 
+# A boot can come up a year behind, and then every TLS handshake fails with
+# "certificate not valid yet" and not one https page loads. The Flip has an RTC
+# that holds what `hwclock` writes, but nothing in this firmware ever writes it;
+# the Mini Plus has no RTC at all, so there this runs on every boot.
+#
+# Only acted on when the clock is behind something already known to have
+# happened, so a right clock costs nothing. The floor is instant and is enough
+# for a certificate's `notBefore`; the network refines it, in the background,
+# because waiting on a wifi that may not be up yet would stall every launch on a
+# device with no RTC to fall back on.
+NTP_PEER=pool.ntp.org
+clock=ok
+if [ "${RETSURF_CLOCK_FIX:-1}" != 0 ]; then
+  floor=0
+  # `allium.log` first: the firmware writes it every session, so it tracks when
+  # the device was last used rather than when this browser last ran.
+  for f in /mnt/SDCARD/allium.log /mnt/SDCARD/.allium/state \
+           "$gamedir/log.txt" "$gamedir/data/session.toml" "$gamedir/retsurf"; do
+    t=$(date -r "$f" +%s 2>/dev/null) || continue
+    [ "$t" -gt "$floor" ] && floor=$t
+  done
+  if [ "$(date +%s)" -lt "$floor" ]; then
+    date -s "@$floor" >/dev/null 2>&1 && clock=floor
+    # No TLS involved here, so it works even from the wrong year.
+    (
+      timeout -t 20 ntpd -q -n -p "$NTP_PEER" >/dev/null 2>&1 &&
+        echo "retsurf: clock = ntp ($(date -u))" >> "$gamedir/log.txt"
+      hwclock -w -u >/dev/null 2>&1
+    ) &
+  fi
+fi
+
 # 128 MB of RAM against a working set measured in hundreds: without somewhere to
 # page anonymous memory the kernel kills the browser rather than swapping it.
 ZRAM_MB=96
@@ -87,6 +119,7 @@ release_swap() {
 }
 
 {
+  echo "retsurf: clock = $clock ($(date -u))"
   echo "retsurf: swap = $swap_ready"
   free 2>/dev/null || head -3 /proc/meminfo
 } > "$gamedir/log.txt" 2>&1

@@ -66,6 +66,15 @@ Everything writable stays inside the app folder, so removing it removes the lot:
   `SDL_RENDER_DRIVER="Miyoo Mini"` — SDL lists its own software driver ahead of
   the panel's, and what that one draws never arrives. Provenance and licences in
   `lib/README.md`.
+- **The clock.** A boot can come up a year behind, and then no https page loads
+  at all because every certificate is "not valid yet". The Flip has an RTC that
+  keeps what it is given, but nothing in this firmware ever gives it anything;
+  the Mini Plus has no RTC, so there this happens on every boot. The launcher
+  acts only when the clock is behind something already known to have happened,
+  so a right clock costs nothing: it jumps to that floor immediately — enough
+  for a certificate's `notBefore` — and asks the network for the real time in
+  the background, so a wifi that has not associated yet never delays the start.
+  `log.txt` records what it got. `RETSURF_CLOCK_FIX=0` turns it off.
 - **The pad, as keys.** This SDL2 offers no controller mapping and sends key
   presses instead, so `RETSURF_KEYMAP=miyoo` tells the browser to read them as
   the pad — which is what makes the table above work. Without it A, B, X, Y and
