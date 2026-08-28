@@ -400,10 +400,12 @@ struct SoftwareBackend {
     /// Whether the chrome's rectangles keep their corners (see [`corner_rounding`]).
     rounding: bool,
     /// The shapes the chrome now standing in the composition surface was drawn
-    /// from, and the pixels it covers — what [`chrome_survives`] compares the
-    /// new frame against.
+    /// from — what [`chrome_damage`] compares the new frame against — and the
+    /// areas it covers, one per drawn primitive. One enclosing rect instead
+    /// would reach from the toolbar to wherever the cursor is, and call the page
+    /// between them chrome.
     chrome_shapes: Vec<egui::epaint::ClippedShape>,
-    chrome_rect: Option<Rect>,
+    chrome_rects: Vec<Rect>,
     /// Where the last page frame was blitted, for the frames that do not blit
     /// one and still have to clear around it.
     page_rect: Option<Rect>,
@@ -440,7 +442,7 @@ impl SoftwareBackend {
             rendering_ctx,
             rounding: corner_rounding(),
             chrome_shapes: Vec::new(),
-            chrome_rect: None,
+            chrome_rects: Vec::new(),
             page_rect: None,
         })
     }
@@ -461,40 +463,51 @@ impl SoftwareBackend {
             rendering_ctx,
             rounding,
             chrome_shapes,
-            chrome_rect,
+            chrome_rects,
             page_rect,
+            size,
             ..
         } = self;
         let mut timing = CompositeTiming::default();
         let at = Instant::now();
 
-        // The chrome already in the surface stands unless egui asks for another
-        // one, or this frame's page blit is about to write over it.
-        let erased = page_painted && overlaps(*page_rect, *chrome_rect);
-        let redraw = erased || !chrome_unchanged(egui, chrome_shapes);
-        // The page goes down when the browser drew a new frame, and again
-        // whenever the chrome is redrawn: the chrome being replaced may have
-        // covered part of the page, and only the page can take those pixels back.
-        if page_painted || redraw {
-            if let Some(blitted) = blit_page(offscreen, rendering_ctx, page_at) {
+        // The chrome already in the surface stands where egui draws it the same
+        // and this frame's page blit does not write over it.
+        let changed = chrome_damage(egui, chrome_shapes, *size);
+        let erased = page_painted
+            .then(|| covered_chrome(chrome_rects, *page_rect))
+            .flatten();
+        let redraw = union(changed, erased);
+        // The page goes down when the browser drew a new frame, and again under
+        // whatever chrome is being redrawn: the chrome leaving may have covered
+        // part of the page, and only the page can take those pixels back.
+        let restore = (!page_painted).then_some(redraw).flatten();
+        if page_painted || restore.is_some() {
+            if let Some(blitted) = blit_page(offscreen, rendering_ctx, page_at, restore) {
                 *page_rect = Some(blitted);
             }
         }
-        if redraw {
+        if let Some(redraw) = redraw {
             // Only what the page does not cover: on this device the surface is
             // 1.7 MB and clearing all of it before overwriting most of it again
             // is a fifth of the frame's memory traffic for nothing.
-            clear_around(offscreen, *page_rect);
+            clear_around(offscreen, *page_rect, redraw);
         }
         timing.page = at.elapsed();
 
-        if redraw {
-            *chrome_rect = paint_chrome(egui, offscreen, *rounding, chrome_shapes, &mut timing);
-        } else {
+        match redraw {
+            Some(redraw) => paint_chrome(
+                egui,
+                offscreen,
+                *rounding,
+                redraw,
+                (chrome_shapes, chrome_rects),
+                &mut timing,
+            ),
             // The chrome on the surface is this frame's chrome. Drop the output
             // it would have been drawn from — its deltas are empty, or the frame
             // would have been redrawn.
-            let _ = egui.run_output.take();
+            None => drop(egui.run_output.take()),
         }
 
         let at = Instant::now();
@@ -542,7 +555,7 @@ impl SoftwareBackend {
         // The new surface holds neither the chrome nor the page, whatever the
         // shapes say.
         self.chrome_shapes.clear();
-        self.chrome_rect = None;
+        self.chrome_rects.clear();
         self.page_rect = None;
         // `unsafe_textures` (the canvas backend's) makes textures outlive their
         // creator, so the old one has to go by hand.
@@ -560,9 +573,11 @@ fn paint_chrome(
     egui: &mut EguiCanvas<SurfaceContext<'static>>,
     offscreen: &mut Canvas<Surface<'static>>,
     rounding: bool,
-    painted: &mut Vec<egui::epaint::ClippedShape>,
+    damage: Rect,
+    standing: (&mut Vec<egui::epaint::ClippedShape>, &mut Vec<Rect>),
     timing: &mut CompositeTiming,
-) -> Option<Rect> {
+) {
+    let (painted, areas) = standing;
     let pixels_per_point = egui.run_output.pixels_per_point;
     let (mut textures_delta, mut shapes) = egui.run_output.take();
 
@@ -590,68 +605,117 @@ fn paint_chrome(
     }
     timing.textures = at.elapsed();
 
-    let drawn = primitives_bounds(&primitives, pixels_per_point);
+    // Every primitive's area, not just the damaged ones: what stands in the
+    // surface after this is the shapes outside the damage, which did not move,
+    // plus the ones inside it.
+    areas.clear();
+    areas.extend(primitives_areas(&primitives, pixels_per_point));
 
     let at = Instant::now();
     egui.painter
-        .paint_primitives(offscreen, pixels_per_point, primitives);
+        .paint_primitives_within(offscreen, pixels_per_point, primitives, Some(damage));
     timing.chrome = at.elapsed();
 
     for id in textures_delta.free.drain() {
         egui.painter.free_texture(&id);
     }
-    drawn
 }
 
-/// Whether egui's new frame draws what the composition surface already holds:
-/// the same shapes, and no texture change to apply under them. Then the cheapest
-/// chrome is the one already there — on a GPU-less device a scrolling page would
-/// otherwise pay to rasterize a toolbar that did not move.
+/// Where egui's new frame differs from the one already in the composition
+/// surface: `None` when it draws exactly the same, and the whole window when the
+/// two cannot be told apart shape by shape (one holds shapes the other does not,
+/// or a texture changed under both). On a GPU-less device the pixels are the
+/// cost, and a moving cursor or a typed character changes very few of them — so
+/// what the rest of the chrome costs is finding that out.
 #[cfg(feature = "software")]
-fn chrome_unchanged(
+fn chrome_damage(
     egui: &EguiCanvas<SurfaceContext<'static>>,
     painted: &[egui::epaint::ClippedShape],
-) -> bool {
-    egui.run_output.textures_delta.is_empty() && egui.run_output.shapes == painted
-}
-
-/// Whether two rects share a pixel; `false` if either is nothing.
-#[cfg(feature = "software")]
-fn overlaps(a: Option<Rect>, b: Option<Rect>) -> bool {
-    matches!((a, b), (Some(a), Some(b)) if a.has_intersection(b))
-}
-
-/// The pixels `primitives` draw over, `None` if they draw nothing. Their clip
-/// rects would be a cheaper answer and a useless one: a foreground layer is
-/// clipped to the whole window whatever it holds.
-#[cfg(feature = "software")]
-fn primitives_bounds(primitives: &[egui::ClippedPrimitive], pixels_per_point: f32) -> Option<Rect> {
-    let mut bounds: Option<egui::Rect> = None;
-    for primitive in primitives {
-        let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive else {
-            // A paint callback draws through the renderer, which this backend
-            // has none of; the painter logs it and skips it.
-            continue;
-        };
-        if mesh.is_empty() {
-            continue;
-        }
-        let drawn = mesh.calc_bounds().intersect(primitive.clip_rect);
-        if !drawn.is_positive() {
-            continue;
-        }
-        bounds = Some(bounds.map_or(drawn, |b| b.union(drawn)));
+    size: (u32, u32),
+) -> Option<Rect> {
+    let whole = Rect::new(0, 0, size.0, size.1);
+    let fresh = &egui.run_output.shapes;
+    if !egui.run_output.textures_delta.is_empty() || fresh.len() != painted.len() {
+        return Some(whole);
     }
-    let bounds = bounds?;
-    // Outward to whole pixels: a shape that covers part of one still wrote it.
-    let min = (bounds.min * pixels_per_point).floor();
-    let max = (bounds.max * pixels_per_point).ceil();
-    Some(Rect::new(
+    let mut damage: Option<egui::Rect> = None;
+    for (fresh, painted) in fresh.iter().zip(painted) {
+        if fresh == painted {
+            continue;
+        }
+        // Both sides: the shape has to be drawn where it now is, and erased
+        // where it was.
+        for clipped in [fresh, painted] {
+            let bounds = clipped
+                .shape
+                .visual_bounding_rect()
+                .intersect(clipped.clip_rect);
+            if bounds.is_positive() {
+                damage = Some(damage.map_or(bounds, |d| d.union(bounds)));
+            }
+        }
+    }
+    // A point of margin: a shape's visual bounds do not always account for how
+    // far its own antialiasing reaches.
+    to_pixels(damage?.expand(1.0), egui.run_output.pixels_per_point).intersection(whole)
+}
+
+/// The smallest whole pixels covering `rect`: a shape over part of one still
+/// wrote it.
+#[cfg(feature = "software")]
+fn to_pixels(rect: egui::Rect, pixels_per_point: f32) -> Rect {
+    let min = (rect.min * pixels_per_point).floor();
+    let max = (rect.max * pixels_per_point).ceil();
+    Rect::new(
         min.x as i32,
         min.y as i32,
         (max.x - min.x).max(0.0) as u32,
         (max.y - min.y).max(0.0) as u32,
-    ))
+    )
+}
+
+/// The rect covering both, or whichever of them there is.
+#[cfg(feature = "software")]
+fn union(a: Option<Rect>, b: Option<Rect>) -> Option<Rect> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.union(b)),
+        (some, None) | (None, some) => some,
+    }
+}
+
+/// The pixels each of `primitives` draws over. Their clip rects would be a
+/// cheaper answer and a useless one: a foreground layer is clipped to the whole
+/// window whatever it holds.
+#[cfg(feature = "software")]
+fn primitives_areas(
+    primitives: &[egui::ClippedPrimitive],
+    pixels_per_point: f32,
+) -> impl Iterator<Item = Rect> + '_ {
+    primitives.iter().filter_map(move |primitive| {
+        // A paint callback draws through the renderer, which this backend has
+        // none of; the painter logs it and skips it.
+        let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive else {
+            return None;
+        };
+        if mesh.is_empty() {
+            return None;
+        }
+        let drawn = mesh.calc_bounds().intersect(primitive.clip_rect);
+        drawn
+            .is_positive()
+            .then(|| to_pixels(drawn, pixels_per_point))
+    })
+}
+
+/// How much of the chrome the page frame is about to overwrite: the rect
+/// enclosing the parts of it the page reaches, `None` if it reaches none.
+#[cfg(feature = "software")]
+fn covered_chrome(chrome: &[Rect], page: Option<Rect>) -> Option<Rect> {
+    let page = page?;
+    chrome
+        .iter()
+        .filter_map(|area| area.intersection(page))
+        .reduce(|a, b| a.union(b))
 }
 
 /// Square off a shape's corners, recursing into a group. egui triangulates a
@@ -696,16 +760,21 @@ fn build_compose_targets(
     Ok((offscreen, present))
 }
 
-/// Fill everything outside `covered`, which the page has already written. No
-/// rect means nothing was written and the whole surface needs it.
+/// Fill everything within `damage` that `covered` — where the page was written —
+/// does not reach. No page rect means the whole damage needs it.
 #[cfg(feature = "software")]
-fn clear_around(offscreen: &mut Canvas<Surface<'static>>, covered: Option<Rect>) {
+fn clear_around(offscreen: &mut Canvas<Surface<'static>>, covered: Option<Rect>, damage: Rect) {
     offscreen.set_draw_color(CLEAR_COLOR);
+    let clear = |canvas: &mut Canvas<Surface<'static>>| {
+        if let Err(e) = canvas.fill_rect(damage) {
+            log::error!("could not clear the damaged area: {e}");
+        }
+    };
     let Some(page) = covered else {
-        return offscreen.clear();
+        return clear(offscreen);
     };
     let Ok((w, h)) = offscreen.output_size() else {
-        return offscreen.clear();
+        return clear(offscreen);
     };
     let (w, h) = (w as i32, h as i32);
     let strips = [
@@ -724,8 +793,12 @@ fn clear_around(offscreen: &mut Canvas<Surface<'static>>, covered: Option<Rect>)
             page.height(),
         ),
     ];
-    // Zero-sized strips are the common case (the page spans the width); SDL
-    // skips them, so they cost nothing to pass.
+    // Zero-sized strips are the common case (the page spans the width), and so
+    // are strips the damage does not reach; both drop out here.
+    let strips: Vec<Rect> = strips
+        .iter()
+        .filter_map(|strip| strip.intersection(damage))
+        .collect();
     if let Err(e) = offscreen.fill_rects(&strips) {
         log::error!("could not clear around the page: {e}");
     }
@@ -733,13 +806,15 @@ fn clear_around(offscreen: &mut Canvas<Surface<'static>>, covered: Option<Rect>)
 
 /// Copy the page frame into the composition surface at `at`, rows reversed —
 /// swgl leaves it bottom-up, like the GL framebuffer WebRender believes it is
-/// drawing into. Both sides are BGRA, so a row is a memcpy. Returns the rect it
-/// wrote, for [`clear_around`].
+/// drawing into. Both sides are BGRA, so a row is a memcpy. `within` narrows the
+/// copy to a rect, for a frame that only needs the page back under a piece of
+/// chrome. Returns where the page sits, whole, for [`clear_around`].
 #[cfg(feature = "software")]
 fn blit_page(
     offscreen: &mut Canvas<Surface<'static>>,
     page: &SwglRenderingContext,
     at: (i32, i32),
+    within: Option<Rect>,
 ) -> Option<Rect> {
     let frame = page.frame()?;
     let surface = offscreen.surface_mut();
@@ -751,16 +826,30 @@ fn blit_page(
     if w == 0 || h == 0 {
         return None;
     }
+    let whole = Rect::new(x as i32, y as i32, w as u32, h as u32);
+    let Some(copy) = (match within {
+        Some(within) => whole.intersection(within),
+        None => Some(whole),
+    }) else {
+        return Some(whole);
+    };
     let Some(dst) = surface.without_lock_mut() else {
         log::error!("composition surface has no writable pixels");
         return None;
     };
-    let row = w * BYTES_PER_PIXEL;
-    for (dy, src) in frame.rows_top_down().take(h).enumerate() {
-        let at = (y + dy) * pitch + x * BYTES_PER_PIXEL;
-        dst[at..at + row].copy_from_slice(&src[..row]);
+    let skip_rows = (copy.y() - whole.y()) as usize;
+    let from = (copy.x() - whole.x()) as usize * BYTES_PER_PIXEL;
+    let row = copy.width() as usize * BYTES_PER_PIXEL;
+    for (dy, src) in frame
+        .rows_top_down()
+        .skip(skip_rows)
+        .take(copy.height() as usize)
+        .enumerate()
+    {
+        let at = (copy.y() as usize + dy) * pitch + copy.x() as usize * BYTES_PER_PIXEL;
+        dst[at..at + row].copy_from_slice(&src[from..from + row]);
     }
-    Some(Rect::new(x as i32, y as i32, w as u32, h as u32))
+    Some(whole)
 }
 
 fn build_window(
