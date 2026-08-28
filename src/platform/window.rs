@@ -396,6 +396,8 @@ struct SoftwareBackend {
     size: (u32, u32),
     egui: EguiCanvas<SurfaceContext<'static>>,
     rendering_ctx: Rc<SwglRenderingContext>,
+    /// Whether the chrome's rectangles keep their corners (see [`corner_rounding`]).
+    rounding: bool,
 }
 
 #[cfg(feature = "software")]
@@ -427,6 +429,7 @@ impl SoftwareBackend {
             size,
             egui,
             rendering_ctx,
+            rounding: corner_rounding(),
         })
     }
 
@@ -439,6 +442,7 @@ impl SoftwareBackend {
             present,
             egui,
             rendering_ctx,
+            rounding,
             ..
         } = self;
         let mut timing = CompositeTiming::default();
@@ -451,7 +455,7 @@ impl SoftwareBackend {
         clear_around(offscreen, covered);
         timing.page = at.elapsed();
 
-        paint_chrome(egui, offscreen, &mut timing);
+        paint_chrome(egui, offscreen, *rounding, &mut timing);
 
         let at = Instant::now();
         let surface = offscreen.surface();
@@ -510,10 +514,17 @@ impl SoftwareBackend {
 fn paint_chrome(
     egui: &mut EguiCanvas<SurfaceContext<'static>>,
     offscreen: &mut Canvas<Surface<'static>>,
+    rounding: bool,
     timing: &mut CompositeTiming,
 ) {
     let pixels_per_point = egui.run_output.pixels_per_point;
-    let (mut textures_delta, shapes) = egui.run_output.take();
+    let (mut textures_delta, mut shapes) = egui.run_output.take();
+
+    if !rounding {
+        for clipped in &mut shapes {
+            square_corners(&mut clipped.shape);
+        }
+    }
 
     let at = Instant::now();
     let primitives = egui.ctx.tessellate(shapes, pixels_per_point);
@@ -536,6 +547,30 @@ fn paint_chrome(
     for id in textures_delta.free.drain() {
         egui.painter.free_texture(&id);
     }
+}
+
+/// Square off a shape's corners, recursing into a group. egui triangulates a
+/// rounded rectangle whole and SDL rasterizes a triangle at some fifteen times
+/// the per-pixel cost of a rectangle fill, so the radius decides which path the
+/// whole shape takes — there is no cheaper radius, only none.
+#[cfg(feature = "software")]
+fn square_corners(shape: &mut egui::Shape) {
+    match shape {
+        egui::Shape::Rect(rect) => rect.corner_radius = egui::epaint::CornerRadius::ZERO,
+        egui::Shape::Vec(shapes) => shapes.iter_mut().for_each(square_corners),
+        _ => {}
+    }
+}
+
+/// Whether the chrome keeps its rounded corners. Off on this backend, where they
+/// are over half of what rasterizing the chrome costs (see [`square_corners`]);
+/// `RETSURF_ROUNDING=1` puts them back, which is how the two are compared on one
+/// page. Text and circles are unaffected either way.
+#[cfg(feature = "software")]
+fn corner_rounding() -> bool {
+    let on = std::env::var("RETSURF_ROUNDING").is_ok_and(|v| v != "0");
+    log::info!("egui corner rounding: {on}");
+    on
 }
 
 /// The surface the frame is composed in and the texture it is presented through.
