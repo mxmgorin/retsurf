@@ -324,7 +324,7 @@ impl App {
             return;
         }
         let at = self.frame_timer.mark();
-        let timing = self.ui.draw(&mut self.window);
+        let timing = self.ui.draw(&mut self.window, page_painted);
         self.frame_timer.chrome_done(at, timing);
     }
 

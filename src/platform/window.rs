@@ -203,21 +203,22 @@ impl AppWindow {
 
     /// Paint the last [`Self::run_ui`] and present it. `page_at` is where the web
     /// view's top-left sits in physical pixels; the software backend composites
-    /// the page frame there, under the chrome.
+    /// the page frame there, under the chrome, and leaves the one already there
+    /// alone unless `page_painted` says the browser drew a new one.
     /// Returns where the time went, on the backend that has anything to say
     /// about it; the GL one leaves it to the driver.
-    pub fn paint(&mut self, page_at: (i32, i32)) -> Option<CompositeTiming> {
+    pub fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming> {
         // The GL backend draws the page as a texture in the same rect, so only
         // the software one has any use for where that rect is.
         #[cfg(not(feature = "software"))]
-        let _ = page_at;
+        let _ = (page_at, page_painted);
         match &mut self.backend {
             Backend::Gl(b) => {
                 b.paint();
                 None
             }
             #[cfg(feature = "software")]
-            Backend::Software(b) => Some(b.paint(page_at, self.ctx_init)),
+            Backend::Software(b) => Some(b.paint(page_at, page_painted, self.ctx_init)),
         }
     }
 
@@ -398,6 +399,14 @@ struct SoftwareBackend {
     rendering_ctx: Rc<SwglRenderingContext>,
     /// Whether the chrome's rectangles keep their corners (see [`corner_rounding`]).
     rounding: bool,
+    /// The shapes the chrome now standing in the composition surface was drawn
+    /// from, and the pixels it covers — what [`chrome_survives`] compares the
+    /// new frame against.
+    chrome_shapes: Vec<egui::epaint::ClippedShape>,
+    chrome_rect: Option<Rect>,
+    /// Where the last page frame was blitted, for the frames that do not blit
+    /// one and still have to clear around it.
+    page_rect: Option<Rect>,
 }
 
 #[cfg(feature = "software")]
@@ -430,10 +439,18 @@ impl SoftwareBackend {
             egui,
             rendering_ctx,
             rounding: corner_rounding(),
+            chrome_shapes: Vec::new(),
+            chrome_rect: None,
+            page_rect: None,
         })
     }
 
-    fn paint(&mut self, page_at: (i32, i32), ctx_init: fn(&egui::Context)) -> CompositeTiming {
+    fn paint(
+        &mut self,
+        page_at: (i32, i32),
+        page_painted: bool,
+        ctx_init: fn(&egui::Context),
+    ) -> CompositeTiming {
         self.resize_compose_targets(ctx_init);
 
         let Self {
@@ -443,19 +460,42 @@ impl SoftwareBackend {
             egui,
             rendering_ctx,
             rounding,
+            chrome_shapes,
+            chrome_rect,
+            page_rect,
             ..
         } = self;
         let mut timing = CompositeTiming::default();
         let at = Instant::now();
 
-        // Only what the page does not cover: on this device the surface is
-        // 1.7 MB and clearing all of it before overwriting most of it again is
-        // a fifth of the frame's memory traffic for nothing.
-        let covered = blit_page(offscreen, rendering_ctx, page_at);
-        clear_around(offscreen, covered);
+        // The chrome already in the surface stands unless egui asks for another
+        // one, or this frame's page blit is about to write over it.
+        let erased = page_painted && overlaps(*page_rect, *chrome_rect);
+        let redraw = erased || !chrome_unchanged(egui, chrome_shapes);
+        // The page goes down when the browser drew a new frame, and again
+        // whenever the chrome is redrawn: the chrome being replaced may have
+        // covered part of the page, and only the page can take those pixels back.
+        if page_painted || redraw {
+            if let Some(blitted) = blit_page(offscreen, rendering_ctx, page_at) {
+                *page_rect = Some(blitted);
+            }
+        }
+        if redraw {
+            // Only what the page does not cover: on this device the surface is
+            // 1.7 MB and clearing all of it before overwriting most of it again
+            // is a fifth of the frame's memory traffic for nothing.
+            clear_around(offscreen, *page_rect);
+        }
         timing.page = at.elapsed();
 
-        paint_chrome(egui, offscreen, *rounding, &mut timing);
+        if redraw {
+            *chrome_rect = paint_chrome(egui, offscreen, *rounding, chrome_shapes, &mut timing);
+        } else {
+            // The chrome on the surface is this frame's chrome. Drop the output
+            // it would have been drawn from — its deltas are empty, or the frame
+            // would have been redrawn.
+            let _ = egui.run_output.take();
+        }
 
         let at = Instant::now();
         let surface = offscreen.surface();
@@ -499,6 +539,11 @@ impl SoftwareBackend {
         ctx_init(&self.egui.ctx);
         apply_feathering(&self.egui.ctx, true);
         self.offscreen = offscreen;
+        // The new surface holds neither the chrome nor the page, whatever the
+        // shapes say.
+        self.chrome_shapes.clear();
+        self.chrome_rect = None;
+        self.page_rect = None;
         // `unsafe_textures` (the canvas backend's) makes textures outlive their
         // creator, so the old one has to go by hand.
         let stale = std::mem::replace(&mut self.present, present);
@@ -515,10 +560,16 @@ fn paint_chrome(
     egui: &mut EguiCanvas<SurfaceContext<'static>>,
     offscreen: &mut Canvas<Surface<'static>>,
     rounding: bool,
+    painted: &mut Vec<egui::epaint::ClippedShape>,
     timing: &mut CompositeTiming,
-) {
+) -> Option<Rect> {
     let pixels_per_point = egui.run_output.pixels_per_point;
     let (mut textures_delta, mut shapes) = egui.run_output.take();
+
+    // Kept as egui gave them, so the next frame's comparison is like for like;
+    // squaring is a function of the shapes and cannot make two frames differ.
+    painted.clear();
+    painted.extend_from_slice(&shapes);
 
     if !rounding {
         for clipped in &mut shapes {
@@ -539,6 +590,8 @@ fn paint_chrome(
     }
     timing.textures = at.elapsed();
 
+    let drawn = primitives_bounds(&primitives, pixels_per_point);
+
     let at = Instant::now();
     egui.painter
         .paint_primitives(offscreen, pixels_per_point, primitives);
@@ -547,6 +600,58 @@ fn paint_chrome(
     for id in textures_delta.free.drain() {
         egui.painter.free_texture(&id);
     }
+    drawn
+}
+
+/// Whether egui's new frame draws what the composition surface already holds:
+/// the same shapes, and no texture change to apply under them. Then the cheapest
+/// chrome is the one already there — on a GPU-less device a scrolling page would
+/// otherwise pay to rasterize a toolbar that did not move.
+#[cfg(feature = "software")]
+fn chrome_unchanged(
+    egui: &EguiCanvas<SurfaceContext<'static>>,
+    painted: &[egui::epaint::ClippedShape],
+) -> bool {
+    egui.run_output.textures_delta.is_empty() && egui.run_output.shapes == painted
+}
+
+/// Whether two rects share a pixel; `false` if either is nothing.
+#[cfg(feature = "software")]
+fn overlaps(a: Option<Rect>, b: Option<Rect>) -> bool {
+    matches!((a, b), (Some(a), Some(b)) if a.has_intersection(b))
+}
+
+/// The pixels `primitives` draw over, `None` if they draw nothing. Their clip
+/// rects would be a cheaper answer and a useless one: a foreground layer is
+/// clipped to the whole window whatever it holds.
+#[cfg(feature = "software")]
+fn primitives_bounds(primitives: &[egui::ClippedPrimitive], pixels_per_point: f32) -> Option<Rect> {
+    let mut bounds: Option<egui::Rect> = None;
+    for primitive in primitives {
+        let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive else {
+            // A paint callback draws through the renderer, which this backend
+            // has none of; the painter logs it and skips it.
+            continue;
+        };
+        if mesh.is_empty() {
+            continue;
+        }
+        let drawn = mesh.calc_bounds().intersect(primitive.clip_rect);
+        if !drawn.is_positive() {
+            continue;
+        }
+        bounds = Some(bounds.map_or(drawn, |b| b.union(drawn)));
+    }
+    let bounds = bounds?;
+    // Outward to whole pixels: a shape that covers part of one still wrote it.
+    let min = (bounds.min * pixels_per_point).floor();
+    let max = (bounds.max * pixels_per_point).ceil();
+    Some(Rect::new(
+        min.x as i32,
+        min.y as i32,
+        (max.x - min.x).max(0.0) as u32,
+        (max.y - min.y).max(0.0) as u32,
+    ))
 }
 
 /// Square off a shape's corners, recursing into a group. egui triangulates a

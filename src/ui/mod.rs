@@ -1341,6 +1341,7 @@ impl AppUi {
     pub fn draw(
         &mut self,
         window: &mut AppWindow,
+        page_painted: bool,
     ) -> Option<crate::platform::window::CompositeTiming> {
         // Where the software backend composites the page frame; the GL backend
         // draws it as a texture in the same rect and ignores this.
@@ -1349,7 +1350,7 @@ impl AppUi {
             (self.webview_rect.left() * ppp).round() as i32,
             (self.webview_rect.top() * ppp).round() as i32,
         );
-        let timing = window.paint(page_at);
+        let timing = window.paint(page_at, page_painted);
         self.repaint_pending = false;
         timing
     }
