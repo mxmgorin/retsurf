@@ -7,7 +7,7 @@ use sdl2::{Sdl, VideoSubsystem};
 use servo::RenderingContext;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(feature = "software")]
 use crate::platform::render::{SwglRenderingContext, BYTES_PER_PIXEL};
@@ -21,6 +21,9 @@ use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Canvas, Texture, WindowCanvas};
 #[cfg(feature = "software")]
 use sdl2::surface::{Surface, SurfaceContext};
+// Only the software backend times its own steps; GL leaves that to the driver.
+#[cfg(feature = "software")]
+use std::time::Instant;
 
 /// swgl writes its framebuffer as BGRA bytes, which is what SDL calls
 /// `ARGB8888`. Composing in that format keeps the page a straight row copy.
@@ -31,14 +34,18 @@ const COMPOSE_FORMAT: PixelFormatEnum = PixelFormatEnum::ARGB8888;
 #[cfg(feature = "software")]
 const CLEAR_COLOR: Color = Color::BLACK;
 
-/// Where a software frame's time went. Four steps over the same 1.7 MB surface,
-/// and which of them dominates decides what is worth optimising next — so the
+/// Where a software frame's time went, step by step over the same 1.7 MB
+/// surface. Which step dominates decides what is worth optimising next — so the
 /// split is measured rather than guessed (`[debug] frame_timing`).
 #[derive(Default, Clone, Copy)]
 pub struct CompositeTiming {
     /// Copying the page under the chrome, and clearing what it does not cover.
     pub page: Duration,
-    /// egui, rasterized by SDL's software renderer.
+    /// egui's shapes into triangles.
+    pub tessellate: Duration,
+    /// egui's texture deltas (the font atlas, mostly) into SDL textures.
+    pub textures: Duration,
+    /// Those triangles, rasterized by SDL's software renderer.
     pub chrome: Duration,
     /// The composed surface into the presentation texture.
     pub upload: Duration,
@@ -49,6 +56,8 @@ pub struct CompositeTiming {
 impl CompositeTiming {
     pub fn add(&mut self, other: Self) {
         self.page += other.page;
+        self.tessellate += other.tessellate;
+        self.textures += other.textures;
         self.chrome += other.chrome;
         self.upload += other.upload;
         self.present += other.present;
@@ -442,9 +451,7 @@ impl SoftwareBackend {
         clear_around(offscreen, covered);
         timing.page = at.elapsed();
 
-        let at = Instant::now();
-        egui.paint(offscreen);
-        timing.chrome = at.elapsed();
+        paint_chrome(egui, offscreen, &mut timing);
 
         let at = Instant::now();
         let surface = offscreen.surface();
@@ -493,6 +500,41 @@ impl SoftwareBackend {
         let stale = std::mem::replace(&mut self.present, present);
         unsafe { stale.destroy() };
         self.size = size;
+    }
+}
+
+/// What [`EguiCanvas::paint`] does, taken apart so each step is timed on its
+/// own: the chrome is most of a GPU-less frame, and one number for it does not
+/// say whether the cost is the triangles or the pixels.
+#[cfg(feature = "software")]
+fn paint_chrome(
+    egui: &mut EguiCanvas<SurfaceContext<'static>>,
+    offscreen: &mut Canvas<Surface<'static>>,
+    timing: &mut CompositeTiming,
+) {
+    let pixels_per_point = egui.run_output.pixels_per_point;
+    let (mut textures_delta, shapes) = egui.run_output.take();
+
+    let at = Instant::now();
+    let primitives = egui.ctx.tessellate(shapes, pixels_per_point);
+    timing.tessellate = at.elapsed();
+
+    let at = Instant::now();
+    // Drained, not dropped: egui asserts that every delta was applied.
+    for (id, deltas) in textures_delta.set.drain() {
+        for delta in deltas {
+            egui.painter.set_texture(id, &delta);
+        }
+    }
+    timing.textures = at.elapsed();
+
+    let at = Instant::now();
+    egui.painter
+        .paint_primitives(offscreen, pixels_per_point, primitives);
+    timing.chrome = at.elapsed();
+
+    for id in textures_delta.free.drain() {
+        egui.painter.free_texture(&id);
     }
 }
 

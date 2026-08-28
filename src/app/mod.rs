@@ -233,8 +233,10 @@ impl App {
             let page_painted = self.browser.paint();
             self.frame_timer.page_done(at);
 
+            let at = self.frame_timer.mark();
             self.ui
                 .update(&mut self.window, &mut self.browser, &mut commands);
+            self.frame_timer.ui_done(at);
 
             // Android: raise/hide the system soft keyboard to match focus. The
             // address bar (egui) and page text fields (Servo) are the two sinks;
@@ -350,7 +352,12 @@ const FRAME_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 struct FrameTimer {
     enabled: bool,
     frames: u32,
+    /// Loop passes that built the UI, which is more than `frames`: a pass whose
+    /// picture came out identical is not drawn (see [`AppUi::take_frame_dirty`]).
+    passes: u32,
     page: Duration,
+    /// Building egui's shapes — the layout pass, before anything is rasterized.
+    ui: Duration,
     chrome: Duration,
     /// The software backend's own split of `chrome`; `None` on GL, which leaves
     /// the work to the driver and has nothing to report.
@@ -363,7 +370,9 @@ impl FrameTimer {
         Self {
             enabled,
             frames: 0,
+            passes: 0,
             page: Duration::ZERO,
+            ui: Duration::ZERO,
             chrome: Duration::ZERO,
             composite: None,
             since: Instant::now(),
@@ -381,6 +390,14 @@ impl FrameTimer {
     fn page_done(&mut self, at: Option<Instant>) {
         if let Some(at) = at {
             self.page += at.elapsed();
+        }
+    }
+
+    #[inline]
+    fn ui_done(&mut self, at: Option<Instant>) {
+        if let Some(at) = at {
+            self.ui += at.elapsed();
+            self.passes += 1;
         }
     }
 
@@ -414,10 +431,15 @@ impl FrameTimer {
             return;
         }
         let per = |total: Duration| total.as_secs_f32() * 1000.0 / self.frames as f32;
+        // The UI pass runs whether or not the frame is drawn, so it averages over
+        // the passes rather than the frames.
+        let per_pass = |total: Duration| total.as_secs_f32() * 1000.0 / self.passes.max(1) as f32;
         let split = match self.composite {
             Some(c) => format!(
-                " [page {:.1} chrome {:.1} upload {:.1} present {:.1}]",
+                " [page {:.1} tess {:.1} tex {:.1} raster {:.1} upload {:.1} present {:.1}]",
                 per(c.page),
+                per(c.tessellate),
+                per(c.textures),
                 per(c.chrome),
                 per(c.upload),
                 per(c.present)
@@ -425,10 +447,12 @@ impl FrameTimer {
             None => String::new(),
         };
         log::info!(
-            "frame timing: page {:.1} ms, chrome+present {:.1} ms ({} frames){}",
+            "frame timing: page {:.1} ms, ui {:.1} ms, chrome+present {:.1} ms ({} frames, {} passes){}",
             per(self.page),
+            per_pass(self.ui),
             per(self.chrome),
             self.frames,
+            self.passes,
             split
         );
         *self = Self::new(self.enabled);
