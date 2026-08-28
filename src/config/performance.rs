@@ -43,6 +43,10 @@ token_enum! {
         default Auto;
         /// Pick a tier from the build target and detected RAM (the default).
         Auto => "auto", "Auto",
+        /// Below the floor (~128 MB, the Miyoo Mini family): `Embedded` with a
+        /// quarter of the JS heap and no slack before a collection, for a device
+        /// that browses on swap.
+        Micro => "micro", "Micro",
         /// Tightest floor (~512 MB, sub-1 GB boards): baseline JIT only, single
         /// thread, minimal caches, foreground tab only.
         Embedded => "embedded", "Embedded",

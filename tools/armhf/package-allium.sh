@@ -124,7 +124,7 @@ chmod 755 "$app/launch.sh" "$app/ports/Retsurf.port/launch.sh"
 # package never costs the user their settings.
 cat > "$app/etc/config.toml" <<'EOF'
 [performance]
-memory_profile = "embedded"
+memory_profile = "micro"
 
 [display]
 software_render = true
