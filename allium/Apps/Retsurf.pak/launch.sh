@@ -49,9 +49,16 @@ export SSL_CERT_FILE="$gamedir/etc/ssl/cacert.pem"
 
 # Neither firmware ships fontconfig or a single font, so the package brings both
 # and this is the only configuration fontconfig will see. The path is baked in
-# here because it is only known once the app is installed.
-sed "s|@GAMEDIR@|$gamedir|g" "$gamedir/etc/fonts/fonts.conf.in" > "$gamedir/data/fonts.conf"
-export FONTCONFIG_FILE="$gamedir/data/fonts.conf"
+# here because it is only known once the app is installed — so it is rewritten
+# when the template is newer than it, and when the card has been mounted
+# somewhere else since.
+fonts_in="$gamedir/etc/fonts/fonts.conf.in"
+fonts_conf="$gamedir/data/fonts.conf"
+if [ ! -s "$fonts_conf" ] || [ "$fonts_in" -nt "$fonts_conf" ] ||
+   ! grep -q "$gamedir" "$fonts_conf"; then
+  sed "s|@GAMEDIR@|$gamedir|g" "$fonts_in" > "$fonts_conf"
+fi
+export FONTCONFIG_FILE="$fonts_conf"
 
 # A boot can come up a year behind, and then every TLS handshake fails with
 # "certificate not valid yet" and not one https page loads. The Flip has an RTC
