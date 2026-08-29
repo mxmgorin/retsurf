@@ -59,42 +59,16 @@ rm -rf "$dist"
 mkdir -p "$app/lib/fallback" "$app/fonts" "$app/etc/fonts" "$app/etc/ssl"
 
 # The runtime the toolchain and Debian owe us, collected in the build image so
-# the C++ runtime is the one this compiler pairs with.
-docker run --rm -i --network host -v "$app/lib":/out \
-  -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
-  "$image" bash -euxs <<'CONTAINER'
-    tc=/opt/miyoomini-toolchain/arm-linux-gnueabihf
-    # The C++ runtime this compiler pairs with, plus its libgcc. The glob ends on
-    # a digit so it cannot also take the `-gdb.py` sitting beside it.
-    stdcxx=$(ls "$tc/lib"/libstdc++.so.6.[0-9]*[0-9])
-    cp -a "$stdcxx" "$tc/libc/lib/libgcc_s.so.1" /out/
-    # A copy, not a link: the card is FAT32, which has neither symlinks nor
-    # hardlinks, and the soname is the name the loader actually opens.
-    cp -a "$stdcxx" /out/libstdc++.so.6
-
-    # buster is the glibc-2.28 era, which is what the device runs.
-    pool=http://archive.debian.org/debian/pool/main
-    cd /tmp && mkdir -p debs && cd debs
-    curl --retry 5 -fsSLO "$pool/f/fontconfig/libfontconfig1_2.13.1-2_armhf.deb"
-    curl --retry 5 -fsSLO "$pool/e/expat/libexpat1_2.2.6-2+deb10u4_armhf.deb"
-    curl --retry 5 -fsSLO "$pool/u/util-linux/libuuid1_2.33.1-0.1_armhf.deb"
-    for f in *.deb; do dpkg -x "$f" /tmp/fc; done
-    # By name, not by glob: the packages also carry a wide-character expat the
-    # binary never names.
-    for name in libfontconfig.so.1 libexpat.so.1 libuuid.so.1; do
-      real=$(readlink -f "$(find /tmp/fc -name "$name" | head -1)")
-      cp -a "$real" /out/
-      cp -a "$real" "/out/$name"
-    done
-
-    # The toolchain ships its runtime with debug info -- 19 MB of it, and none of
-    # it loaded at run time. Regular files only: strip would replace a symlink
-    # with a copy of its target.
-    find /out -maxdepth 1 -type f -name '*.so*' \
-      -exec /opt/miyoomini-toolchain/bin/arm-linux-gnueabihf-strip {} +
-
-    chown -R "$HOST_UID:$HOST_GID" /out
-CONTAINER
+# the C++ runtime is the one this compiler pairs with. `RETSURF_NO_DOCKER=1` runs
+# the same script directly, for a machine that already has the toolchain unpacked
+# — which is what CI is.
+if [ "${RETSURF_NO_DOCKER:-0}" = 1 ]; then
+  "$here/runtime-libs.sh" "$app/lib"
+else
+  docker run --rm -i --network host -v "$app/lib":/out \
+    -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
+    "$image" bash -s /out < "$here/runtime-libs.sh"
+fi
 
 cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5" "$app/lib/"
 cp -a "$sdl_lib/fallback/libGLESv2.so" "$sdl_lib/fallback/libshmvar.so" "$app/lib/fallback/"
