@@ -97,6 +97,11 @@ chmod 755 "$app/launch.sh" "$app/ports/Retsurf.port/launch.sh"
 # the launcher installs it only when there is no config to keep, so updating the
 # package never costs the user their settings.
 cat > "$app/etc/config.toml" <<'EOF'
+[browser]
+# One tab: a second one is a second engine's worth of memory on a device that
+# already browses out of swap, and every navigation replaces rather than stacks.
+max_tabs = 1
+
 [performance]
 memory_profile = "micro"
 
