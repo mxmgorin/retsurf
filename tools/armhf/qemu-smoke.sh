@@ -4,8 +4,9 @@
 # plus the Miyoo SDL2 build that retleaf already carries.
 #
 # It rules out a broken cross build, nothing more — qemu has no panel, no MI
-# hardware and no memory pressure. Expect it to reach window creation and then
-# fail asking for a GL context, until the software renderer exists.
+# hardware and no memory pressure. Expect it to fall back past GL (the driver
+# refuses the attributes), bring up swgl and WebRender, and then die in the
+# panel driver it has no hardware for. Anything short of that is the build.
 #
 # Runs inside the build image, so it wants three mounts:
 #

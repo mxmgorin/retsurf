@@ -2,7 +2,8 @@ use crate::config::DisplayConfig;
 use crate::platform::render::SdlRenderingContext;
 use egui_sdl2::{egui, EguiGlow, EventResponse};
 use gleam::gl::Gl;
-use sdl2::video::{GLContext, GLProfile, WindowBuilder};
+use sdl2::sys;
+use sdl2::video::{GLContext, WindowBuilder};
 use sdl2::{Sdl, VideoSubsystem};
 use servo::RenderingContext;
 use std::rc::Rc;
@@ -288,6 +289,21 @@ fn build_backend(video: &VideoSubsystem, config: &DisplayConfig) -> Result<Backe
     GlBackend::new(video, config).map(|b| Backend::Gl(Box::new(b)))
 }
 
+/// Ask SDL for one GL attribute, and let a refusal be an error. The `gl_attr`
+/// setters panic instead, which on a driver with no GL at all — the Miyoo's —
+/// ends the process at the first attribute rather than falling back to software,
+/// and `panic = "abort"` gives nothing to fall back from.
+fn set_gl_attr(attr: sys::SDL_GLattr, value: i32) -> Result<(), String> {
+    if unsafe { sys::SDL_GL_SetAttribute(attr, value) } != 0 {
+        return Err(format!(
+            "driver refused GL attribute {}: {}",
+            attr as i32,
+            sdl2::get_error()
+        ));
+    }
+    Ok(())
+}
+
 /// Everything through SDL2's single GL/GLES context: WebRender renders into an
 /// FBO, egui draws that FBO's colour texture into the window.
 struct GlBackend {
@@ -304,18 +320,16 @@ struct GlBackend {
 
 impl GlBackend {
     fn new(video_subsystem: &VideoSubsystem, config: &DisplayConfig) -> Result<Self, String> {
-        {
-            let gl_attr = video_subsystem.gl_attr();
-            if config.use_gles {
-                // Mali blobs on RK3326/RK3566 expose GLES 3.2; WebRender needs >= 3.0.
-                gl_attr.set_context_profile(GLProfile::GLES);
-                gl_attr.set_context_version(3, 0);
-            } else {
-                gl_attr.set_context_profile(GLProfile::Core);
-                gl_attr.set_context_version(3, 2);
-            }
-            gl_attr.set_double_buffer(true);
-        }
+        // Mali blobs on RK3326/RK3566 expose GLES 3.2; WebRender needs >= 3.0.
+        let (profile, minor) = if config.use_gles {
+            (sys::SDL_GLprofile::SDL_GL_CONTEXT_PROFILE_ES, 0)
+        } else {
+            (sys::SDL_GLprofile::SDL_GL_CONTEXT_PROFILE_CORE, 2)
+        };
+        set_gl_attr(sys::SDL_GLattr::SDL_GL_CONTEXT_PROFILE_MASK, profile as i32)?;
+        set_gl_attr(sys::SDL_GLattr::SDL_GL_CONTEXT_MAJOR_VERSION, 3)?;
+        set_gl_attr(sys::SDL_GLattr::SDL_GL_CONTEXT_MINOR_VERSION, minor)?;
+        set_gl_attr(sys::SDL_GLattr::SDL_GL_DOUBLEBUFFER, 1)?;
 
         let mut window = build_window(video_subsystem, config, true)?;
         set_window_icon(&mut window);
