@@ -423,6 +423,10 @@ struct SoftwareBackend {
     /// Where the last page frame was blitted, for the frames that do not blit
     /// one and still have to clear around it.
     page_rect: Option<Rect>,
+    /// What the frame before this one changed on the panel (see the present
+    /// step), and whether to send the panel less than a whole frame at all.
+    last_changed: Option<Rect>,
+    partial: bool,
 }
 
 #[cfg(feature = "software")]
@@ -458,6 +462,8 @@ impl SoftwareBackend {
             chrome_shapes: Vec::new(),
             chrome_rects: Vec::new(),
             page_rect: None,
+            last_changed: None,
+            partial: partial_present(),
         })
     }
 
@@ -479,6 +485,8 @@ impl SoftwareBackend {
             chrome_shapes,
             chrome_rects,
             page_rect,
+            last_changed,
+            partial,
             size,
             ..
         } = self;
@@ -524,24 +532,43 @@ impl SoftwareBackend {
             None => drop(egui.run_output.take()),
         }
 
+        // What of the panel this frame changes — and what the frame before it
+        // changed, because a driver that flips between two buffers is about to
+        // show the one written two frames ago. `None` is a frame identical to
+        // the one already on the panel, which is worth not sending at all.
+        let changed = union(redraw, page_painted.then_some(*page_rect).flatten());
+        let region = if *partial {
+            union(changed, *last_changed)
+        } else {
+            Some(Rect::new(0, 0, size.0, size.1))
+        };
+        *last_changed = changed;
+
         let at = Instant::now();
         let surface = offscreen.surface();
         let pitch = surface.pitch() as usize;
-        match surface.without_lock() {
-            Some(pixels) => {
-                if let Err(e) = present.update(None, pixels, pitch) {
+        match (region, surface.without_lock()) {
+            (Some(region), Some(pixels)) => {
+                // `update` reads `region.height()` rows of `region.width()`
+                // pixels, a pitch apart, so it wants the surface from that
+                // rect's own first pixel.
+                let from = region.y() as usize * pitch + region.x() as usize * BYTES_PER_PIXEL;
+                if let Err(e) = present.update(Some(region), &pixels[from..], pitch) {
                     log::error!("could not upload the composed frame: {e}");
                 }
             }
-            None => log::error!("composition surface has no readable pixels"),
+            (Some(_), None) => log::error!("composition surface has no readable pixels"),
+            (None, _) => {}
         }
         timing.upload = at.elapsed();
 
         let at = Instant::now();
-        if let Err(e) = canvas.copy(present, None, None) {
-            log::error!("could not blit the composed frame: {e}");
+        if let Some(region) = region {
+            if let Err(e) = canvas.copy(present, Some(region), Some(region)) {
+                log::error!("could not blit the composed frame: {e}");
+            }
+            canvas.present();
         }
-        canvas.present();
         timing.present = at.elapsed();
         timing
     }
@@ -571,6 +598,7 @@ impl SoftwareBackend {
         self.chrome_shapes.clear();
         self.chrome_rects.clear();
         self.page_rect = None;
+        self.last_changed = None;
         // `unsafe_textures` (the canvas backend's) makes textures outlive their
         // creator, so the old one has to go by hand.
         let stale = std::mem::replace(&mut self.present, present);
@@ -743,6 +771,19 @@ fn square_corners(shape: &mut egui::Shape) {
         egui::Shape::Vec(shapes) => shapes.iter_mut().for_each(square_corners),
         _ => {}
     }
+}
+
+/// Whether the panel may be sent less than a whole frame. On by default: the
+/// copy is what a frame costs once the chrome stops being redrawn, and most
+/// frames change a cursor's worth of it. `RETSURF_PARTIAL_PRESENT=0` sends whole
+/// frames again — the answer if a driver's buffering shows stale pixels.
+#[cfg(feature = "software")]
+fn partial_present() -> bool {
+    let on = std::env::var("RETSURF_PARTIAL_PRESENT")
+        .ok()
+        .is_none_or(|v| v != "0");
+    log::info!("partial present: {on}");
+    on
 }
 
 /// Whether the chrome keeps its rounded corners. Off on this backend, where they
