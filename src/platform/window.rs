@@ -555,16 +555,22 @@ impl SoftwareBackend {
             None => drop(egui.run_output.take()),
         }
 
-        // What of the panel this frame changes — and what the frame before it
-        // changed, because a driver that flips between two buffers is about to
-        // show the one written two frames ago. `None` is a frame identical to
-        // the one already on the panel, which is worth not sending at all.
+        // What this frame changes decides whether the panel is sent anything at
+        // all — `None` is a frame identical to the one already on it, and
+        // sending that costs the whole copy for nothing. What it is *sent* is
+        // the whole frame: the Miyoo's driver puts a partial copy somewhere
+        // other than where it was asked to, which arrives as a picture in
+        // pieces. `RETSURF_PARTIAL_PRESENT=1` sends the rect instead, together
+        // with the frame before it — a driver that flips between two buffers is
+        // about to show the one written two frames ago.
         let changed = union(redraw, page_painted.then_some(*page_rect).flatten());
-        let region = if *partial {
-            union(changed, *last_changed)
-        } else {
-            Some(Rect::new(0, 0, size.0, size.1))
-        };
+        let region = changed.map(|changed| {
+            if *partial {
+                union(Some(changed), *last_changed).unwrap_or(changed)
+            } else {
+                Rect::new(0, 0, size.0, size.1)
+            }
+        });
         *last_changed = changed;
 
         let at = Instant::now();
@@ -796,15 +802,14 @@ fn square_corners(shape: &mut egui::Shape) {
     }
 }
 
-/// Whether the panel may be sent less than a whole frame. On by default: the
-/// copy is what a frame costs once the chrome stops being redrawn, and most
-/// frames change a cursor's worth of it. `RETSURF_PARTIAL_PRESENT=0` sends whole
-/// frames again — the answer if a driver's buffering shows stale pixels.
+/// Whether the copy to the panel may be clipped to what changed. **Off**: the
+/// Miyoo Mini's `Miyoo Mini` renderer draws such a copy in the wrong place, and
+/// the frame arrives in pieces. A frame that changed nothing is still skipped
+/// whole, which is where most of the saving was anyway.
+/// `RETSURF_PARTIAL_PRESENT=1` asks for the clipped copy on a driver that can.
 #[cfg(feature = "software")]
 fn partial_present() -> bool {
-    let on = std::env::var("RETSURF_PARTIAL_PRESENT")
-        .ok()
-        .is_none_or(|v| v != "0");
+    let on = std::env::var("RETSURF_PARTIAL_PRESENT").is_ok_and(|v| v != "0");
     log::info!("partial present: {on}");
     on
 }
