@@ -304,7 +304,10 @@ impl App {
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
         self.ui.menu.history_mut().set_config(&self.config.history);
-        self.ui.set_memory_overlay(self.config.debug.memory_overlay);
+        self.ui.set_memory_debug(
+            self.config.debug.memory_overlay,
+            self.config.debug.memory_log,
+        );
         self.ui.set_update_config(&self.config.update);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).

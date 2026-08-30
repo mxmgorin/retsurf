@@ -268,6 +268,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Updates",     "Update channel",         choice!(update.channel: Channel), false),
     f(S::Advanced, "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
+    f(S::Advanced, "Diagnostics", "Memory to log",          flag!(debug.memory_log), false),
 ];
 
 #[cfg(test)]

@@ -178,16 +178,16 @@ impl App {
             // Debug memory overlay: on a throttle, ask Servo for a fresh report,
             // and adopt the latest one that has arrived (it comes back async, a
             // frame or two later). Both no-ops unless the overlay is enabled.
-            if self.ui.memory_overlay_enabled() {
+            if self.ui.memory_reports_wanted() {
                 if self.last_memory_report.elapsed() >= MEMORY_REPORT_INTERVAL {
                     self.browser.request_memory_report();
                     self.last_memory_report = Instant::now();
                 }
                 if let Some(report) = self.browser.take_memory_report() {
                     self.ui.set_memory_summary(report);
-                    // The overlay draws on a screen nobody is watching over ssh;
-                    // the same figures go to the log, on a slower throttle than
-                    // the overlay's so the card is not written to every second.
+                    // `[debug] memory_log` writes the same figures without
+                    // drawing them, on a slower throttle than the overlay's
+                    // refresh so the card is not written to every second.
                     if self.last_memory_log.elapsed() >= MEMORY_LOG_INTERVAL {
                         self.ui.log_memory_summary();
                         self.last_memory_log = Instant::now();

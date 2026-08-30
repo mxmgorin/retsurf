@@ -252,6 +252,9 @@ pub struct AppUi {
     last_input_keyboard: bool,
     /// Whether the debug memory overlay is enabled (`[debug] memory_overlay`).
     memory_overlay: bool,
+    /// Whether the same report goes to the log (`[debug] memory_log`), which is
+    /// how a handheld answers the question without covering its own screen.
+    memory_log: bool,
     /// The latest rolled-up memory report to draw, refreshed from the main loop.
     memory_summary: Option<memory::MemorySummary>,
 }
@@ -306,22 +309,25 @@ impl AppUi {
             hint_badges: input.hint_badges,
             last_input_keyboard: false,
             memory_overlay: debug.memory_overlay,
+            memory_log: debug.memory_log,
             memory_summary: None,
         }
     }
 
-    /// Whether the debug memory overlay is on (drives the main loop's periodic
-    /// memory-report requests; see [`crate::browser::AppBrowser::request_memory_report`]).
+    /// Whether anything wants Servo's memory report — the overlay to draw it or
+    /// the log to record it. Drives the main loop's periodic requests (see
+    /// [`crate::browser::AppBrowser::request_memory_report`]).
     #[inline]
-    pub fn memory_overlay_enabled(&self) -> bool {
-        self.memory_overlay
+    pub fn memory_reports_wanted(&self) -> bool {
+        self.memory_overlay || self.memory_log
     }
 
-    /// Toggle the debug memory overlay live (from a settings save). Clears the
-    /// stale snapshot when turning off so it doesn't flash on the next enable.
-    pub fn set_memory_overlay(&mut self, on: bool) {
-        self.memory_overlay = on;
-        if !on {
+    /// Adopt edited diagnostics live (from a settings save). Clears the stale
+    /// snapshot once nothing wants it, so it doesn't flash on the next enable.
+    pub fn set_memory_debug(&mut self, overlay: bool, to_log: bool) {
+        self.memory_overlay = overlay;
+        self.memory_log = to_log;
+        if !self.memory_reports_wanted() {
             self.memory_summary = None;
         }
     }
@@ -331,9 +337,10 @@ impl AppUi {
         self.memory_summary = Some(memory::MemorySummary::from_report(report));
     }
 
-    /// Write the overlay's latest figures to the log (see [`memory::MemorySummary::log`]).
+    /// Write the latest figures to the log, if `[debug] memory_log` asked for it
+    /// (see [`memory::MemorySummary::log`]).
     pub fn log_memory_summary(&self) {
-        if let Some(summary) = &self.memory_summary {
+        if let (true, Some(summary)) = (self.memory_log, &self.memory_summary) {
             summary.log();
         }
     }
@@ -1001,9 +1008,9 @@ impl AppUi {
         if let Some(refresh) = self.hints.refresh_in() {
             self.repaint_delay = Some(self.repaint_delay.map_or(refresh, |d| d.min(refresh)));
         }
-        // Keep the loop ticking ~1 Hz while the debug memory overlay is on, so its
-        // periodic report request fires and the figures stay fresh when idle.
-        if self.memory_overlay {
+        // Keep the loop ticking ~1 Hz while a memory report is wanted, so its
+        // periodic request fires and the figures stay fresh when idle.
+        if self.memory_reports_wanted() {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
         }
