@@ -570,13 +570,13 @@ impl SoftwareBackend {
         let at = Instant::now();
         let surface = offscreen.surface();
         let pitch = surface.pitch() as usize;
+        // Whole frame even when only part of it is presented: a streaming
+        // texture does not promise to keep what was uploaded before, and the
+        // Miyoo's driver does not — a partial upload showed the panel stale
+        // pixels. SDL defers the copy to the draw below, so this measures 0.0.
         match (region, surface.without_lock()) {
-            (Some(region), Some(pixels)) => {
-                // `update` reads `region.height()` rows of `region.width()`
-                // pixels, a pitch apart, so it wants the surface from that
-                // rect's own first pixel.
-                let from = region.y() as usize * pitch + region.x() as usize * BYTES_PER_PIXEL;
-                if let Err(e) = present.update(Some(region), &pixels[from..], pitch) {
+            (Some(_), Some(pixels)) => {
+                if let Err(e) = present.update(None, pixels, pitch) {
                     log::error!("could not upload the composed frame: {e}");
                 }
             }
