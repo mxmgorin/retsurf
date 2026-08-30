@@ -54,6 +54,8 @@ pub struct App {
     last_memory_report: Instant,
     /// When to hand the allocator's free memory back (see [`HEAP_TRIM_DELAY`]).
     heap_trim_at: Option<Instant>,
+    /// Last time the report was written to the log (see [`MEMORY_LOG_INTERVAL`]).
+    last_memory_log: Instant,
     /// Paint timing for `[debug] frame_timing`; inert unless that is on.
     frame_timer: FrameTimer,
     /// When the last frame was presented, for [`App::pace_frame`].
@@ -72,6 +74,10 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 /// How often the debug memory overlay (`[debug] memory_overlay`) refreshes its
 /// figures by asking Servo for a new report.
 const MEMORY_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// How often those figures also reach the log — the only way to read them on a
+/// device whose screen is not where the answer is wanted.
+const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
 
 /// How long after a navigation the allocator is asked for its free memory back:
 /// long enough that the document being replaced has finished going away.
@@ -118,6 +124,7 @@ impl App {
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
+            last_memory_log: Instant::now(),
             heap_trim_at: None,
             frame_timer,
             last_frame: Instant::now(),
@@ -178,6 +185,13 @@ impl App {
                 }
                 if let Some(report) = self.browser.take_memory_report() {
                     self.ui.set_memory_summary(report);
+                    // The overlay draws on a screen nobody is watching over ssh;
+                    // the same figures go to the log, on a slower throttle than
+                    // the overlay's so the card is not written to every second.
+                    if self.last_memory_log.elapsed() >= MEMORY_LOG_INTERVAL {
+                        self.ui.log_memory_summary();
+                        self.last_memory_log = Instant::now();
+                    }
                 }
             }
 

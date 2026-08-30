@@ -55,6 +55,27 @@ impl MemorySummary {
     }
 }
 
+impl MemorySummary {
+    /// The overlay's figures as one log line, for a device whose screen nobody
+    /// is reading — the Miyoo answers over ssh and nothing else.
+    pub fn log(&self) {
+        let fmt = |pairs: &[(String, usize)], take: usize| {
+            pairs
+                .iter()
+                .take(take)
+                .map(|(name, size)| format!("{name} {}", fmt_bytes(*size)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        log::info!(
+            "memory: explicit {} [{}] gauges [{}]",
+            fmt_bytes(self.explicit_total),
+            fmt(&self.rows, 8),
+            fmt(&self.gauges, 3),
+        );
+    }
+}
+
 /// Group an explicit report by its first two path segments (e.g.
 /// `image-cache`, `js/main`); deeper detail folds into the group.
 fn group_key(path: &[String]) -> String {

@@ -331,6 +331,13 @@ impl AppUi {
         self.memory_summary = Some(memory::MemorySummary::from_report(report));
     }
 
+    /// Write the overlay's latest figures to the log (see [`memory::MemorySummary::log`]).
+    pub fn log_memory_summary(&self) {
+        if let Some(summary) = &self.memory_summary {
+            summary.log();
+        }
+    }
+
     /// Whether an egui widget (e.g. the address bar) currently wants keyboard
     /// input. Used on Android to show/hide the system soft keyboard.
     #[allow(dead_code)] // only called on Android
