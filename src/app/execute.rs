@@ -322,6 +322,9 @@ impl App {
         }
         // Binds later opens; the tabs already open stay.
         self.browser.set_max_tabs(self.config.browser.max_tabs);
+        // The frame cap takes effect on the very next frame, which is what makes
+        // it worth tuning by hand on a device.
+        self.window.set_max_fps(self.config.display.max_fps);
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

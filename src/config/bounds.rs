@@ -35,6 +35,8 @@ pub const MAX_TABS: IntBounds = IntBounds { min: 0, max: 32 };
 pub const WIDTH: IntBounds = IntBounds { min: 160, max: 3840 };
 pub const HEIGHT: IntBounds = IntBounds { min: 144, max: 2160 };
 pub const CURSOR_LINGER_MS: IntBounds = IntBounds { min: 0, max: 10_000 };
+/// `0` is uncapped, which only a renderer paced by something else can afford.
+pub const MAX_FPS: IntBounds = IntBounds { min: 0, max: 120 };
 
 // Input
 pub const DEADZONE: FloatBounds = FloatBounds { min: 0.0, max: 0.9, default: 0.25 };

@@ -65,10 +65,18 @@ impl CompositeTiming {
     }
 }
 
-/// 30 fps, the software path's ceiling. Nothing here blocks the way a GL swap
-/// does, so without a cap a scrolling frame would run the CPU flat out.
+/// The shortest a software frame may take, from `[display] max_fps` (`0`
+/// uncapped). Nothing on this path blocks the way a GL swap does, so without a
+/// cap a scrolling frame would run the CPU flat out.
 #[cfg(feature = "software")]
-const SOFTWARE_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+fn frame_interval(max_fps: u32) -> Option<Duration> {
+    let interval = (max_fps > 0).then(|| Duration::from_secs_f64(1.0 / max_fps as f64));
+    match interval {
+        Some(interval) => log::info!("frame cap: {max_fps} fps ({:.1?} a frame)", interval),
+        None => log::info!("frame cap: none"),
+    }
+    interval
+}
 
 /// The window, the renderer that puts pixels in it, and the egui that draws the
 /// chrome — one bundle, because which renderer came up decides all three.
@@ -229,8 +237,20 @@ impl AppWindow {
         match &self.backend {
             Backend::Gl(_) => None,
             #[cfg(feature = "software")]
-            Backend::Software(_) => Some(SOFTWARE_FRAME_INTERVAL),
+            Backend::Software(b) => b.frame_interval,
         }
+    }
+
+    /// Adopt an edited frame cap (settings overlay). The GL backend has no use
+    /// for one — the swap interval paces it.
+    pub fn set_max_fps(&mut self, max_fps: u32) {
+        match &mut self.backend {
+            Backend::Gl(_) => {}
+            #[cfg(feature = "software")]
+            Backend::Software(b) => b.frame_interval = frame_interval(max_fps),
+        }
+        #[cfg(not(feature = "software"))]
+        let _ = max_fps;
     }
 
     pub fn destroy(&mut self) {
@@ -427,6 +447,8 @@ struct SoftwareBackend {
     /// step), and whether to send the panel less than a whole frame at all.
     last_changed: Option<Rect>,
     partial: bool,
+    /// The frame cap, as a minimum frame time (see [`frame_interval`]).
+    frame_interval: Option<Duration>,
 }
 
 #[cfg(feature = "software")]
@@ -464,6 +486,7 @@ impl SoftwareBackend {
             page_rect: None,
             last_changed: None,
             partial: partial_present(),
+            frame_interval: frame_interval(config.max_fps),
         })
     }
 

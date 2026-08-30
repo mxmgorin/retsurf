@@ -46,6 +46,14 @@ pub fn run_app() {
     if let Ok(v) = std::env::var("RETSURF_SOFTWARE") {
         app_config.display.software_render = v != "0";
     }
+    // A launcher's way to try a frame cap without editing the config — and the
+    // way to compare two of them in one sitting.
+    if let Some(fps) = std::env::var("RETSURF_MAX_FPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        app_config.display.max_fps = fps;
+    }
     if app_config.display.software_render && !cfg!(feature = "software") {
         log::warn!(
             "software rendering asked for, but this build has no `software` feature; using GL"
