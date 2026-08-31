@@ -148,6 +148,10 @@ fn micro() -> Preferences {
     // without being felt, and a longer slice finishes the collection sooner.
     p.js_mem_gc_incremental_slice_ms = 5; // ms
 
+    // Keep no page alive for Back: `1` costs the whole previous document (48 MB
+    // of layout on an image-heavy page), and reloading is the cheaper trade.
+    p.session_history_max_length = 0;
+
     p
 }
 
