@@ -1,7 +1,7 @@
-From f2cf0416836c5fe38d8dd3cf0ee1c7dcb977402c Mon Sep 17 00:00:00 2001
+From c1d9027ff0231419db5be289036c6de1f0161065 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:19 +0300
-Subject: [PATCH 2/7] retsurf: advance the containing-block walk past boxless
+Subject: [PATCH 2/6] retsurf: advance the containing-block walk past boxless
  ancestors (integration only, do not send upstream)
 
 ---

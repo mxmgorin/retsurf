@@ -29,14 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The engine moved up to Servo `main` as of 2026-08-31 (109 upstream commits).
-  The patch set retsurf carries on top grew from two to seven: alongside the
+  The patch set retsurf carries on top grew from two to six: alongside the
   optional surfman connection and the containing-block walk, the fork now drops
   a gone pipeline's display list from the WebRender scene, drops a script
   message whose event loop is gone, drops a dying document's rooted callbacks
-  and promises, lets the malloc heap's GC thresholds be set by pref, and
-  installs the SpiderMonkey testing functions under the internals pref. The
+  and promises, and lets the malloc heap's GC thresholds be set by pref. The
   first three are leaks a long browsing session used to accumulate; `patches/`
-  mirrors all seven as plain files.
+  mirrors all six as plain files.
 
 - **The allocator hands memory back.** glibc keeps a closed page's memory
   reserved for reuse rather than returning it, which on a handheld is hundreds

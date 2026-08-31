@@ -1,7 +1,7 @@
-From a5cda5f55c65216d25659f72f59922dacb452b56 Mon Sep 17 00:00:00 2001
+From 6ec41a0d498a777d5f3fef6da275125a6f7e5067 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Thu, 27 Aug 2026 23:45:22 +0300
-Subject: [PATCH 5/7] retsurf: let the malloc heap's GC thresholds be set by
+Subject: [PATCH 5/6] retsurf: let the malloc heap's GC thresholds be set by
  pref
 
 ---

@@ -1,7 +1,7 @@
-From 0f96864594bfa477003a1656c7dd214d7ce47d33 Mon Sep 17 00:00:00 2001
+From 66a9c7127388b808a470a7687b8d2fd166e4539c Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:18 +0300
-Subject: [PATCH 1/7] retsurf: make the surfman connection optional
+Subject: [PATCH 1/6] retsurf: make the surfman connection optional
  (integration only, do not send upstream)
 
 ---
