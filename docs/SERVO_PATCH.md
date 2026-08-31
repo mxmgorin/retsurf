@@ -1,15 +1,34 @@
 # The Servo patches
 
-retsurf carries two small changes to Servo. They live as commits on the
-`retsurf-main-0.6` branch of our fork (`mxmgorin/servo`) — one branch per retsurf
+retsurf carries seven small changes to Servo. They live as commits on the
+`retsurf-main-0.7` branch of our fork (`mxmgorin/servo`) — one branch per retsurf
 minor, rebased onto upstream `main` as it moves — which `[patch.crates-io]` in
 `Cargo.toml` pins by `rev`, so the engine retsurf builds is Servo's unreleased
-`main` plus exactly these two fixes. (`retsurf-0.5`, off the `release/v0.5` line
-the published crates come from, is kept as the fallback.) Each pinned rev is
-tagged after the retsurf release that ships it (`retsurf-main-0.6.0`; the first
-four pins predate the scheme and are numbered `retsurf-main-1..4`), and
-`patches/` in this repo mirrors the diff as plain files (8 KB) so the change is
+`main` plus exactly these seven fixes. Every rev an older release pinned is kept
+reachable by a tag named after that release (`retsurf-v0.4.0`, `retsurf-v0.5.1`),
+and `patches/` in this repo mirrors the diff as plain files so the change is
 readable without fetching the fork.
+
+Two further patches — WebRender kept off the paths swgl does not implement, and
+a painter removable without surfman details — are needed only by the software
+renderer, so they sit on `retsurf-swgl` (these seven plus those two) rather than
+on the line above. Nothing here depends on them.
+
+The two below have a design worth writing down. Patches 3 to 7 are short fixes
+whose commit messages carry the reasoning, with the diffs in
+`patches/0003..0007`:
+
+- **3. `components/script`: drop a script message whose event loop is gone.**
+- **4. `components/paint`: drop a gone pipeline's display list.** Nothing else
+  took it out of the WebRender scene, so every navigation left one behind.
+- **5. `components/config`: let the malloc heap's GC thresholds be set by pref.**
+  SpiderMonkey's own default (38 MB) assumes a desktop; the memory tiers want it
+  lower.
+- **6. `components/script`: install the SpiderMonkey testing functions under the
+  internals pref.** `dumpHeap` and friends, for measuring a release build.
+- **7. `components/script`: drop a dying document's rooted callbacks and
+  promises.** Rust-owned GC roots (event listeners, `fonts.ready`) kept a
+  navigated-away document's JS heap alive.
 
 ## 1. `components/paint`: optional surfman connection
 

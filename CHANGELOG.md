@@ -7,22 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-31
+
+### Added
+
+- **Swap tuning for memory-starved handhelds.** The PortMaster launcher can add
+  a zram device and set the swap sysctls before starting the browser, which is
+  what keeps a small board from being killed by an image-heavy page. It stays
+  off unless a `swap-tuning.on` file sits next to the script: the change is
+  system-wide and outlives the port, and every CFW has its own idea about swap.
+  Where the firmware ships zram as a module and never loads it (ROCKNIX) the
+  launcher loads it; where there is no swap to tune at all the sysctls are left
+  alone rather than written for nothing.
+
+- **`RETSURF_SERVO_PREFS` reaches engine prefs the config does not expose.**
+  Comma-separated `name=value` pairs, applied at startup, so a measurement that
+  used to need a rebuild — `expose_servointernals_globally=true` for
+  `navigator.servo`, say — is now an environment variable. Names are checked
+  against Servo's own list first, since its setter panics on an unknown one.
+
 ### Changed
 
-- Closing the last tab now replaces it with a fresh one at the home page instead
-  of doing nothing; the closed page's document and history go away with it.
-- Fresh speed-dial defaults: mobile Wikipedia, Retro Handhelds, r/SBCGaming on
-  old reddit, the retsurf repository, servo.org and the settings tile. The
-  search tile is gone —
-  the start page has a search field, and it goes through `search_page` anyway.
-  Only a first run seeds these; an existing `dial.toml` is untouched.
-- The default `search_page` is DuckDuckGo's no-JS endpoint
+- The engine moved up to Servo `main` as of 2026-08-31 (109 upstream commits).
+  The patch set retsurf carries on top grew from two to seven: alongside the
+  optional surfman connection and the containing-block walk, the fork now drops
+  a gone pipeline's display list from the WebRender scene, drops a script
+  message whose event loop is gone, drops a dying document's rooted callbacks
+  and promises, lets the malloc heap's GC thresholds be set by pref, and
+  installs the SpiderMonkey testing functions under the internals pref. The
+  first three are leaks a long browsing session used to accumulate; `patches/`
+  mirrors all seven as plain files.
+
+- **The allocator hands memory back.** glibc keeps a closed page's memory
+  reserved for reuse rather than returning it, which on a handheld is hundreds
+  of MB the browser is not using and the device cannot spare. Navigating now
+  schedules a `malloc_trim` five seconds later — long enough for the replaced
+  document to have gone away — and the mmap/trim thresholds and arena cap are
+  set at startup on every tier but the desktop one (Servo runs 27 threads, and
+  glibc would give each its own arena to fragment). `RETSURF_HEAP_TUNE=0|1`
+  overrides the tier, which is how the two are compared in one sitting.
+
+- **The default `search_page` is DuckDuckGo's no-JS endpoint**
   (`lite.duckduckgo.com/lite/`), which ships the results in the HTML instead of
   building them with a script — a quarter of the page weight and no wait for JS
   on a slow board. Existing `config.toml` files keep their current value.
+
+- **Fresh speed-dial defaults:** mobile Wikipedia, Retro Handhelds, r/SBCGaming
+  on old reddit, the retsurf repository, servo.org and the settings tile. The
+  search tile is gone — the start page has a search field, and it goes through
+  `search_page` anyway. Only a first run seeds these; an existing `dial.toml` is
+  untouched.
+
+- **Closing the last tab opens the home page** instead of doing nothing. The
+  closed page's document and history go with it, so the memory does too.
+
+- **The adblock engine parses network rules only.** The hook it drives is a
+  request filter, so EasyList's cosmetic half was resident for nothing. The
+  cache is named `adblock-net.dat` and the older `adblock.dat` is deleted on
+  startup, so an engine built before this is rebuilt rather than loaded.
+
+- **The `tight` tier keeps one document in the back-forward cache**, not three.
+  Three was priced on synthetic pages: measured on a 960 MB A55 handheld, two
+  navigated-away Wikipedia articles held 54.1 and 53.7 MB of layout tree each
+  while GitHub was open, and the kernel OOM-killed the process.
+
+- **Panics append to the panic file** rather than overwriting it, with a
+  timestamp per entry — a device that crashes twice in a session should say so,
+  and the first crash is usually the one that explains it.
+
+- A new icon, across the desktop, Android and PortMaster packaging.
+
+- The Android JNI library is its own crate (`android/lib`), so the desktop
+  builds no longer carry a cdylib target they never load.
+
 - Bumped `egui-sdl2` to 0.11, which brings egui 0.36. `egui-phosphor` comes from
   a fork by rev until upstream releases for 0.36.
+
 - Bumped `rubato` to 5 (audioadapter 5).
+
+- Contributor tooling: `tools/arm64/` cross-builds the aarch64 handheld binaries
+  and the PortMaster package in a container, and `tools/memory-gate.sh` scripts
+  the memory check.
+
+### Fixed
+
+- **An iframe could spend the page's image budget.** The per-page cap
+  (`[data_saving] max_images_per_page`) counted every document's images against
+  one budget, so an ad frame could exhaust it and the page it sat in would stop
+  loading pictures. Each document now has its own, and gets it back when it goes
+  away.
+
+- **The text caret no longer blinks.** It woke the idle loop twice a second and
+  had the chrome redrawn to toggle a one-pixel line, which on a handheld is
+  battery spent on nothing. It stays solid.
 
 ## [0.6.0] - 2026-08-24
 
@@ -388,7 +465,8 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
-[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mxmgorin/retsurf/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mxmgorin/retsurf/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mxmgorin/retsurf/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mxmgorin/retsurf/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/mxmgorin/retsurf/compare/v0.3.1...v0.4.0

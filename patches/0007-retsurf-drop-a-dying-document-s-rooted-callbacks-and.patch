@@ -1,0 +1,154 @@
+From 8e6b2b879910c50d5be6845912c27ff84e44775a Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Fri, 28 Aug 2026 10:53:52 +0300
+Subject: [PATCH 7/7] retsurf: drop a dying document's rooted callbacks and
+ promises
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+CallbackObject and Promise each take an unconditional GC root that only
+Drop removes, and the Rust object lives exactly as long as its reflector.
+So one event listener, or document.fonts.ready, kept its whole realm alive
+and no collection could reclaim it — which is why two forced full GCs
+returned zero bytes.
+
+Found by installing SpiderMonkey's dumpHeap and grouping the roots of the
+dump by the global they point into: after ten navigations every one of the
+eleven navigated-away windows held exactly one CallbackObject::root and one
+Promise::root, with 12 Window, 12 HTMLBodyElement and 6600 HTMLDivElement
+still alive after a full GC.
+
+Clearing the listeners of the tree, the window and the FontFaceSet at
+pipeline exit, and letting go of the ready promise, takes js/malloc-heap
+from 34 MB to 6 over the same run, live windows from 12 to 1, and the
+figure no longer moves with the number of navigations.
+---
+ components/script/dom/css/fontfaceset.rs      | 34 ++++++++++++++-----
+ components/script/dom/document/document.rs    | 14 ++++++++
+ components/script/event_loop/script_thread.rs |  1 +
+ 3 files changed, 41 insertions(+), 8 deletions(-)
+
+diff --git a/components/script/dom/css/fontfaceset.rs b/components/script/dom/css/fontfaceset.rs
+index 541191b4cd3..cacc78efdb2 100644
+--- a/components/script/dom/css/fontfaceset.rs
++++ b/components/script/dom/css/fontfaceset.rs
+@@ -53,7 +53,7 @@ pub(crate) struct FontFaceSet {
+ 
+     /// <https://drafts.csswg.org/css-font-loading/#dom-fontfaceset-readypromise-slot>
+     #[conditional_malloc_size_of]
+-    promise: RefCell<Rc<Promise>>,
++    promise: RefCell<Option<Rc<Promise>>>,
+ 
+     set_entries: DomRefCell<Vec<Dom<FontFace>>>,
+ }
+@@ -62,7 +62,7 @@ impl FontFaceSet {
+     fn new_inherited(promise: Rc<Promise>) -> Self {
+         FontFaceSet {
+             target: EventTarget::new_inherited(),
+-            promise: promise.into(),
++            promise: RefCell::new(Some(promise)),
+             set_entries: Default::default(),
+         }
+     }
+@@ -103,9 +103,23 @@ impl FontFaceSet {
+         }
+     }
+ 
++    fn ready_promise_is_fulfilled(&self) -> bool {
++        self.promise
++            .borrow()
++            .as_ref()
++            .is_some_and(|promise| promise.is_fulfilled())
++    }
++
++    /// A `Rc<Promise>` is an unconditional GC root, so a dying document must let go of it.
++    pub(crate) fn release_ready_promise(&self) {
++        self.promise.borrow_mut().take();
++    }
++
+     /// Fulfill the font ready promise, returning true if it was not already fulfilled beforehand.
+     pub(crate) fn fulfill_ready_promise_if_needed(&self, cx: &mut JSContext) -> bool {
+-        let promise = self.promise.borrow().clone();
++        let Some(promise) = self.promise.borrow().clone() else {
++            return false;
++        };
+         if promise.is_fulfilled() {
+             return false;
+         }
+@@ -114,7 +128,10 @@ impl FontFaceSet {
+     }
+ 
+     pub(crate) fn waiting_to_fullfill_promise(&self) -> bool {
+-        !self.promise.borrow().is_fulfilled()
++        self.promise
++            .borrow()
++            .as_ref()
++            .is_some_and(|promise| !promise.is_fulfilled())
+     }
+ 
+     fn contains_face(&self, target: &FontFace) -> bool {
+@@ -144,8 +161,8 @@ impl FontFaceSet {
+ 
+         // Step 3. If font face set’s [[ReadyPromise]] slot currently holds a fulfilled
+         // promise, replace it with a fresh pending promise.
+-        if self.promise.borrow().is_fulfilled() {
+-            *self.promise.borrow_mut() = Promise::new(cx, &self.global());
++        if self.ready_promise_is_fulfilled() {
++            *self.promise.borrow_mut() = Some(Promise::new(cx, &self.global()));
+         }
+ 
+         // Step 4. Queue a task to fire a font load event named loading at font face set.
+@@ -279,12 +296,13 @@ impl FontFaceSet {
+ impl FontFaceSetMethods<crate::DomTypeHolder> for FontFaceSet {
+     /// <https://drafts.csswg.org/css-font-loading/#dom-fontfaceset-ready>
+     fn Ready(&self, cx: &mut JSContext) -> Rc<Promise> {
+-        if self.promise.borrow().is_fulfilled() {
++        if self.ready_promise_is_fulfilled() {
+             // There may be pending style changes that cause new web fonts to start loading,
+             // re-initializing document.fonts.ready.
+             self.flush_author_font_set(cx);
+         }
+-        self.promise.borrow().clone()
++        let promise = self.promise.borrow().clone();
++        promise.unwrap_or_else(|| Promise::new(cx, &self.global()))
+     }
+ 
+     /// <https://drafts.csswg.org/css-font-loading/#dom-fontfaceset-add>
+diff --git a/components/script/dom/document/document.rs b/components/script/dom/document/document.rs
+index 6f9ba49698b..1de99f4911f 100644
+--- a/components/script/dom/document/document.rs
++++ b/components/script/dom/document/document.rs
+@@ -996,6 +996,20 @@ impl Document {
+         &self.window
+     }
+ 
++    /// Let go of the handles Rust keeps into this document's realm. Callbacks and
++    /// promises are unconditional GC roots, so one left behind keeps the whole
++    /// document alive for the life of the process.
++    pub(crate) fn release_rooted_handles(&self) {
++        for node in self.upcast::<Node>().traverse_preorder(ShadowIncluding::Yes) {
++            node.upcast::<EventTarget>().remove_all_listeners();
++        }
++        if let Some(fonts) = self.fonts.get() {
++            fonts.upcast::<EventTarget>().remove_all_listeners();
++            fonts.release_ready_promise();
++        }
++        self.window.upcast::<EventTarget>().remove_all_listeners();
++    }
++
+     #[inline]
+     pub(crate) fn is_html_document(&self) -> bool {
+         self.is_html_document
+diff --git a/components/script/event_loop/script_thread.rs b/components/script/event_loop/script_thread.rs
+index 663525cd097..c5252d54297 100644
+--- a/components/script/event_loop/script_thread.rs
++++ b/components/script/event_loop/script_thread.rs
+@@ -3228,6 +3228,7 @@ impl ScriptThread {
+ 
+                 debug!("{pipeline_id}: Clearing JavaScript runtime");
+                 window.clear_js_runtime();
++                document.release_rooted_handles();
+             }
+         }
+ 

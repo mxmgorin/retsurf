@@ -1,6 +1,6 @@
 [package]
 name = "retsurf"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 license = "GPL-3.0"
 
@@ -60,16 +60,16 @@ env_logger = "0.11.8"
 #
 # webcrypto: gates all of `window.crypto`, `getRandomValues` included, so scripts
 # that never touch SubtleCrypto still break without it. On for every build.
-servo = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
 # WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
 # device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
 # types. Must resolve to the fork like `servo` does, or the backend registers into a
 # second copy of these crates.
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -149,7 +149,7 @@ android_logger = "0.15"
 #
 # Only catches transitive crates-io references now; a rev bump moves both lists.
 [patch.crates-io]
-servo = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2381d2f39c6f040cb991e5ac382a54d050e4aa89" }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "8e6b2b879910c50d5be6845912c27ff84e44775a" }

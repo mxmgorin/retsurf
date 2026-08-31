@@ -1,0 +1,59 @@
+From a5cda5f55c65216d25659f72f59922dacb452b56 Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Thu, 27 Aug 2026 23:45:22 +0300
+Subject: [PATCH 5/7] retsurf: let the malloc heap's GC thresholds be set by
+ pref
+
+---
+ components/config/prefs.rs                  | 9 +++++++++
+ components/script/runtime/script_runtime.rs | 8 ++++++++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/components/config/prefs.rs b/components/config/prefs.rs
+index 9d616f8cf0f..497e63f8f75 100644
+--- a/components/config/prefs.rs
++++ b/components/config/prefs.rs
+@@ -291,7 +291,14 @@ pub struct Preferences {
+     pub js_mem_gc_incremental_enabled: bool,
+     pub js_mem_gc_incremental_slice_ms: i64,
+     pub js_mem_gc_low_frequency_heap_growth: i64,
++    /// Malloc'd bytes (MB) SpiderMonkey holds before a collection is triggered by
++    /// them. `js_mem_max` bounds the GC heap only, and on a small device the
++    /// malloc heap is the larger half. `0` keeps SpiderMonkey's own default.
++    pub js_mem_gc_malloc_threshold_mb: i64,
+     pub js_mem_gc_per_zone_enabled: bool,
++    /// Malloc'd bytes (MB) past which a collection becomes urgent. `0` keeps
++    /// SpiderMonkey's own default.
++    pub js_mem_gc_urgent_threshold_mb: i64,
+     pub js_mem_gc_zeal_frequency: i64,
+     pub js_mem_gc_zeal_level: i64,
+     pub js_mem_max: i64,
+@@ -545,7 +552,9 @@ impl Preferences {
+             js_mem_gc_incremental_enabled: false,
+             js_mem_gc_incremental_slice_ms: 10,
+             js_mem_gc_low_frequency_heap_growth: 150,
++            js_mem_gc_malloc_threshold_mb: 0,
+             js_mem_gc_per_zone_enabled: false,
++            js_mem_gc_urgent_threshold_mb: 0,
+             js_mem_gc_zeal_frequency: 100,
+             js_mem_gc_zeal_level: 0,
+             js_mem_max: -1,
+diff --git a/components/script/runtime/script_runtime.rs b/components/script/runtime/script_runtime.rs
+index f3b8fe06a8e..a961c84c16e 100644
+--- a/components/script/runtime/script_runtime.rs
++++ b/components/script/runtime/script_runtime.rs
+@@ -948,6 +948,14 @@ impl Runtime {
+             if let Some(val) = in_range(pref!(js_mem_gc_empty_chunk_count_min), 0, 10_000) {
+                 JS_SetGCParameter(cx, JSGCParamKey::JSGC_MIN_EMPTY_CHUNK_COUNT, val as u32);
+             }
++            // The malloc heap is the half `js_mem_max` does not bound, and its
++            // default threshold (38 MB) is a desktop's.
++            if let Some(val) = in_range(pref!(js_mem_gc_malloc_threshold_mb), 1, 10_000) {
++                JS_SetGCParameter(cx, JSGCParamKey::JSGC_MALLOC_THRESHOLD_BASE, val as u32);
++            }
++            if let Some(val) = in_range(pref!(js_mem_gc_urgent_threshold_mb), 1, 10_000) {
++                JS_SetGCParameter(cx, JSGCParamKey::JSGC_URGENT_THRESHOLD_MB, val as u32);
++            }
+         }
+         Runtime {
+             rt: runtime,

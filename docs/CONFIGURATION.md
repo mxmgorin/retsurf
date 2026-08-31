@@ -281,6 +281,8 @@ files.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
+| `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
+| `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
 | `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) |
 | `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
