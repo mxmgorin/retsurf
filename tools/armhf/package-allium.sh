@@ -105,6 +105,11 @@ max_tabs = 1
 [performance]
 memory_profile = "micro"
 
+# Decoded images are what this device runs out of memory on: 87 MB of WebRender
+# image memory on one gallery page, 9 MB at this cap. Settings -> Data saving.
+[data_saving]
+max_images_per_page = 12
+
 [display]
 software_render = true
 EOF
