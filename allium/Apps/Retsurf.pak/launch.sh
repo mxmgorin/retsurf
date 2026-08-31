@@ -95,7 +95,11 @@ fi
 # 128 MB of RAM against a working set measured in hundreds: without somewhere to
 # page anonymous memory the kernel kills the browser rather than swapping it.
 ZRAM_MB=96
-SWAPFILE_MB=256
+SWAPFILE_MB=512
+
+# One page per fault, not eight: the default readahead is a bet on a fast disk,
+# and this one is an SD card reached over a bus that charges for every read.
+echo 0 > /proc/sys/vm/page-cluster 2>/dev/null
 swapfile="$gamedir/data/swapfile"
 swap_ready=no
 
@@ -113,7 +117,7 @@ fi
 
 # A swapfile on the card otherwise. It can be swapped on directly even though the
 # card is FAT32 — vfat implements `bmap` — so no loop device is needed, which is
-# just as well because this kernel has none. Created once; the `dd` is ~20 s.
+# just as well because this kernel has none. Created once; the `dd` is ~40 s.
 if [ "$swap_ready" = no ]; then
   if grep -q "$swapfile" /proc/swaps 2>/dev/null; then
     swap_ready=file
