@@ -130,10 +130,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// into `tabs`. The new webview drives its own navigation, so we don't set a
     /// URL — mirroring [`super::AppBrowser::build_tab`] otherwise.
     fn request_create_new(&self, parent_webview: WebView, request: servo::CreateNewWebViewRequest) {
-        // A page must not evict a tab of the user's, so at the cap the popup is
-        // declined: dropping the request answers Servo with no webview. A cap of
-        // one is the exception — there every navigation replaces, and declining
-        // would leave the link doing nothing at all.
+        // A page must not evict a tab of the user's, so the popup is declined
+        // at the cap — except at one, where declining is a dead link.
         let replaces = self.max_tabs.get() == 1;
         if !replaces && !self.has_tab_room() {
             log::warn!("tab cap reached: declined a page-opened tab");

@@ -204,6 +204,15 @@ impl Gamepad {
             }
         }
 
+        // Triggers wired to keys never reach `on_axis`, where this intent is
+        // otherwise made — the Miyoo sends L2/R2 as Tab and Backspace.
+        if matches!(pad, Pad::L2 | Pad::R2) {
+            commands.push(AppCommand::Input(InputCommand::Trigger {
+                right: pad == Pad::R2,
+                pressed,
+            }));
+        }
+
         self.press(pad, pressed, bindings, commands);
     }
 

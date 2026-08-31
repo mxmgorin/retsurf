@@ -15,13 +15,9 @@ pub struct DisplayConfig {
     /// the only thing that draws on a GPU-less device (Miyoo Mini). Needs the
     /// `software` build feature; overridden at startup via `RETSURF_SOFTWARE=1`.
     pub software_render: bool,
-    /// Frames per second the software renderer is held to (`0` uncapped);
-    /// `RETSURF_MAX_FPS` overrides it at startup. Nothing paces that renderer on
-    /// its own — a GL swap blocks on vsync and this does not — so without a cap
-    /// a scrolling page runs the CPU flat out. It also decides how often Servo's
-    /// embedder callbacks are pumped, so a lower cap leaves the engine's threads
-    /// more of a two-core device and can slow page loads at the same time; the
-    /// GL backend ignores it entirely.
+    /// Frames per second the software renderer is held to (`0` uncapped,
+    /// `RETSURF_MAX_FPS` overrides). Nothing else paces it, and the cap paces
+    /// the whole loop — including how often Servo's callbacks are pumped.
     pub max_fps: u32,
     /// How long the virtual cursor stays visible after the last movement, in ms.
     /// It hides when idle (nothing to hover) but lingers so you can see where it

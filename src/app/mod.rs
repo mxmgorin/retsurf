@@ -185,9 +185,8 @@ impl App {
                 }
                 if let Some(report) = self.browser.take_memory_report() {
                     self.ui.set_memory_summary(report);
-                    // `[debug] memory_log` writes the same figures without
-                    // drawing them, on a slower throttle than the overlay's
-                    // refresh so the card is not written to every second.
+                    // Slower than the overlay's refresh: the card should not
+                    // be written to every second.
                     if self.last_memory_log.elapsed() >= MEMORY_LOG_INTERVAL {
                         self.ui.log_memory_summary();
                         self.last_memory_log = Instant::now();

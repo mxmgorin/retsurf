@@ -309,10 +309,9 @@ fn build_backend(video: &VideoSubsystem, config: &DisplayConfig) -> Result<Backe
     GlBackend::new(video, config).map(|b| Backend::Gl(Box::new(b)))
 }
 
-/// Ask SDL for one GL attribute, and let a refusal be an error. The `gl_attr`
-/// setters panic instead, which on a driver with no GL at all — the Miyoo's —
-/// ends the process at the first attribute rather than falling back to software,
-/// and `panic = "abort"` gives nothing to fall back from.
+/// Ask SDL for one GL attribute, and let a refusal be an error: the `gl_attr`
+/// setters panic instead, which ends a `panic = "abort"` build on a driver with
+/// no GL at all — before it can fall back to software.
 fn set_gl_attr(attr: sys::SDL_GLattr, value: i32) -> Result<(), String> {
     if unsafe { sys::SDL_GL_SetAttribute(attr, value) } != 0 {
         return Err(format!(
@@ -555,14 +554,8 @@ impl SoftwareBackend {
             None => drop(egui.run_output.take()),
         }
 
-        // What this frame changes decides whether the panel is sent anything at
-        // all — `None` is a frame identical to the one already on it, and
-        // sending that costs the whole copy for nothing. What it is *sent* is
-        // the whole frame: the Miyoo's driver puts a partial copy somewhere
-        // other than where it was asked to, which arrives as a picture in
-        // pieces. `RETSURF_PARTIAL_PRESENT=1` sends the rect instead, together
-        // with the frame before it — a driver that flips between two buffers is
-        // about to show the one written two frames ago.
+        // `None` is a frame identical to the one on the panel: not worth a
+        // copy. What is sent is the whole frame — see `partial_present`.
         let changed = union(redraw, page_painted.then_some(*page_rect).flatten());
         let region = changed.map(|changed| {
             if *partial {
@@ -576,10 +569,8 @@ impl SoftwareBackend {
         let at = Instant::now();
         let surface = offscreen.surface();
         let pitch = surface.pitch() as usize;
-        // Whole frame even when only part of it is presented: a streaming
-        // texture does not promise to keep what was uploaded before, and the
-        // Miyoo's driver does not — a partial upload showed the panel stale
-        // pixels. SDL defers the copy to the draw below, so this measures 0.0.
+        // Whole frame even when part of it is presented: a streaming texture
+        // does not promise to keep what was uploaded before.
         match (region, surface.without_lock()) {
             (Some(_), Some(pixels)) => {
                 if let Err(e) = present.update(None, pixels, pitch) {
@@ -693,11 +684,8 @@ fn paint_chrome(
 }
 
 /// Where egui's new frame differs from the one already in the composition
-/// surface: `None` when it draws exactly the same, and the whole window when the
-/// two cannot be told apart shape by shape (one holds shapes the other does not,
-/// or a texture changed under both). On a GPU-less device the pixels are the
-/// cost, and a moving cursor or a typed character changes very few of them — so
-/// what the rest of the chrome costs is finding that out.
+/// surface — `None` when it draws the same, the whole window when the two
+/// cannot be compared shape by shape. A moving cursor changes very few pixels.
 #[cfg(feature = "software")]
 fn chrome_damage(
     egui: &EguiCanvas<SurfaceContext<'static>>,
@@ -802,11 +790,9 @@ fn square_corners(shape: &mut egui::Shape) {
     }
 }
 
-/// Whether the copy to the panel may be clipped to what changed. **Off**: the
-/// Miyoo Mini's `Miyoo Mini` renderer draws such a copy in the wrong place, and
-/// the frame arrives in pieces. A frame that changed nothing is still skipped
-/// whole, which is where most of the saving was anyway.
-/// `RETSURF_PARTIAL_PRESENT=1` asks for the clipped copy on a driver that can.
+/// Whether the copy to the panel may be clipped to what changed. Off: the Miyoo
+/// driver draws such a copy in the wrong place and the frame arrives in pieces.
+/// `RETSURF_PARTIAL_PRESENT=1` asks for it on a driver that can.
 #[cfg(feature = "software")]
 fn partial_present() -> bool {
     let on = std::env::var("RETSURF_PARTIAL_PRESENT").is_ok_and(|v| v != "0");
