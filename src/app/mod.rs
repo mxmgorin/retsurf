@@ -188,7 +188,10 @@ impl App {
                     // Slower than the overlay's refresh: the card should not
                     // be written to every second.
                     if self.last_memory_log.elapsed() >= MEMORY_LOG_INTERVAL {
-                        self.ui.log_memory_summary();
+                        self.ui.log_memory_summary(
+                            self.window.egui_ctx(),
+                            self.window.compose_bytes(),
+                        );
                         self.last_memory_log = Instant::now();
                     }
                 }

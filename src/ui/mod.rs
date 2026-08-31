@@ -338,10 +338,12 @@ impl AppUi {
     }
 
     /// Write the latest figures to the log, if `[debug] memory_log` asked for it
-    /// (see [`memory::MemorySummary::log`]).
-    pub fn log_memory_summary(&self) {
+    /// (see [`memory::MemorySummary::log`]). `compose_bytes` is the compositor's,
+    /// from [`crate::platform::AppWindow::compose_bytes`].
+    pub fn log_memory_summary(&self, ctx: &egui::Context, compose_bytes: usize) {
         if let (true, Some(summary)) = (self.memory_log, &self.memory_summary) {
             summary.log();
+            memory::log_chrome(ctx, compose_bytes);
         }
     }
 

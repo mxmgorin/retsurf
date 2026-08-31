@@ -76,6 +76,23 @@ impl MemorySummary {
     }
 }
 
+/// The chrome's own memory, absent from Servo's report. The painter keeps its own
+/// copy of every egui texture, so the process pays twice the figure logged here.
+pub fn log_chrome(ctx: &egui::Context, compose: usize) {
+    let [w, h] = ctx.fonts(|f| f.font_image_size());
+    let textures: usize = ctx
+        .tex_manager()
+        .read()
+        .allocated()
+        .map(|(_, meta)| meta.bytes_used())
+        .sum();
+    log::info!(
+        "memory (chrome): atlas {w}x{h}, egui textures {}, compose {}",
+        fmt_bytes(textures),
+        fmt_bytes(compose),
+    );
+}
+
 /// Group an explicit report by its first two path segments (e.g.
 /// `image-cache`, `js/main`); deeper detail folds into the group.
 fn group_key(path: &[String]) -> String {

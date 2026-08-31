@@ -271,6 +271,20 @@ impl AppWindow {
     pub fn drawable_size(&self) -> (u32, u32) {
         self.sdl2_window().drawable_size()
     }
+
+    /// Full-frame buffers kept in RAM: composition surface, presentation texture,
+    /// swgl framebuffer. Zero on GL — those live in the driver.
+    pub fn compose_bytes(&self) -> usize {
+        match &self.backend {
+            Backend::Gl(_) => 0,
+            #[cfg(feature = "software")]
+            Backend::Software(b) => {
+                const FRAMES: usize = 3;
+                let (w, h) = b.size;
+                FRAMES * w as usize * h as usize * BYTES_PER_PIXEL
+            }
+        }
+    }
 }
 
 /// egui smooths a shape's edges by tessellating extra triangles for them. On a
