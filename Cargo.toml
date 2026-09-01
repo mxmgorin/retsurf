@@ -45,6 +45,15 @@ strip = true
 debug-assertions = false
 overflow-checks = false
 
+# The rasterizers stay at -O3 when the rest of the graph is built for size (see
+# tools/armhf/build.sh): they are the frame, and scalar swgl is not an option.
+[profile.release.package.swgl]
+opt-level = 3
+[profile.release.package.webrender]
+opt-level = 3
+[profile.release.package.webrender_api]
+opt-level = 3
+
 [dependencies]
 rust-embed="8.7.2"
 rustls = {version = "0.23.32", features = ["ring"] }

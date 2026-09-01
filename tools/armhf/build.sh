@@ -73,8 +73,14 @@ docker run --rm -i --network host \
     # vectorisation. It warns about being unstable, once per crate.
     # --allow-shlib-undefined: this SDL2 pulls in X11/wayland/alsa/gbm, which
     # neither sysroot has and we never call.
+    # The binary's own text is 64 MB demand-paged from the SD card, and the
+    # device took 191k major faults in one session reading it back.
+    #   -Wl,--gc-sections drops what the C/C++ halves never reference;
+    #   relocation-model=static skips a PIE's relocation work at every launch.
     export RUSTFLAGS="-L /opt/sysroot/usr/lib/$LIBDIR \
       -C link-arg=-Wl,--allow-shlib-undefined \
+      -C link-arg=-Wl,--gc-sections \
+      -C relocation-model=static -C link-arg=-no-pie \
       -C target-cpu=cortex-a7 -C target-feature=+neon"
     # -mtune, never -mcpu: cc-rs passes -march=armv7-a of its own, and GCC warns
     # that -mcpu conflicts with it. That warning is fatal in a way that looks
@@ -88,7 +94,9 @@ docker run --rm -i --network host \
     # no NEON; swgl without NEON falls back to scalar.
     # -I: the Debian sysroot headers (zlib for libpng, see the Dockerfile). The
     # toolchain finds its own headers without help.
+    # One section per function/datum, so the link above can drop the unreached.
     export CFLAGS_armv7_unknown_linux_gnueabihf="-mtune=cortex-a7 -mfpu=neon-vfpv4 \
+      -ffunction-sections -fdata-sections \
       -I/opt/sysroot/usr/include"
     export CXXFLAGS_armv7_unknown_linux_gnueabihf="$CFLAGS_armv7_unknown_linux_gnueabihf"
 
@@ -116,6 +124,9 @@ docker run --rm -i --network host \
     # webgl off, so the surfman probe -- our only catch_unwind -- is gone and
     # unwind tables with it. Same trade as the aarch64 handheld build.
     export CARGO_PROFILE_RELEASE_PANIC=abort
+    # Size over speed for the bulk of the Rust: the engine's code is cold and
+    # there is a lot of it. The rasterizers keep -O3, see Cargo.toml.
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL="${RETSURF_ARM_OPT:-s}"
 
     cargo build --release --no-default-features --features software --target "$TARGET" $CARGO_ARGS
     out="/target/$TARGET/release/retsurf"
