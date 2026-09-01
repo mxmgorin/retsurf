@@ -130,6 +130,9 @@ fn install_panic_hook() {
         let path =
             std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
         let backtrace = std::backtrace::Backtrace::force_capture();
+        // Android has no stderr, so a panic in a Servo thread would otherwise
+        // vanish silently; the logger reaches logcat.
+        log::error!("{info}\n\nbacktrace:\n{backtrace}");
         // Appended, not written: a device that crashes twice a session should
         // say so, and the first crash is usually the one that explains it.
         let at = std::time::SystemTime::now()

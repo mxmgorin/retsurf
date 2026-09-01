@@ -12,10 +12,14 @@
     <!-- Downloads use the app-specific external dir (getExternalFilesDir), which
          needs no storage permission on any API level. -->
 
+    <!-- allowNativeHeapPointerTagging: SpiderMonkey packs native pointers into a
+         JSVal and asserts the top 16 bits are clear; Android's tagged heap
+         pointers (API 30+) are not, and the script thread dies on the assert. -->
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
+        android:allowNativeHeapPointerTagging="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
         android:hardwareAccelerated="true">
 
