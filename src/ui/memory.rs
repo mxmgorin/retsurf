@@ -19,6 +19,18 @@ pub struct MemorySummary {
     /// Global gauges (resident, vsize, ...), kept apart from the explicit tree
     /// so the two accountings aren't mixed/double-counted.
     gauges: Vec<(String, usize)>,
+    /// Whole report paths, largest first, for `RETSURF_MEMORY_DETAIL`: the rolled
+    /// up rows say `js` grew and not which allocation under it did.
+    detail: Vec<(String, usize)>,
+}
+
+/// How many whole paths `RETSURF_MEMORY_DETAIL` logs.
+const DETAIL_ROWS: usize = 20;
+
+/// Whether to keep whole report paths (`RETSURF_MEMORY_DETAIL`), for a session
+/// spent finding out what a group is made of.
+fn detail_wanted() -> bool {
+    std::env::var("RETSURF_MEMORY_DETAIL").is_ok_and(|v| v != "0")
 }
 
 impl MemorySummary {
@@ -28,6 +40,8 @@ impl MemorySummary {
     pub fn from_report(report: MemoryReportResult) -> Self {
         let mut groups: HashMap<String, usize> = HashMap::new();
         let mut gauges: Vec<(String, usize)> = Vec::new();
+        let mut detail: Vec<(String, usize)> = Vec::new();
+        let detail_wanted = detail_wanted();
         let mut explicit_total = 0;
         for process in report.results {
             for r in process.reports {
@@ -36,9 +50,14 @@ impl MemorySummary {
                 } else {
                     explicit_total += r.size;
                     *groups.entry(group_key(&r.path)).or_default() += r.size;
+                    if detail_wanted {
+                        detail.push((r.path.join("/"), r.size));
+                    }
                 }
             }
         }
+        detail.sort_by_key(|&(_, size)| Reverse(size));
+        detail.truncate(DETAIL_ROWS);
         let mut rows: Vec<(String, usize)> = groups.into_iter().collect();
         rows.sort_by_key(|&(_, size)| Reverse(size));
         rows.truncate(12);
@@ -51,6 +70,7 @@ impl MemorySummary {
             rows,
             explicit_total,
             gauges,
+            detail,
         }
     }
 }
@@ -73,6 +93,9 @@ impl MemorySummary {
             fmt(&self.rows, 8),
             fmt(&self.gauges, 3),
         );
+        if !self.detail.is_empty() {
+            log::info!("memory detail: {}", fmt(&self.detail, DETAIL_ROWS));
+        }
     }
 }
 
