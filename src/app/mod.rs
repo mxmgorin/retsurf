@@ -83,6 +83,12 @@ const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
 /// long enough that the document being replaced has finished going away.
 const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 
+/// How long a pass that presented nothing waits, where the backend has no frame
+/// cap of its own. Only the present blocks on a vsynced backend, so skipping it
+/// leaves nothing to pace the loop; 60 Hz costs at most one frame of latency on
+/// the input that does need a redraw.
+const SKIPPED_PASS_INTERVAL: Duration = Duration::from_millis(16);
+
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
@@ -279,9 +285,9 @@ impl App {
                 }
             }
 
-            self.draw(page_painted);
+            let drew = self.draw(page_painted);
             self.frame_timer.tick();
-            self.pace_frame();
+            self.pace_frame(drew);
         }
 
         // Persist what was buffered since the last throttle tick — `Drop` won't
@@ -334,26 +340,35 @@ impl App {
 
     /// Put the frame on the panel — unless neither the page nor the chrome
     /// changed, which on a GPU-less device is most of them (see
-    /// [`AppUi::take_frame_dirty`]).
-    fn draw(&mut self, page_painted: bool) {
+    /// [`AppUi::take_frame_dirty`]). Reports whether anything was presented, which
+    /// is what decides the pacing below.
+    fn draw(&mut self, page_painted: bool) -> bool {
         if !page_painted && !self.ui.take_frame_dirty(&self.window) {
-            return;
+            return false;
         }
         let at = self.frame_timer.mark();
         let timing = self.ui.draw(&mut self.window, page_painted);
         self.frame_timer.chrome_done(at, timing);
+        true
     }
 
-    /// Hold the loop to the window's frame interval when presenting doesn't pace
-    /// it (the software renderer has no vsync to block on). Outside the frame
-    /// timer on purpose, so the figures it logs stay the cost of the work.
-    fn pace_frame(&mut self) {
-        let Some(interval) = self.window.frame_interval() else {
-            return;
+    /// Hold the loop to a frame interval when presenting doesn't pace it. Two
+    /// cases: the software renderer has no vsync to block on at all, and a pass
+    /// that skipped the present never reached the vsync the GL path leans on —
+    /// and `wait` deliberately does not block while a gamepad is connected, for
+    /// exactly that reason. Measured free-running at 300-500 passes a second on
+    /// an A55 handheld and 1600 on a desktop. Outside the frame timer on purpose,
+    /// so the figures it logs stay the cost of the work.
+    fn pace_frame(&mut self, drew: bool) {
+        let interval = match self.window.frame_interval() {
+            Some(interval) => Some(interval),
+            None => (!drew).then_some(SKIPPED_PASS_INTERVAL),
         };
-        let since = self.last_frame.elapsed();
-        if since < interval {
-            std::thread::sleep(interval - since);
+        if let Some(interval) = interval {
+            let since = self.last_frame.elapsed();
+            if since < interval {
+                std::thread::sleep(interval - since);
+            }
         }
         self.last_frame = Instant::now();
     }

@@ -188,9 +188,9 @@ pub struct AppUi {
     /// clears the keys, once [`Self::osk_height`] is known (see [`AppUi::update`]).
     osk_lift_pending: bool,
     repaint_pending: bool,
-    /// Force the next frame onto the screen whatever else says, for the changes
-    /// egui cannot report: the first frame, a resize, an explicit repaint.
-    force_redraw: bool,
+    /// Loop passes still to be drawn whatever else says, for the changes egui
+    /// cannot report: the first frame, a resize, an explicit repaint.
+    forced_passes: u8,
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     /// `None` in software mode, where the window composites the page itself.
     browser_tex_id: Option<egui::TextureId>,
@@ -283,7 +283,7 @@ impl AppUi {
             osk_height: 0.0,
             osk_lift_pending: false,
             repaint_pending: false,
-            force_redraw: true,
+            forced_passes: 1,
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
             cursor: {
@@ -364,10 +364,15 @@ impl AppUi {
     /// egui output, so a command that changes UI state (open a menu, switch section,
     /// type on the keyboard) wouldn't show until the next input wakes the loop. This
     /// schedules that follow-up frame so the change appears at once.
+    ///
+    /// Two passes, not one: this pass draws the output built before the command ran,
+    /// and the pass after it is the one the change is actually in. Marking only this
+    /// pass leaves that second one with nothing to make it dirty, and on a device
+    /// slow enough to have no spare passes the screen then trails the input.
     #[inline]
     pub fn request_repaint(&mut self) {
         self.repaint_delay = Some(Duration::ZERO);
-        self.force_redraw = true;
+        self.forced_passes = 2;
     }
 
     /// Whether the frame just built differs from the one already on the panel.
@@ -379,12 +384,12 @@ impl AppUi {
     /// the same picture again; an event it consumed, an animation it is running,
     /// or the lingering cursor overlay all say otherwise.
     pub fn take_frame_dirty(&mut self, window: &AppWindow) -> bool {
-        let dirty = self.force_redraw
+        let forced = self.forced_passes > 0;
+        self.forced_passes = self.forced_passes.saturating_sub(1);
+        forced
             || self.repaint_pending
             || window.repaint_delay() < Duration::MAX
-            || self.cursor_visible_for().is_some();
-        self.force_redraw = false;
-        dirty
+            || self.cursor_visible_for().is_some()
     }
 
     /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
@@ -975,7 +980,7 @@ impl AppUi {
         let size = (dw, dh.saturating_sub(toolbar_px).max(1));
         if size != self.browser_viewport {
             self.browser_viewport = size;
-            self.force_redraw = true;
+            self.forced_passes = self.forced_passes.max(1);
             browser.resize(size.0, size.1);
         }
     }
@@ -993,7 +998,7 @@ impl AppUi {
     /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &mut AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = window.on_event(event);
-        self.repaint_pending = resp.repaint;
+        self.repaint_pending |= resp.repaint;
         // don't consume when pointer over browser area
         resp.consumed & self.is_pointer_over_toolbar(window)
     }
