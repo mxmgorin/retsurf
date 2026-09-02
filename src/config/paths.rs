@@ -1,19 +1,15 @@
 //! Path/directory and environment resolution shared across the crate: the UI
 //! scale, the user data dir and its subfolders, and the config file path.
 
-/// UI/content scale factor. The Android activity sets `RETSURF_SCALE` to the
-/// display density (`DisplayMetrics.density`) before SDL starts, so the toolbar
-/// and page render at a readable size on high-DPI phones instead of 1:1 pixels.
-/// Desktop leaves it unset and stays at 1.0 — egui already derives HiDPI there
-/// from the drawable/window ratio, which is 1:1 on Android. Applied to egui's
-/// zoom factor and Servo's `hidpi_scale_factor`. Clamped to a sane range.
-pub fn device_scale() -> f32 {
+/// UI/content scale pinned by the launcher, standing in for the fit the UI works
+/// out from the panel. Android sets `RETSURF_SCALE` to the display density, which
+/// a resolution alone cannot tell. `None` — the usual case — leaves it to the fit.
+pub fn device_scale() -> Option<f32> {
     std::env::var("RETSURF_SCALE")
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
         .filter(|s| s.is_finite() && *s > 0.0)
         .map(|s| s.clamp(0.5, 6.0))
-        .unwrap_or(1.0)
 }
 
 /// The per-user data directory (with a trailing separator) where retsurf keeps

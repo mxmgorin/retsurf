@@ -34,6 +34,12 @@ pub const MAX_TABS: IntBounds = IntBounds { min: 0, max: 32 };
 // Display
 pub const WIDTH: IntBounds = IntBounds { min: 160, max: 3840 };
 pub const HEIGHT: IntBounds = IntBounds { min: 144, max: 2160 };
+/// How far the UI zoom may be pushed either side of the fit to the panel.
+/// Relative, since the chrome already sizes itself to the screen it is on.
+pub const SCALE: FloatBounds = FloatBounds { min: 0.6, max: 1.6, default: 1.0 };
+/// Both the settings step and the grid the zoom snaps to: a press that landed
+/// back on the zoom it left would do nothing.
+pub const SCALE_STEP: f64 = 0.05;
 pub const CURSOR_LINGER_MS: IntBounds = IntBounds { min: 0, max: 10_000 };
 /// `0` is uncapped, which only a renderer paced by something else can afford.
 pub const MAX_FPS: IntBounds = IntBounds { min: 0, max: 120 };

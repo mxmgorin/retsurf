@@ -88,8 +88,9 @@ async_clipboard = false       # Async Clipboard API                  — full on
 permissions = false           # Permissions API                      — full only
 
 [display]
-width = 640
-height = 480
+width = 640                # size the window opens at, and where it is left on exit
+height = 480               # (desktop only: a handheld's window is its panel)
+scale = 1.0                # UI zoom, as a factor over the fit to the panel (see below)
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 software_render = false    # draw everything on the CPU, with no GL at all (see below)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
@@ -282,6 +283,7 @@ files.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
+| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[display].scale` still multiplies it. Set by the Android launcher to the display density |
 | `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
 | `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
@@ -296,6 +298,21 @@ files.
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.
+
+## Interface scale
+
+The chrome is drawn against a 640x480 design and zoomed to fit the panel it is
+on, so a toolbar keeps its size in thumbs rather than in pixels. A fit within a
+quarter of a whole number is rounded down to it — fractional zoom lands glyphs
+between pixels, and the spare pixels widen the page instead. `[display].scale`
+is a factor over that fit (0.6 to 1.6), so one setting means the same thing on a
+handheld and on a desktop window. The page follows the same zoom as its device
+pixel ratio, which keeps a CSS pixel and a chrome point the same size.
+
+On 640x480 and 752x560 panels the fit is 1.0, so nothing changes there; a
+desktop window is where the zoom is visibly above one. `RETSURF_SCALE` replaces
+the fit where the launcher knows better — Android sets it to the display
+density, which a resolution alone cannot tell.
 
 ## Software rendering
 

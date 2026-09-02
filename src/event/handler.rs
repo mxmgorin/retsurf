@@ -248,24 +248,17 @@ impl AppEventHandler {
                 mouse_btn, x, y, ..
             } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, false);
-                let event = servo::InputEvent::MouseButton(event);
-                browser.handle_input(event);
+                browser.mouse_button(mouse_btn, x, y, false);
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, true);
-                let event = servo::InputEvent::MouseButton(event);
-
-                browser.handle_input(event);
+                browser.mouse_button(mouse_btn, x, y, true);
             }
             Event::MouseMotion { x, y, .. } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_move_event(x, y);
-                let event = servo::InputEvent::MouseMove(event);
-                browser.handle_input(event);
+                browser.mouse_move(x, y);
             }
             Event::MouseWheel {
                 x,
@@ -276,13 +269,12 @@ impl AppEventHandler {
             } => {
                 let (mx, my) = ui.to_browser_rel_pos(mouse_x as f32, mouse_y as f32);
                 // Fire the DOM `wheel` event (for pages with JS handlers)...
-                let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
-                browser.handle_input(servo::InputEvent::Wheel(event));
+                browser.wheel(x, y, mx, my);
                 // ...then perform the actual native scroll. SDL `y` is positive
                 // when scrolling up; Servo's positive `dy` reveals lower content.
-                const WHEEL_PX: f32 = 60.0;
-                let dy = -y as f32 * WHEEL_PX;
-                browser.scroll(-x as f32 * WHEEL_PX, dy, mx, my);
+                const WHEEL_STEP: f32 = 60.0;
+                let dy = -y as f32 * WHEEL_STEP;
+                browser.scroll(-x as f32 * WHEEL_STEP, dy, mx, my);
                 ui.notify_page_scroll(dy);
             }
             // Touch: SDL finger coords are normalized to the window; scale to the
@@ -309,6 +301,7 @@ impl AppEventHandler {
                 let (px, py) = (x * w as f32, y * h as f32);
                 if let Some((dx, dy)) = self.touch.motion(finger_id, px, py) {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
+                    let (dx, dy) = ui.to_points(dx, dy);
                     // Content follows the finger: dragging down reveals upper
                     // content, and Servo's positive dy reveals lower content, so
                     // negate the deltas.
@@ -319,20 +312,9 @@ impl AppEventHandler {
             Event::FingerUp { finger_id, .. } => {
                 if let super::touch::TouchEnd::Tap(px, py) = self.touch.up(finger_id) {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
-                    let down = super::sdl2_servo::into_mouse_button_event(
-                        sdl2::mouse::MouseButton::Left,
-                        bx,
-                        by,
-                        true,
-                    );
-                    browser.handle_input(servo::InputEvent::MouseButton(down));
-                    let up = super::sdl2_servo::into_mouse_button_event(
-                        sdl2::mouse::MouseButton::Left,
-                        bx,
-                        by,
-                        false,
-                    );
-                    browser.handle_input(servo::InputEvent::MouseButton(up));
+                    for down in [true, false] {
+                        browser.mouse_button(sdl2::mouse::MouseButton::Left, bx, by, down);
+                    }
                 }
             }
             Event::KeyDown {

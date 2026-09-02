@@ -38,16 +38,26 @@ use crate::{
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
 
-/// Style a freshly built [`egui::Context`]: the shared accent theme (see
-/// [`theme`]) plus the device's UI zoom. Handed to the window, which applies it
-/// to every context it creates.
+/// The panel the chrome was drawn for; every other one is that, scaled. A pair
+/// of edges, not a width and a height: [`wanted_scale`] fits it either way round.
+const BASE_SIZE: egui::Vec2 = egui::vec2(640.0, 480.0);
+/// Bounds on the zoom actually installed, whatever the fit and the setting
+/// between them ask for.
+const SCALE_RANGE: std::ops::RangeInclusive<f32> = 0.5..=4.0;
+const SCALE_STEP: f32 = crate::config::bounds::SCALE_STEP as f32;
+/// A panel reported past this is egui's placeholder rect, not a screen; the real
+/// size arrives with the first frame.
+const MAX_PANEL: f32 = 8192.0;
+/// How far past a whole number a fit may reach before the fraction is worth it:
+/// fractional zoom lands glyphs between pixels, and the spare pixels become page.
+const WHOLE_ZOOM_REACH: f32 = 0.25;
+
+/// Style a freshly built [`egui::Context`]: the accent theme plus a launcher's
+/// pinned zoom. The fit to the panel needs a frame's measurements and arrives
+/// with [`AppUi::sync_scale`].
 pub fn init_egui_ctx(ctx: &egui::Context) {
     theme::apply(ctx);
-    // egui-sdl2 derives pixels-per-point from the drawable/window ratio (1.0 on
-    // Android), then multiplies by this — so on a phone the toolbar/overlays
-    // render at a readable size instead of 1:1 pixels. Desktop scale is 1.0.
-    let scale = crate::config::device_scale();
-    if scale != 1.0 {
+    if let Some(scale) = crate::config::device_scale() {
         ctx.set_zoom_factor(scale);
     }
 }
@@ -204,6 +214,11 @@ pub struct AppUi {
     cursor_last_move: Option<Instant>,
     /// How long the cursor stays visible after a move (from the interface config).
     cursor_linger: Duration,
+    /// `[display] scale`: the user's factor over the fit to the panel. Applied live.
+    ui_scale: f32,
+    /// `RETSURF_SCALE`, standing in for the panel's own fit where a launcher
+    /// knows better (Android, which reports a density a resolution cannot).
+    forced_scale: Option<f32>,
     /// Which edge the toolbar renders on (from the display config). Applied live.
     toolbar_position: ToolbarPosition,
     /// Whether the toolbar hides on scroll-down / reveals on scroll-up (config).
@@ -287,11 +302,15 @@ impl AppUi {
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
             cursor: {
+                // Points, like every rect it is tested against.
                 let (w, h) = window.size();
-                (w as f32 / 2.0, h as f32 / 2.0)
+                let ppp = window.egui_ctx().pixels_per_point();
+                (w as f32 / ppp / 2.0, h as f32 / ppp / 2.0)
             },
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(display.cursor_linger_ms),
+            ui_scale: display.scale,
+            forced_scale: crate::config::device_scale(),
             toolbar_position: display.toolbar_position,
             toolbar_autohide: display.toolbar_autohide,
             toolbar_shown: true,
@@ -398,8 +417,10 @@ impl AppUi {
     #[inline]
     pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) {
         let (w, h) = window.size();
-        self.cursor.0 = (self.cursor.0 + dx).clamp(CURSOR_EXTENT, w as f32 - CURSOR_EXTENT);
-        self.cursor.1 = (self.cursor.1 + dy).clamp(CURSOR_EXTENT, h as f32 - CURSOR_EXTENT);
+        // The window in points: the cursor is drawn in them, the window is pixels.
+        let (w, h) = self.to_points(w as f32, h as f32);
+        self.cursor.0 = (self.cursor.0 + dx).clamp(CURSOR_EXTENT, w - CURSOR_EXTENT);
+        self.cursor.1 = (self.cursor.1 + dy).clamp(CURSOR_EXTENT, h - CURSOR_EXTENT);
         self.cursor_last_move = Some(Instant::now());
     }
 
@@ -953,9 +974,49 @@ impl AppUi {
             .memory(|m| m.has_focus(egui::Id::new("dial_edit_url")))
     }
 
+    /// A window pixel (as SDL reports events) in web-view points — the space the
+    /// page's own rects come back in, and what [`AppBrowser`] is fed.
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
-        (x - self.webview_rect.left(), y - self.webview_rect.top())
+        let ppp = self.egui_ctx.pixels_per_point();
+        (
+            x / ppp - self.webview_rect.left(),
+            y / ppp - self.webview_rect.top(),
+        )
+    }
+
+    /// A window-pixel distance in points, for the deltas SDL reports in pixels.
+    #[inline]
+    pub fn to_points(&self, dx: f32, dy: f32) -> (f32, f32) {
+        let ppp = self.egui_ctx.pixels_per_point();
+        (dx / ppp, dy / ppp)
+    }
+
+    /// Scale the whole chrome to the panel it is on, then by what the setting
+    /// asks for. Every size in the renderers is in points against a 640x480
+    /// design, so one zoom factor carries the lot. The page follows on the same
+    /// factor, so a CSS pixel and a point stay the same size.
+    fn sync_scale(&mut self, browser: &AppBrowser) {
+        let ctx = &self.egui_ctx;
+        let installed = ctx.zoom_factor();
+        let native = panel_points(ctx.content_rect().size(), installed);
+        if !(1.0..=MAX_PANEL).contains(&native.x) || !(1.0..=MAX_PANEL).contains(&native.y) {
+            return;
+        }
+        let wanted = wanted_scale(native, self.forced_scale, self.ui_scale);
+        browser.set_hidpi(wanted);
+        if (wanted - installed).abs() < f32::EPSILON {
+            return;
+        }
+        // Two decimals: snapping to the step grid leaves float noise in the tail.
+        log::info!("ui scale {wanted:.2} for {}x{} points", native.x, native.y);
+        ctx.set_zoom_factor(wanted);
+        self.forced_passes = self.forced_passes.max(1);
+    }
+
+    /// Adopt an edited `[display] scale`; the next frame installs it.
+    pub fn set_ui_scale(&mut self, scale: f32) {
+        self.ui_scale = scale;
     }
 
     /// Resize the browser to the central web-view area (the window minus the
@@ -1092,6 +1153,8 @@ impl AppUi {
         if self.egui_ctx != *window.egui_ctx() {
             self.egui_ctx = window.egui_ctx().clone();
         }
+        // Before the layout: every rect below is measured in the zoom in force.
+        self.sync_scale(browser);
 
         // The cursor draws only while it lingers after a move. When it does, ask
         // the loop to wake when the linger ends so it gets erased even if no other
@@ -1396,6 +1459,30 @@ impl AppUi {
     }
 }
 
+/// The panel behind a laid-out rect, in points at zoom 1: the drawn area with the
+/// zoom divided back out, rounded so the measurement does not feed on its own
+/// output and swap between two steps every frame.
+fn panel_points(content: egui::Vec2, zoom: f32) -> egui::Vec2 {
+    (content * zoom).round()
+}
+
+/// The zoom a panel of `native` points wants: what the design fits into it, or
+/// `forced` where a launcher said so, taken `user` times over and snapped to a
+/// step the layout can settle on.
+fn wanted_scale(native: egui::Vec2, forced: Option<f32>, user: f32) -> f32 {
+    // Long edge to long edge: a turned screen is the same screen, so the chrome
+    // keeps its size and the page gets the spare measure instead.
+    let fit =
+        (native.max_elem() / BASE_SIZE.max_elem()).min(native.min_elem() / BASE_SIZE.min_elem());
+    let fit = if fit >= 1.0 && fit.fract() <= WHOLE_ZOOM_REACH {
+        fit.floor()
+    } else {
+        fit
+    };
+    let wanted = forced.unwrap_or(fit) * user;
+    ((wanted / SCALE_STEP).round() * SCALE_STEP).clamp(*SCALE_RANGE.start(), *SCALE_RANGE.end())
+}
+
 /// The D-pad scroll-mode indicator at the parked cursor position: a center dot
 /// with up/down arrowheads, like a browser's middle-click autoscroll marker.
 fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
@@ -1412,5 +1499,121 @@ fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
             egui::pos2(pos.x + 4.5, base),
         ];
         painter.add(egui::Shape::convex_polygon(points, fill, stroke));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::bounds::SCALE;
+
+    /// The panel the chrome was drawn for, the Miyoo Flip's, and a desktop window.
+    const HANDHELD: egui::Vec2 = BASE_SIZE;
+    const FLIP: egui::Vec2 = egui::vec2(752.0, 560.0);
+    const DESKTOP: egui::Vec2 = egui::vec2(1280.0, 720.0);
+    /// The same handheld held the other way up.
+    const TURNED: egui::Vec2 = egui::vec2(BASE_SIZE.y, BASE_SIZE.x);
+
+    /// Snapping multiplies the step back out, so the answers land a rounding
+    /// short of the round number they read as.
+    fn assert_scale(got: f32, want: f32) {
+        assert!((got - want).abs() < SCALE_STEP / 2.0, "{got} is not {want}");
+    }
+
+    /// Every scale the setting can be stepped to.
+    fn user_scales() -> impl Iterator<Item = f32> {
+        let (min, max, step) = (SCALE.min as f32, SCALE.max as f32, SCALE_STEP);
+        let steps = ((max - min) / step).round() as i32;
+        (0..=steps).map(move |i| min + i as f32 * step)
+    }
+
+    #[test]
+    fn the_design_lands_at_one_on_the_panel_it_was_drawn_for() {
+        assert_scale(wanted_scale(HANDHELD, None, 1.0), 1.0);
+        assert_scale(wanted_scale(DESKTOP, None, 1.0), 1.5);
+    }
+
+    /// The Flip's panel is 17% past the design, which is not worth rendering type
+    /// between pixels for; the spare pixels widen the page instead.
+    #[test]
+    fn a_panel_a_little_past_the_design_keeps_a_whole_zoom() {
+        assert_scale(wanted_scale(FLIP, None, 1.0), 1.0);
+    }
+
+    #[test]
+    fn a_quarter_turn_hands_back_the_same_screen_and_the_same_sized_chrome() {
+        assert_scale(wanted_scale(TURNED, None, 1.0), 1.0);
+        for panel in [HANDHELD, FLIP, DESKTOP] {
+            let turned = egui::vec2(panel.y, panel.x);
+            for user in user_scales() {
+                assert_eq!(
+                    wanted_scale(panel, None, user),
+                    wanted_scale(turned, None, user),
+                    "{panel:?} at {user} resizes itself when turned"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_setting_is_read_against_whatever_the_panel_asked_for() {
+        assert_scale(wanted_scale(HANDHELD, None, 1.2), 1.2);
+        assert_scale(wanted_scale(DESKTOP, None, 1.2), 1.8);
+        // A launcher's pin (Android's density) is a base like any other.
+        assert_scale(wanted_scale(DESKTOP, Some(2.0), 1.2), 2.4);
+    }
+
+    #[test]
+    fn neither_end_of_the_setting_can_push_the_zoom_out_of_range() {
+        for panel in [HANDHELD, DESKTOP, egui::vec2(7680.0, 4320.0)] {
+            for user in [SCALE.min as f32, SCALE.max as f32] {
+                let scale = wanted_scale(panel, None, user);
+                assert!(
+                    SCALE_RANGE.contains(&scale),
+                    "{panel:?} at {user} -> {scale}"
+                );
+            }
+        }
+    }
+
+    /// What `Context::content_rect` hands back for a panel at `zoom`: the points
+    /// it lays out in, snapped to egui's 1/32pt grid.
+    fn content_rect(panel: egui::Vec2, zoom: f32) -> egui::Vec2 {
+        use egui::emath::GuiRounding as _;
+        (panel / zoom).round_ui()
+    }
+
+    /// One frame: measure the panel through the zoom in force, ask for the next.
+    fn next_zoom(panel: egui::Vec2, zoom: f32, user: f32) -> f32 {
+        wanted_scale(panel_points(content_rect(panel, zoom), zoom), None, user)
+    }
+
+    #[test]
+    fn a_scale_settles_rather_than_swapping_between_two_steps_every_frame() {
+        for panel in [HANDHELD, FLIP, TURNED, DESKTOP] {
+            for user in user_scales() {
+                let mut zoom = 1.0;
+                for _ in 0..8 {
+                    zoom = next_zoom(panel, zoom, user);
+                }
+                assert_eq!(
+                    next_zoom(panel, zoom, user),
+                    zoom,
+                    "{panel:?} at {user} swaps"
+                );
+            }
+        }
+    }
+
+    /// A setting stepping by 5% into a zoom snapped to 10% spends half its presses
+    /// on nothing at all.
+    #[test]
+    fn every_step_of_the_setting_moves_the_panel_the_design_was_drawn_for() {
+        let mut zooms: Vec<f32> = user_scales()
+            .map(|user| wanted_scale(HANDHELD, None, user))
+            .collect();
+        let asked = zooms.len();
+        zooms.dedup();
+        assert_eq!(zooms.len(), asked, "{zooms:?} repeats a zoom");
     }
 }

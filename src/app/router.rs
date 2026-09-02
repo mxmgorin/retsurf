@@ -5,7 +5,6 @@
 
 use super::{App, AppCommand, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
-use crate::event::sdl2_servo::{into_mouse_button_event, into_mouse_move_event};
 use crate::overlay::hints::{HintInput, Sym};
 use crate::overlay::osk::OskCommand;
 use crate::ui::Focus;
@@ -333,12 +332,10 @@ impl App {
             return;
         };
         self.ui.hints.hide();
-        self.browser
-            .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+        self.browser.mouse_move(x, y);
         for pressed in [true, false] {
-            let event = into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
             self.browser
-                .handle_input(servo::InputEvent::MouseButton(event));
+                .mouse_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
         }
     }
 
@@ -347,11 +344,9 @@ impl App {
     fn primary_action(&mut self, pressed: bool) {
         if self.ui.cursor_over_browser() {
             let (x, y) = self.ui.cursor_browser_rel();
+            self.browser.mouse_move(x, y);
             self.browser
-                .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
-            let event = into_mouse_button_event(sdl2::mouse::MouseButton::Left, x, y, pressed);
-            self.browser
-                .handle_input(servo::InputEvent::MouseButton(event));
+                .mouse_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
         } else {
             self.ui.click_ui(pressed, &mut self.window);
         }
@@ -457,8 +452,7 @@ impl App {
             // there's nothing in Servo to point at.
             if self.ui.cursor_over_browser() {
                 let (x, y) = self.ui.cursor_browser_rel();
-                self.browser
-                    .handle_input(servo::InputEvent::MouseMove(into_mouse_move_event(x, y)));
+                self.browser.mouse_move(x, y);
             }
         }
 

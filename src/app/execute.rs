@@ -298,6 +298,7 @@ impl App {
             .set_gamepad_config(self.config.input.clone());
         self.ui
             .set_cursor_linger(self.config.display.cursor_linger_ms);
+        self.ui.set_ui_scale(self.config.display.scale);
         self.ui
             .set_toolbar_position(self.config.display.toolbar_position);
         self.ui

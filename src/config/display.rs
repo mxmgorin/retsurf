@@ -6,8 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DisplayConfig {
+    /// The size the window opens at, where the driver leaves that to us (desktop,
+    /// never a handheld). Rewritten on exit with the size it was left at.
     pub width: u32,
     pub height: u32,
+    /// UI zoom over the scale the panel's own size asks for, so one setting means
+    /// the same thing on a handheld and on a desktop window. The page follows it.
+    pub scale: f32,
     /// Request an OpenGL ES context (required on Mali handhelds) instead of
     /// desktop GL. Can be overridden at startup via `RETSURF_GLES=0`.
     pub use_gles: bool,
@@ -39,6 +44,7 @@ impl Default for DisplayConfig {
         Self {
             width: 640,
             height: 480,
+            scale: 1.0,
             use_gles: true,
             software_render: false,
             max_fps: 30,

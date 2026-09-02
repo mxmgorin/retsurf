@@ -119,7 +119,7 @@ impl AppConfig {
     /// (see [`crate::overlay::settings`]); a hand-edited file otherwise bypasses
     /// them, and an out-of-range value (e.g. `page_zoom = 0`, `width = 0`, a
     /// negative speed, or a NaN) can break rendering or input. Logs corrections.
-    fn sanitize(&mut self) {
+    pub(crate) fn sanitize(&mut self) {
         use bounds as b;
 
         fix_f32("browser.page_zoom", &mut self.browser.page_zoom, b::PAGE_ZOOM);
@@ -127,6 +127,7 @@ impl AppConfig {
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);
         fix_u32("display.height", &mut self.display.height, b::HEIGHT);
+        fix_f32("display.scale", &mut self.display.scale, b::SCALE);
         fix_u64(
             "display.cursor_linger_ms",
             &mut self.display.cursor_linger_ms,

@@ -139,7 +139,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
         let webview = request
             .builder(self.rendering_ctx.clone())
-            .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
+            .hidpi_scale_factor(euclid::Scale::new(self.hidpi.get()))
             .delegate(parent_webview.delegate())
             .build();
         if self.default_zoom != 1.0 {

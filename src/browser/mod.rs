@@ -204,6 +204,9 @@ struct AppBrowserInner {
     /// `[browser] page_zoom`: applied to every new tab and the `zoom_reset`
     /// target (also hides the toolbar zoom chip when a tab is back at it).
     default_zoom: f32,
+    /// Device pixel ratio in force — the UI scale, so a CSS pixel and a chrome
+    /// point are the same size. A `Cell`: the scale follows the window.
+    hidpi: Cell<f32>,
     /// `[browser] max_tabs` (`0` unlimited); a `Cell` so a settings save can
     /// change it live.
     max_tabs: Cell<usize>,
@@ -272,6 +275,7 @@ impl AppBrowserInner {
             dismissed_controls: RefCell::new(vec![]),
             user_content,
             default_zoom,
+            hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             forced_dark,
@@ -592,10 +596,7 @@ impl AppBrowser {
         let webview =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
                 .url(url)
-                // Device pixel ratio: 1.0 on desktop, the display density on
-                // Android (see config::device_scale), so the page lays out for a
-                // logical viewport and renders crisply rather than tiny.
-                .hidpi_scale_factor(euclid::Scale::new(crate::config::device_scale()))
+                .hidpi_scale_factor(euclid::Scale::new(self.inner.hidpi.get()))
                 .delegate(self.inner.clone())
                 .user_content_manager(self.inner.user_content.clone())
                 .build();
@@ -838,6 +839,50 @@ impl AppBrowser {
         false
     }
 
+    /// Follow the chrome's zoom with the page's device pixel ratio. Every open
+    /// tab, not just the active one: a hidden tab would lay out for the old scale.
+    pub fn set_hidpi(&self, scale: f32) {
+        if self.inner.hidpi.replace(scale) == scale {
+            return;
+        }
+        for tab in self.inner.tabs.borrow().iter() {
+            tab.webview
+                .set_hidpi_scale_factor(euclid::Scale::new(scale));
+        }
+    }
+
+    /// A web-view point in the pixels the page is rendered and hit-tested in.
+    #[inline]
+    fn page_px(&self, x: f32, y: f32) -> (f32, f32) {
+        let scale = self.inner.hidpi.get();
+        (x * scale, y * scale)
+    }
+
+    /// Point the page at `(x, y)` (web-view points), so `:hover` and JS follow.
+    pub fn mouse_move(&self, x: f32, y: f32) {
+        let (x, y) = self.page_px(x, y);
+        self.handle_input(servo::InputEvent::MouseMove(
+            crate::event::sdl2_servo::into_mouse_move_event(x, y),
+        ));
+    }
+
+    /// Press or release `button` at `(x, y)` (web-view points).
+    pub fn mouse_button(&self, button: sdl2::mouse::MouseButton, x: f32, y: f32, down: bool) {
+        let (x, y) = self.page_px(x, y);
+        self.handle_input(servo::InputEvent::MouseButton(
+            crate::event::sdl2_servo::into_mouse_button_event(button, x, y, down),
+        ));
+    }
+
+    /// The DOM `wheel` event at `(x, y)` (web-view points). Fires handlers only —
+    /// [`Self::scroll`] is what moves the page.
+    pub fn wheel(&self, dx: i32, dy: i32, x: f32, y: f32) {
+        let (x, y) = self.page_px(x, y);
+        self.handle_input(servo::InputEvent::Wheel(
+            crate::event::sdl2_servo::into_wheel_event(dx, dy, x, y),
+        ));
+    }
+
     pub fn handle_input(&self, event: servo::InputEvent) {
         let Some(tab) = self.inner.active_webview() else {
             return;
@@ -880,13 +925,15 @@ impl AppBrowser {
         webview.evaluate_javascript(js, |_| {});
     }
 
-    /// Scroll the active page by a device-pixel delta at `(x, y)`. Positive `dy`
-    /// reveals content lower on the page. This is the native compositor scroll
-    /// (`InputEvent::Wheel` only fires the DOM `wheel` event, it does not scroll).
+    /// Scroll the active page by a delta at `(x, y)`, both in web-view points.
+    /// Positive `dy` reveals content lower on the page. This is the native
+    /// compositor scroll (`InputEvent::Wheel` only fires the DOM event).
     pub fn scroll(&self, dx: f32, dy: f32, x: f32, y: f32) {
         let Some(tab) = self.inner.active_webview() else {
             return;
         };
+        let (dx, dy) = self.page_px(dx, dy);
+        let (x, y) = self.page_px(x, y);
         let delta = servo::Scroll::Delta(servo::DeviceVector2D::new(dx, dy).into());
         let point = servo::DevicePoint::new(x, y).into();
         tab.notify_scroll_event(delta, point);
