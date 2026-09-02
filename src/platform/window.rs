@@ -78,6 +78,10 @@ fn frame_interval(max_fps: u32) -> Option<Duration> {
     interval
 }
 
+/// Frame pace where a GL driver refused the swap interval: 60 Hz, the refresh of
+/// every panel this runs on.
+const NO_VSYNC_INTERVAL: Duration = Duration::from_micros(16_667);
+
 /// The window, the renderer that puts pixels in it, and the egui that draws the
 /// chrome — one bundle, because which renderer came up decides all three.
 ///
@@ -232,10 +236,10 @@ impl AppWindow {
     }
 
     /// The shortest a frame may take, or `None` when presenting already paces the
-    /// loop itself — which GL does, through the swap interval.
+    /// loop itself — which GL does, but only where the swap interval was granted.
     pub fn frame_interval(&self) -> Option<Duration> {
         match &self.backend {
-            Backend::Gl(_) => None,
+            Backend::Gl(b) => (!b.vsync).then_some(NO_VSYNC_INTERVAL),
             #[cfg(feature = "software")]
             Backend::Software(b) => b.frame_interval,
         }
@@ -349,6 +353,9 @@ struct GlBackend {
     /// egui's handle to the FBO colour texture. Its GL name is stable across
     /// resizes, so this stays valid for the program's lifetime.
     browser_tex: egui::TextureId,
+    /// Whether the swap actually blocks. The fbdev + Mali path on muOS refuses
+    /// the interval, and the loop leans on it for pacing.
+    vsync: bool,
 }
 
 impl GlBackend {
@@ -374,9 +381,13 @@ impl GlBackend {
             .gl_make_current(&gl_context)
             .map_err(|e| format!("failed to make GL context current: {e}"))?;
 
-        // Cap the main loop to the display refresh; without this the loop would
-        // busy-spin while the gamepad drives continuous cursor/scroll updates.
-        let _ = video_subsystem.gl_set_swap_interval(sdl2::video::SwapInterval::VSync);
+        // Caps the main loop, and on a panning fbdev it also decides whether the
+        // flip lands in the blanking interval — muOS tears a band off the top
+        // frame without it. Refusals are real, so the result is kept.
+        let vsync = video_subsystem
+            .gl_set_swap_interval(sdl2::video::SwapInterval::VSync)
+            .is_ok();
+        log::info!("gl: vsync {}", if vsync { "on" } else { "REFUSED, pacing by hand" });
 
         // glow (egui) and gleam (Servo/WebRender) both resolve GL entry points
         // through SDL's loader; one closure feeds all three loads.
@@ -413,6 +424,7 @@ impl GlBackend {
             egui,
             rendering_ctx,
             browser_tex,
+            vsync,
         })
     }
 
