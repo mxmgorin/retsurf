@@ -179,7 +179,7 @@ at runtime on the device, so they aren't bundled.
 ## Building for armhf (Miyoo Mini)
 
 A different device family — SSD202D, armv7, no GPU at all. The renderer for it is the
-`software` feature below; what is still missing is the device-side packaging.
+`software` feature below, and `allium/` is the device-side package (`allium/README.md`).
 
 ```sh
 tools/armhf/build.sh              # prints the binary's path

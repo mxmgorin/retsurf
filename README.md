@@ -15,7 +15,7 @@
 
 retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical.  Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 for windowing and input and egui for the UI.
 
-retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets [PortMaster-compatible](https://portmaster.games/supported-devices.html) Linux handhelds, as well as regular desktops and Android (touch + system keyboard).
+retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets [PortMaster-compatible](https://portmaster.games/supported-devices.html) Linux handhelds, as well as regular desktops and Android (touch + system keyboard). Devices with no GPU at all — the Miyoo Mini family — get a build that rasterizes the page and the chrome on the CPU instead.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -88,6 +88,22 @@ cargo install cargo-ndk --locked
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
+### Miyoo Mini (Allium)
+
+There is no GPU on this device, so the page is rasterized by WebRender's software
+backend and the chrome by SDL's 2D renderer — the `software` cargo feature. The armv7
+binary and the card layout around it are cross-built in a container:
+
+```sh
+tools/armhf/build.sh                 # prints the binary's path
+tools/armhf/package-allium.sh -n     # dist/retsurf-allium.zip around what was just built
+```
+
+Packaging borrows three sets of files it cannot ship itself — the Miyoo SDL2 build
+above all; the script header says where each comes from. See **[the Allium
+package](allium/README.md)** for the device side: install, controls, and what 128 MB
+of RAM costs you.
+
 ## Configuration
 
 `config.toml` (settings) and `bindings.toml` (gamepad/keyboard mappings) live in the
@@ -108,4 +124,5 @@ me motivated.
 
 - [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
 - [Android notes](docs/ANDROID_PORT.md) — build/packaging, storage, touch, lifecycle, status
+- [Allium package](allium/README.md) — the Miyoo Mini build: install, controls, limits
 - [The Servo Book](https://book.servo.org/) — the embedded engine: architecture, concepts, build system

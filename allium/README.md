@@ -8,9 +8,10 @@ drawn by SDL's 2D renderer.
 **Miyoo Mini Plus and Flip only.** The original Mini has no wifi, and a browser
 without a network is nothing.
 
-**This is a first device build.** It has been checked on a desktop, under qemu,
-and nowhere else. Expect it to be slow, and expect to find out here whether 128
-MB is enough.
+**This is a first device build.** It has been run on a Miyoo Mini Flip — where it
+browses a real site at 24 to 26 fps — and on nothing else; the Plus is the same
+SoC with no RTC, and untested. Expect it to be slow, and expect the 128 MB to be
+what you hit first.
 
 ## Install
 

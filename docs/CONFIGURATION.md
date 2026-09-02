@@ -93,6 +93,8 @@ height = 480               # (desktop only: a handheld's window is its panel)
 scale = 1.0                # UI zoom, as a factor over the fit to the panel (see below)
 use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
 software_render = false    # draw everything on the CPU, with no GL at all (see below)
+max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
+dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (top reflows, bottom overlays)
@@ -110,6 +112,8 @@ layouts = ["en", "ru"]
 # use less RAM at some cost to speed (important on unified-memory handhelds, where
 # the GPU draws from the same pool). One of:
 #   auto      pick a tier from the build target + detected RAM (the default)
+#   micro     ~128 MB boards (Miyoo Mini): embedded with a quarter of the JS heap,
+#             no slack before a collection and no page kept alive for back
 #   embedded  ~512 MB / sub-1 GB boards: baseline JIT only, single-threaded, no caches
 #   tight     ~1 GB boards (RK3326, H700): baseline JIT only, small caches
 #   balanced  ~2 GB boards (RK3566, A527): modest parallelism, full JIT
@@ -285,8 +289,15 @@ files.
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
 | `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[display].scale` still multiplies it. Set by the Android launcher to the display density |
 | `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
+| `RETSURF_MAX_FPS` | — | Overrides `[display].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
+| `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
+| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that keeps no kill helper of its own (Allium sets it) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
 | `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
+| `RETSURF_MEMORY_DETAIL` | `0` | `1` logs the 20 largest whole memory-report paths beside the rolled-up groups |
+| `RETSURF_PARTIAL_PRESENT` | `0` | `1` sends the panel only the part of the software frame that changed; the Miyoo driver misplaces a partial copy, which is why it is off |
+| `RETSURF_ROUNDING` | `0` on the software renderer | `1` puts the chrome's rounded corners back there, to compare what they cost |
+| `RETSURF_FEATHERING` | follows the renderer | `0`/`1` overrides egui's edge smoothing, which is off on the software renderer |
 | `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
 | `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) |
 | `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
