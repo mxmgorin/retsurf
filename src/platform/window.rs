@@ -356,6 +356,8 @@ struct GlBackend {
     /// Whether the swap actually blocks. The fbdev + Mali path on muOS refuses
     /// the interval, and the loop leans on it for pacing.
     vsync: bool,
+    /// See [`DisplayConfig::dark_last_row`].
+    dark_last_row: bool,
 }
 
 impl GlBackend {
@@ -425,6 +427,7 @@ impl GlBackend {
             rendering_ctx,
             browser_tex,
             vsync,
+            dark_last_row: config.dark_last_row,
         })
     }
 
@@ -438,6 +441,18 @@ impl GlBackend {
         use glow::HasContext;
         unsafe { self.glow_ctx.bind_framebuffer(glow::FRAMEBUFFER, None) };
         self.egui.paint();
+        if self.dark_last_row {
+            // After egui, before the swap: nothing may paint over it.
+            // GL's origin is bottom-left, so y=0 is the row scanned out last.
+            let (w, _) = self.window.drawable_size();
+            unsafe {
+                self.glow_ctx.enable(glow::SCISSOR_TEST);
+                self.glow_ctx.scissor(0, 0, w as i32, 1);
+                self.glow_ctx.clear_color(0.0, 0.0, 0.0, 1.0);
+                self.glow_ctx.clear(glow::COLOR_BUFFER_BIT);
+                self.glow_ctx.disable(glow::SCISSOR_TEST);
+            }
+        }
         self.window.gl_swap_window();
     }
 }
