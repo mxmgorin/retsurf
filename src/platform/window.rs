@@ -92,6 +92,8 @@ const NO_VSYNC_INTERVAL: Duration = Duration::from_micros(16_667);
 pub struct AppWindow {
     _video_subsystem: VideoSubsystem,
     backend: Backend,
+    /// The size the window opened at — what [`Self::remembered_size`] measures against.
+    initial_size: (u32, u32),
     /// Applied to every fresh [`egui::Context`]. Only the software backend
     /// builds more than one, when a resize rebuilds its painter.
     #[cfg(feature = "software")]
@@ -124,12 +126,16 @@ impl AppWindow {
         };
         ctx_init(ctx);
         apply_feathering(ctx, software);
-        Ok(Self {
+        let mut window = Self {
             _video_subsystem: video_subsystem,
             backend,
+            initial_size: (0, 0),
             #[cfg(feature = "software")]
             ctx_init,
-        })
+        };
+        // Not the configured size: a driver that owns the screen opens at the panel.
+        window.initial_size = window.size();
+        Ok(window)
     }
 
     pub fn sdl2_window(&self) -> &sdl2::video::Window {
@@ -274,6 +280,16 @@ impl AppWindow {
     /// browser's rendering context are sized in.
     pub fn drawable_size(&self) -> (u32, u32) {
         self.sdl2_window().drawable_size()
+    }
+
+    /// The size to reopen at: `None` unless the user resized the window, since a
+    /// panel-sized or maximized one is not a size to open at.
+    pub fn remembered_size(&self) -> Option<(u32, u32)> {
+        let window = self.sdl2_window();
+        let held = window.is_maximized()
+            || window.fullscreen_state() != sdl2::video::FullscreenType::Off;
+        let size = window.size();
+        (!held && size != self.initial_size).then_some(size)
     }
 
     /// Full-frame buffers kept in RAM: composition surface, presentation texture,

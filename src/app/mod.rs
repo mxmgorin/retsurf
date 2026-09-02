@@ -294,6 +294,7 @@ impl App {
         // run (we `process::exit` below), so this must be explicit.
         self.ui.menu.flush_history();
         self.save_session();
+        self.save_window_size();
         self.window.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage
@@ -308,6 +309,22 @@ impl App {
 
     fn shutdown(&mut self) {
         self.state = AppState::ShuttingDown;
+    }
+
+    /// Reopen at the size the window was left at. [`AppWindow::remembered_size`]
+    /// offers only a size the user chose, so a handheld never rewrites its config.
+    fn save_window_size(&mut self) {
+        let Some((width, height)) = self.window.remembered_size() else {
+            return;
+        };
+        let before = (self.config.display.width, self.config.display.height);
+        (self.config.display.width, self.config.display.height) = (width, height);
+        // Clamped like a hand-edited size, so an oversized window settles rather
+        // than rewriting the file on every exit.
+        self.config.sanitize();
+        if (self.config.display.width, self.config.display.height) != before {
+            self.config.save();
+        }
     }
 
     /// Fill the empty tab list at startup: the saved session, or the home page
