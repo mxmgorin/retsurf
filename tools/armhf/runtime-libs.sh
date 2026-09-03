@@ -2,7 +2,7 @@
 # The shared libraries the package owes the device but the firmware does not
 # have: the C++ runtime this compiler pairs with, and the fontconfig chain.
 #
-#   runtime-libs.sh <lib-dir>
+#   runtime-libs.sh <lib-dir> [binary]
 #
 # Wants the Miyoo toolchain at $TOOLCHAIN and a network. Run it inside the build
 # image (where both are given) or on a host that unpacked the toolchain itself —
@@ -13,18 +13,32 @@
 # directory the container wrote into.
 set -euxo pipefail
 
-out=${1:?usage: runtime-libs.sh <lib-dir>}
+out=${1:?usage: runtime-libs.sh <lib-dir> [binary]}
+bin=${2:-}
 toolchain=${TOOLCHAIN:-/opt/miyoomini-toolchain}
 tc=$toolchain/arm-linux-gnueabihf
 mkdir -p "$out"
 
-# The C++ runtime this compiler pairs with, plus its libgcc. The glob ends on a
-# digit so it cannot also take the `-gdb.py` sitting beside it.
-stdcxx=$(ls "$tc/lib"/libstdc++.so.6.[0-9]*[0-9])
-cp -a "$stdcxx" "$tc/libc/lib/libgcc_s.so.1" "$out/"
-# A copy, not a link: the card is FAT32, which has neither symlinks nor
-# hardlinks, and the soname is the name the loader actually opens.
-cp -a "$stdcxx" "$out/libstdc++.so.6"
+# libgcc_s is always named; the binary links it dynamically on purpose.
+cp -a "$tc/libc/lib/libgcc_s.so.1" "$out/"
+
+# The C++ runtime is skipped only where the binary is here to prove it does not
+# name one -- it links libstdc++ statically now. Shipping a second, older
+# libstdc++ beside a binary that never asks is not merely dead weight: a build
+# that went back to dynamic linking would load *that* one, older than the headers
+# it compiled against, and fail in ways a link error would have caught.
+needs_stdcxx=yes
+if [ -n "$bin" ] && command -v arm-linux-gnueabihf-readelf >/dev/null; then
+  arm-linux-gnueabihf-readelf -d "$bin" | grep -q 'NEEDED.*libstdc++' || needs_stdcxx=no
+fi
+if [ "$needs_stdcxx" = yes ]; then
+  # The glob ends on a digit so it cannot also take the `-gdb.py` beside it.
+  stdcxx=$(ls "$tc/lib"/libstdc++.so.6.[0-9]*[0-9])
+  cp -a "$stdcxx" "$out/"
+  # A copy, not a link: the card is FAT32, which has neither symlinks nor
+  # hardlinks, and the soname is the name the loader actually opens.
+  cp -a "$stdcxx" "$out/libstdc++.so.6"
+fi
 
 # buster is the glibc-2.28 era, which is what the device runs.
 pool=http://archive.debian.org/debian/pool/main

@@ -52,12 +52,40 @@ jobs:
         run: |
           set -eux
           # Host-side only: Servo brings real C/C++, SpiderMonkey drives its own
-          # configure/make (python3), and bindgen wants libclang. The target
-          # libraries come from the two sysroots below, not from apt.
+          # configure/make (python3). The target libraries come from the two
+          # sysroots below, not from apt.
+          #
+          # The target compiler is Ubuntu's cross GCC 10 — mozjs_sys 153 wants
+          # GCC >= 10.1 and _GLIBCXX_RELEASE >= 10, where the Miyoo toolchain's
+          # own GCC is 8.3. Not 12, also packaged: libstdc++ 12 references
+          # `__libc_single_threaded`, a glibc 2.32 symbol absent from the 2.28
+          # this device runs. The cross package brings the binutils the steps
+          # after the build read the ELF with.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang libclang-dev llvm-dev cmake gperf pkg-config \
+            build-essential cmake gperf pkg-config \
+            gcc-10-arm-linux-gnueabihf g++-10-arm-linux-gnueabihf \
             python3 python3-pip python3-setuptools file
+          arm-linux-gnueabihf-g++-10 --version | head -1
+
+      - name: libclang 19 for bindgen
+        run: |
+          set -eux
+          # Ubuntu stops at clang 15 and mozjs_sys 153 needs 19, the version
+          # SpiderMonkey's configure names too. Its headers put a
+          # `[[maybe_unused]]` after a GNU attribute (mfbt/Attributes.h hands GCC
+          # and clang the same `__attribute__((format(printf, ...)))`), which
+          # every clang up to 15 rejects: "an attribute list cannot appear here".
+          # llvm-19 is here for llvm-objdump, which configure hunts for and
+          # refuses to proceed without — it is what reads the test binary in the
+          # static-libstdc++ detection.
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm19.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-19 libclang-19-dev llvm-19
+          ls /usr/lib/llvm-19/lib/libclang.so /usr/lib/llvm-19/bin/llvm-objdump
 
       - name: Rust toolchain
         run: |
@@ -66,17 +94,43 @@ jobs:
           rustup target add "$TARGET"
           rustc --version
 
-      - name: Miyoo Mini toolchain
+      - name: Miyoo Mini sysroot
         run: |
           set -eux
-          # ARM's A-profile GCC 8.3 over a sysroot built for this device. Its
-          # glibc is the 2.28 floor and it links libstdc++ dynamically, which
-          # SpiderMonkey's configure insists on. See tools/armhf/Dockerfile.
+          # Downloaded for its sysroot alone: glibc 2.28, the OnionOS floor, so
+          # the floor holds by construction rather than by asking for stubs. Its
+          # bin/ deliberately stays off PATH — the GCC-8-era ar and readelf there
+          # would answer for the cross names ahead of the ones matching the
+          # compiler. See tools/armhf/Dockerfile.
           curl --retry 5 -fsSL \
             "https://github.com/shauninman/miyoomini-toolchain-buildroot/releases/download/$TOOLCHAIN_VERSION/miyoomini-toolchain.tar.xz" \
             | sudo tar -xJ -C /opt
-          echo "$TOOLCHAIN/bin" >> "$GITHUB_PATH"
-          "$TOOLCHAIN/bin/arm-linux-gnueabihf-gcc" --version | head -1
+          ls "$TOOLCHAIN/arm-linux-gnueabihf/libc/lib/libc.so.6"
+
+      - name: Compiler shims
+        run: |
+          set -eux
+          # Ubuntu's cross GCC carries no default FPU, and SpiderMonkey's
+          # configure probes it with a bare `-march=armv7-a` of its own: that
+          # resets the FPU choice, and armhf's default `-mfloat-abi=hard` then has
+          # nothing to use ("cc1: error: selected processor lacks an FPU").
+          # CFLAGS cannot reach that probe, so the A7's FPU goes on the driver.
+          # Last wins, so this also settles the -mfpu cc-rs passes.
+          sudo mkdir -p /opt/cc-shims
+          for tool in gcc-10 g++-10; do
+            printf '%s\n' '#!/bin/sh' \
+              "exec /usr/bin/arm-linux-gnueabihf-$tool \"\$@\" -mfpu=neon-vfpv4" \
+              | sudo tee "/opt/cc-shims/arm-linux-gnueabihf-$tool" >/dev/null
+            sudo chmod 755 "/opt/cc-shims/arm-linux-gnueabihf-$tool"
+          done
+          echo "/opt/cc-shims" >> "$GITHUB_PATH"
+          # `-static-libstdc++` only replaces the driver's own `-lstdc++`, and
+          # cc-rs puts another one on the link line for every C++ crate in the
+          # graph, which finds a shared library and pulls it back in. A directory
+          # holding only the archive answers that one statically too.
+          sudo mkdir -p /opt/cxx-static
+          sudo ln -s /usr/lib/gcc-cross/arm-linux-gnueabihf/10/libstdc++.a \
+            /opt/cxx-static/libstdc++.a
 
       - name: armhf sysroot
         run: |
@@ -137,10 +191,10 @@ jobs:
 
       - name: Build
         env:
-          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
-          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
+          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc-10
+          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++-10
           AR_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-ar
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc-10
           # The SSD202D is always a Cortex-A7. On the Rust side +neon is not
           # redundant with target-cpu: the target spec disables NEON outright and
           # target-cpu does not undo that (verified in the emitted asm), so
@@ -148,9 +202,41 @@ jobs:
           # unstable, once per crate.
           # --allow-shlib-undefined: this SDL2 pulls in X11/wayland/alsa/gbm,
           # which neither sysroot has and we never call.
+          #
+          # The link takes libc from the device's sysroot and libstdc++ from the
+          # compiler, which is what makes this arrangement work: only
+          # $SYSROOT/usr/lib goes on the search path, never $SYSROOT/lib — that
+          # one also holds the toolchain's libstdc++ 8.3, and finding it first
+          # would answer -static-libstdc++ with a runtime older than the headers.
+          # /opt/cxx-static holds only the archive, which is what makes cc-rs's
+          # own -lstdc++ static too. libgcc_s stays dynamic: its symbols are
+          # GCC_3.0 to GCC_4.3.0, frozen for two decades.
+          # -lpthread by hand: glibc folded it into libc in 2.34, so the compiler
+          # no longer passes it, and libstdc++'s <thread> needs it on 2.28.
+          #
+          # The binary's own text is demand-paged off the SD card, and the device
+          # took 191k major faults in one session reading it back:
+          #   -Wl,--gc-sections drops what the C/C++ halves never reference;
+          #   relocation-model=static skips a PIE's relocation work at launch.
+          # -B$SYSROOT/usr/lib is load-bearing, not an optimisation: it makes gcc
+          # take crt1.o and libc_nonshared.a from the glibc-2.28 sysroot. Ubuntu's
+          # GCC 10 defaults them to its own glibc 2.35, where __libc_csu_init is
+          # gone and .init_array is the loader's job (needs glibc >= 2.34). On the
+          # device's 2.28 neither path then runs .init_array, so every C++ global
+          # constructor is skipped -- SpiderMonkey spins forever on an
+          # unconstructed static. --sysroot does not redirect the crt gcc
+          # auto-adds; -B does.
           RUSTFLAGS: >-
             -L /opt/sysroot/usr/lib/arm-linux-gnueabihf
+            -C link-arg=--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc
+            -C link-arg=-L/opt/cxx-static
+            -C link-arg=-L/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc/usr/lib
+            -C link-arg=-static-libstdc++ -C link-arg=-static-libgcc
+            -C link-arg=-lpthread
             -C link-arg=-Wl,--allow-shlib-undefined
+            -C link-arg=-Wl,--gc-sections
+            -C relocation-model=static -C link-arg=-no-pie
+            -C link-arg=-B/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc/usr/lib
             -C target-cpu=cortex-a7 -C target-feature=+neon
           # -mtune, never -mcpu: cc-rs passes -march=armv7-a of its own, and GCC
           # warns that -mcpu conflicts with it. That warning is fatal in a way
@@ -160,36 +246,52 @@ jobs:
           # -fno-sized-deallocation that way: the first breaks the link against
           # SpiderMonkey's own no-rtti build, the second is a silent ABI mismatch
           # on operator delete.
-          # -mfpu comes last and overrides cc-rs's vfpv3-d16, which has no NEON;
-          # swgl without NEON falls back to scalar.
-          # -I: the Debian sysroot headers (zlib for libpng, see above). The
-          # toolchain finds its own headers without help.
-          CFLAGS_armv7_unknown_linux_gnueabihf: "-mtune=cortex-a7 -mfpu=neon-vfpv4 -I/opt/sysroot/usr/include"
-          CXXFLAGS_armv7_unknown_linux_gnueabihf: "-mtune=cortex-a7 -mfpu=neon-vfpv4 -I/opt/sysroot/usr/include"
-          # bindgen runs the host libclang against target headers, so it needs
-          # pointing at both sysroots by hand — it inherits nothing from the
-          # cross gcc.
+          # No -mfpu here: the driver shim appends it after everything, which is
+          # what also settles the vfpv3-d16 cc-rs passes (no NEON, and swgl
+          # without NEON falls back to scalar).
+          # -I: the Debian sysroot headers (zlib for libpng, see above).
+          # --sysroot: the compiler is Ubuntu's, the userland the device's.
+          # Without it both halves compile against jammy's glibc 2.35 headers and
+          # the link resolves there, taking the binary over the floor.
+          CFLAGS_armv7_unknown_linux_gnueabihf: "--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc -mtune=cortex-a7 -I/opt/sysroot/usr/include"
+          CXXFLAGS_armv7_unknown_linux_gnueabihf: "--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc -mtune=cortex-a7 -I/opt/sysroot/usr/include"
+          # bindgen runs libclang against target headers, so it needs pointing at
+          # both sysroots by hand — it inherits nothing from the cross gcc. The
+          # C++ headers are the compiler's, not the sysroot's: that one carries
+          # libstdc++ 8.3 headers and SpiderMonkey requires 10 or newer.
+          LIBCLANG_PATH: /usr/lib/llvm-19/lib
+          CLANG_PATH: /usr/bin/clang-19
           BINDGEN_EXTRA_CLANG_ARGS_armv7_unknown_linux_gnueabihf: >-
             --target=armv7-unknown-linux-gnueabihf
             --sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc
-            -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include/c++/8.3.0
-            -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include/c++/8.3.0/arm-linux-gnueabihf
-            -isystem /opt/miyoomini-toolchain/lib/gcc/arm-linux-gnueabihf/8.3.0/include
+            -isystem /usr/arm-linux-gnueabihf/include/c++/10
+            -isystem /usr/arm-linux-gnueabihf/include/c++/10/arm-linux-gnueabihf
+            -isystem /usr/lib/gcc-cross/arm-linux-gnueabihf/10/include
             -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include
             -isystem /opt/sysroot/usr/include
+          # SpiderMonkey's configure hunts for llvm-objdump beside whichever clang
+          # it found and gives up if there is none. Named outright, since the
+          # compiler here is GCC.
+          LLVM_OBJDUMP: /usr/lib/llvm-19/bin/llvm-objdump
           # SpiderMonkey builds tools that run on the build machine, and its
-          # configure falls back to the target compiler when these are unset.
-          HOST_CC: clang
-          HOST_CXX: clang++
+          # configure falls back to the target compiler when these are unset. GCC
+          # and not the clang beside it: 153 wants clang 19 or newer for a
+          # compiler, and the host GCC is 11, above its 10.1 floor.
+          HOST_CC: gcc
+          HOST_CXX: g++
           # Only fontconfig is probed; everything else in the graph builds from
           # source once the probe fails, which is why the sysroot carries so little.
           PKG_CONFIG_ALLOW_CROSS: "1"
           PKG_CONFIG_SYSROOT_DIR: /opt/sysroot
           PKG_CONFIG_LIBDIR: /opt/sysroot/usr/lib/arm-linux-gnueabihf/pkgconfig
           # CI performance build, kept out of Cargo.toml so local release builds
-          # stay fast to compile.
+          # stay fast to compile. Size over speed for the bulk of the Rust: the
+          # engine's code is cold and there is a lot of it, and the binary is
+          # paged off the same card as the swap. The rasterizers keep -O3, see
+          # Cargo.toml.
           CARGO_PROFILE_RELEASE_LTO: "fat"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
           # webgl off, so the surfman probe — our only catch_unwind — is gone and
           # unwind tables with it. Same trade as the aarch64 handheld build.
           CARGO_PROFILE_RELEASE_PANIC: "abort"

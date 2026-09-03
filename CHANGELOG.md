@@ -26,7 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same recipe in CI. The launcher installs the device's default config once
   (never over the user's), writes the font config, sets the clock before TLS
   needs a valid `notBefore`, and adds a swapfile. `allium/README.md` documents
-  the device side, `docs/HANDHELD_PORT.md` the build.
+  the device side, `docs/HANDHELD_PORT.md` the build. The compiler is Ubuntu's
+  cross GCC 10 over the Miyoo toolchain's glibc-2.28 sysroot, with libstdc++
+  linked statically — the engine's SpiderMonkey 153 requires GCC 10.1 where that
+  toolchain's own is 8.3, and no C++ runtime exists that satisfies both it and a
+  2.28 loader.
 
 - **A `micro` memory profile for ~128 MB boards**: `embedded` with a quarter of
   the JS heap, no slack before a collection, and no page kept alive for back.

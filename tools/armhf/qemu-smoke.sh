@@ -61,12 +61,20 @@ export LD_LIBRARY_PATH="$RT/lib:$RT/usr/lib"
 export SDL_VIDEODRIVER=dummy
 export SDL_AUDIODRIVER=dummy
 export RETSURF_DATA_DIR=/tmp/data
-export RUST_LOG=info
+# `RETSURF_LOG_LEVEL`, not `RUST_LOG`: the app builds its env_logger with that
+# name (`src/lib.rs`), so `RUST_LOG` here was doing nothing at all. Overridable —
+# `info` says which renderer came up, `debug` how far engine startup got, which
+# is the question when it comes up and then stops.
+: "${RETSURF_LOG_LEVEL:=info}"
+export RETSURF_LOG_LEVEL
 export HOME=/tmp
 
 echo "=== run ==="
 set +e
-timeout 120 qemu-arm -L "$RT" /work/retsurf > /tmp/run.log 2>&1
+# -k, or the deadline is advisory: TERM goes to the emulated program, which
+# installs handlers of its own and ignores it, and qemu outlives the timeout.
+# Startup under emulation is minutes, so RETSURF_SMOKE_SECS raises the deadline.
+timeout -k 10 "${RETSURF_SMOKE_SECS:-120}" qemu-arm -L "$RT" /work/retsurf > /tmp/run.log 2>&1
 rc=$?
 set -e
 echo "exit=$rc"

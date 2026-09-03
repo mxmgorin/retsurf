@@ -63,11 +63,11 @@ mkdir -p "$app/lib/fallback" "$app/fonts" "$app/etc/fonts" "$app/etc/ssl"
 # the same script directly, for a machine that already has the toolchain unpacked
 # — which is what CI is.
 if [ "${RETSURF_NO_DOCKER:-0}" = 1 ]; then
-  "$here/runtime-libs.sh" "$app/lib"
+  "$here/runtime-libs.sh" "$app/lib" "$bin"
 else
-  docker run --rm -i --network host -v "$app/lib":/out \
+  docker run --rm -i --network host -v "$app/lib":/out -v "$bin":/bin.arm:ro \
     -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
-    "$image" bash -s /out < "$here/runtime-libs.sh"
+    "$image" bash -s /out /bin.arm < "$here/runtime-libs.sh"
 fi
 
 cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5" "$app/lib/"
