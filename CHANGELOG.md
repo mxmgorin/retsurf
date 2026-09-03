@@ -110,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The font config is written only when it would change, so a launch no longer
   rebuilds the fontconfig cache for nothing.
 
+- **R2 no longer eats the last letter where the pad arrives as keys.** The Miyoo
+  sends R2 as Backspace, and the raw key still reached egui, which deleted a
+  character from the focused field before the trigger's Enter submitted it — a
+  start-page search for `asd` fetched `as`. Keys that *are* the pad now stop
+  before egui, both edges.
+
 - **Reordering the speed dial moves the ⚙ Settings tile too.** The editor used to
   hide it from the pins and always draw it last, so it sat somewhere else on the
   start page and no reorder could shift it. Both screens now show one order, and

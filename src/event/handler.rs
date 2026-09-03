@@ -208,6 +208,25 @@ impl AppEventHandler {
         true
     }
 
+    /// Whether the event is the pad arriving as keys ([`Keymap`]), which egui must
+    /// not see: it typed a space into the focused field on every A press, and ate
+    /// its last letter on R2 (the Miyoo sends R2 as Backspace).
+    fn is_pad_as_keys(&self, event: &Event) -> bool {
+        if self.keymap == Keymap::Desktop {
+            return false;
+        }
+        match event {
+            Event::TextInput { .. } | Event::TextEditing { .. } => true,
+            Event::KeyDown {
+                keycode: Some(kc), ..
+            }
+            | Event::KeyUp {
+                keycode: Some(kc), ..
+            } => self.keymap.pad(*kc).is_some(),
+            _ => false,
+        }
+    }
+
     fn handle_event(
         &mut self,
         event: Event,
@@ -224,12 +243,8 @@ impl AppEventHandler {
         // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
         // while the caret sat in the address bar. Modified keys stay ours (egui
         // still saw the event above, so typing is unaffected).
-        // Where the pad arrives as keys, the text edge of those keys is not
-        // text anyone typed — letting egui have it would put a space in the
-        // address bar every time A is pressed.
-        let types_nothing = self.keymap != Keymap::Desktop
-            && matches!(event, Event::TextInput { .. } | Event::TextEditing { .. });
-        if !types_nothing && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
+        let egui_first = !self.is_pad_as_keys(&event);
+        if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
 
