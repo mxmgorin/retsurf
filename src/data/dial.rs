@@ -10,10 +10,10 @@ use crate::config;
 use serde::{Deserialize, Serialize};
 
 /// A special speed-dial entry that opens the settings overlay instead of
-/// navigating to a URL. Stored in the dial like any pin, but recognized on
-/// activation (see [`crate::app`]) and drawn as a ⚙ tile (see
-/// [`crate::ui::home::paint_tile`]). Added / removed from the speed-dial
-/// editor's "Pin settings" button.
+/// navigating to a URL. Stored, ordered and removed like any pin, but recognized
+/// on activation (see [`crate::app`]) and drawn as a ⚙ tile (see
+/// [`crate::ui::home::paint_tile`]). Re-added from the speed-dial editor's
+/// trailing "Pin settings" tile once removed.
 pub const SETTINGS_PIN: &str = "retsurf:settings";
 
 /// Shipped on first run so the start page isn't empty before anything is pinned.
@@ -105,8 +105,8 @@ impl Dial {
         }
     }
 
-    /// Swap the pins at `a` and `b`; persists. The editor reorders with this, so
-    /// the indices may straddle the settings sentinel — it keeps its own slot.
+    /// Swap the pins at `a` and `b`; persists. The editor reorders with this; the
+    /// settings sentinel is an entry like any other, so it moves too.
     pub fn swap(&mut self, a: usize, b: usize) {
         if a != b && a < self.urls.len() && b < self.urls.len() {
             self.urls.swap(a, b);

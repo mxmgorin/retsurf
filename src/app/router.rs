@@ -111,7 +111,7 @@ impl App {
                     self.delete_menu_selection();
                 } else if focus == Focus::DialEdit {
                     // X deletes the focused pin tile (no-op on the field or the
-                    // trailing settings toggle, which pins/unpins with A).
+                    // trailing "Pin settings" tile, which adds with A).
                     self.ui.dial_edit_remove_selected();
                 } else if focus == Focus::Settings {
                     // X is unused in settings (rows edit with A and Left/Right).

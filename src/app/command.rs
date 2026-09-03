@@ -114,9 +114,9 @@ pub enum MenuAction {
     DialAdd(String),
     /// Remove the pin at `index` in the speed-dial editor (clicking its ✖).
     DialRemoveAt(usize),
-    /// Toggle the ⚙ settings shortcut on/off the dial (the editor's "Pin
-    /// settings" button); keeps the editor open.
-    DialToggleSettings,
+    /// Put the ⚙ settings shortcut back on the dial (the editor's trailing "Pin
+    /// settings" tile); keeps the editor open.
+    DialPinSettings,
     /// Remove the entry at `index` in the active section (clicking its ✖).
     RemoveAt(usize),
     /// Switch to the tab at `index` and close the menu (clicking a tab row).

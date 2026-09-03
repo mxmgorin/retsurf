@@ -74,9 +74,7 @@ impl App {
             MenuAction::DialClose => self.ui.close_pins_editor(),
             MenuAction::DialAdd(url) => self.dial_add(url),
             MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
-            MenuAction::DialToggleSettings => {
-                self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN)
-            }
+            MenuAction::DialPinSettings => self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN),
             MenuAction::RemoveAt(index) => self.ui.menu.remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
@@ -352,11 +350,11 @@ impl App {
                 self.ui.dial_edit_focus_field();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
-            // A on the trailing settings tile toggles the settings shortcut on/off the
-            // dial; the regular pin tiles are edit-only (delete with X).
+            // A on the trailing tile pins the settings shortcut; pin tiles are
+            // edit-only (delete with X, move with L1/R1).
             EditItem::Tile(_) => {
-                if self.ui.dial_edit_settings_selected() {
-                    self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN);
+                if self.ui.dial_edit_pin_settings_selected() {
+                    self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN);
                 }
             }
         }
