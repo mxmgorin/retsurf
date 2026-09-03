@@ -89,6 +89,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A tab the page opens replaces the open one when the cap is one.** Refusing it
   there left a link that did nothing at all.
 
+- **A "Restore all defaults" row** (Settings > Advanced): every settings row, the
+  speed-dial pins and the control bindings back to how they ship, on two presses
+  like the clear-data row beside it. What you saved — bookmarks, history, tabs —
+  is left to that row.
+
 ### Fixed
 
 - **A driver that refuses a GL attribute no longer ends the run** — the window

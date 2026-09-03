@@ -127,6 +127,19 @@ pub enum Task {
     /// Wipe history, site data, the HTTP cache, the saved session and the open
     /// tabs. Bookmarks, pins and the settings themselves stay.
     ClearData,
+    /// Every settings row, the speed-dial pins and the control bindings back to
+    /// how they ship. The user's own content is [`Task::ClearData`]'s business.
+    RestoreDefaults,
+}
+
+impl Task {
+    /// The verb shown as the row's value — what the second press will do.
+    pub fn verb(self) -> &'static str {
+        match self {
+            Task::ClearData => "Clear",
+            Task::RestoreDefaults => "Restore",
+        }
+    }
 }
 
 /// A config row in the list. `section` is the tab it lives under; `cat` is a
@@ -270,6 +283,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
     f(S::Advanced, "Diagnostics", "Memory to log",          flag!(debug.memory_log), false),
+    // Last row: it rewrites every other one.
+    f(S::Advanced, "Reset",       "Restore all defaults",   Kind::Action { task: Task::RestoreDefaults }, true),
 ];
 
 #[cfg(test)]

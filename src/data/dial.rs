@@ -114,6 +114,12 @@ impl Dial {
         }
     }
 
+    /// Put the shipped [`DEFAULTS`] back, dropping whatever was pinned; persists.
+    pub fn reset(&mut self) {
+        *self = Self::seeded();
+        self.save();
+    }
+
     /// Pin `url` if absent, otherwise unpin it; persists either way.
     pub fn toggle(&mut self, url: &str) {
         if let Some(i) = self.urls.iter().position(|u| u == url) {

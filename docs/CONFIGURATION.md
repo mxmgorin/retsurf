@@ -23,6 +23,11 @@ HTTP cache, the saved tab session and the finished downloads, and closes the ope
 back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
 speed-dial pins, settings and bindings are left alone.
 
+**Settings > Advanced > Restore all defaults** is the other half: every settings row, the
+speed-dial pins and the control bindings go back to how they ship, and nothing you saved
+(bookmarks, history, tabs) is touched. Two presses as well. The settings and bindings are
+written when the overlay closes, the pins right away; rows marked `*` need a restart.
+
 ```toml
 [browser]
 home_page = "retsurf:home"                     # built-in start page; or any URL

@@ -243,6 +243,7 @@ impl App {
         } else if let Some(task) = self.ui.settings.confirm_action() {
             match task {
                 Task::ClearData => self.clear_browsing_data(),
+                Task::RestoreDefaults => self.restore_defaults(),
             }
         } else if self.ui.settings.selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);
@@ -261,6 +262,15 @@ impl App {
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.browser.home_page);
         log::info!("cleared browsing data");
+    }
+
+    /// Settings and bindings (overlay drafts, saved on close) plus the pins (their
+    /// own file, written now) back to how they ship. Bookmarks, history and tabs
+    /// are [`Self::clear_browsing_data`]'s business.
+    fn restore_defaults(&mut self) {
+        self.ui.settings.restore_defaults();
+        self.ui.menu.dial.reset();
+        log::info!("restored default settings, bindings and pins");
     }
 
     /// Close the settings overlay (B / close button): adopt its edited drafts
