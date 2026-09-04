@@ -128,6 +128,12 @@ layouts = ["en", "ru"]
 # `auto` resolves to: android build -> android; windows/macos -> desktop; Linux with
 # >6 GB -> desktop; otherwise by RAM (from /proc/meminfo). Changing it needs a restart.
 memory_profile = "auto"
+# `RETSURF_MAIN_NICE=<n>` reprioritizes the main thread (compositing and input)
+# against the engine's. Off by default: measured on a Miyoo Flip it earns nothing,
+# because two cores at 21% utilisation are not contended and priority only decides
+# who waits. Worth up to -38% on frame cost once the cores *are* saturated, which
+# is why the knob exists. A negative value needs root or CAP_SYS_NICE; without
+# either it is skipped with a log line.
 # Servo thread counts. 0 = keep the memory profile's choice; a non-zero value
 # overrides it (handy to fine-tune a tier without switching profiles).
 layout_threads = 0         # Stylo/layout threads

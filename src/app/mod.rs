@@ -101,6 +101,9 @@ impl App {
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
         log::info!("init: browser ready; creating event handler + ui");
+        // After the engine's threads exist: a thread inherits its creator's
+        // nice, so earlier would renice all 59 of them instead of one.
+        crate::platform::threads::prioritize_main();
         let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(
             &window,

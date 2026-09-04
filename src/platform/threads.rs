@@ -1,10 +1,28 @@
-//! Per-thread cost from `/proc/self/task` for `[debug] thread_cpu` — wall clock
-//! alone cannot tell work a frame did from time it spent waiting.
+//! Main-thread priority, and per-thread cost from `/proc/self/task` for
+//! `[debug] thread_cpu` — wall clock alone cannot tell work from waiting.
 
 use std::collections::HashMap;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::time::{Duration, Instant};
+
+/// Renice the main thread to `RETSURF_MAIN_NICE` (unset or `0` = leave alone).
+/// Off by default: measured on the Flip it earns nothing, because two cores at
+/// 21% utilisation are not contended. A knob because it is worth -38% when they are.
+pub fn prioritize_main() {
+    let Some(nice) = std::env::var("RETSURF_MAIN_NICE")
+        .ok()
+        .and_then(|value| value.parse::<i32>().ok())
+        .filter(|n| *n != 0)
+    else {
+        return;
+    };
+    match priority::set_nice(nice) {
+        Ok(()) => log::info!("main thread nice {nice}"),
+        // Wants CAP_SYS_NICE or root; declining costs only the priority.
+        Err(e) => log::info!("main thread nice {nice} declined ({e})"),
+    }
+}
 
 /// How often the per-thread deltas reach the log.
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
