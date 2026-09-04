@@ -58,6 +58,8 @@ pub struct App {
     last_memory_log: Instant,
     /// Paint timing for `[debug] frame_timing`; inert unless that is on.
     frame_timer: FrameTimer,
+    /// Per-thread cost for `[debug] thread_cpu`; inert unless that is on.
+    thread_cpu: crate::platform::threads::ThreadCpu,
     /// When the last frame was presented, for [`App::pace_frame`].
     last_frame: Instant,
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
@@ -115,6 +117,7 @@ impl App {
 
         // Read before `config` moves into the struct below.
         let frame_timer = FrameTimer::new(config.debug.frame_timing);
+        let thread_cpu = crate::platform::threads::ThreadCpu::new(config.debug.thread_cpu);
         Ok(Self {
             config,
             window,
@@ -133,6 +136,7 @@ impl App {
             last_memory_log: Instant::now(),
             heap_trim_at: None,
             frame_timer,
+            thread_cpu,
             last_frame: Instant::now(),
             _audio: audio,
         })
@@ -287,8 +291,11 @@ impl App {
 
             let drew = self.draw(page_painted);
             self.frame_timer.tick();
+            self.thread_cpu.tick();
             self.pace_frame(drew);
         }
+
+        self.thread_cpu.report_run();
 
         // Persist what was buffered since the last throttle tick — `Drop` won't
         // run (we `process::exit` below), so this must be explicit.

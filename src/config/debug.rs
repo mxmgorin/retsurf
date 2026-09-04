@@ -18,4 +18,8 @@ pub struct DebugConfig {
     /// number that decides whether software rendering is usable on a given
     /// device; see [`crate::app::FrameTimer`].
     pub frame_timing: bool,
+    /// CPU and major faults per thread family, plus run totals at exit — what
+    /// `frame_timing` cannot say: work done, or waiting. See
+    /// [`crate::platform::threads`].
+    pub thread_cpu: bool,
 }
