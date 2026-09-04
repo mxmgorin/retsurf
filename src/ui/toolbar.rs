@@ -334,7 +334,8 @@ fn paint_loading_edge(
             y: LOADING_EDGE,
         },
     );
-    ctx.layer_painter(layer).rect_filled(edge, 0.0, theme::ACCENT);
+    ctx.layer_painter(layer)
+        .rect_filled(edge, 0.0, theme::ACCENT);
 }
 
 /// Draw the toolbar as a space-reserving panel anchored to `position`'s edge

@@ -67,7 +67,10 @@ mod tests {
     /// A configured cap is reported as-is; 0 stays unlimited.
     #[test]
     fn configured_image_cap() {
-        let cfg = DataSavingConfig { max_images_per_page: 48, ..DataSavingConfig::default() };
+        let cfg = DataSavingConfig {
+            max_images_per_page: 48,
+            ..DataSavingConfig::default()
+        };
         assert_eq!(ContentFilter::from_config(&cfg).image_cap(), Some(48));
     }
 }

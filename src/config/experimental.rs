@@ -192,8 +192,14 @@ mod tests {
     /// Token parse is lenient and unknown tokens fall back to Balanced.
     #[test]
     fn from_value_is_lenient() {
-        assert_eq!(ExperimentalPreset::from_value(" OFF "), ExperimentalPreset::Off);
-        assert_eq!(ExperimentalPreset::from_value("Full"), ExperimentalPreset::Full);
+        assert_eq!(
+            ExperimentalPreset::from_value(" OFF "),
+            ExperimentalPreset::Off
+        );
+        assert_eq!(
+            ExperimentalPreset::from_value("Full"),
+            ExperimentalPreset::Full
+        );
         assert_eq!(
             ExperimentalPreset::from_value("nonsense"),
             ExperimentalPreset::Balanced

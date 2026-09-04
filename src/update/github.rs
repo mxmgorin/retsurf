@@ -51,7 +51,10 @@ pub(super) fn latest_release(asset: Option<&str>) -> Result<UpdateState, String>
         Err(e) => return Err(e.to_string()),
     };
 
-    let body = response.body_mut().read_to_vec().map_err(|e| e.to_string())?;
+    let body = response
+        .body_mut()
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
     let release: Release =
         serde_json::from_slice(&body).map_err(|e| format!("parse release: {e}"))?;
     classify(&release, asset)
@@ -68,7 +71,10 @@ pub(super) fn latest_beta(asset: Option<&str>) -> Result<UpdateState, String> {
         .header("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| e.to_string())?;
-    let body = response.body_mut().read_to_vec().map_err(|e| e.to_string())?;
+    let body = response
+        .body_mut()
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
     let releases: Vec<Release> =
         serde_json::from_slice(&body).map_err(|e| format!("parse releases: {e}"))?;
 
@@ -169,15 +175,19 @@ struct WorkflowRun {
 /// [`RETSURF_GIT_HASH`]; a match is [`UpdateState::UpToDate`], otherwise an
 /// in-place [`Offer::Install`] whose download URL needs the same token.
 pub(super) fn latest_ci(artifact: &str, token: &str) -> Result<UpdateState, String> {
-    let url =
-        format!("https://api.github.com/repos/{REPO}/actions/artifacts?per_page=100&name={artifact}");
+    let url = format!(
+        "https://api.github.com/repos/{REPO}/actions/artifacts?per_page=100&name={artifact}"
+    );
     let mut response = ureq::get(&url)
         .header("User-Agent", USER_AGENT)
         .header("Accept", "application/vnd.github+json")
         .header("Authorization", format!("Bearer {token}"))
         .call()
         .map_err(ci_error)?;
-    let body = response.body_mut().read_to_vec().map_err(|e| e.to_string())?;
+    let body = response
+        .body_mut()
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
     let list: ArtifactList =
         serde_json::from_slice(&body).map_err(|e| format!("parse artifacts: {e}"))?;
 
@@ -280,7 +290,12 @@ mod tests {
             ]
         }));
         match classify(&r, Some("retsurf-linux-x86_64.zip")).unwrap() {
-            UpdateState::Available { version, notes, page, offer } => {
+            UpdateState::Available {
+                version,
+                notes,
+                page,
+                offer,
+            } => {
                 assert_eq!(version, "99.0.0");
                 assert_eq!(notes.as_deref(), Some("New in this release\n- one\n- two"));
                 assert_eq!(page.as_deref(), Some("https://example.com/tag/v99.0.0"));
@@ -308,7 +323,9 @@ mod tests {
             "assets": []
         }));
         match classify(&r, None).unwrap() {
-            UpdateState::Available { notes, page, offer, .. } => {
+            UpdateState::Available {
+                notes, page, offer, ..
+            } => {
                 assert_eq!(notes.as_deref(), Some("notes"));
                 assert_eq!(page.as_deref(), Some("https://example.com/tag/v99.0.0"));
                 assert!(matches!(offer, Offer::Open));
