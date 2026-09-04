@@ -1012,10 +1012,9 @@ impl AppUi {
         if dw == 0 || dh == 0 {
             return;
         }
-        // A bottom auto-hide bar floats as an overlay, so the web view is
-        // full-height; every other case reserves a strip (and the measured height
-        // is already 0 when a top auto-hide bar is hidden away).
-        let overlay = self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom;
+        // An auto-hide bar floats as an overlay on either edge, so the web view
+        // stays full-height; without auto-hide the bar reserves a strip.
+        let overlay = self.toolbar_autohide;
         let toolbar_px = if overlay {
             0
         } else {
@@ -1111,16 +1110,15 @@ impl AppUi {
 
     /// Decide the toolbar layout for this frame, before the egui closure (these
     /// reads — esp. `focus()` — borrow all of `self`, which can't overlap
-    /// `egui.run`). Auto-hide forces the bar visible while typing so the address
-    /// bar is reachable. A top bar reserves space (the page reflows below it, so
-    /// the bar never covers content); a bottom auto-hide bar floats as an overlay
-    /// and slides off (no reflow). Without auto-hide the bar is always a panel.
+    /// `egui.run`). Auto-hide forces the bar visible while typing, and floats it
+    /// on either edge: a strip that came and went would resize the web view, and
+    /// that is a full Servo reflow mid-scroll. Otherwise the bar is a panel.
     fn toolbar_layout(&self) -> ToolbarLayout {
         let typing = self.focus() != Focus::Page;
         ToolbarLayout {
             position: self.toolbar_position,
             shown: !self.toolbar_autohide || self.toolbar_shown || typing,
-            overlay: self.toolbar_autohide && self.toolbar_position == ToolbarPosition::Bottom,
+            overlay: self.toolbar_autohide,
         }
     }
 
@@ -1190,9 +1188,8 @@ impl AppUi {
                 let active_downloads = self.menu.downloads.active_count();
 
                 // 1) Reserved-space toolbar: the panel reserves its strip and the
-                //    page reflows below it. Drawn unless we're in overlay mode (a
-                //    bottom auto-hide bar) or a top auto-hide bar has hidden away —
-                //    skipping it lets the central panel grow full-height.
+                //    page reflows below it. Only when auto-hide is off — an
+                //    auto-hiding bar floats instead, so it never resizes the page.
                 if !toolbar_overlay && toolbar_shown {
                     self.toolbar_rect = toolbar::add_toolbar(
                         &mut root,
@@ -1242,9 +1239,8 @@ impl AppUi {
                         }
                     });
 
-                // 3) Floating overlay toolbar (bottom auto-hide): slides over the
-                //    full-height web view, so toggling it never resizes the
-                //    viewport. Animated; `toolbar_height` feeds next frame's slide.
+                // 3) Floating overlay toolbar (auto-hide, either edge): over the
+                //    full-height web view, so toggling it resizes nothing.
                 if toolbar_overlay {
                     // Instant show/hide: draw the bar only while shown, and skip it
                     // entirely while hidden — a foreground `Area` costs a

@@ -30,9 +30,9 @@ pub struct DisplayConfig {
     pub cursor_linger_ms: u64,
     /// Which edge the toolbar (address bar + nav buttons) sits on.
     pub toolbar_position: ToolbarPosition,
-    /// Hide the toolbar while scrolling down, reveal it on scrolling up. A top
-    /// toolbar reserves space when shown (the page reflows below it, so the bar
-    /// never covers content); a bottom toolbar floats over the page and slides away.
+    /// Hide the toolbar while scrolling down, reveal it on scrolling up. Floats
+    /// over the page on either edge: a strip that came and went would resize the
+    /// web view, reflowing the page mid-scroll.
     pub toolbar_autohide: bool,
     /// Paint the screen's last row black. Some panels show that row again as the
     /// first one, so a light page bleeds a band above the toolbar (muOS/A133).

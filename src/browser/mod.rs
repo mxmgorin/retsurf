@@ -1038,6 +1038,9 @@ impl AppBrowser {
             return;
         }
         let size = dpi::PhysicalSize::new(w, h);
+        // A full reflow each, so the count is the measurement when chrome
+        // that comes and goes is suspected of resizing the page.
+        log::debug!("viewport resize: {w}x{h}");
         // Servo's `resize_rendering_context` resizes our rendering context *and*
         // reflows the page — but it early-returns when the context size already
         // matches. So we must NOT resize the context ourselves first: doing that

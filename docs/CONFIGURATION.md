@@ -102,7 +102,7 @@ max_fps = 30               # frame cap for the software renderer, which nothing 
 dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
-toolbar_autohide = false   # hide on scroll down, reveal on scroll up (top reflows, bottom overlays)
+toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats over the page, either edge)
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
