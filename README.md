@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="resources/images/retsurf-wordmark.png" alt="retsurf" width="320">
+  <img src="resources/images/retsurf-logo.png" alt="retsurf" width="100">
 </h1>
 
 <p align="center">A gamepad-native web browser for unconventional devices.</p>
