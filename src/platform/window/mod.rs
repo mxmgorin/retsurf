@@ -260,10 +260,7 @@ impl AppWindow {
 /// software, so the default follows the renderer. Glyphs antialias regardless.
 /// `RETSURF_FEATHERING=0|1` overrides.
 fn apply_feathering(ctx: &egui::Context, software: bool) {
-    let on = match std::env::var("RETSURF_FEATHERING") {
-        Ok(v) => v != "0",
-        Err(_) => !software,
-    };
+    let on = crate::config::env_flag("RETSURF_FEATHERING").unwrap_or(!software);
     ctx.tessellation_options_mut(|o| o.feathering = on);
     log::info!("egui feathering: {on}");
 }

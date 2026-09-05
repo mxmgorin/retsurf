@@ -395,7 +395,7 @@ fn square_corners(shape: &mut egui::Shape) {
 /// Whether the panel copy may be clipped to what changed. Off: the Miyoo driver
 /// draws a clipped copy in the wrong place. `RETSURF_PARTIAL_PRESENT=1` opts in.
 fn partial_present() -> bool {
-    let on = std::env::var("RETSURF_PARTIAL_PRESENT").is_ok_and(|v| v != "0");
+    let on = crate::config::env_flag("RETSURF_PARTIAL_PRESENT").unwrap_or(false);
     log::info!("partial present: {on}");
     on
 }
@@ -403,7 +403,7 @@ fn partial_present() -> bool {
 /// Whether the chrome keeps rounded corners. Off: over half the chrome's raster
 /// cost (see [`square_corners`]). `RETSURF_ROUNDING=1` puts them back.
 fn corner_rounding() -> bool {
-    let on = std::env::var("RETSURF_ROUNDING").is_ok_and(|v| v != "0");
+    let on = crate::config::env_flag("RETSURF_ROUNDING").unwrap_or(false);
     log::info!("egui corner rounding: {on}");
     on
 }

@@ -54,7 +54,7 @@ impl AppEventHandler {
             std::env::var("RETSURF_KEYMAP").ok().as_deref(),
         );
         log::info!("keyboard layout: {keymap:?}");
-        let menu_quits = std::env::var_os("RETSURF_MENU_QUIT").is_some_and(|v| v != "0");
+        let menu_quits = crate::config::env_flag("RETSURF_MENU_QUIT").unwrap_or(false);
 
         for id in 0..game_controller_subsystem.num_joysticks()? {
             if game_controller_subsystem.is_game_controller(id) {

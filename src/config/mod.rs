@@ -61,6 +61,12 @@ pub struct AppConfig {
     pub update: UpdateConfig,
 }
 
+/// A boolean `RETSURF_*` toggle: `None` when unset, otherwise any value but
+/// `"0"` is on.
+pub(crate) fn env_flag(name: &str) -> Option<bool> {
+    std::env::var(name).ok().map(|v| v != "0")
+}
+
 impl AppConfig {
     /// Load configuration from a TOML file. The path is `RETSURF_CONFIG` when set,
     /// otherwise `retsurf.toml` next to the executable (so a portable handheld
@@ -122,7 +128,11 @@ impl AppConfig {
     pub(crate) fn sanitize(&mut self) {
         use bounds as b;
 
-        fix_f32("browser.page_zoom", &mut self.browser.page_zoom, b::PAGE_ZOOM);
+        fix_f32(
+            "browser.page_zoom",
+            &mut self.browser.page_zoom,
+            b::PAGE_ZOOM,
+        );
         fix_u32("browser.max_tabs", &mut self.browser.max_tabs, b::MAX_TABS);
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);
@@ -138,23 +148,43 @@ impl AppConfig {
         fix_f32("input.deadzone", &mut i.deadzone, b::DEADZONE);
         fix_f32("input.cursor_speed", &mut i.cursor_speed, b::CURSOR_SPEED);
         fix_f32("input.scroll_speed", &mut i.scroll_speed, b::SCROLL_SPEED);
-        fix_f32("input.trigger_threshold", &mut i.trigger_threshold, b::TRIGGER_THRESHOLD);
-        fix_f32("input.osk_nav_threshold", &mut i.osk_nav_threshold, b::OSK_NAV_THRESHOLD);
+        fix_f32(
+            "input.trigger_threshold",
+            &mut i.trigger_threshold,
+            b::TRIGGER_THRESHOLD,
+        );
+        fix_f32(
+            "input.osk_nav_threshold",
+            &mut i.osk_nav_threshold,
+            b::OSK_NAV_THRESHOLD,
+        );
         fix_u64(
             "input.osk_nav_initial_delay_ms",
             &mut i.osk_nav_initial_delay_ms,
             b::OSK_NAV_INITIAL_DELAY_MS,
         );
-        fix_u64("input.osk_nav_repeat_ms", &mut i.osk_nav_repeat_ms, b::OSK_NAV_REPEAT_MS);
+        fix_u64(
+            "input.osk_nav_repeat_ms",
+            &mut i.osk_nav_repeat_ms,
+            b::OSK_NAV_REPEAT_MS,
+        );
         fix_u64("input.hold_ms", &mut i.hold_ms, b::HOLD_MS);
 
-        fix_usize("history.max_entries", &mut self.history.max_entries, b::HISTORY_MAX);
+        fix_usize(
+            "history.max_entries",
+            &mut self.history.max_entries,
+            b::HISTORY_MAX,
+        );
         fix_usize(
             "data_saving.max_images_per_page",
             &mut self.data_saving.max_images_per_page,
             b::IMAGES_PER_PAGE,
         );
-        fix_u64("adblock.update_days", &mut self.adblock.update_days, b::ADBLOCK_UPDATE_DAYS);
+        fix_u64(
+            "adblock.update_days",
+            &mut self.adblock.update_days,
+            b::ADBLOCK_UPDATE_DAYS,
+        );
         fix_u32(
             "audio.max_decode_seconds",
             &mut self.audio.max_decode_seconds,
@@ -271,8 +301,14 @@ mod tests {
     fn from_value_is_lenient() {
         // Case- and whitespace-insensitive, unified across all the enums.
         assert_eq!(CursorMode::from_value("  SCROLL "), CursorMode::Scroll);
-        assert_eq!(ToolbarPosition::from_value("Bottom"), ToolbarPosition::Bottom);
-        assert_eq!(MemoryProfile::from_value(" Embedded"), MemoryProfile::Embedded);
+        assert_eq!(
+            ToolbarPosition::from_value("Bottom"),
+            ToolbarPosition::Bottom
+        );
+        assert_eq!(
+            MemoryProfile::from_value(" Embedded"),
+            MemoryProfile::Embedded
+        );
         assert_eq!(Channel::from_value(" CI "), Channel::Ci);
     }
 }

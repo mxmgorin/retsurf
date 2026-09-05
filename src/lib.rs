@@ -40,11 +40,11 @@ pub fn run_app() {
         .install_default()
         .expect("Error initializing crypto provider");
     let mut app_config = config::AppConfig::load();
-    if let Ok(v) = std::env::var("RETSURF_GLES") {
-        app_config.display.use_gles = v != "0";
+    if let Some(gles) = config::env_flag("RETSURF_GLES") {
+        app_config.display.use_gles = gles;
     }
-    if let Ok(v) = std::env::var("RETSURF_SOFTWARE") {
-        app_config.display.software_render = v != "0";
+    if let Some(software) = config::env_flag("RETSURF_SOFTWARE") {
+        app_config.display.software_render = software;
     }
     // A launcher's way to try a frame cap without editing the config — and the
     // way to compare two of them in one sitting.
@@ -164,7 +164,10 @@ fn install_panic_hook() {
             .open(&path)
             .and_then(|mut file| {
                 use std::io::Write;
-                writeln!(file, "retsurf {BUILD_ID} at {at}\n\n{info}\n\nbacktrace:\n{backtrace}\n")
+                writeln!(
+                    file,
+                    "retsurf {BUILD_ID} at {at}\n\n{info}\n\nbacktrace:\n{backtrace}\n"
+                )
             });
         default(info);
     }));

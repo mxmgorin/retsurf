@@ -30,7 +30,7 @@ const DETAIL_ROWS: usize = 20;
 /// Whether to keep whole report paths (`RETSURF_MEMORY_DETAIL`), for a session
 /// spent finding out what a group is made of.
 fn detail_wanted() -> bool {
-    std::env::var("RETSURF_MEMORY_DETAIL").is_ok_and(|v| v != "0")
+    crate::config::env_flag("RETSURF_MEMORY_DETAIL").unwrap_or(false)
 }
 
 impl MemorySummary {
