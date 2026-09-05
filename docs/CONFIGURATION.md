@@ -134,6 +134,14 @@ memory_profile = "auto"
 # who waits. Worth up to -38% on frame cost once the cores *are* saturated, which
 # is why the knob exists. A negative value needs root or CAP_SYS_NICE; without
 # either it is skipped with a log line.
+# Hold the CPU's `performance` governor while a page loads, then put the old one
+# back. The kernel's own governor ramps too late for a load burst: measured on a
+# Miyoo Flip, `performance` is worth -16% page time and -11% CPU, and confining it
+# to loads keeps the idle clock (and the battery) where it was. Needs a writable
+# `scaling_governor`, so root — the handheld launchers have it, a desktop does
+# not, and without it this goes inert after one attempt with a log line. Applies
+# live; also in the settings overlay (Advanced -> Performance).
+cpu_boost_on_load = false
 # Servo thread counts. 0 = keep the memory profile's choice; a non-zero value
 # overrides it (handy to fine-tune a tier without switching profiles).
 layout_threads = 0         # Stylo/layout threads

@@ -146,6 +146,9 @@ fn install_panic_hook() {
     std::panic::set_hook(Box::new(move |info| {
         let path =
             std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
+        // The governor is machine-wide; leaving it raised costs battery until
+        // the next reboot.
+        platform::cpufreq::restore();
         let backtrace = std::backtrace::Backtrace::force_capture();
         // Android has no stderr, so a panic in a Servo thread would otherwise
         // vanish silently; the logger reaches logcat.

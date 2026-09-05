@@ -276,6 +276,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Memory profile",          choice!(performance.memory_profile: MemoryProfile), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", int!(performance.layout_threads as u32, bounds::LAYOUT_THREADS, 1), true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
+    f(S::Advanced, "Performance", "CPU boost on load",       flag!(performance.cpu_boost_on_load), false),
     f(S::Advanced, "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::Advanced, "Downloads",   "Save folder",            text!(downloads.dir), true),
     f(S::Advanced, "Data",        "Clear browsing data",    Kind::Action { task: Task::ClearData }, false),

@@ -60,6 +60,8 @@ pub struct App {
     frame_timer: FrameTimer,
     /// Per-thread cost for `[debug] thread_cpu`; inert unless that is on.
     thread_cpu: crate::platform::threads::ThreadCpu,
+    /// Holds `performance` while a page loads (`[performance] cpu_boost_on_load`).
+    cpu_boost: crate::platform::cpufreq::LoadBoost,
     /// When the last frame was presented, for [`App::pace_frame`].
     last_frame: Instant,
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
@@ -121,6 +123,8 @@ impl App {
         // Read before `config` moves into the struct below.
         let frame_timer = FrameTimer::new(config.debug.frame_timing);
         let thread_cpu = crate::platform::threads::ThreadCpu::new(config.debug.thread_cpu);
+        let cpu_boost =
+            crate::platform::cpufreq::LoadBoost::new(config.performance.cpu_boost_on_load);
         Ok(Self {
             config,
             window,
@@ -140,6 +144,7 @@ impl App {
             heap_trim_at: None,
             frame_timer,
             thread_cpu,
+            cpu_boost,
             last_frame: Instant::now(),
             _audio: audio,
         })
@@ -208,6 +213,12 @@ impl App {
                         self.last_memory_log = Instant::now();
                     }
                 }
+            }
+
+            // Hold the CPU's fast governor across a load; the linger covers the
+            // paint that follows, and needs a frame to fall on to be dropped.
+            if self.cpu_boost.follow(self.browser.any_loading()) {
+                self.ui.request_repaint();
             }
 
             // Mirror whether the active tab is on the start page, so the UI's
@@ -305,6 +316,9 @@ impl App {
         self.ui.menu.flush_history();
         self.save_session();
         self.save_window_size();
+        // `process::exit` below skips every `Drop`, and the governor is
+        // machine-wide.
+        crate::platform::cpufreq::restore();
         self.window.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage

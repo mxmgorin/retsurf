@@ -104,6 +104,9 @@ max_tabs = 1
 
 [performance]
 memory_profile = "micro"
+# The launcher runs as root, so this can drive the governor: `performance` while
+# a page loads is worth -16% page time here, and `ondemand` the rest of the time.
+cpu_boost_on_load = true
 
 # Decoded images are what this device runs out of memory on: 87 MB of WebRender
 # image memory on one gallery page, 9 MB at this cap. Settings -> Data saving.

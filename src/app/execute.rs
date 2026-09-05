@@ -335,6 +335,8 @@ impl App {
         }
         // Binds later opens; the tabs already open stay.
         self.browser.set_max_tabs(self.config.browser.max_tabs);
+        self.cpu_boost
+            .set_enabled(self.config.performance.cpu_boost_on_load);
         // The frame cap takes effect on the very next frame, which is what makes
         // it worth tuning by hand on a device.
         self.window.set_max_fps(self.config.display.max_fps);

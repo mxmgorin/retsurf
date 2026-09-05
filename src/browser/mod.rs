@@ -374,6 +374,16 @@ impl AppBrowser {
         })
     }
 
+    /// Whether any tab is fetching, not just the shown one — a background tab's
+    /// load competes for the same cores.
+    pub fn any_loading(&self) -> bool {
+        self.inner
+            .tabs
+            .borrow()
+            .iter()
+            .any(|t| t.state.is_loading())
+    }
+
     /// Take and clear the URLs navigated to since the last call, for the history
     /// log. Drained once per frame by the main loop.
     #[inline]

@@ -21,6 +21,11 @@ pub struct PerformanceConfig {
     /// storage, WebRender workers). `0` = keep the memory profile's choice;
     /// non-zero overrides every pool with this value.
     pub worker_pool_max: u32,
+    /// Hold the CPU's `performance` governor while a page loads, where the
+    /// kernel's own governor ramps too late to help (measured: -16% page time on
+    /// a Miyoo Flip). Needs a writable `scaling_governor`, so root in practice;
+    /// without one it is skipped with a log line. Applies live.
+    pub cpu_boost_on_load: bool,
     /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
     /// A spill store, not a second level: it takes what the in-memory cache
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
