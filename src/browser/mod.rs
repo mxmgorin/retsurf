@@ -519,7 +519,7 @@ impl AppBrowser {
                         servo::JSValue::Number(n) => Some(*n as f32),
                         _ => None,
                     };
-                    for c in values.chunks_exact(5) {
+                    for c in values.as_chunks::<5>().0 {
                         let (Some(x), Some(y), Some(w), Some(h)) =
                             (num(&c[0]), num(&c[1]), num(&c[2]), num(&c[3]))
                         else {
