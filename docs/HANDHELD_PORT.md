@@ -45,7 +45,7 @@ llvmpipe). Each frame calls `read_to_image()`, uploads the result as an egui tex
 composites.
 
 Path B (current): Servo's render target is an FBO in SDL2's own GL context, via a custom
-`RenderingContext` impl in `src/platform/render.rs`. egui draws that FBO's color texture
+`RenderingContext` impl in `src/platform/render/sdl.rs`. egui draws that FBO's color texture
 directly. No CPU readback, GPU-accelerated, a single GL context, and no surfman software
 adapter or llvmpipe.
 
@@ -70,8 +70,8 @@ No surfman software adapter, no CPU readback, one GL context.
 
 | File | Change |
 |------|--------|
-| `src/platform/render.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
-| `src/platform/window.rs`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
+| `src/platform/render/sdl.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
+| `src/platform/window/`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
 | `src/browser.rs` | Takes the shared `Rc<dyn RenderingContext>`; `resize()` resizes the context + webview. |
 | `src/ui.rs`      | Registers the FBO color texture once (`register_native_texture`) and draws it (V-flipped) in the central panel; drives browser viewport size from the central rect. |
 | `src/app.rs`     | Loop: `browser.paint()` (Servo to FBO), then `ui.update`, then `ui.draw` (egui composites and presents). Resizes reactive. `process::exit(0)` on shutdown. |
@@ -122,7 +122,7 @@ just isn't there. Servo's `register_rendering_context` hard-`expect()`s a surfma
 
 The fix has two parts:
 
-- `src/platform/render.rs`: `connection()` is now optional. `surfman::Connection::new()`
+- `src/platform/render/sdl.rs`: `connection()` is now optional. `surfman::Connection::new()`
   is wrapped in `catch_unwind`, since surfman panics rather than returning `Err` on
   missing EGL symbols. Capable platforms (desktop, EGL 1.5) keep a real connection and
   WebGL; EGL 1.4 devices get `None`.

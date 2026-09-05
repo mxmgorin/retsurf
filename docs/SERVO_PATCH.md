@@ -38,7 +38,7 @@ Lets Servo start on handhelds whose GL driver is EGL 1.4. The change lives in
 two places:
 
 - `components/paint/paint.rs` in the fork
-- `src/platform/render.rs`, in retsurf's own `connection()`
+- `src/platform/render/sdl.rs`, in retsurf's own `connection()`
 
 ### What was done
 
