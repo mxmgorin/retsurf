@@ -13,7 +13,7 @@ const SHEET_URL: &str = "retsurf://forced-dark.css";
 pub(super) fn stylesheet() -> Rc<UserStyleSheet> {
     let url = ::url::Url::parse(SHEET_URL).expect("SHEET_URL is a valid literal URL");
     Rc::new(UserStyleSheet::new(
-        include_str!("forced_dark.css").to_string(),
+        include_str!("assets/forced_dark.css").to_string(),
         url,
     ))
 }
