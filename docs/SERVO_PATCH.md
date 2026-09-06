@@ -1,7 +1,7 @@
 # The Servo patches
 
 retsurf carries six small changes to Servo. They live as commits on the
-`retsurf-main-0.7` branch of our fork (`mxmgorin/servo`) — one branch per retsurf
+`retsurf-main-0.8` branch of our fork (`mxmgorin/servo`) — one branch per retsurf
 minor, rebased onto upstream `main` as it moves — which `[patch.crates-io]` in
 `Cargo.toml` pins by `rev`, so the engine retsurf builds is Servo's unreleased
 `main` plus exactly these six fixes. Every rev an older release pinned is kept
@@ -9,28 +9,30 @@ reachable by a tag named after that release (`retsurf-v0.4.0`, `retsurf-v0.5.1`)
 and `patches/` in this repo mirrors the diff as plain files so the change is
 readable without fetching the fork.
 
-Three further patches sit on `retsurf-swgl` (these six plus those three), which
-the handheld work builds against: WebRender kept off the paths swgl does not
-implement, a painter removable without surfman details, and the SpiderMonkey
+The set was eight. The containing-block walk (servo/servo#47693) and the
+script-message unwrap (#47686) landed upstream and are gone; so did the
+pipeline-exit half of the display-list fix (#47651), leaving patch 6 below.
+
+One further patch sits on `retsurf-swgl` (these six plus it): the SpiderMonkey
 testing functions (`dumpHeap` and friends, for measuring a release build)
-installed under the internals pref. The first two are software-rendering only;
-the third takes `js::DefineTestingFunctions` by its Itanium-mangled symbol name,
-which MSVC does not produce — it fails to link on Windows, so it stays off the
-line every platform builds.
+installed under the internals pref. It takes `js::DefineTestingFunctions` by its
+Itanium-mangled symbol name, which MSVC does not produce — it fails to link on
+Windows, so it stays off the line every platform builds.
 
-The two below have a design worth writing down. Patches 3 to 6 are short fixes
-whose commit messages carry the reasoning, with the diffs in
-`patches/0003..0006`:
+The three below have a design worth writing down. Patches 2, 3 and 6 are short
+fixes whose commit messages carry the reasoning, with the diffs in
+`patches/0002`, `patches/0003` and `patches/0006`:
 
-- **3. `components/script`: drop a script message whose event loop is gone.**
-- **4. `components/paint`: drop a gone pipeline's display list.** Nothing else
-  took it out of the WebRender scene, so every navigation left one behind.
-- **5. `components/config`: let the malloc heap's GC thresholds be set by pref.**
+- **2. `components/config`: let the malloc heap's GC thresholds be set by pref.**
   SpiderMonkey's own default (38 MB) assumes a desktop; the memory tiers want it
   lower.
-- **6. `components/script`: drop a dying document's rooted callbacks and
+- **3. `components/script`: drop a dying document's rooted callbacks and
   promises.** Rust-owned GC roots (event listeners, `fonts.ready`) kept a
   navigated-away document's JS heap alive.
+- **6. `components/paint`: drop a removed webview's display lists.** Upstream
+  takes a pipeline's scene state out on its final exit, but a WebView removed
+  while pipelines are still on it gets no such message, so those display lists
+  stayed in the scene.
 
 ## 1. `components/paint`: optional surfman connection
 
@@ -72,57 +74,46 @@ than returning `Err`) when EGL symbols are missing, so `render.rs` wraps it in
   surfman can't create a `Connection` at all. Without the patch the engine
   panics at startup on those devices even though it renders fine otherwise.
 
-## 2. `components/layout`: containing-block walk hangs on boxless ancestors
+## 4. `components/paint`: keep WebRender off the paths swgl does not implement
 
-Fixes a hard freeze on pages that combine `IntersectionObserver` with
-`display: contents` — reddit and MDN among them. The change is in
-`components/layout/query.rs`, in `containing_block_for_node`.
+Two `WebRenderOptions` Servo hardcodes are wrong for a software rasterizer, and
+both kill the process rather than degrading. They are now `!is_software_webrender`,
+which is the same renderer-name test WebRender itself uses to pick its software
+paths (`Software WebRender`, a string only swgl returns).
 
 ### What was done
 
-The walk up the flat tree skipped ancestors with no layout box without
-advancing the cursor:
-
-```rust
-while let Some(ancestor) = unsafe { current_ancestor.dangerous_flat_tree_parent() } {
-    let Some((ancestor_style, ancestor_flags)) = style_and_flags_for_node(&ancestor) else {
-        continue;   // current_ancestor unchanged -> same parent forever
-    };
-```
-
-`style_and_flags_for_node` returns `None` for a `LayoutBox::DisplayContents`,
-so any `display: contents` ancestor made the loop spin forever. The patch moves
-`current_ancestor = ancestor` to the top of the loop body, which is what the
-near-identical walk in `process_scroll_container_query` already does.
+- **`clear_caches_with_quads`** defaults to `true` and clears picture-cache tiles
+  by drawing a quad instead of calling `glClear`. That needs
+  `glDepthFunc(GL_ALWAYS)`, which swgl asserts on — and with asserts compiled out
+  silently treats as `GL_LESS`, so the depth clear never happens and the tiles
+  come back wrong. The option exists only as a driver workaround (`glClear`
+  crashes on some Mali-T parts), so a software rasterizer has no business there.
+- **`enable_dithering`** is likewise hardcoded `true`. swgl builds its shaders
+  from `get_shader_features(GL | DUAL_SOURCE_BLENDING | ADVANCED_BLEND_EQUATION |
+  DEBUG)` — no `DITHERING` — so WebRender asks for `ps_quad_gradient DITHERING`,
+  finds no program, and aborts in `BindAttribLocation`. Any CSS gradient did it.
 
 ### Why
 
-- **It is an infinite loop in the script thread.** Not slow — stuck. The tab
-  never paints again and one core spins at 100%.
-- **Only `IntersectionObserver` reaches it.** `containing_block_for_node` backs
-  `query_containing_block` and `query_containing_block_is_descendant`, whose
-  only callers are the intersection-computation steps. That is why the freeze
-  appears exactly when the IntersectionObserver experimental feature is on, and
-  why turning it off "fixes" reddit at the cost of lazy-loading everywhere.
-- **`display: contents` is ordinary.** Web-component-heavy sites wrap content in
-  it constantly; it is not an edge case worth living with.
-- **A boxless element can never be a containing block**, so skipping it and
-  continuing the walk is also the correct answer, not just a livelock guard.
+Servo has no software-rendering target of its own, so nothing upstream exercises
+these. Both are one-line guards and neither changes anything for a GL renderer:
+Mali, Adreno, desktop GL and even llvmpipe (`llvmpipe (LLVM ...)`) all fail the
+name test and keep today's behaviour.
 
-Upstream `main` still has the same code (checked 2026-08-17).
+## 5. `components/shared/paint`: removing a painter that registered no details
 
-### Reproducing
+`PainterSurfmanDetailsMap::remove` asserted the entry existed — but patch 1
+deliberately does not insert one when the rendering context has no surfman
+connection, so the assert fires at shutdown. Removal no longer asserts.
 
-`tests/pages/io-stress.html` builds a reddit-shaped feed of observed posts;
-`contents=1` puts a `display: contents` wrapper in each target's ancestor chain:
+### Why
 
-```
-python3 tests/serve.py 8099
-# home_page = "http://127.0.0.1:8099/io-stress.html?posts=20&depth=4&contents=1"
-```
-
-Before the patch that page never renders (no beacons, `Script#1` pegged);
-after it, it runs at the same frame rate as `contents=0`.
+This is patch 1's missing half, and it is **not** software-only: the aarch64
+handheld builds are `--no-default-features`, so `webgl` is off, `connection()`
+returns `None`, nothing is inserted, and the same panic is waiting there. It
+went unnoticed because `panic = "abort"` turns it into an exit code at the very
+end of a run, after the window is already gone.
 
 ## Cost
 

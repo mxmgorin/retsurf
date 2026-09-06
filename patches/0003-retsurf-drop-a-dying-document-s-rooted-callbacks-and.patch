@@ -1,7 +1,7 @@
-From a8570fbb56068fa82f6978223ff111adcdd6fc78 Mon Sep 17 00:00:00 2001
+From fb21e3fb29c5c0d3b341a65fece8f1cc9a8cd7e9 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Fri, 28 Aug 2026 10:53:52 +0300
-Subject: [PATCH 6/6] retsurf: drop a dying document's rooted callbacks and
+Subject: [PATCH 3/6] retsurf: drop a dying document's rooted callbacks and
  promises
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -30,7 +30,7 @@ figure no longer moves with the number of navigations.
  3 files changed, 41 insertions(+), 8 deletions(-)
 
 diff --git a/components/script/dom/css/fontfaceset.rs b/components/script/dom/css/fontfaceset.rs
-index 541191b4cd3..cacc78efdb2 100644
+index 551ef08b57b..647d38d91ca 100644
 --- a/components/script/dom/css/fontfaceset.rs
 +++ b/components/script/dom/css/fontfaceset.rs
 @@ -53,7 +53,7 @@ pub(crate) struct FontFaceSet {
@@ -116,7 +116,7 @@ index 541191b4cd3..cacc78efdb2 100644
  
      /// <https://drafts.csswg.org/css-font-loading/#dom-fontfaceset-add>
 diff --git a/components/script/dom/document/document.rs b/components/script/dom/document/document.rs
-index 6f9ba49698b..1de99f4911f 100644
+index e1231c6d18d..e0599c08e91 100644
 --- a/components/script/dom/document/document.rs
 +++ b/components/script/dom/document/document.rs
 @@ -996,6 +996,20 @@ impl Document {
@@ -141,10 +141,10 @@ index 6f9ba49698b..1de99f4911f 100644
      pub(crate) fn is_html_document(&self) -> bool {
          self.is_html_document
 diff --git a/components/script/event_loop/script_thread.rs b/components/script/event_loop/script_thread.rs
-index 663525cd097..c5252d54297 100644
+index 3ef03724037..34f7e772a43 100644
 --- a/components/script/event_loop/script_thread.rs
 +++ b/components/script/event_loop/script_thread.rs
-@@ -3228,6 +3228,7 @@ impl ScriptThread {
+@@ -3206,6 +3206,7 @@ impl ScriptThread {
  
                  debug!("{pipeline_id}: Clearing JavaScript runtime");
                  window.clear_js_runtime();

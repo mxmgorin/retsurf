@@ -1,0 +1,35 @@
+From 2e902cb1814749559ffbd64f90927c04e07f954d Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 15:32:10 +0300
+Subject: [PATCH 6/6] retsurf: drop a removed webview's display lists from the
+ WebRender scene
+
+---
+ components/paint/painter.rs | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/components/paint/painter.rs b/components/paint/painter.rs
+index 194d5f2bb6c..4c6237db465 100644
+--- a/components/paint/painter.rs
++++ b/components/paint/painter.rs
+@@ -1240,11 +1240,19 @@ impl Painter {
+     }
+ 
+     pub(crate) fn remove_webview(&mut self, webview_id: WebViewId) {
+-        if self.webview_renderers.remove(&webview_id).is_none() {
++        let Some(webview_renderer) = self.webview_renderers.remove(&webview_id) else {
+             warn!("Tried removing unknown WebView: {webview_id:?}");
+             return;
+         };
+ 
++        // A pipeline this WebView still had never gets its own exit message here,
++        // so its display list would stay in the scene.
++        let mut transaction = Transaction::new();
++        for pipeline_id in webview_renderer.pipelines.keys() {
++            transaction.remove_pipeline(pipeline_id.into());
++        }
++        self.send_transaction(transaction);
++
+         self.send_root_pipeline_display_list();
+     }
+ 

@@ -65,12 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The engine's patch set grew from six to eight: WebRender is kept off the two
+- The engine's patch set is six. Two are new: WebRender is kept off the two
   paths swgl does not implement (a quad-drawn cache clear and dithering, either
   of which aborted the process), and a painter can be removed when it registered
   no surfman details. The second is not software-only — it is the optional-
   connection patch's missing half, and the same panic waits in every webgl-off
-  handheld build. `patches/` mirrors all eight.
+  handheld build. Two others left the set for Servo itself: the containing-block
+  walk (servo/servo#47693) and the script-message unwrap (#47686) landed
+  upstream, as did the pipeline-exit half of the display-list fix (#47651).
+  `patches/` mirrors all six.
 
 - **The chrome is rasterized only where it changed**, and reused as it stands
   while egui draws the same frame. On the software renderer its corners are
@@ -93,6 +96,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   speed-dial pins and the control bindings back to how they ship, on two presses
   like the clear-data row beside it. What you saved — bookmarks, history, tabs —
   is left to that row.
+
+- Bumped `egui-sdl2` to 0.12, and back to a crates.io release from the rev pin
+  the damage-rect work needed. egui stays 0.36. The release also lands the
+  software renderer's 1:1 texture copies on whole pixels, which is reachable here
+  whenever `[display] scale` is not a whole number: SDL resampled a copy it
+  should not have, and glyphs lost a row.
 
 ### Fixed
 
