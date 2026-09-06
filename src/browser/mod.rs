@@ -1,21 +1,26 @@
-//! The embedded Servo browser: tab list, painting, input, and commands. All
-//! reactions to Servo (the `WebViewDelegate` impl, including download
-//! interception and ad blocking) live in [`delegate`]; address-bar text
-//! interpretation in [`url`].
+//! The embedded Servo browser. The data model and shared state live here; tab
+//! lifecycle in [`tabs`], page input and evaluated scripts in [`input`],
+//! toolbar/router commands in [`command`]. All reactions to Servo (the
+//! `WebViewDelegate` impl, download interception, ad blocking) live in
+//! [`delegate`]; address-bar text interpretation in [`url`].
 
 pub mod adblock;
 mod blob_download;
 pub mod content_filter;
 
+mod command;
 mod delegate;
 mod engine;
 mod forced_dark;
 mod home;
+mod input;
 pub mod memory;
 mod reader;
+mod tabs;
 mod url;
 
 pub use blob_download::BlobDownload;
+pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
 pub use home::HOME_URL;
 pub use url::try_into_url;
@@ -24,9 +29,7 @@ use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
     event::user::{UserEvent, UserEventSender},
-    overlay::hints::Hint,
 };
-use ::url::Url;
 use servo::profile_traits::mem::MemoryReportResult;
 use servo::{EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
@@ -37,35 +40,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[derive(Clone)]
-pub enum BrowserCommand {
-    Back,
-    Forward,
-    Reload,
-    Load,
-    /// Navigate the active tab to the configured home page (`home_page`).
-    Home,
-    /// Toggle reader mode on the active page (see [`reader`]).
-    Reader,
-    /// Step the active tab's page zoom along [`ZOOM_LADDER`] (+1 in, -1 out);
-    /// `0` resets to the config default.
-    Zoom(i32),
-}
-
-/// The page-zoom steps (Firefox's ladder), walked by [`BrowserCommand::Zoom`].
-const ZOOM_LADDER: &[f32] = &[
-    0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0,
-];
-
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
 }
 
 pub struct BrowserState {
-    /// Address bar text: an edit buffer, not necessarily the loaded page.
-    location: String,
-    /// The tab's loaded URL. Apart from `location` so a half-typed draft can't
-    /// pass for the current page (it hid the start page and got bookmarked).
+    /// Address bar text: an edit buffer, not necessarily the loaded page (a
+    /// half-typed draft must not pass for the current page — see `page_url`).
+    pub location: String,
+    /// The tab's loaded URL, written only by [`delegate`] on real navigations.
     page_url: String,
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
@@ -77,15 +60,7 @@ impl BrowserState {
         self.loading
     }
 
-    pub fn get_location_mut(&mut self) -> &mut String {
-        &mut self.location
-    }
-
-    pub fn get_location(&self) -> &str {
-        &self.location
-    }
-
-    /// What the tab has loaded, as opposed to [`Self::get_location`].
+    /// What the tab has loaded, as opposed to the `location` edit buffer.
     pub fn page_url(&self) -> &str {
         &self.page_url
     }
@@ -116,11 +91,10 @@ struct Tab {
     webview: WebView,
     state: BrowserState,
     /// Images allowed on this tab, hashed for the per-page cap (see
-    /// `delegate::image_key`), bucketed by the document that asked for them so an
-    /// iframe cannot spend the page's budget and never give it back. Keyed by the
-    /// load's referrer, which is the closest thing to a frame identity the
-    /// embedder API offers. Cleared wholesale on the tab's top-level navigations;
-    /// per tab so a background load can't spend the visible page's budget.
+    /// `delegate::image_key`), bucketed by the load's referrer — the closest
+    /// thing to a frame identity — so an iframe can't spend the page's budget.
+    /// Cleared on top-level navigations; per tab so a background load can't
+    /// spend the visible page's budget.
     page_images: RefCell<HashMap<u64, HashSet<u64>>>,
 }
 
@@ -181,13 +155,12 @@ struct AppBrowserInner {
     download_exts: Vec<String>,
     /// Network-level ad blocking, consulted for every resource load.
     adblock: Adblock,
-    /// Lightweight-mode content filter (block images/media/fonts), consulted
-    /// for every resource load alongside the ad blocker. Behind a `Cell` so a
-    /// settings save can swap in new flags live (see [`AppBrowser::set_content_filter`]).
+    /// Lightweight-mode content filter (block images/media/fonts), consulted for
+    /// every resource load. A `Cell` so a settings save can swap in new flags live.
     content_filter: Cell<ContentFilter>,
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
-    hint_rects: RefCell<Option<Vec<Hint>>>,
+    hint_rects: RefCell<Option<Vec<crate::overlay::hints::Hint>>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -438,12 +411,10 @@ impl AppBrowser {
         std::mem::take(&mut self.inner.blob_downloads.borrow_mut())
     }
 
-    /// Ask Servo for a memory report (the data behind `about:memory`). The report
-    /// is gathered across all threads and delivered asynchronously on an IPC
-    /// router thread: the callback stashes it and wakes the loop, which drains it
-    /// via [`AppBrowser::take_memory_report`]. Drives the debug memory overlay
-    /// (`[debug] memory_overlay`). Not free (it walks every reporter), so the loop
-    /// throttles requests rather than firing one per frame.
+    /// Ask Servo for a memory report (the data behind `about:memory`), delivered
+    /// asynchronously on an IPC router thread: the callback stashes it and wakes
+    /// the loop, which drains it via [`Self::take_memory_report`]. Not free (it
+    /// walks every reporter), so the loop throttles requests.
     pub fn request_memory_report(&self) {
         let slot = self.inner.mem_report.clone();
         let waker = self.inner.event_sender.clone();
@@ -466,9 +437,8 @@ impl AppBrowser {
         self.inner.mem_report.lock().ok().and_then(|mut g| g.take())
     }
 
-    /// Replace the lightweight-mode content filter (called when the settings
-    /// overlay saves new `block_*` flags, so they take effect without a
-    /// restart). Already-loaded resources stay; only subsequent loads see it.
+    /// Replace the lightweight-mode content filter (a settings save), so new
+    /// `block_*` flags apply without a restart. Only subsequent loads see it.
     #[inline]
     pub fn set_content_filter(&self, filter: ContentFilter) {
         self.inner.content_filter.set(filter);
@@ -481,12 +451,10 @@ impl AppBrowser {
         engine::set_experimental_prefs(&self.inner.servo, exp);
     }
 
-    /// Retheme every open tab and inherit the choice into later ones.
-    ///
-    /// Reloads them: measured on Servo 0.4, notifying a loaded page flips
-    /// `matchMedia` but does not restyle it, and user stylesheets need a load
-    /// either way. Guarded on an actual change so an unrelated settings save
-    /// can't discard scroll and form state.
+    /// Retheme every open tab (a reload: measured on Servo 0.4, notifying a
+    /// loaded page flips `matchMedia` but does not restyle it) and inherit the
+    /// choice into later tabs. Guarded on an actual change so an unrelated
+    /// settings save can't discard scroll and form state.
     pub fn set_page_theme(&self, theme: PageTheme) {
         if self.inner.page_theme.replace(theme) == theme {
             return;
@@ -497,54 +465,6 @@ impl AppBrowser {
             tab.state.loading = true;
             tab.webview.reload();
         }
-    }
-
-    /// Ask the active page for its visible clickable elements (hint mode). The
-    /// JS runs asynchronously; the resulting rects land in `hint_rects` (drained
-    /// via [`AppBrowser::take_hint_rects`]) and a wake-up event is sent. An
-    /// evaluation error yields an empty list, which exits hint mode.
-    pub fn collect_hints(&self) {
-        let Some(webview) = self.inner.active_webview() else {
-            return;
-        };
-        let inner = self.inner.clone();
-        webview.evaluate_javascript(COLLECT_HINTS_JS, move |result| {
-            let mut hints = vec![];
-            match result {
-                // The script returns a flat array, five entries per element:
-                // x, y, w, h (viewport-relative CSS px numbers) then the link's
-                // absolute URL as a string (empty for non-link clickables).
-                Ok(servo::JSValue::Array(values)) => {
-                    let num = |v: &servo::JSValue| match v {
-                        servo::JSValue::Number(n) => Some(*n as f32),
-                        _ => None,
-                    };
-                    for c in values.as_chunks::<5>().0 {
-                        let (Some(x), Some(y), Some(w), Some(h)) =
-                            (num(&c[0]), num(&c[1]), num(&c[2]), num(&c[3]))
-                        else {
-                            continue;
-                        };
-                        let url = match &c[4] {
-                            servo::JSValue::String(s) if !s.is_empty() => Some(s.clone()),
-                            _ => None,
-                        };
-                        hints.push(Hint { x, y, w, h, url });
-                    }
-                }
-                Ok(other) => log::warn!("hint collection returned unexpected value: {other:?}"),
-                Err(e) => log::warn!("hint collection failed: {e:?}"),
-            }
-            *inner.hint_rects.borrow_mut() = Some(hints);
-            inner.event_sender.send(UserEvent::HintsReady);
-        });
-    }
-
-    /// Take the rects from the last hint collection, if it has finished since
-    /// the previous call. Drained once per frame by the main loop.
-    #[inline]
-    pub fn take_hint_rects(&self) -> Option<Vec<Hint>> {
-        self.inner.hint_rects.borrow_mut().take()
     }
 
     /// Take the select pickers / JS dialogs the pages opened since the last
@@ -568,162 +488,6 @@ impl AppBrowser {
         self.inner.ime_control.get().is_some()
     }
 
-    /// Number of open tabs.
-    #[inline]
-    pub fn tab_count(&self) -> usize {
-        self.inner.tabs.borrow().len()
-    }
-
-    /// A snapshot of the open tabs for the menu's Tabs section.
-    pub fn tabs(&self) -> Vec<TabInfo> {
-        let active = self.inner.active.get();
-        self.inner
-            .tabs
-            .borrow()
-            .iter()
-            .enumerate()
-            .map(|(i, tab)| {
-                let title = tab
-                    .webview
-                    .page_title()
-                    .filter(|t| !t.is_empty())
-                    .or_else(|| Some(tab.state.page_url.clone()).filter(|l| !l.is_empty()))
-                    .unwrap_or_else(|| "New tab".to_string());
-                TabInfo {
-                    title,
-                    url: tab.state.page_url.clone(),
-                    active: i == active,
-                }
-            })
-            .collect()
-    }
-
-    /// Build a webview loading `url` (with the default page zoom applied), or
-    /// `None` if the URL won't parse. It is not shown or focused — the callers
-    /// decide whether the new tab is foreground or background.
-    fn build_tab(&self, url: &str) -> Option<servo::WebView> {
-        let url = Url::parse(url).ok()?;
-        let webview =
-            servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
-                .url(url)
-                .hidpi_scale_factor(euclid::Scale::new(self.inner.hidpi.get()))
-                .delegate(self.inner.clone())
-                .user_content_manager(self.inner.user_content.clone())
-                .build();
-        if self.inner.default_zoom != 1.0 {
-            webview.set_page_zoom(self.inner.default_zoom);
-        }
-        webview.notify_theme_change(engine::theme(self.inner.page_theme.get()));
-        Some(webview)
-    }
-
-    /// Open a new tab at `url` and make it the active (shown) one.
-    pub fn open_tab(&mut self, url: &str) {
-        let Some(webview) = self.build_tab(url) else {
-            return;
-        };
-
-        // Hide the previously shown tab before switching to the new one (all tabs
-        // share one rendering context, so only one may be shown at a time).
-        if let Some(cur) = self.inner.active_webview() {
-            cur.hide();
-        }
-        webview.show();
-        webview.focus();
-
-        let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.push(Tab::loading(webview));
-        self.inner.active.set(tabs.len() - 1);
-        drop(tabs);
-        self.inner.repaint_pending.set(true);
-        self.trim_tabs();
-    }
-
-    /// Open `url` in a new background tab: built and loading, but left unshown
-    /// and unfocused so the current tab stays in view (the link-hints "open in
-    /// new tab" gesture). Loading is independent of `show()`, so it fetches in
-    /// the background; switch to it later via the tab cycle or menu.
-    pub fn open_tab_background(&mut self, url: &str) {
-        let Some(webview) = self.build_tab(url) else {
-            return;
-        };
-        self.inner.tabs.borrow_mut().push(Tab::loading(webview));
-        self.trim_tabs();
-    }
-
-    /// Trim to `[browser] max_tabs` after a push (`0` is unlimited): close the
-    /// oldest tabs that aren't in view, so a cap of one replaces instead.
-    fn trim_tabs(&self) {
-        let cap = self.inner.max_tabs.get();
-        if cap == 0 {
-            return;
-        }
-        while self.tab_count() > cap {
-            let active = self.inner.active.get();
-            let Some(oldest) = (0..self.tab_count()).find(|i| *i != active) else {
-                return;
-            };
-            log::info!("tab cap {cap} reached: closing tab {oldest}");
-            self.remove_tab(oldest);
-        }
-    }
-
-    /// Adopt an edited cap (settings overlay); it bounds later opens only.
-    #[inline]
-    pub fn set_max_tabs(&self, max_tabs: u32) {
-        self.inner.max_tabs.set(max_tabs as usize);
-    }
-
-    /// Reopen a saved session (see [`crate::data::session`]): a tab per URL,
-    /// with `active` shown, cut down to `max_tabs` and past URLs that won't
-    /// parse. `false` when nothing was restored (the caller then loads the home
-    /// page). Startup only: it assumes an empty tab list.
-    pub fn restore_tabs(&mut self, urls: &[String], active: usize) -> bool {
-        let window = session_window(urls.len(), active, self.inner.max_tabs.get());
-        if window.len() < urls.len() {
-            log::info!(
-                "session: {} of {} tabs fit the cap",
-                window.len(),
-                urls.len()
-            );
-        }
-        let active = active - window.start;
-
-        let mut kept = Vec::with_capacity(window.len());
-        let mut built = Vec::with_capacity(window.len());
-        for (i, url) in urls[window].iter().enumerate() {
-            match self.build_tab(url) {
-                Some(webview) => {
-                    kept.push(i);
-                    built.push(webview);
-                }
-                None => log::warn!("session: dropping unparseable url `{url}`"),
-            }
-        }
-        if built.is_empty() {
-            return false;
-        }
-        let shown = shown_index(&kept, active);
-        log::info!("session: restoring {} tabs, showing {shown}", built.len());
-
-        let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.extend(built.into_iter().map(Tab::loading));
-        tabs[shown].webview.show();
-        tabs[shown].webview.focus();
-        drop(tabs);
-        self.inner.active.set(shown);
-        self.inner.repaint_pending.set(true);
-        true
-    }
-
-    /// Drop every tab and open a fresh one at `url` — the tab half of clearing
-    /// browsing data (dropping a `WebView` closes it in Servo).
-    pub fn reset_tabs(&mut self, url: &str) {
-        self.inner.tabs.borrow_mut().clear();
-        self.inner.active.set(0);
-        self.open_tab(url);
-    }
-
     /// Clear every site's cookies and web storage, and the HTTP cache. The
     /// on-disk copies follow at exit, when Servo writes the emptied jars.
     pub fn clear_site_data(&self) {
@@ -740,92 +504,6 @@ impl AppBrowser {
         manager.clear_cookies(None);
         self.inner.servo.network_manager().clear_cache();
         log::info!("cleared cookies, cache, storage of {} sites", sites.len());
-    }
-
-    /// Switch the shown tab to `index` (no-op if out of range or already active).
-    pub fn switch_to(&self, index: usize) {
-        let tabs = self.inner.tabs.borrow();
-        let active = self.inner.active.get();
-        if index >= tabs.len() || index == active {
-            return;
-        }
-        if let Some(cur) = tabs.get(active) {
-            cur.webview.hide();
-        }
-        let target = &tabs[index];
-        target.webview.show();
-        target.webview.focus();
-        drop(tabs);
-        self.inner.active.set(index);
-        self.inner.repaint_pending.set(true);
-    }
-
-    /// Switch the active tab by `delta` positions, wrapping around (e.g. -1 for the
-    /// previous tab, +1 for the next). No-op with fewer than two tabs.
-    pub fn cycle_tab(&self, delta: i32) {
-        let count = self.tab_count();
-        if count <= 1 {
-            return;
-        }
-        let active = self.inner.active.get() as i32;
-        let next = (active + delta).rem_euclid(count as i32) as usize;
-        self.switch_to(next);
-    }
-
-    /// Close the tab at `index`. Closing the last one leaves a fresh tab at
-    /// `home` instead of no tab at all. If the active tab is closed, the next
-    /// tab becomes active and is shown.
-    pub fn close_tab(&self, index: usize, home: &str) {
-        if self.tab_count() == 1 && index == 0 {
-            self.replace_last_tab(home);
-            return;
-        }
-        self.remove_tab(index);
-    }
-
-    /// Swap the sole open tab for a new one at `home`: dropping the old WebView
-    /// closes it in Servo, so its document and history go with it.
-    fn replace_last_tab(&self, home: &str) {
-        let Some(webview) = self.build_tab(home) else {
-            log::warn!("failed to parse home_page `{home}`");
-            return;
-        };
-        let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.clear();
-        webview.show();
-        webview.focus();
-        tabs.push(Tab::loading(webview));
-        self.inner.active.set(0);
-        drop(tabs);
-        self.inner.repaint_pending.set(true);
-    }
-
-    /// Drop the tab at `index`, keeping at least one open.
-    fn remove_tab(&self, index: usize) {
-        let mut tabs = self.inner.tabs.borrow_mut();
-        if index >= tabs.len() || tabs.len() == 1 {
-            return;
-        }
-        let active = self.inner.active.get();
-        let was_active = index == active;
-        // Removing the WebView drops it, which closes it in Servo (see `Drop`).
-        tabs.remove(index);
-
-        let new_active = if was_active {
-            index.min(tabs.len() - 1)
-        } else if index < active {
-            active - 1
-        } else {
-            active
-        };
-        self.inner.active.set(new_active);
-        if was_active {
-            let tab = &tabs[new_active];
-            tab.webview.show();
-            tab.webview.focus();
-        }
-        drop(tabs);
-        self.inner.repaint_pending.set(true);
     }
 
     /// Spin the Servo event loop once, running delegate callbacks and updating paint output.
@@ -861,186 +539,13 @@ impl AppBrowser {
         }
     }
 
-    /// A web-view point in the pixels the page is rendered and hit-tested in.
-    #[inline]
-    fn page_px(&self, x: f32, y: f32) -> (f32, f32) {
-        let scale = self.inner.hidpi.get();
-        (x * scale, y * scale)
-    }
-
-    /// Point the page at `(x, y)` (web-view points), so `:hover` and JS follow.
-    pub fn mouse_move(&self, x: f32, y: f32) {
-        let (x, y) = self.page_px(x, y);
-        self.handle_input(servo::InputEvent::MouseMove(
-            crate::event::sdl2_servo::into_mouse_move_event(x, y),
-        ));
-    }
-
-    /// Press or release `button` at `(x, y)` (web-view points).
-    pub fn mouse_button(&self, button: sdl2::mouse::MouseButton, x: f32, y: f32, down: bool) {
-        let (x, y) = self.page_px(x, y);
-        self.handle_input(servo::InputEvent::MouseButton(
-            crate::event::sdl2_servo::into_mouse_button_event(button, x, y, down),
-        ));
-    }
-
-    /// The DOM `wheel` event at `(x, y)` (web-view points). Fires handlers only —
-    /// [`Self::scroll`] is what moves the page.
-    pub fn wheel(&self, dx: i32, dy: i32, x: f32, y: f32) {
-        let (x, y) = self.page_px(x, y);
-        self.handle_input(servo::InputEvent::Wheel(
-            crate::event::sdl2_servo::into_wheel_event(dx, dy, x, y),
-        ));
-    }
-
-    pub fn handle_input(&self, event: servo::InputEvent) {
-        let Some(tab) = self.inner.active_webview() else {
-            return;
-        };
-
-        tab.notify_input_event(event.clone());
-
-        if let servo::InputEvent::MouseButton(be) = event {
-            if be.action == servo::MouseButtonAction::Down {
-                match be.button {
-                    servo::MouseButton::Back => _ = tab.go_back(1),
-                    servo::MouseButton::Forward => _ = tab.go_forward(1),
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    /// Empty the page's focused field (the keyboard's Clr key), notifying the
-    /// page as a real edit would.
-    pub fn clear_focused_field(&self) {
-        let Some(webview) = self.inner.active_webview() else {
-            return;
-        };
-        webview.evaluate_javascript(CLEAR_FIELD_JS, |_| {});
-    }
-
-    /// Scroll the page so its focused element clears the bottom `covered`
-    /// fraction of the viewport — the on-screen keyboard, which the page knows
-    /// nothing about. A no-op when the element is already above it.
-    ///
-    /// Done in the page rather than by the compositor: only the document knows
-    /// where its focused element is. Servo's IME rect can't answer that (its own
-    /// FIXME: it reports a frame-relative CSS box, not a viewport position).
-    pub fn lift_focus_above(&self, covered: f32) {
-        let Some(webview) = self.inner.active_webview() else {
-            return;
-        };
-        let js = LIFT_FOCUS_JS.replace("COVERED", &format!("{covered:.4}"));
-        webview.evaluate_javascript(js, |_| {});
-    }
-
-    /// Scroll the active page by a delta at `(x, y)`, both in web-view points.
-    /// Positive `dy` reveals content lower on the page. This is the native
-    /// compositor scroll (`InputEvent::Wheel` only fires the DOM event).
-    pub fn scroll(&self, dx: f32, dy: f32, x: f32, y: f32) {
-        let Some(tab) = self.inner.active_webview() else {
-            return;
-        };
-        let (dx, dy) = self.page_px(dx, dy);
-        let (x, y) = self.page_px(x, y);
-        let delta = servo::Scroll::Delta(servo::DeviceVector2D::new(dx, dy).into());
-        let point = servo::DevicePoint::new(x, y).into();
-        tab.notify_scroll_event(delta, point);
-    }
-
-    pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
-        match command {
-            BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
-            BrowserCommand::Forward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
-            BrowserCommand::Reload => {
-                if let Some(webview) = self.inner.active_webview() {
-                    self.mark_loading();
-                    webview.reload();
-                }
-            }
-            BrowserCommand::Reader => self.toggle_reader(),
-            BrowserCommand::Zoom(delta) => self.zoom(*delta),
-            BrowserCommand::Load => {
-                let active = self.inner.active.get();
-                let tabs = self.inner.tabs.borrow();
-                let Some(tab) = tabs.get(active) else {
-                    return;
-                };
-                let Some(url) = try_into_url(&tab.state.location, &config.search_page) else {
-                    log::warn!("failed to parse location");
-                    return;
-                };
-                let webview = tab.webview.clone();
-                drop(tabs);
-                self.mark_loading();
-                webview.load(url);
-            }
-            BrowserCommand::Home => {
-                let Some(webview) = self.inner.active_webview() else {
-                    return;
-                };
-                let Some(url) = try_into_url(&config.home_page, &config.search_page) else {
-                    log::warn!("failed to parse home_page `{}`", config.home_page);
-                    return;
-                };
-                self.mark_loading();
-                webview.load(url);
-            }
-        }
-    }
-
-    /// Arm the active tab's loading flag; `Complete` clears it. Needed because
-    /// Servo sends `LoadStatus::Started` only for page-initiated navigations. Not
-    /// for back / forward: those reuse the session-history document with no load
-    /// at all, so nothing would clear the flag.
-    fn mark_loading(&self) {
-        let active = self.inner.active.get();
-        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
-            tab.state.loading = true;
-        }
-    }
-
-    /// Shut Servo down cleanly: close every webview, then drop the `Servo`
-    /// handle — its `Drop` sends Exit to the constellation and spins the event
-    /// loop to completion. That exit pass is when the net and storage threads
-    /// write the persisted site data (`cookie_jar.json`, `localstorage.json`,
-    /// …) into `config_dir`; skipping it (a bare `process::exit`) loses logins.
+    /// Shut Servo down cleanly: drop every webview, then the `Servo` handle —
+    /// its `Drop` spins the exit pass in which the net/storage threads write the
+    /// persisted site data. Skipping it (a bare `process::exit`) loses logins.
     pub fn shutdown(self) {
         // Dropping the webviews releases their delegate handles, making `self`
         // the last owner of the inner state — dropping it drops the `Servo`.
         self.inner.tabs.borrow_mut().clear();
-    }
-
-    /// Step the active tab's page zoom to the next [`ZOOM_LADDER`] entry in
-    /// the given direction (so an off-ladder config default still steps
-    /// sensibly); `0` resets to the config default. Page zoom reflows the
-    /// layout and is per-WebView, so each tab keeps its own level.
-    fn zoom(&self, delta: i32) {
-        let Some(webview) = self.inner.active_webview() else {
-            return;
-        };
-        let current = webview.page_zoom();
-        let target = match delta {
-            0 => self.inner.default_zoom,
-            d if d > 0 => *ZOOM_LADDER
-                .iter()
-                .find(|z| **z > current + 0.005)
-                .unwrap_or(ZOOM_LADDER.last().unwrap()),
-            _ => *ZOOM_LADDER
-                .iter()
-                .rev()
-                .find(|z| **z < current - 0.005)
-                .unwrap_or(&ZOOM_LADDER[0]),
-        };
-        webview.set_page_zoom(target);
-    }
-
-    /// The active tab's page zoom as a percentage, when it differs from the
-    /// config default — feeds the toolbar's zoom chip (hidden at the default).
-    pub fn zoom_chip(&self) -> Option<u16> {
-        let zoom = self.inner.active_webview().map(|w| w.page_zoom())?;
-        ((zoom - self.inner.default_zoom).abs() > 0.005).then(|| (zoom * 100.0).round() as u16)
     }
 
     pub fn resize(&self, w: u32, h: u32) {
@@ -1051,131 +556,13 @@ impl AppBrowser {
         // A full reflow each, so the count is the measurement when chrome
         // that comes and goes is suspected of resizing the page.
         log::debug!("viewport resize: {w}x{h}");
-        // Servo's `resize_rendering_context` resizes our rendering context *and*
-        // reflows the page — but it early-returns when the context size already
-        // matches. So we must NOT resize the context ourselves first: doing that
-        // made Servo skip the reflow, so the page never adjusted. Let
-        // `WebView::resize` drive both (it resizes the shared context, covering all
-        // tabs). With no tab yet, resize the context directly.
+        // Servo's resize reflows *and* resizes the context, but early-returns
+        // when the context size already matches — resizing the context ourselves
+        // first made Servo skip the reflow. Let `WebView::resize` drive both;
+        // with no tab yet, resize the context directly.
         match self.inner.active_webview() {
             Some(tab) => tab.resize(size),
             None => self.inner.rendering_ctx.resize(size),
         }
-    }
-}
-
-/// Which restored tab to show: the saved `active` one, or the nearest earlier
-/// survivor when its URL was skipped. `kept` holds their saved positions.
-fn shown_index(kept: &[usize], active: usize) -> usize {
-    kept.iter().rposition(|&i| i <= active).unwrap_or(0)
-}
-
-/// The stretch of a saved session that fits `cap` (`0` is unlimited): oldest
-/// tabs go first, but the window always covers `active`, so `start <= active`.
-fn session_window(len: usize, active: usize, cap: usize) -> std::ops::Range<usize> {
-    if cap == 0 || len <= cap {
-        return 0..len;
-    }
-    let start = (len - cap).min(active);
-    start..start + cap
-}
-
-/// Empty the focused field, firing the events a page listens for.
-const CLEAR_FIELD_JS: &str = r#"
-(function () {
-    const el = document.activeElement;
-    if (!el) return;
-    if ('value' in el) {
-        el.value = '';
-    } else if (el.isContentEditable) {
-        el.textContent = '';
-    } else {
-        return;
-    }
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-})()
-"#;
-
-/// Scroll the focused element clear of the viewport's bottom `COVERED` fraction
-/// (substituted by [`AppBrowser::lift_focus_above`]). A fraction, not a pixel
-/// count, so it needs no CSS-px / logical-px conversion.
-const LIFT_FOCUS_JS: &str = r#"
-(function () {
-    const el = document.activeElement;
-    if (!el || !el.getBoundingClientRect) return;
-    const limit = window.innerHeight * (1 - COVERED) - 8;
-    const over = el.getBoundingClientRect().bottom - limit;
-    if (over > 0) window.scrollBy({ left: 0, top: over });
-})()
-"#;
-
-/// Collect the visible clickable elements as a flat `[x, y, w, h, …]` array
-/// (viewport-relative CSS px). Skips off-viewport, zero-size, hidden, and
-/// click-through elements; capped so a link-farm page can't flood the IPC
-/// channel. Cross-origin iframes are unreachable from the top document — their
-/// content gets no hints (the virtual cursor remains the fallback).
-const COLLECT_HINTS_JS: &str = r#"
-(function () {
-    const out = [];
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const els = document.querySelectorAll(
-        'a[href], button, input:not([type="hidden"]), select, textarea, summary, ' +
-        '[onclick], [role="button"], [role="link"], [role="tab"], [contenteditable="true"]'
-    );
-    for (const el of els) {
-        if (out.length >= 750) break; // 150 hints (5 entries each)
-        const r = el.getBoundingClientRect();
-        if (r.width < 2 || r.height < 2) continue;
-        if (r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) continue;
-        const s = window.getComputedStyle(el);
-        if (s.visibility !== 'visible' || s.pointerEvents === 'none') continue;
-        // el.href on an <a> is the resolved absolute URL; restrict to http(s)
-        // so "open in new tab" skips javascript:/mailto:/fragment links (those
-        // fall back to a normal click). '' marks a non-link clickable.
-        const href = (el.tagName === 'A' && /^https?:/i.test(el.href)) ? el.href : '';
-        out.push(r.left, r.top, r.width, r.height, href);
-    }
-    return out;
-})()
-"#;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The restored tabs keep their saved order, so the shown one is the saved
-    /// index shifted back by however many earlier URLs were dropped.
-    #[test]
-    fn shown_index_follows_the_dropped_tabs() {
-        assert_eq!(shown_index(&[0, 1, 2], 2), 2);
-        assert_eq!(shown_index(&[1, 3], 3), 1);
-        assert_eq!(shown_index(&[0, 2, 4], 4), 2);
-    }
-
-    /// The saved active tab itself may be the one dropped: show the nearest
-    /// earlier survivor, or the first tab when none precedes it.
-    #[test]
-    fn shown_index_falls_back_when_the_active_tab_is_dropped() {
-        assert_eq!(shown_index(&[0, 3], 2), 0);
-        assert_eq!(shown_index(&[2, 3], 1), 0);
-    }
-
-    /// A session within the cap (or with no cap at all) restores whole.
-    #[test]
-    fn session_window_keeps_everything_that_fits() {
-        assert_eq!(session_window(3, 1, 8), 0..3);
-        assert_eq!(session_window(3, 1, 3), 0..3);
-        assert_eq!(session_window(50, 49, 0), 0..50);
-    }
-
-    /// Over the cap the oldest tabs go — unless the one in view is among them,
-    /// which pins the window to it.
-    #[test]
-    fn session_window_drops_the_oldest_but_keeps_the_active_tab() {
-        assert_eq!(session_window(10, 9, 4), 6..10);
-        assert_eq!(session_window(10, 6, 4), 6..10);
-        assert_eq!(session_window(10, 2, 4), 2..6);
-        assert_eq!(session_window(10, 0, 1), 0..1);
     }
 }

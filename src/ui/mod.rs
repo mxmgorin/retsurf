@@ -586,7 +586,7 @@ impl AppUi {
                 );
                 root.set_clip_rect(ctx.content_rect());
 
-                let bookmarked = self.menu.is_bookmarked(state.get_location());
+                let bookmarked = self.menu.is_bookmarked(&state.location);
                 let active_downloads = self.menu.downloads.active_count();
 
                 // 1) Reserved-space toolbar (auto-hide off): the panel reserves

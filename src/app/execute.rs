@@ -394,7 +394,7 @@ impl App {
             self.ui.settings_open(&self.config);
             return;
         }
-        *self.browser.get_state_mut().get_location_mut() = url;
+        self.browser.get_state_mut().location = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);
         self.ui.menu.close();

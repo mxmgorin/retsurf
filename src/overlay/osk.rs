@@ -391,7 +391,7 @@ impl Osk {
     /// directly, a page field through the DOM.
     fn clear_field(&mut self, target: OskTarget, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => browser.get_state_mut().get_location_mut().clear(),
+            OskTarget::AddressBar => browser.get_state_mut().location.clear(),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
@@ -411,7 +411,7 @@ impl Osk {
     fn backspace(&mut self, target: OskTarget, browser: &AppBrowser) {
         match target {
             OskTarget::AddressBar => {
-                self.caret = remove_before(browser.get_state_mut().get_location_mut(), self.caret)
+                self.caret = remove_before(&mut browser.get_state_mut().location, self.caret)
             }
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
@@ -426,7 +426,7 @@ impl Osk {
     fn input_char(&mut self, target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
         match target {
             OskTarget::AddressBar => {
-                self.caret = insert_at(browser.get_state_mut().get_location_mut(), self.caret, c)
+                self.caret = insert_at(&mut browser.get_state_mut().location, self.caret, c)
             }
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
@@ -485,7 +485,7 @@ fn caret_field(target: &OskTarget) -> bool {
 /// Char length of the target's buffer (0 for the buffer-less `Page`).
 fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
     match target {
-        OskTarget::AddressBar => browser.get_state_mut().get_location().chars().count(),
+        OskTarget::AddressBar => browser.get_state_mut().location.chars().count(),
         OskTarget::Prompt(buf)
         | OskTarget::Home(buf)
         | OskTarget::DialEdit(buf)

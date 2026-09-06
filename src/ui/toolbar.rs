@@ -266,13 +266,13 @@ fn toolbar_contents(
                                         ui.ctx(),
                                         egui::Id::new("location"),
                                         pos,
-                                        state.get_location().chars().count(),
+                                        state.location.chars().count(),
                                     );
                                 }
-                                let char_count = state.get_location().chars().count();
+                                let char_count = state.location.chars().count();
                                 let location = ui.add_sized(
                                     ui.available_size(),
-                                    new_text_edit(state.get_location_mut(), "location")
+                                    new_text_edit(&mut state.location, "location")
                                         .frame(egui::Frame::new()),
                                 );
                                 // Focusing the bar selects the URL, so typing
