@@ -7,6 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Rendering without a GPU at all.** The new `software` cargo feature replaces
+  both renderers with CPU ones: the page is rasterized by swgl (WebRender's own
+  software backend) and the chrome is drawn by SDL's 2D renderer into an
+  offscreen surface over it, so the composed frame reaches the panel as one
+  texture copy and no GL driver is needed anywhere. `[display] software_render`
+  (or `RETSURF_SOFTWARE=1`) forces it; a build that has the feature also falls
+  back to it on its own when no GL context can be created, so a device with no
+  driver lands there without being told to. Nothing paces this path — there is no
+  vsync — so `[display] max_fps` (30 by default) caps the whole loop, Servo's
+  callbacks included.
+
+- **An Allium package for the Miyoo Mini Plus and Flip** (`allium/`), the first
+  device family with no GPU. `tools/armhf/` cross-builds the armv7 binary in a
+  container and packages it; `.github/workflows/build-linux-armhf.yml` is the
+  same recipe in CI. The launcher installs the device's default config once
+  (never over the user's), writes the font config, sets the clock before TLS
+  needs a valid `notBefore`, and adds a swapfile. `allium/README.md` documents
+  the device side, `docs/HANDHELD_PORT.md` the build. The compiler is Ubuntu's
+  cross GCC 10 over the Miyoo toolchain's glibc-2.28 sysroot, with libstdc++
+  linked statically — the engine's SpiderMonkey 153 requires GCC 10.1 where that
+  toolchain's own is 8.3, and no C++ runtime exists that satisfies both it and a
+  2.28 loader.
+
+- **A `micro` memory profile for ~128 MB boards**: `embedded` with a quarter of
+  the JS heap, no slack before a collection, and no page kept alive for back.
+  The Allium package also ships the per-page image cap on, which is what keeps an
+  image-heavy page from taking the device down.
+
+- **The chrome sizes itself to the panel it runs on.** It is drawn against a
+  640x480 design and zoomed to fit, so a toolbar keeps its size in thumbs rather
+  than in pixels, and the page follows the same zoom as its device pixel ratio.
+  `[display] scale` (0.6 to 1.6) is a factor over that fit, so one setting means
+  the same thing on a handheld and on a desktop window; `RETSURF_SCALE` replaces
+  the fit where the launcher knows better, which is what Android now sets to the
+  display density.
+
+- **`[display] dark_last_row`**, for panels that show the screen's last row again
+  as the first one (muOS/A133) — a light page used to bleed a band above the
+  toolbar.
+
+- **The window reopens at the size it was left at** (`[display] width`/`height`
+  are rewritten on exit). Desktop only: a handheld's window is its panel.
+
+- **The Miyoo pad, read from the keys it sends.** That firmware's SDL2 offers no
+  controller mapping and sends key presses instead; `RETSURF_KEYMAP=miyoo` feeds
+  them to the pad machine, so they answer to the `[gamepad]` table and can be
+  rebound like any button.
+
+- Measurement that does not need the overlay on the screen it is measuring:
+  `[debug] memory_log` writes the memory report to the log every ten seconds,
+  `[debug] frame_timing` logs the per-frame paint cost averaged over a second and
+  split by step, and `RETSURF_MEMORY_DETAIL` adds the largest whole report paths
+  under the rolled-up groups.
+
+### Changed
+
+- The engine's patch set is six. Two are new: WebRender is kept off the two
+  paths swgl does not implement (a quad-drawn cache clear and dithering, either
+  of which aborted the process), and a painter can be removed when it registered
+  no surfman details. The second is not software-only — it is the optional-
+  connection patch's missing half, and the same panic waits in every webgl-off
+  handheld build. Two others left the set for Servo itself: the containing-block
+  walk (servo/servo#47693) and the script-message unwrap (#47686) landed
+  upstream, as did the pipeline-exit half of the display-list fix (#47651).
+  `patches/` mirrors all six.
+
+- **The chrome is rasterized only where it changed**, and reused as it stands
+  while egui draws the same frame. On the software renderer its corners are
+  square and egui's feathering is off, both of which cost more than they are
+  worth when a CPU tessellates them (`RETSURF_ROUNDING=1`, `RETSURF_FEATHERING=1`
+  put them back for a comparison).
+
+- **The malloc heap the JS engine does not count is bounded on the small tiers.**
+  Measured on the device, it climbed 2.4 MB a navigation to SpiderMonkey's 38 MB
+  default — a third of a Miyoo's RAM — before anything collected it. `micro`
+  collects at 6 MB, `embedded` at 12.
+
+- The armhf binary is built for size, and the sizes that follow from that are in
+  `tools/armhf/`. `RETSURF_ARM_LTO=thin` links it where RAM is short.
+
+- **A tab the page opens replaces the open one when the cap is one.** Refusing it
+  there left a link that did nothing at all.
+
+- **A "Restore all defaults" row** (Settings > Advanced): every settings row, the
+  speed-dial pins and the control bindings back to how they ship, on two presses
+  like the clear-data row beside it. What you saved — bookmarks, history, tabs —
+  is left to that row.
+
+- Bumped `egui-sdl2` to 0.12, and back to a crates.io release from the rev pin
+  the damage-rect work needed. egui stays 0.36. The release also lands the
+  software renderer's 1:1 texture copies on whole pixels, which is reachable here
+  whenever `[display] scale` is not a whole number: SDL resampled a copy it
+  should not have, and glyphs lost a row.
+
+### Fixed
+
+- **A driver that refuses a GL attribute no longer ends the run** — the window
+  falls back to software rendering where the build has it.
+
+- **The frame is drawn when a command changed it**, and the loop no longer
+  free-runs when nothing did. The swap-interval result is kept rather than
+  assumed, so a driver that ignores the vsync request is paced by the frame cap
+  instead of spinning.
+
+- **The panel gets whole frames.** The `mmiyoo` driver misplaces a partial copy,
+  so the changed rect is used for the rasterizer's work and not for the upload
+  (`RETSURF_PARTIAL_PRESENT=1` sends partial frames on a driver that handles
+  them).
+
+- **Triggers wired to keyboard keys reach the on-screen keyboard's shift and
+  enter**, which on a device whose pad *is* a keyboard is most of typing.
+
+- The font config is written only when it would change, so a launch no longer
+  rebuilds the fontconfig cache for nothing.
+
+- **R2 no longer eats the last letter where the pad arrives as keys.** The Miyoo
+  sends R2 as Backspace, and the raw key still reached egui, which deleted a
+  character from the focused field before the trigger's Enter submitted it — a
+  start-page search for `asd` fetched `as`. Keys that *are* the pad now stop
+  before egui, both edges.
+
+- **Reordering the speed dial moves the ⚙ Settings tile too.** The editor used to
+  hide it from the pins and always draw it last, so it sat somewhere else on the
+  start page and no reorder could shift it. Both screens now show one order, and
+  X removes the tile (the trailing "Pin settings" slot puts it back).
+
 ## [0.7.0] - 2026-08-31
 
 ### Added

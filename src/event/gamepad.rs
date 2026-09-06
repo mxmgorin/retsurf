@@ -176,11 +176,24 @@ impl Gamepad {
         bindings: &Bindings<Action>,
         commands: &mut Vec<AppCommand>,
     ) {
-        let pad = pad_of(button);
+        if let Some(pad) = pad_of(button) {
+            self.on_pad(pad, pressed, bindings, commands);
+        }
+    }
+
+    /// One pad edge, however it reached us — a controller button, or a key on a
+    /// device that wires its pad to the keyboard (see [`inputbind::sdl::Keymap`]).
+    pub fn on_pad(
+        &mut self,
+        pad: Pad,
+        pressed: bool,
+        bindings: &Bindings<Action>,
+        commands: &mut Vec<AppCommand>,
+    ) {
         // The D-pad contributes to the aim vector on both edges (per axis, so a
         // held diagonal keeps both), and emits a discrete press edge for hint
         // mode's combo symbols (ignored elsewhere). It is also a bindable pad.
-        if let Some((dx, dy)) = pad.and_then(Pad::vector) {
+        if let Some((dx, dy)) = pad.vector() {
             if dx != 0 {
                 self.dpad.0 = if pressed { dx as f32 } else { 0.0 };
             } else {
@@ -191,9 +204,16 @@ impl Gamepad {
             }
         }
 
-        if let Some(pad) = pad {
-            self.press(pad, pressed, bindings, commands);
+        // Triggers wired to keys never reach `on_axis`, where this intent is
+        // otherwise made — the Miyoo sends L2/R2 as Tab and Backspace.
+        if matches!(pad, Pad::L2 | Pad::R2) {
+            commands.push(AppCommand::Input(InputCommand::Trigger {
+                right: pad == Pad::R2,
+                pressed,
+            }));
         }
+
+        self.press(pad, pressed, bindings, commands);
     }
 
     /// One pad edge through the gesture machine.

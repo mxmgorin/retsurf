@@ -5,10 +5,9 @@
 //! dial itself lives in the menu's store, the central router drives the actions,
 //! and [`crate::ui::dial_edit`] renders it.
 
-/// The focused item in the editor: a grid tile or the URL field. The grid's
-/// trailing tile is the always-present ⚙ settings toggle (like the start page's
-/// trailing Edit tile), so it's just the last `Tile` index — see
-/// [`crate::ui::AppUi::dial_edit_settings_selected`].
+/// The focused item in the editor: a grid tile or the URL field. Tile indices are
+/// dial indices; the slot past them is the "Pin settings" tile shown while the ⚙
+/// shortcut is off the dial — see [`crate::ui::AppUi::dial_edit_pin_settings_selected`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum EditItem {
     Tile(usize),
@@ -98,8 +97,8 @@ impl DialEdit {
         self.cols = cols.max(1);
     }
 
-    /// Move the selection by a dominant-axis step across the `count`-tile grid
-    /// (its last tile is the ⚙ settings toggle) and the URL field below it.
+    /// Move the selection by a dominant-axis step across the `count`-tile grid and
+    /// the URL field below it.
     pub fn move_sel(&mut self, dx: i32, dy: i32, count: usize) {
         let cols = self.cols.max(1);
         match self.item {
@@ -123,8 +122,8 @@ impl DialEdit {
                     self.item = EditItem::Tile(i + 1);
                 }
             }
-            // The field sits below the grid (which always has at least the ⚙
-            // settings tile): ▲ goes up into it, nothing lives below.
+            // The field sits below the grid (never empty — an emptied dial still
+            // has "Pin settings"): ▲ goes up into it, nothing lives below.
             EditItem::Field => {
                 if dy < 0 && count > 0 {
                     self.item = EditItem::Tile(count - 1);

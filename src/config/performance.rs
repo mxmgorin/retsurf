@@ -21,6 +21,11 @@ pub struct PerformanceConfig {
     /// storage, WebRender workers). `0` = keep the memory profile's choice;
     /// non-zero overrides every pool with this value.
     pub worker_pool_max: u32,
+    /// Hold the CPU's `performance` governor while a page loads, where the
+    /// kernel's own governor ramps too late to help (measured: -16% page time on
+    /// a Miyoo Flip). Needs a writable `scaling_governor`, so root in practice;
+    /// without one it is skipped with a log line. Applies live.
+    pub cpu_boost_on_load: bool,
     /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
     /// A spill store, not a second level: it takes what the in-memory cache
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
@@ -43,6 +48,10 @@ token_enum! {
         default Auto;
         /// Pick a tier from the build target and detected RAM (the default).
         Auto => "auto", "Auto",
+        /// Below the floor (~128 MB, the Miyoo Mini family): `Embedded` with a
+        /// quarter of the JS heap and no slack before a collection, for a device
+        /// that browses on swap.
+        Micro => "micro", "Micro",
         /// Tightest floor (~512 MB, sub-1 GB boards): baseline JIT only, single
         /// thread, minimal caches, foreground tab only.
         Embedded => "embedded", "Embedded",

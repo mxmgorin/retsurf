@@ -40,8 +40,25 @@ pub fn run_app() {
         .install_default()
         .expect("Error initializing crypto provider");
     let mut app_config = config::AppConfig::load();
-    if let Ok(v) = std::env::var("RETSURF_GLES") {
-        app_config.display.use_gles = v != "0";
+    if let Some(gles) = config::env_flag("RETSURF_GLES") {
+        app_config.display.use_gles = gles;
+    }
+    if let Some(software) = config::env_flag("RETSURF_SOFTWARE") {
+        app_config.display.software_render = software;
+    }
+    // A launcher's way to try a frame cap without editing the config — and the
+    // way to compare two of them in one sitting.
+    if let Some(fps) = std::env::var("RETSURF_MAX_FPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        app_config.display.max_fps = fps;
+    }
+    if app_config.display.software_render && !cfg!(feature = "software") {
+        log::warn!(
+            "software rendering asked for, but this build has no `software` feature; using GL"
+        );
+        app_config.display.software_render = false;
     }
     // Android GPUs (Mali/Adreno/PowerVR) only expose GLES; desktop GL is never an
     // option there, so the config/RETSURF_GLES toggle can't select it.
@@ -54,7 +71,7 @@ pub fn run_app() {
         std::env::set_var("SDL_TOUCH_MOUSE_EVENTS", "0");
     }
 
-    if app_config.display.use_gles {
+    if app_config.display.use_gles && !app_config.display.software_render {
         // SDL creates a GLES context (sets the thread's EGL API to ES). Servo's
         // surfman context must use the same API or context creation fails, so
         // force surfman to GLES too. Must be set before any surfman/SDL GL init.
@@ -129,6 +146,9 @@ fn install_panic_hook() {
     std::panic::set_hook(Box::new(move |info| {
         let path =
             std::env::var("RETSURF_PANIC_FILE").unwrap_or_else(|_| "retsurf-panic.log".to_string());
+        // The governor is machine-wide; leaving it raised costs battery until
+        // the next reboot.
+        platform::cpufreq::restore();
         let backtrace = std::backtrace::Backtrace::force_capture();
         // Android has no stderr, so a panic in a Servo thread would otherwise
         // vanish silently; the logger reaches logcat.
@@ -144,7 +164,10 @@ fn install_panic_hook() {
             .open(&path)
             .and_then(|mut file| {
                 use std::io::Write;
-                writeln!(file, "retsurf {BUILD_ID} at {at}\n\n{info}\n\nbacktrace:\n{backtrace}\n")
+                writeln!(
+                    file,
+                    "retsurf {BUILD_ID} at {at}\n\n{info}\n\nbacktrace:\n{backtrace}\n"
+                )
             });
         default(info);
     }));

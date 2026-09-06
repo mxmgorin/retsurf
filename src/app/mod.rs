@@ -54,6 +54,16 @@ pub struct App {
     last_memory_report: Instant,
     /// When to hand the allocator's free memory back (see [`HEAP_TRIM_DELAY`]).
     heap_trim_at: Option<Instant>,
+    /// Last time the report was written to the log (see [`MEMORY_LOG_INTERVAL`]).
+    last_memory_log: Instant,
+    /// Paint timing for `[debug] frame_timing`; inert unless that is on.
+    frame_timer: FrameTimer,
+    /// Per-thread cost for `[debug] thread_cpu`; inert unless that is on.
+    thread_cpu: crate::platform::threads::ThreadCpu,
+    /// Holds `performance` while a page loads (`[performance] cpu_boost_on_load`).
+    cpu_boost: crate::platform::cpufreq::LoadBoost,
+    /// When the last frame was presented, for [`App::pace_frame`].
+    last_frame: Instant,
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
     /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
     _audio: Option<sdl2::AudioSubsystem>,
@@ -69,20 +79,33 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 /// figures by asking Servo for a new report.
 const MEMORY_REPORT_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How often those figures also reach the log — the only way to read them on a
+/// device whose screen is not where the answer is wanted.
+const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
+
 /// How long after a navigation the allocator is asked for its free memory back:
 /// long enough that the document being replaced has finished going away.
 const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 
+/// How long a pass that presented nothing waits, where the backend has no frame
+/// cap of its own. Only the present blocks on a vsynced backend, so skipping it
+/// leaves nothing to pace the loop; 60 Hz costs at most one frame of latency on
+/// the input that does need a redraw.
+const SKIPPED_PASS_INTERVAL: Duration = Duration::from_millis(16);
+
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
-        let window = AppWindow::new(sdl, &config.display)?;
+        let window = AppWindow::new(sdl, &config.display, crate::ui::init_egui_ctx)?;
         // Before the browser: whichever media backend lands first is the one that sticks.
         let audio = crate::media::init(sdl, &config.audio, &config.video);
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
         log::info!("init: browser ready; creating event handler + ui");
+        // After the engine's threads exist: a thread inherits its creator's
+        // nice, so earlier would renice all 59 of them instead of one.
+        crate::platform::threads::prioritize_main();
         let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(
             &window,
@@ -97,6 +120,11 @@ impl App {
         );
         log::info!("init: app constructed");
 
+        // Read before `config` moves into the struct below.
+        let frame_timer = FrameTimer::new(config.debug.frame_timing);
+        let thread_cpu = crate::platform::threads::ThreadCpu::new(config.debug.thread_cpu);
+        let cpu_boost =
+            crate::platform::cpufreq::LoadBoost::new(config.performance.cpu_boost_on_load);
         Ok(Self {
             config,
             window,
@@ -112,7 +140,12 @@ impl App {
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
+            last_memory_log: Instant::now(),
             heap_trim_at: None,
+            frame_timer,
+            thread_cpu,
+            cpu_boost,
+            last_frame: Instant::now(),
             _audio: audio,
         })
     }
@@ -133,7 +166,7 @@ impl App {
             // orientation. Refresh egui's cached size from the live window each
             // frame so the layout follows the actual surface.
             #[cfg(target_os = "android")]
-            self.ui.sync_window_size(&self.window);
+            self.ui.sync_window_size(&mut self.window);
 
             // Record any pages the focused webview navigated to this frame. Sourced
             // from real navigations (not address-bar text), so typing doesn't log.
@@ -163,14 +196,29 @@ impl App {
             // Debug memory overlay: on a throttle, ask Servo for a fresh report,
             // and adopt the latest one that has arrived (it comes back async, a
             // frame or two later). Both no-ops unless the overlay is enabled.
-            if self.ui.memory_overlay_enabled() {
+            if self.ui.memory_reports_wanted() {
                 if self.last_memory_report.elapsed() >= MEMORY_REPORT_INTERVAL {
                     self.browser.request_memory_report();
                     self.last_memory_report = Instant::now();
                 }
                 if let Some(report) = self.browser.take_memory_report() {
                     self.ui.set_memory_summary(report);
+                    // Slower than the overlay's refresh: the card should not
+                    // be written to every second.
+                    if self.last_memory_log.elapsed() >= MEMORY_LOG_INTERVAL {
+                        self.ui.log_memory_summary(
+                            self.window.egui_ctx(),
+                            self.window.compose_bytes(),
+                        );
+                        self.last_memory_log = Instant::now();
+                    }
                 }
+            }
+
+            // Hold the CPU's fast governor across a load; the linger covers the
+            // paint that follows, and needs a frame to fall on to be dropped.
+            if self.cpu_boost.follow(self.browser.any_loading()) {
+                self.ui.request_repaint();
             }
 
             // Mirror whether the active tab is on the start page, so the UI's
@@ -178,8 +226,12 @@ impl App {
             // frame (set before input is handled in `wait`).
             let home_changed = self.ui.set_home_active(self.browser.on_home_page());
 
-            self.event_handler
-                .wait(&self.window, &mut self.ui, &mut self.browser, &mut commands);
+            self.event_handler.wait(
+                &mut self.window,
+                &mut self.ui,
+                &mut self.browser,
+                &mut commands,
+            );
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
@@ -215,10 +267,16 @@ impl App {
                 self.browser.collect_hints();
             }
 
-            // Render Servo into its FBO; egui composites that FBO's texture.
-            self.browser.paint();
+            // Render the page: into our FBO on GL, into swgl's CPU buffer
+            // otherwise. The window composites it under the chrome either way.
+            let at = self.frame_timer.mark();
+            let page_painted = self.browser.paint();
+            self.frame_timer.page_done(at);
 
-            self.ui.update(&mut self.browser, &mut commands);
+            let at = self.frame_timer.mark();
+            self.ui
+                .update(&mut self.window, &mut self.browser, &mut commands);
+            self.frame_timer.ui_done(at);
 
             // Android: raise/hide the system soft keyboard to match focus. The
             // address bar (egui) and page text fields (Servo) are the two sinks;
@@ -245,14 +303,23 @@ impl App {
                 }
             }
 
-            self.draw();
+            let drew = self.draw(page_painted);
+            self.frame_timer.tick();
+            self.thread_cpu.tick();
+            self.pace_frame(drew);
         }
+
+        self.thread_cpu.report_run();
 
         // Persist what was buffered since the last throttle tick — `Drop` won't
         // run (we `process::exit` below), so this must be explicit.
         self.ui.menu.flush_history();
         self.save_session();
-        self.ui.destroy();
+        self.save_window_size();
+        // `process::exit` below skips every `Drop`, and the governor is
+        // machine-wide.
+        crate::platform::cpufreq::restore();
+        self.window.destroy();
 
         // Shut Servo down cleanly first — that's when cookies / localStorage
         // are written to disk, so logins survive (see `AppBrowser::shutdown`).
@@ -266,6 +333,22 @@ impl App {
 
     fn shutdown(&mut self) {
         self.state = AppState::ShuttingDown;
+    }
+
+    /// Reopen at the size the window was left at. [`AppWindow::remembered_size`]
+    /// offers only a size the user chose, so a handheld never rewrites its config.
+    fn save_window_size(&mut self) {
+        let Some((width, height)) = self.window.remembered_size() else {
+            return;
+        };
+        let before = (self.config.display.width, self.config.display.height);
+        (self.config.display.width, self.config.display.height) = (width, height);
+        // Clamped like a hand-edited size, so an oversized window settles rather
+        // than rewriting the file on every exit.
+        self.config.sanitize();
+        if (self.config.display.width, self.config.display.height) != before {
+            self.config.save();
+        }
     }
 
     /// Fill the empty tab list at startup: the saved session, or the home page
@@ -296,7 +379,154 @@ impl App {
         }
     }
 
-    fn draw(&mut self) {
-        self.ui.draw(&self.window);
+    /// Put the frame on the panel — unless neither the page nor the chrome
+    /// changed, which on a GPU-less device is most of them (see
+    /// [`AppUi::take_frame_dirty`]). Reports whether anything was presented, which
+    /// is what decides the pacing below.
+    fn draw(&mut self, page_painted: bool) -> bool {
+        if !page_painted && !self.ui.take_frame_dirty(&self.window) {
+            return false;
+        }
+        let at = self.frame_timer.mark();
+        let timing = self.ui.draw(&mut self.window, page_painted);
+        self.frame_timer.chrome_done(at, timing);
+        true
+    }
+
+    /// Hold the loop to a frame interval when presenting doesn't pace it. Two
+    /// cases: the software renderer has no vsync to block on at all, and a pass
+    /// that skipped the present never reached the vsync the GL path leans on —
+    /// and `wait` deliberately does not block while a gamepad is connected, for
+    /// exactly that reason. Measured free-running at 300-500 passes a second on
+    /// an A55 handheld and 1600 on a desktop. Outside the frame timer on purpose,
+    /// so the figures it logs stay the cost of the work.
+    fn pace_frame(&mut self, drew: bool) {
+        let interval = match self.window.frame_interval() {
+            Some(interval) => Some(interval),
+            None => (!drew).then_some(SKIPPED_PASS_INTERVAL),
+        };
+        if let Some(interval) = interval {
+            let since = self.last_frame.elapsed();
+            if since < interval {
+                std::thread::sleep(interval - since);
+            }
+        }
+        self.last_frame = Instant::now();
+    }
+}
+
+/// How often [`FrameTimer`] logs its averages.
+const FRAME_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Rolling paint timing for `[debug] frame_timing`, split into the two halves
+/// that cost differently on a GPU-less device: rasterizing the page (WebRender,
+/// swgl in software mode) and drawing the chrome over it and presenting.
+struct FrameTimer {
+    enabled: bool,
+    frames: u32,
+    /// Loop passes that built the UI, which is more than `frames`: a pass whose
+    /// picture came out identical is not drawn (see [`AppUi::take_frame_dirty`]).
+    passes: u32,
+    page: Duration,
+    /// Building egui's shapes — the layout pass, before anything is rasterized.
+    ui: Duration,
+    chrome: Duration,
+    /// The software backend's own split of `chrome`; `None` on GL, which leaves
+    /// the work to the driver and has nothing to report.
+    composite: Option<crate::platform::window::CompositeTiming>,
+    since: Instant,
+}
+
+impl FrameTimer {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            frames: 0,
+            passes: 0,
+            page: Duration::ZERO,
+            ui: Duration::ZERO,
+            chrome: Duration::ZERO,
+            composite: None,
+            since: Instant::now(),
+        }
+    }
+
+    /// The start of a timed half, or `None` when timing is off — which is what
+    /// keeps a disabled timer down to one branch per frame.
+    #[inline]
+    fn mark(&self) -> Option<Instant> {
+        self.enabled.then(Instant::now)
+    }
+
+    #[inline]
+    fn page_done(&mut self, at: Option<Instant>) {
+        if let Some(at) = at {
+            self.page += at.elapsed();
+        }
+    }
+
+    #[inline]
+    fn ui_done(&mut self, at: Option<Instant>) {
+        if let Some(at) = at {
+            self.ui += at.elapsed();
+            self.passes += 1;
+        }
+    }
+
+    #[inline]
+    fn chrome_done(
+        &mut self,
+        at: Option<Instant>,
+        composite: Option<crate::platform::window::CompositeTiming>,
+    ) {
+        let Some(at) = at else { return };
+        self.chrome += at.elapsed();
+        if let Some(split) = composite {
+            self.composite
+                .get_or_insert_with(Default::default)
+                .add(split);
+        }
+        self.frames += 1;
+    }
+
+    /// Report the interval just ended. Driven once per loop pass rather than per
+    /// frame, so a browser that has stopped drawing still reports the frames it
+    /// drew — seeing that number reach zero is the whole point of it.
+    fn tick(&mut self) {
+        if !self.enabled || self.since.elapsed() < FRAME_REPORT_INTERVAL {
+            return;
+        }
+        if self.frames == 0 {
+            // Idle is the expected state and does not need a line a second
+            // written to an SD card to say so.
+            self.since = Instant::now();
+            return;
+        }
+        let per = |total: Duration| total.as_secs_f32() * 1000.0 / self.frames as f32;
+        // The UI pass runs whether or not the frame is drawn, so it averages over
+        // the passes rather than the frames.
+        let per_pass = |total: Duration| total.as_secs_f32() * 1000.0 / self.passes.max(1) as f32;
+        let split = match self.composite {
+            Some(c) => format!(
+                " [page {:.1} tess {:.1} tex {:.1} raster {:.1} upload {:.1} present {:.1}]",
+                per(c.page),
+                per(c.tessellate),
+                per(c.textures),
+                per(c.chrome),
+                per(c.upload),
+                per(c.present)
+            ),
+            None => String::new(),
+        };
+        log::info!(
+            "frame timing: page {:.1} ms, ui {:.1} ms, chrome+present {:.1} ms ({} frames, {} passes){}",
+            per(self.page),
+            per_pass(self.ui),
+            per(self.chrome),
+            self.frames,
+            self.passes,
+            split
+        );
+        *self = Self::new(self.enabled);
     }
 }

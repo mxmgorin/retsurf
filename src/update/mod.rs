@@ -38,7 +38,9 @@ const USER_AGENT: &str = concat!("retsurf/", env!("CARGO_PKG_VERSION"));
 pub enum UpdateState {
     Idle,
     Checking,
-    UpToDate { current: String },
+    UpToDate {
+        current: String,
+    },
     Available {
         version: String,
         /// Release notes (the GitHub release body), shown read-only on the About
@@ -49,9 +51,14 @@ pub enum UpdateState {
         page: Option<String>,
         offer: Offer,
     },
-    Downloading { received: u64, total: u64 },
+    Downloading {
+        received: u64,
+        total: u64,
+    },
     Installing,
-    Installed { version: String },
+    Installed {
+        version: String,
+    },
     Error(String),
 }
 
@@ -168,10 +175,13 @@ impl Updater {
                 Channel::Beta => github::latest_beta(asset.as_deref()),
                 Channel::Ci => match (artifact, token) {
                     (Some(artifact), Some(token)) => github::latest_ci(&artifact, &token),
-                    (None, _) => Err("CI updates aren't available for this install type".to_string()),
-                    (_, None) => {
-                        Err("Set RETSURF_GITHUB_TOKEN (or [update] token) for the CI channel".to_string())
+                    (None, _) => {
+                        Err("CI updates aren't available for this install type".to_string())
                     }
+                    (_, None) => Err(
+                        "Set RETSURF_GITHUB_TOKEN (or [update] token) for the CI channel"
+                            .to_string(),
+                    ),
                 },
             };
             publish(&state, result.unwrap_or_else(UpdateState::Error), &sender);
@@ -212,12 +222,22 @@ impl Updater {
         // CI artifact downloads hit the GitHub API and need the token; release asset
         // URLs are public (and must NOT carry it). ureq drops the Authorization header
         // when it follows the 302 to blob storage (redirect_auth_headers = Never).
-        let auth = (self.channel == Channel::Ci).then(|| self.token.clone()).flatten();
+        let auth = (self.channel == Channel::Ci)
+            .then(|| self.token.clone())
+            .flatten();
         let kind = self.kind.clone();
         let state = self.state.clone();
         let sender = sender.clone();
         std::thread::spawn(move || {
-            install::run(&kind, &version, &url, sha256.as_deref(), auth.as_deref(), &state, &sender);
+            install::run(
+                &kind,
+                &version,
+                &url,
+                sha256.as_deref(),
+                auth.as_deref(),
+                &state,
+                &sender,
+            );
         });
     }
 }

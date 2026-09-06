@@ -127,6 +127,19 @@ pub enum Task {
     /// Wipe history, site data, the HTTP cache, the saved session and the open
     /// tabs. Bookmarks, pins and the settings themselves stay.
     ClearData,
+    /// Every settings row, the speed-dial pins and the control bindings back to
+    /// how they ship. The user's own content is [`Task::ClearData`]'s business.
+    RestoreDefaults,
+}
+
+impl Task {
+    /// The verb shown as the row's value — what the second press will do.
+    pub fn verb(self) -> &'static str {
+        match self {
+            Task::ClearData => "Clear",
+            Task::RestoreDefaults => "Restore",
+        }
+    }
 }
 
 /// A config row in the list. `section` is the tab it lives under; `cat` is a
@@ -228,7 +241,9 @@ pub(super) static FIELDS: &[Field] = &[
 
     f(S::Display,  "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
     f(S::Display,  "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
+    f(S::Display,  "Display",     "Interface scale",        float!(display.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Display,  "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
+    f(S::Display,  "Display",     "Frame cap (fps)",        int!(display.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
     f(S::Display,  "Display",     "Cursor linger (ms)",     int!(display.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
     f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
@@ -261,12 +276,16 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Memory profile",          choice!(performance.memory_profile: MemoryProfile), true),
     f(S::Advanced, "Performance", "Layout threads (0=auto)", int!(performance.layout_threads as u32, bounds::LAYOUT_THREADS, 1), true),
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
+    f(S::Advanced, "Performance", "CPU boost on load",       flag!(performance.cpu_boost_on_load), false),
     f(S::Advanced, "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::Advanced, "Downloads",   "Save folder",            text!(downloads.dir), true),
     f(S::Advanced, "Data",        "Clear browsing data",    Kind::Action { task: Task::ClearData }, false),
     f(S::Advanced, "Updates",     "Update channel",         choice!(update.channel: Channel), false),
     f(S::Advanced, "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
     f(S::Advanced, "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
+    f(S::Advanced, "Diagnostics", "Memory to log",          flag!(debug.memory_log), false),
+    // Last row: it rewrites every other one.
+    f(S::Advanced, "Reset",       "Restore all defaults",   Kind::Action { task: Task::RestoreDefaults }, true),
 ];
 
 #[cfg(test)]

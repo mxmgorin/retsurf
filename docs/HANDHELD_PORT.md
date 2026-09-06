@@ -45,7 +45,7 @@ llvmpipe). Each frame calls `read_to_image()`, uploads the result as an egui tex
 composites.
 
 Path B (current): Servo's render target is an FBO in SDL2's own GL context, via a custom
-`RenderingContext` impl in `src/platform/render.rs`. egui draws that FBO's color texture
+`RenderingContext` impl in `src/platform/render/sdl.rs`. egui draws that FBO's color texture
 directly. No CPU readback, GPU-accelerated, a single GL context, and no surfman software
 adapter or llvmpipe.
 
@@ -70,8 +70,8 @@ No surfman software adapter, no CPU readback, one GL context.
 
 | File | Change |
 |------|--------|
-| `src/platform/render.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
-| `src/platform/window.rs`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
+| `src/platform/render/sdl.rs` *(new)* | `SdlRenderingContext`: implements `servo::RenderingContext` over SDL2's GL context + a self-managed FBO (color texture + depth renderbuffer). `prepare_for_rendering` binds the FBO; `read_to_image` via `glReadPixels`; `resize` reallocates; `connection()` returns a surfman `Connection` (Servo requires it for WebGL); exposes the color texture for egui. |
+| `src/platform/window/`  | SDL2 owns the GL/GLES context; builds `glow` + `gleam` GL from SDL's proc loader and constructs the `SdlRenderingContext`; exposes it + its color texture; `bind_default_framebuffer`; `present` via `gl_swap_window`. |
 | `src/browser.rs` | Takes the shared `Rc<dyn RenderingContext>`; `resize()` resizes the context + webview. |
 | `src/ui.rs`      | Registers the FBO color texture once (`register_native_texture`) and draws it (V-flipped) in the central panel; drives browser viewport size from the central rect. |
 | `src/app.rs`     | Loop: `browser.paint()` (Servo to FBO), then `ui.update`, then `ui.draw` (egui composites and presents). Resizes reactive. `process::exit(0)` on shutdown. |
@@ -122,7 +122,7 @@ just isn't there. Servo's `register_rendering_context` hard-`expect()`s a surfma
 
 The fix has two parts:
 
-- `src/platform/render.rs`: `connection()` is now optional. `surfman::Connection::new()`
+- `src/platform/render/sdl.rs`: `connection()` is now optional. `surfman::Connection::new()`
   is wrapped in `catch_unwind`, since surfman panics rather than returning `Err` on
   missing EGL symbols. Capable platforms (desktop, EGL 1.5) keep a real connection and
   WebGL; EGL 1.4 devices get `None`.
@@ -175,3 +175,77 @@ which is more than a typical C/SDL port pulls in, especially `mozjs_sys` and `mo
 `cargo build --release` runs as a native arm64 build under qemu, so the first build is slow,
 with SpiderMonkey and ANGLE the long poles. `libGLESv2` and `libEGL` (the Mali blob) resolve
 at runtime on the device, so they aren't bundled.
+
+## Building for armhf (Miyoo Mini)
+
+A different device family — SSD202D, armv7, no GPU at all. The renderer for it is the
+`software` feature below, and `allium/` is the device-side package (`allium/README.md`).
+
+```sh
+tools/armhf/build.sh              # prints the binary's path
+RETSURF_ARM_LTO=thin tools/armhf/build.sh   # lighter link when RAM is short
+```
+
+It cross-compiles from x86_64 in a container, unlike the aarch64 build above, which runs
+natively under qemu. `.github/workflows/build-linux-armhf.yml` is the same recipe in CI,
+kept as its own workflow so it shares nothing with the aarch64 one.
+
+**The compiler and the userland come from different places, and that is the whole design.**
+The Miyoo Mini community toolchain supplies only its sysroot — glibc 2.28, the floor the
+device's loader sets — while the compiler is Ubuntu's cross GCC 10, because SpiderMonkey 153
+requires GCC 10.1 and `_GLIBCXX_RELEASE >= 10` where that toolchain's own GCC is 8.3. GCC 12
+is packaged too and cannot be used: its libstdc++ references `__libc_single_threaded`, a
+glibc 2.32 symbol absent from 2.28. So libc is taken from the sysroot, libstdc++ from the
+compiler and linked statically, and bindgen runs against libclang 19 — `tools/armhf/Dockerfile`
+records each of those choices and why zig is still out.
+
+Four things about this target cost a build each to find, and all four fail quietly rather
+than loudly:
+
+- **The sysroot must not reach the library search path whole.** `--sysroot` alone leaves the
+  link resolving libc from the build host, taking the binary over the floor; adding
+  `$SYSROOT/lib` instead answers `-static-libstdc++` with the toolchain's libstdc++ 8.3,
+  older than the headers the code compiled against. Only `$SYSROOT/usr/lib` goes on it,
+  which has libc's linker script and no libstdc++ at all.
+
+- **`-mtune=cortex-a7`, never `-mcpu`.** cc-rs passes `-march=armv7-a` of its own, GCC warns
+  that `-mcpu` conflicts with it, and cc-rs treats *any* stderr from a flag probe as "flag
+  unsupported" — so one warning silently drops every `flag_if_supported` flag in the graph.
+  `mozjs_sys` asks for `-fno-rtti` and `-fno-sized-deallocation` that way; losing the first
+  breaks the link against SpiderMonkey, losing the second is an ABI mismatch on
+  `operator delete` that would only show up as heap corruption on the device.
+- **NEON is off unless asked for twice, and the FPU is off unless the driver carries it.**
+  `-C target-feature=+neon` for the Rust half — the rustc target spec disables NEON outright
+  and `-C target-cpu` does not undo that — and `-mfpu=neon-vfpv4` for the C/C++ half, which
+  goes on the compiler driver rather than in `CFLAGS`: SpiderMonkey's configure probes with a
+  bare `-march=armv7-a` that resets the FPU choice, and `-mfloat-abi=hard` then has nothing
+  to use. That shim also settles cc-rs's `-mfpu=vfpv3-d16`, which has no NEON.
+- **`HOST_CC`/`HOST_CXX` must be set.** SpiderMonkey builds tools that run on the build
+  machine, and its configure otherwise falls back to the cross compiler and rejects it. They
+  name GCC: 153 wants clang 19 or newer for a compiler, and the distro's is older.
+
+The sysroot in the image carries SDL2 and fontconfig from Debian for the link step only; the
+toolchain's own sysroot has neither. On the device both have to come from somewhere else —
+its SDL2 is a Miyoo-specific build.
+
+## Rendering without a GPU
+
+The `software` cargo feature (on for the armhf build, off everywhere else) replaces both
+renderers with CPU ones, so no GL driver is needed at all:
+
+- the page is rasterized by [swgl](https://crates.io/crates/swgl), WebRender's own software
+  backend — the same version as the `webrender` in our graph, because WebRender selects its
+  software paths off the renderer name string rather than a build flag;
+- the chrome is drawn by SDL's 2D renderer into an offscreen surface, over the page frame,
+  and the composed frame reaches the panel as one texture copy — the only presentation path
+  the Miyoo's `mmiyoo` driver shows.
+
+swgl's `GL_RGBA8` framebuffer is BGRA in memory, which is SDL's `ARGB8888`, so the page
+crosses into the composition surface as a plain row copy; only the row order is reversed,
+because WebRender still draws bottom-up. There is no vsync on this path, so the main loop
+caps itself at 30 fps.
+
+`[display] software_render` (or `RETSURF_SOFTWARE=1`) forces it. A build that has the
+feature also falls back to it on its own when no GL context can be created, so a device with
+no driver lands there without being told to. `[debug] frame_timing` logs the per-frame cost,
+split into the page and everything after it.

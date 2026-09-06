@@ -9,7 +9,7 @@ use crate::{
     platform::window::AppWindow,
     ui::AppUi,
 };
-use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames};
+use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames, Keymap};
 use inputbind::{Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -28,6 +28,14 @@ pub struct AppEventHandler {
     key_names: KeyNames,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
+    /// Whether the keys arriving from this device *are* the pad. The Miyoo's
+    /// SDL2 offers no controller mapping and sends keys instead, so there they
+    /// feed the pad machine and answer to the `[gamepad]` table like any button.
+    keymap: Keymap,
+    /// MENU is the launcher's key nearly everywhere — OnionOS hands it to the
+    /// firmware's own kill helper — so the app answers it only where the
+    /// launcher says it keeps none (`RETSURF_MENU_QUIT`, which Allium sets).
+    menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
@@ -38,6 +46,15 @@ impl AppEventHandler {
     pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
+        // `RETSURF_KEYMAP=miyoo|desktop` wins over the driver name, and has to:
+        // the Miyoo SDL2 this package bundles calls its driver `Mini`, which is
+        // not the `mmiyoo` the detection knows.
+        let keymap = Keymap::detect(
+            sdl.video()?.current_video_driver(),
+            std::env::var("RETSURF_KEYMAP").ok().as_deref(),
+        );
+        log::info!("keyboard layout: {keymap:?}");
+        let menu_quits = crate::config::env_flag("RETSURF_MENU_QUIT").unwrap_or(false);
 
         for id in 0..game_controller_subsystem.num_joysticks()? {
             if game_controller_subsystem.is_game_controller(id) {
@@ -55,6 +72,8 @@ impl AppEventHandler {
             bindings: bindings::build(&bindings::load_store(), &key_names),
             key_names,
             gamepad: Gamepad::new(gamepad_cfg),
+            keymap,
+            menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             touch: super::touch::TouchState::new(),
         })
@@ -77,7 +96,7 @@ impl AppEventHandler {
 
     pub fn wait(
         &mut self,
-        window: &AppWindow,
+        window: &mut AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
@@ -146,16 +165,24 @@ impl AppEventHandler {
                     commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
                     return true;
                 }
-                self.capture.on_key(
-                    &key_name(*kc),
-                    mods_for(*kc, *keymod),
-                    is_modifier(*kc),
-                    now,
-                )
+                // Where the pad arrives as keys, it binds as the pad it is.
+                if let Some(pad) = self.keymap.pad(*kc) {
+                    self.capture.on_press(pad, now)
+                } else {
+                    self.capture.on_key(
+                        &key_name(*kc),
+                        mods_for(*kc, *keymod),
+                        is_modifier(*kc),
+                        now,
+                    )
+                }
             }
             Event::KeyUp {
                 keycode: Some(kc), ..
-            } => self.capture.on_key_release(&key_name(*kc)),
+            } => match self.keymap.pad(*kc) {
+                Some(pad) => self.capture.on_release(pad, now),
+                None => self.capture.on_key_release(&key_name(*kc)),
+            },
             // Autorepeat and the text edge are swallowed, never bound.
             Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return true,
             Event::ControllerButtonDown { button, .. } => {
@@ -181,10 +208,29 @@ impl AppEventHandler {
         true
     }
 
+    /// Whether the event is the pad arriving as keys ([`Keymap`]), which egui must
+    /// not see: it typed a space into the focused field on every A press, and ate
+    /// its last letter on R2 (the Miyoo sends R2 as Backspace).
+    fn is_pad_as_keys(&self, event: &Event) -> bool {
+        if self.keymap == Keymap::Desktop {
+            return false;
+        }
+        match event {
+            Event::TextInput { .. } | Event::TextEditing { .. } => true,
+            Event::KeyDown {
+                keycode: Some(kc), ..
+            }
+            | Event::KeyUp {
+                keycode: Some(kc), ..
+            } => self.keymap.pad(*kc).is_some(),
+            _ => false,
+        }
+    }
+
     fn handle_event(
         &mut self,
         event: Event,
-        window: &AppWindow,
+        window: &mut AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
@@ -197,7 +243,8 @@ impl AppEventHandler {
         // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
         // while the caret sat in the address bar. Modified keys stay ours (egui
         // still saw the event above, so typing is unaffected).
-        if ui.handle_event(window, &event) && !is_shortcut_key(&event) {
+        let egui_first = !self.is_pad_as_keys(&event);
+        if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
 
@@ -216,24 +263,17 @@ impl AppEventHandler {
                 mouse_btn, x, y, ..
             } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, false);
-                let event = servo::InputEvent::MouseButton(event);
-                browser.handle_input(event);
+                browser.mouse_button(mouse_btn, x, y, false);
             }
             Event::MouseButtonDown {
                 mouse_btn, x, y, ..
             } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_button_event(mouse_btn, x, y, true);
-                let event = servo::InputEvent::MouseButton(event);
-
-                browser.handle_input(event);
+                browser.mouse_button(mouse_btn, x, y, true);
             }
             Event::MouseMotion { x, y, .. } => {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
-                let event = super::sdl2_servo::into_mouse_move_event(x, y);
-                let event = servo::InputEvent::MouseMove(event);
-                browser.handle_input(event);
+                browser.mouse_move(x, y);
             }
             Event::MouseWheel {
                 x,
@@ -244,13 +284,12 @@ impl AppEventHandler {
             } => {
                 let (mx, my) = ui.to_browser_rel_pos(mouse_x as f32, mouse_y as f32);
                 // Fire the DOM `wheel` event (for pages with JS handlers)...
-                let event = super::sdl2_servo::into_wheel_event(x, y, mx, my);
-                browser.handle_input(servo::InputEvent::Wheel(event));
+                browser.wheel(x, y, mx, my);
                 // ...then perform the actual native scroll. SDL `y` is positive
                 // when scrolling up; Servo's positive `dy` reveals lower content.
-                const WHEEL_PX: f32 = 60.0;
-                let dy = -y as f32 * WHEEL_PX;
-                browser.scroll(-x as f32 * WHEEL_PX, dy, mx, my);
+                const WHEEL_STEP: f32 = 60.0;
+                let dy = -y as f32 * WHEEL_STEP;
+                browser.scroll(-x as f32 * WHEEL_STEP, dy, mx, my);
                 ui.notify_page_scroll(dy);
             }
             // Touch: SDL finger coords are normalized to the window; scale to the
@@ -277,6 +316,7 @@ impl AppEventHandler {
                 let (px, py) = (x * w as f32, y * h as f32);
                 if let Some((dx, dy)) = self.touch.motion(finger_id, px, py) {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
+                    let (dx, dy) = ui.to_points(dx, dy);
                     // Content follows the finger: dragging down reveals upper
                     // content, and Servo's positive dy reveals lower content, so
                     // negate the deltas.
@@ -287,20 +327,9 @@ impl AppEventHandler {
             Event::FingerUp { finger_id, .. } => {
                 if let super::touch::TouchEnd::Tap(px, py) = self.touch.up(finger_id) {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
-                    let down = super::sdl2_servo::into_mouse_button_event(
-                        sdl2::mouse::MouseButton::Left,
-                        bx,
-                        by,
-                        true,
-                    );
-                    browser.handle_input(servo::InputEvent::MouseButton(down));
-                    let up = super::sdl2_servo::into_mouse_button_event(
-                        sdl2::mouse::MouseButton::Left,
-                        bx,
-                        by,
-                        false,
-                    );
-                    browser.handle_input(servo::InputEvent::MouseButton(up));
+                    for down in [true, false] {
+                        browser.mouse_button(sdl2::mouse::MouseButton::Left, bx, by, down);
+                    }
                 }
             }
             Event::KeyDown {
@@ -317,6 +346,18 @@ impl AppEventHandler {
                     repeat,
                     pressed: true,
                 };
+                // MENU, on a device that sends it as Esc and a launcher that
+                // has handed it over. Not a binding: it is the only way out
+                // there, so it must survive whatever the tables are edited to.
+                if self.menu_quits && kc == Keycode::Escape && self.keymap != Keymap::Desktop {
+                    commands.push(AppCommand::Shutdown);
+                    return;
+                }
+                if let Some(pad) = self.keymap.pad(kc) {
+                    ui.note_input_keyboard(false);
+                    self.gamepad.on_pad(pad, true, &self.bindings, commands);
+                    return;
+                }
                 // Remember the input came from the keyboard so hint mode picks
                 // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
                 ui.note_input_keyboard(true);
@@ -336,6 +377,10 @@ impl AppEventHandler {
                     repeat,
                     pressed: false,
                 };
+                if let Some(pad) = self.keymap.pad(kc) {
+                    self.gamepad.on_pad(pad, false, &self.bindings, commands);
+                    return;
+                }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
             Event::ControllerAxisMotion { axis, value, .. } => {

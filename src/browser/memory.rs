@@ -27,6 +27,7 @@
 //!     layout/WebRender threads yields little — keep thread counts modest.
 //!
 //! Rough target -> tier mapping (refined by the board's actual RAM):
+//!   * SSD202D (2xA7, 128 MB, no GPU) -> Micro
 //!   * RK3326 / H700 (4xA35/A53, ~1 GB) -> Tight (keep baseline JIT)
 //!   * A133 Plus (4xA53, PowerVR, 1-2 GB) -> Tight (1 GB) / Balanced (2 GB)
 //!   * RK3566 (4xA55, 1-8 GB) -> Tight (1 GB) / Balanced (2-4 GB)
@@ -61,6 +62,7 @@ pub fn resolve(profile: MemoryProfile) -> MemoryProfile {
 /// before reaching here; it falls back to [`balanced`] defensively.
 pub fn preferences(profile: MemoryProfile) -> Preferences {
     match profile {
+        MemoryProfile::Micro => micro(),
         MemoryProfile::Embedded => embedded(),
         MemoryProfile::Tight => tight(),
         MemoryProfile::Auto | MemoryProfile::Balanced => balanced(),
@@ -91,7 +93,10 @@ fn for_target(ram_mb: u64) -> MemoryProfile {
 /// because GPU memory shares this same pool (unified memory).
 fn suggest(ram_mb: u64) -> MemoryProfile {
     match ram_mb {
-        0..=768 => MemoryProfile::Embedded,
+        // The Miyoo Mini family reports 101 MB and browses on swap; nothing
+        // between it and a 512 MB board exists to be wrong about.
+        0..=256 => MemoryProfile::Micro,
+        257..=768 => MemoryProfile::Embedded,
         769..=1536 => MemoryProfile::Tight, // ~1 GB boards: RK3326, H700, 1 GB RK3566
         1537..=3072 => MemoryProfile::Balanced, // ~2 GB: RK3566, A527
         _ => MemoryProfile::Generous,       // 4 GB+ handheld: A527, high-RAM RK3566
@@ -118,6 +123,41 @@ fn detect_ram_mb() -> u64 {
         }
     }
     FALLBACK_MB
+}
+
+/// ~128 MB (the Miyoo Mini family): below the floor the other tiers assume. The
+/// working set does not fit in RAM here at all — the launcher gives the kernel a
+/// swapfile on the card to page into — so every knob is set to keep pages from
+/// being allocated in the first place, and a GC that runs more often is a better
+/// trade than one that swaps. Baseline JIT still kept: two in-order A7s have
+/// nothing to spare for an interpreter.
+fn micro() -> Preferences {
+    let mut p = embedded();
+
+    // A quarter of what `embedded` allows the JS heap. Anything a page cannot do
+    // in this is a page this device was never going to run.
+    p.js_mem_max = 24; // MB
+    p.js_mem_gc_high_frequency_high_limit_mb = 16;
+    p.js_mem_gc_high_frequency_low_limit_mb = 8;
+    // Barely any slack before the next collection: growth costs card I/O here,
+    // and the GC that avoids it costs cycles the frame budget already lost.
+    p.js_mem_gc_high_frequency_heap_growth_max = 115; // %
+    p.js_mem_gc_high_frequency_heap_growth_min = 105; // %
+    p.js_mem_gc_low_frequency_heap_growth = 105; // %
+    // A frame is 30 ms and more here, so a slice can be longer than `embedded`'s
+    // without being felt, and a longer slice finishes the collection sooner.
+    p.js_mem_gc_incremental_slice_ms = 5; // ms
+    // Measured on the device: the malloc heap climbed 2.4 MB a navigation to
+    // SpiderMonkey's 38 MB default before anything collected it, which is a
+    // third of this machine's RAM.
+    p.js_mem_gc_malloc_threshold_mb = 6;
+    p.js_mem_gc_urgent_threshold_mb = 4;
+
+    // Keep no page alive for Back: `1` costs the whole previous document (48 MB
+    // of layout on an image-heavy page), and reloading is the cheaper trade.
+    p.session_history_max_length = 0;
+
+    p
 }
 
 /// ~512 MB (sub-1 GB boards): the floor. Baseline JIT kept (Ion off) because the
@@ -152,6 +192,10 @@ fn embedded() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 3; // ms — keep a GC step well under a frame
+    // The malloc heap is what `js_mem_max` does not cover, and SpiderMonkey's own
+    // threshold for it (38 MB) assumes a desktop.
+    p.js_mem_gc_malloc_threshold_mb = 12;
+    p.js_mem_gc_urgent_threshold_mb = 8;
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path

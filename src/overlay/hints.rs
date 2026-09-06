@@ -364,7 +364,9 @@ fn assign_codes(hints: &[Hint], anchor: (f32, f32), alphabet: &[Label]) -> Vec<V
     let n = hints.len();
     let len = code_len(n, alphabet.len());
     let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&a, &b| dist2(hints[a].center(), anchor).total_cmp(&dist2(hints[b].center(), anchor)));
+    order.sort_by(|&a, &b| {
+        dist2(hints[a].center(), anchor).total_cmp(&dist2(hints[b].center(), anchor))
+    });
     let mut codes = vec![Vec::new(); n];
     for (rank, &idx) in order.iter().enumerate() {
         codes[idx] = nth_code(rank, len, alphabet);
@@ -476,7 +478,10 @@ mod tests {
             (0.0, 0.0),
         );
         assert_eq!(h.code(0), [Label::Sym(Sym::X), Label::Sym(Sym::X)]);
-        assert!(matches!(h.push_label(Label::Sym(Sym::X)), HintInput::Pending));
+        assert!(matches!(
+            h.push_label(Label::Sym(Sym::X)),
+            HintInput::Pending
+        ));
         assert!(h.has_typed());
         assert!(matches!(
             h.push_label(Label::Sym(Sym::X)),

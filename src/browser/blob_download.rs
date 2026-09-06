@@ -22,7 +22,7 @@ const FALLBACK_NAME: &str = "download";
 /// The user script: `blob_download.js` with the constants above spliced in.
 pub(super) fn capture_js() -> &'static str {
     static JS: LazyLock<String> = LazyLock::new(|| {
-        include_str!("blob_download.js")
+        include_str!("assets/blob_download.js")
             .replace("__PING_URL__", PING_URL)
             .replace("__MAX_BYTES__", &MAX_BYTES.to_string())
     });
@@ -30,11 +30,7 @@ pub(super) fn capture_js() -> &'static str {
 }
 
 /// Pops one queue entry as JSON (a [`Taken`]); empty string once drained.
-pub(super) const TAKE_JS: &str = r#"(function () {
-  var d = window.__retsurfDl;
-  if (!d || !d.pending.length) return "";
-  return JSON.stringify(d.pending.shift());
-})()"#;
+pub(super) const TAKE_JS: &str = include_str!("assets/blob_take.js");
 
 /// One queue entry as the injected script's `queue()` builds it.
 #[derive(Deserialize)]

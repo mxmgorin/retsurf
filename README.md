@@ -13,9 +13,11 @@
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg" alt="Dependencies"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web browser to devices where traditional browsers aren't practical.  Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 for windowing and input and egui for the UI.
+retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust, built to bring a fully featured web experience to devices where traditional browsers aren't practical.
 
-retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed for **gamepad-first navigation**. It targets [PortMaster-compatible](https://portmaster.games/supported-devices.html) Linux handhelds, as well as regular desktops and Android (touch + system keyboard).
+Web rendering comes from [Servo](https://github.com/servo/servo), with SDL2 handling windowing and input and egui providing the UI. retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM, and is designed around **gamepad-first navigation**.
+
+It runs on [PortMaster-compatible](https://portmaster.games/supported-devices.html) Linux handhelds, including the Miyoo Mini family, as well as regular desktops and Android. On GPU-less devices such as the Miyoo Mini, retsurf uses CPU rasterization for both web pages and its UI.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -45,16 +47,38 @@ retsurf is an attempt to fill that gap: a modern web engine, gamepad-first contr
 
 ## Features
 
-- **Gamepad-native navigation** — a virtual cursor (stick / D-pad), Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН). Every gesture is rebindable in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with a D-pad scroll mode for stickless devices.
-- **Tabs, bookmarks, history, downloads** — in one full-screen menu. Files download in the background with progress, cancel, and a ⬇ toolbar chip.
-- **Real page zoom** — reflows the layout (not a magnifier) along Firefox's 50–300% ladder, per tab, so the whole web fits a small screen.
-- **Reader mode** — strips a page to its article with Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so logged-in and dynamic pages work too.
-- **Dark web pages** — asks sites for their dark theme (`prefers-color-scheme`), or forces one by inverting the pages that ship none. Off by default, see [`page_theme`](docs/CONFIGURATION.md#configuration-configtoml).
-- **Ad & tracker blocking** — network-level via [Brave's adblock-rust](https://github.com/brave/adblock-rust) (EasyList + EasyPrivacy), compiled and cached locally so warm starts are instant and work offline.
-- **Native start page** — a search/URL field over a speed-dial grid of pins (`retsurf:home`), controller-navigable like every other overlay.
-- **In-app updates** — checks GitHub, shows release notes inline, and installs in place on PortMaster handhelds and Linux desktops (elsewhere it opens the release page). Stable, beta, and dev channels.
-- **Web Audio** — custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and decodeAudioData for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
-- **Modern rendering** — Servo's WebRender on OpenGL ES 3.x: a single GL context and zero CPU readback, Servo drawing straight into the on-screen framebuffer.
+- **Gamepad-native navigation**<br>
+  Virtual cursor with stick/D-pad control, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
+
+- **Customizable controls**<br>
+  Every gesture is rebindable in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with D-pad scrolling for stickless devices.
+
+- **Tabs, bookmarks, history, and downloads**<br>
+  Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation, with an ⬇ toolbar chip for active downloads.
+
+- **Real page zoom**<br>
+  Reflows the layout rather than magnifying it, following Firefox's 50–300% zoom ladder. Zoom is per-tab, so the whole web remains usable on a small screen.
+
+- **Reader mode**<br>
+  Strips pages down to their articles using Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so it also works with logged-in and dynamically rendered pages.
+
+- **Dark web pages**<br>
+  Uses sites' own dark themes through `prefers-color-scheme`, or forces a dark appearance by inverting pages that don't provide one.
+
+- **Ad & tracker blocking**<br>
+  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are compiled and cached locally, making warm starts instant and allowing blocking to work offline.
+
+- **Native start page**<br>
+  A search/URL field over a speed-dial grid of pins (`retsurf:home`), fully controller-navigable like every other overlay.
+
+- **In-app updates**<br>
+  Checks GitHub for updates and shows release notes inline. On PortMaster handhelds and Linux desktops, updates can be installed in place; elsewhere, the release page is opened. Supports stable, beta, and dev channels.
+
+- **Web Audio**<br>
+  Custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and `decodeAudioData` for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
+
+- **Modern rendering**<br>
+  Servo's WebRender uses OpenGL ES 3.x with a single GL context and zero CPU readback, drawing directly into the on-screen framebuffer.
 
 ## Building & running
 
@@ -88,6 +112,22 @@ cargo install cargo-ndk --locked
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
+### Miyoo Mini (Allium)
+
+There is no GPU on this device, so the page is rasterized by WebRender's software
+backend and the chrome by SDL's 2D renderer — the `software` cargo feature. The armv7
+binary and the card layout around it are cross-built in a container:
+
+```sh
+tools/armhf/build.sh                 # prints the binary's path
+tools/armhf/package-allium.sh -n     # dist/retsurf-allium.zip around what was just built
+```
+
+Packaging borrows three sets of files it cannot ship itself — the Miyoo SDL2 build
+above all; the script header says where each comes from. See **[the Allium
+package](allium/README.md)** for the device side: install, controls, and what 128 MB
+of RAM costs you.
+
 ## Configuration
 
 `config.toml` (settings) and `bindings.toml` (gamepad/keyboard mappings) live in the
@@ -108,4 +148,5 @@ me motivated.
 
 - [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
 - [Android notes](docs/ANDROID_PORT.md) — build/packaging, storage, touch, lifecycle, status
+- [Allium package](allium/README.md) — the Miyoo Mini build: install, controls, limits
 - [The Servo Book](https://book.servo.org/) — the embedded engine: architecture, concepts, build system

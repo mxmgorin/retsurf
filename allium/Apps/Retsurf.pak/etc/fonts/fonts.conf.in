@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!--
+  The whole font world this device has. OnionOS and Allium ship no fontconfig and
+  no fonts, so the package brings both, and this file is the only configuration
+  fontconfig sees: none of the alias rules a desktop keeps in conf.d are there to
+  fall back on, so the ones pages actually ask for are written out below.
+
+  @GAMEDIR@ is substituted by launch.sh, because the app directory is only known
+  once it is installed.
+-->
+<fontconfig>
+  <dir>@GAMEDIR@/fonts</dir>
+  <cachedir>@GAMEDIR@/data/fccache</cachedir>
+
+  <alias>
+    <family>sans-serif</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>serif</family>
+    <prefer><family>DejaVu Serif</family></prefer>
+  </alias>
+  <alias>
+    <family>monospace</family>
+    <prefer><family>DejaVu Sans Mono</family></prefer>
+  </alias>
+  <alias>
+    <family>cursive</family>
+    <prefer><family>DejaVu Serif</family></prefer>
+  </alias>
+  <alias>
+    <family>fantasy</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>system-ui</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+
+  <!-- The families the web names, mapped onto the three we have. -->
+  <alias><family>Arial</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Helvetica</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Helvetica Neue</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Verdana</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Tahoma</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Segoe UI</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Roboto</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Liberation Sans</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Times</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Times New Roman</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Georgia</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Garamond</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Liberation Serif</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Courier</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Courier New</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Consolas</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Menlo</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Monaco</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+
+  <!-- Anything still unmatched: a page that names a font nobody has should get
+       text, not nothing. -->
+  <match target="pattern">
+    <edit name="family" mode="append_last">
+      <string>DejaVu Sans</string>
+    </edit>
+  </match>
+
+  <!-- Grayscale AA: the panel's subpixel order is not something to guess at, and
+       WebRender's subpixel path costs more than it buys at this size. -->
+  <match target="font">
+    <edit name="antialias" mode="assign"><bool>true</bool></edit>
+    <edit name="rgba" mode="assign"><const>none</const></edit>
+    <edit name="hinting" mode="assign"><bool>true</bool></edit>
+    <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
+  </match>
+</fontconfig>

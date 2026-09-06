@@ -20,8 +20,5 @@ pub fn is_home(url: &url::Url) -> bool {
 /// The blank dark page served behind the egui start-page overlay (so there's no
 /// white flash and no network request).
 pub fn render() -> String {
-    "<!doctype html><html><head><meta charset=\"utf-8\">\
-     <style>html,body{margin:0;height:100%;background:#16171a}</style>\
-     </head><body></body></html>"
-        .to_string()
+    include_str!("assets/home.html").to_string()
 }

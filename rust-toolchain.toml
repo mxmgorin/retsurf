@@ -1,6 +1,7 @@
 [toolchain]
-# egui 0.36 requires rustc >= 1.95, which is also what the Servo fork pins.
-channel = "1.95.0"
+# Newest stable: the hot code is Rust, so rustc's LLVM is what moves performance.
+# Above the fork's 1.97.1 pin; egui 0.36 needs >= 1.95.
+channel = "1.98.0"
 
 components = [
     "clippy",

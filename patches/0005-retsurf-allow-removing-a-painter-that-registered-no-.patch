@@ -1,0 +1,29 @@
+From 21173f2948f44d693ea9efdb41a75c50c44fd3e5 Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Wed, 26 Aug 2026 12:28:58 +0300
+Subject: [PATCH 5/6] retsurf: allow removing a painter that registered no
+ surfman details
+
+---
+ components/shared/paint/lib.rs | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/components/shared/paint/lib.rs b/components/shared/paint/lib.rs
+index a538985a22f..b4b80357b2f 100644
+--- a/components/shared/paint/lib.rs
++++ b/components/shared/paint/lib.rs
+@@ -557,10 +557,12 @@ impl PainterSurfmanDetailsMap {
+         assert!(existing.is_none())
+     }
+ 
++    /// retsurf patch: no entry is the normal state for a painter whose
++    /// rendering context had no surfman connection to register (see
++    /// `Paint::register_rendering_context`), so removal cannot assert one.
+     pub fn remove(&self, painter_id: PainterId) {
+         let mut map = self.0.lock().expect("poisoned");
+-        let details = map.remove(&painter_id);
+-        assert!(details.is_some());
++        map.remove(&painter_id);
+     }
+ }
+ 

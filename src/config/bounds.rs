@@ -27,24 +27,72 @@ pub struct FloatBounds {
 }
 
 // Browser
-pub const PAGE_ZOOM: FloatBounds = FloatBounds { min: 0.3, max: 3.0, default: 1.0 };
+pub const PAGE_ZOOM: FloatBounds = FloatBounds {
+    min: 0.3,
+    max: 3.0,
+    default: 1.0,
+};
 /// `0` is unlimited; `1` makes every new tab replace the one before it.
 pub const MAX_TABS: IntBounds = IntBounds { min: 0, max: 32 };
 
 // Display
-pub const WIDTH: IntBounds = IntBounds { min: 160, max: 3840 };
-pub const HEIGHT: IntBounds = IntBounds { min: 144, max: 2160 };
-pub const CURSOR_LINGER_MS: IntBounds = IntBounds { min: 0, max: 10_000 };
+pub const WIDTH: IntBounds = IntBounds {
+    min: 160,
+    max: 3840,
+};
+pub const HEIGHT: IntBounds = IntBounds {
+    min: 144,
+    max: 2160,
+};
+/// How far the UI zoom may be pushed either side of the fit to the panel.
+/// Relative, since the chrome already sizes itself to the screen it is on.
+pub const SCALE: FloatBounds = FloatBounds {
+    min: 0.6,
+    max: 1.6,
+    default: 1.0,
+};
+/// Both the settings step and the grid the zoom snaps to: a press that landed
+/// back on the zoom it left would do nothing.
+pub const SCALE_STEP: f64 = 0.05;
+pub const CURSOR_LINGER_MS: IntBounds = IntBounds {
+    min: 0,
+    max: 10_000,
+};
+/// `0` is uncapped, which only a renderer paced by something else can afford.
+pub const MAX_FPS: IntBounds = IntBounds { min: 0, max: 120 };
 
 // Input
-pub const DEADZONE: FloatBounds = FloatBounds { min: 0.0, max: 0.9, default: 0.25 };
-pub const CURSOR_SPEED: FloatBounds = FloatBounds { min: 100.0, max: 3000.0, default: 600.0 };
-pub const SCROLL_SPEED: FloatBounds = FloatBounds { min: 100.0, max: 5000.0, default: 1600.0 };
-pub const TRIGGER_THRESHOLD: FloatBounds = FloatBounds { min: 0.1, max: 0.9, default: 0.5 };
-pub const OSK_NAV_THRESHOLD: FloatBounds = FloatBounds { min: 0.1, max: 0.9, default: 0.5 };
+pub const DEADZONE: FloatBounds = FloatBounds {
+    min: 0.0,
+    max: 0.9,
+    default: 0.25,
+};
+pub const CURSOR_SPEED: FloatBounds = FloatBounds {
+    min: 100.0,
+    max: 3000.0,
+    default: 600.0,
+};
+pub const SCROLL_SPEED: FloatBounds = FloatBounds {
+    min: 100.0,
+    max: 5000.0,
+    default: 1600.0,
+};
+pub const TRIGGER_THRESHOLD: FloatBounds = FloatBounds {
+    min: 0.1,
+    max: 0.9,
+    default: 0.5,
+};
+pub const OSK_NAV_THRESHOLD: FloatBounds = FloatBounds {
+    min: 0.1,
+    max: 0.9,
+    default: 0.5,
+};
 pub const OSK_NAV_INITIAL_DELAY_MS: IntBounds = IntBounds { min: 50, max: 1000 };
 pub const OSK_NAV_REPEAT_MS: IntBounds = IntBounds { min: 20, max: 500 };
-pub const HOLD_MS: IntBounds = IntBounds { min: 100, max: 2000 };
+pub const HOLD_MS: IntBounds = IntBounds {
+    min: 100,
+    max: 2000,
+};
 
 // Content
 pub const HISTORY_MAX: IntBounds = IntBounds { min: 0, max: 1000 };

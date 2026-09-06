@@ -11,8 +11,9 @@
 #   tools/memory-gate.sh https://example.com            # peak RSS, no limit
 #   tools/memory-gate.sh https://example.com 80M 250M    # the gate
 #
-# Headless on its own X server at the device's 640x480, on the `embedded`
-# profile, against a throwaway data dir. Reading the result on a desktop build:
+# Headless on its own X server at the device's 640x480, against a throwaway data
+# dir, on the `embedded` profile — `RETSURF_GATE_PROFILE=micro` for the tier
+# below it, which is what the Miyoo Mini runs. Reading the result on a desktop build:
 # x86_64 pointers, `webgl` on and llvmpipe in RSS all make it worse than an
 # armv7 device build, so fitting here is a floor, not a forecast. What does not
 # transfer at all is the stall figure — swap is NVMe here and an SD card there.
@@ -34,9 +35,10 @@ trap 'rm -rf "$profile"' EXIT
 cat > "$profile/config.toml" <<EOF
 [browser]
 home_page = "$url"
+restore_tabs = false
 
 [performance]
-memory_profile = "embedded"
+memory_profile = "${RETSURF_GATE_PROFILE:-embedded}"
 EOF
 
 Xvfb $display -screen 0 640x480x24 +extension GLX +extension RANDR >/dev/null 2>&1 &

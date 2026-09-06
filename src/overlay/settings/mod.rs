@@ -334,6 +334,14 @@ impl Settings {
         None
     }
 
+    /// Config and bindings back to their defaults ([`Task::RestoreDefaults`]; the
+    /// pins are the app's). Draft edits like any other, so the close saves them.
+    pub fn restore_defaults(&mut self) {
+        self.draft = AppConfig::default();
+        self.bindings_draft = bindings::default_store();
+        self.show_controls();
+    }
+
     /// Adjust the focused config field by `dx` (◀ = -1, ▶ = +1): toggle a bool,
     /// cycle a choice, or step a number within its bounds. No-op outside config
     /// sections (Controls edits via A; About is read-only).
@@ -382,10 +390,10 @@ impl Settings {
     /// The display string for config row `i`'s current value.
     pub fn value_str(&self, i: usize) -> String {
         match &fields::FIELDS[i].kind {
-            Kind::Action { .. } => if self.armed == Some(i) {
+            Kind::Action { task } => if self.armed == Some(i) {
                 "press again to confirm"
             } else {
-                "Clear"
+                task.verb()
             }
             .to_string(),
             Kind::Bool { get, .. } => if get(&self.draft) { "On" } else { "Off" }.to_string(),
@@ -447,13 +455,17 @@ mod tests {
         assert!(settings.pending_update().is_none());
     }
 
-    /// The [`fields::FIELDS`] index of the row that clears browsing data.
-    fn clear_row() -> usize {
-        let clears = |f: &Field| matches!(f.kind, Kind::Action { task } if task == Task::ClearData);
+    /// The [`fields::FIELDS`] index of `task`'s action row.
+    fn row_of(task: Task) -> usize {
+        let runs = |f: &Field| matches!(f.kind, Kind::Action { task: t } if t == task);
         fields::FIELDS
             .iter()
-            .position(clears)
-            .expect("FIELDS lists the clear-data row")
+            .position(runs)
+            .unwrap_or_else(|| panic!("FIELDS lists an action row for {task:?}"))
+    }
+
+    fn clear_row() -> usize {
+        row_of(Task::ClearData)
     }
 
     /// One press must never wipe anything: it only arms the row.
@@ -468,6 +480,34 @@ mod tests {
         assert_eq!(settings.confirm_action(), Some(Task::ClearData));
         // Run, so the row is disarmed again.
         assert_eq!(settings.confirm_action(), None);
+    }
+
+    /// The restore row hands back its task on the second press, and applying it
+    /// puts the config and the bindings back in the drafts the close saves.
+    #[test]
+    fn restore_defaults_resets_the_drafts() {
+        let mut cfg = AppConfig::default();
+        cfg.browser.home_page = "https://example.org/".to_string();
+        cfg.display.scale = 1.45;
+        cfg.input.hint_badges = !cfg.input.hint_badges;
+
+        let row = row_of(Task::RestoreDefaults);
+        let mut settings = Settings::new();
+        settings.open(&cfg);
+        settings.bindings_draft.gamepad.remove("a");
+        settings.set_selected(row);
+
+        assert_eq!(settings.value_str(row), "Restore");
+        assert_eq!(settings.confirm_action(), None);
+        assert_eq!(settings.confirm_action(), Some(Task::RestoreDefaults));
+        settings.restore_defaults();
+
+        let defaults = AppConfig::default();
+        let draft = settings.draft();
+        assert_eq!(draft.browser.home_page, defaults.browser.home_page);
+        assert_eq!(draft.display.scale, defaults.display.scale);
+        assert_eq!(draft.input.hint_badges, defaults.input.hint_badges);
+        assert_eq!(settings.bindings_draft, bindings::default_store());
     }
 
     /// Moving off the armed row cancels it — otherwise a stray A elsewhere in

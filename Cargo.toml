@@ -18,12 +18,16 @@ crate-type = ["lib"]
 default = ["webgl"]
 # WebGL/WebGPU via a surfman connection. Off for the handheld build: surfman can't
 # initialize on the EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX). See
-# `src/platform/render.rs::create_surfman_connection`.
+# `src/platform/render/sdl.rs::create_surfman_connection`.
 #
 # `servo/webgl` is what compiles the WebGL thread and the script-side API into the
 # engine; without it the handheld build drops both instead of shipping a WebGL that
 # can never get a connection.
 webgl = ["servo/webgl"]
+# Software rendering end to end, for devices with no GPU at all (Miyoo Mini):
+# swgl rasterizes the page, SDL's own renderer paints the chrome. Opt-in because
+# swgl compiles every WebRender shader as C++, which no GPU-bearing target needs.
+software = ["dep:swgl", "egui-sdl2/canvas-backend"]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
@@ -31,7 +35,7 @@ sdl2-static-link = ["sdl2/static-link"]
 # .github/workflows/*, so local `cargo build --release` stays fast.
 #
 # `panic = "abort"` must stay out of here: it makes `catch_unwind` inert and breaks the
-# surfman EGL-1.4 probe (`src/platform/render.rs`). Only the webgl-off handheld CI build
+# surfman EGL-1.4 probe (`src/platform/render/sdl.rs`). Only the webgl-off handheld CI build
 # sets it, where there is no probe.
 [profile.release]
 # `strip` is for local and Android builds, which have no strip step of their own and
@@ -40,6 +44,15 @@ sdl2-static-link = ["sdl2/static-link"]
 strip = true
 debug-assertions = false
 overflow-checks = false
+
+# The rasterizers stay at -O3 when the rest of the graph is built for size (see
+# tools/armhf/build.sh): they are the frame, and scalar swgl is not an option.
+[profile.release.package.swgl]
+opt-level = 3
+[profile.release.package.webrender]
+opt-level = 3
+[profile.release.package.webrender_api]
+opt-level = 3
 
 [dependencies]
 rust-embed="8.7.2"
@@ -50,6 +63,10 @@ sdl2 = { version = "0.38.0", default-features = false }
 gleam = "0.15"
 glow = "0.17"
 surfman = "0.13"
+# WebRender's own software rasterizer (the `software` feature). Same 0.70 as the
+# `webrender` already in the graph — WR switches to its software paths on the
+# renderer name alone, so the two must be one release.
+swgl = { version = "0.70", optional = true }
 log = "0.4.28"
 env_logger = "0.11.8"
 # Named straight off the fork: no 0.5 exists on crates.io, so a version requirement
@@ -60,16 +77,16 @@ env_logger = "0.11.8"
 #
 # webcrypto: gates all of `window.crypto`, `getRandomValues` included, so scripts
 # that never touch SubtleCrypto still break without it. On for every build.
-servo = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
 # WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
 # device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
 # types. Must resolve to the fork like `servo` does, or the backend registers into a
 # second copy of these crates.
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -107,8 +124,10 @@ keyboard-types = "0.8.1"
 # capture and the editor model. Not on crates.io, so it is pinned by rev like the
 # Servo fork. Its `sdl2` feature is the default and resolves to the same sdl2 as
 # ours, so the pad and key types are one set.
-inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "523a8055575e01adee345bc16f8ed42c20014781" }
-egui-sdl2 = { version = "0.11.0", default-features = false, features = ["glow-backend"] }
+inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "e33376b103bc49ea450eec54c251dfcdb251eb8b" }
+# Draws the chrome: egui over SDL2. `glow-backend` is the GPU half; the software
+# build adds `canvas-backend` through the `software` feature above.
+egui-sdl2 = { version = "0.12.0", default-features = false, features = ["glow-backend"] }
 # Every chrome icon comes from this font (see `src/ui/theme.rs`). `bold` is the base
 # weight — the lighter ones wash out at the 15px icons the handhelds draw — and `fill`
 # supplies the solid halves of on/off pairs. Version tracks egui: 0.14 = egui 0.36.
@@ -138,8 +157,8 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-# The engine comes from our Servo fork: `retsurf-main-0.5` is upstream `main` plus
-# the two fixes in `patches/`, with `retsurf-0.5` (the released line) as the
+# The engine comes from our Servo fork: `retsurf-main-0.8` is upstream `main` plus
+# the eight fixes in `patches/`, with `retsurf-0.5` (the released line) as the
 # fallback. See docs/SERVO_PATCH.md.
 #
 # Every entry must name one source: the Servo crates depend on each other by path,
@@ -149,7 +168,7 @@ android_logger = "0.15"
 #
 # Only catches transitive crates-io references now; a rev bump moves both lists.
 [patch.crates-io]
-servo = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "a8570fbb56068fa82f6978223ff111adcdd6fc78" }
+servo = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }

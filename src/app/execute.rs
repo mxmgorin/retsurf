@@ -74,16 +74,15 @@ impl App {
             MenuAction::DialClose => self.ui.close_pins_editor(),
             MenuAction::DialAdd(url) => self.dial_add(url),
             MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
-            MenuAction::DialToggleSettings => {
-                self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN)
-            }
+            MenuAction::DialPinSettings => self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN),
             MenuAction::RemoveAt(index) => self.ui.menu.remove_at(*index),
             MenuAction::OpenTab(index) => {
                 self.browser.switch_to(*index);
                 self.ui.menu.close();
             }
             MenuAction::CloseTab(index) => {
-                self.browser.close_tab(*index, &self.config.browser.home_page);
+                self.browser
+                    .close_tab(*index, &self.config.browser.home_page);
                 self.ui.menu.set_tab_count(self.browser.tab_count());
                 self.schedule_heap_trim();
             }
@@ -245,6 +244,7 @@ impl App {
         } else if let Some(task) = self.ui.settings.confirm_action() {
             match task {
                 Task::ClearData => self.clear_browsing_data(),
+                Task::RestoreDefaults => self.restore_defaults(),
             }
         } else if self.ui.settings.selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);
@@ -263,6 +263,15 @@ impl App {
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.browser.home_page);
         log::info!("cleared browsing data");
+    }
+
+    /// Settings and bindings (overlay drafts, saved on close) plus the pins (their
+    /// own file, written now) back to how they ship. Bookmarks, history and tabs
+    /// are [`Self::clear_browsing_data`]'s business.
+    fn restore_defaults(&mut self) {
+        self.ui.settings.restore_defaults();
+        self.ui.menu.dial.reset();
+        log::info!("restored default settings, bindings and pins");
     }
 
     /// Close the settings overlay (B / close button): adopt its edited drafts
@@ -298,13 +307,17 @@ impl App {
             .set_gamepad_config(self.config.input.clone());
         self.ui
             .set_cursor_linger(self.config.display.cursor_linger_ms);
+        self.ui.set_ui_scale(self.config.display.scale);
         self.ui
             .set_toolbar_position(self.config.display.toolbar_position);
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
         self.ui.menu.history_mut().set_config(&self.config.history);
-        self.ui.set_memory_overlay(self.config.debug.memory_overlay);
+        self.ui.set_memory_debug(
+            self.config.debug.memory_overlay,
+            self.config.debug.memory_log,
+        );
         self.ui.set_update_config(&self.config.update);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
@@ -322,6 +335,11 @@ impl App {
         }
         // Binds later opens; the tabs already open stay.
         self.browser.set_max_tabs(self.config.browser.max_tabs);
+        self.cpu_boost
+            .set_enabled(self.config.performance.cpu_boost_on_load);
+        // The frame cap takes effect on the very next frame, which is what makes
+        // it worth tuning by hand on a device.
+        self.window.set_max_fps(self.config.display.max_fps);
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial
@@ -345,11 +363,11 @@ impl App {
                 self.ui.dial_edit_focus_field();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
-            // A on the trailing settings tile toggles the settings shortcut on/off the
-            // dial; the regular pin tiles are edit-only (delete with X).
+            // A on the trailing tile pins the settings shortcut; pin tiles are
+            // edit-only (delete with X, move with L1/R1).
             EditItem::Tile(_) => {
-                if self.ui.dial_edit_settings_selected() {
-                    self.ui.menu.dial.toggle(crate::data::dial::SETTINGS_PIN);
+                if self.ui.dial_edit_pin_settings_selected() {
+                    self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN);
                 }
             }
         }
@@ -376,7 +394,7 @@ impl App {
             self.ui.settings_open(&self.config);
             return;
         }
-        *self.browser.get_state_mut().get_location_mut() = url;
+        self.browser.get_state_mut().location = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);
         self.ui.menu.close();

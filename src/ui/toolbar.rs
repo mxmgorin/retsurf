@@ -266,13 +266,13 @@ fn toolbar_contents(
                                         ui.ctx(),
                                         egui::Id::new("location"),
                                         pos,
-                                        state.get_location().chars().count(),
+                                        state.location.chars().count(),
                                     );
                                 }
-                                let char_count = state.get_location().chars().count();
+                                let char_count = state.location.chars().count();
                                 let location = ui.add_sized(
                                     ui.available_size(),
-                                    new_text_edit(state.get_location_mut(), "location")
+                                    new_text_edit(&mut state.location, "location")
                                         .frame(egui::Frame::new()),
                                 );
                                 // Focusing the bar selects the URL, so typing
@@ -334,7 +334,8 @@ fn paint_loading_edge(
             y: LOADING_EDGE,
         },
     );
-    ctx.layer_painter(layer).rect_filled(edge, 0.0, theme::ACCENT);
+    ctx.layer_painter(layer)
+        .rect_filled(edge, 0.0, theme::ACCENT);
 }
 
 /// Draw the toolbar as a space-reserving panel anchored to `position`'s edge

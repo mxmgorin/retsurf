@@ -200,7 +200,10 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         ("layout_columns_enabled", exp.columns),
         ("layout_container_queries_enabled", exp.container_queries),
         ("dom_fontface_enabled", exp.fontface),
-        ("dom_intersection_observer_enabled", exp.intersection_observer),
+        (
+            "dom_intersection_observer_enabled",
+            exp.intersection_observer,
+        ),
         ("dom_resize_observer_enabled", exp.resize_observer),
         ("dom_notification_enabled", exp.notification),
         ("dom_async_clipboard_enabled", exp.async_clipboard),
@@ -227,7 +230,10 @@ mod tests {
         let weight = prefs.network_http_cache_size;
         apply_http_disk_cache(&mut prefs, 64, "/tmp/cache/");
 
-        assert_eq!(prefs.network_http_disk_cache, "/tmp/cache/http-cache.sqlite3");
+        assert_eq!(
+            prefs.network_http_disk_cache,
+            "/tmp/cache/http-cache.sqlite3"
+        );
         assert_eq!(prefs.network_http_disk_cache_size, 64 * BYTES_PER_MB);
         assert!(!prefs.network_http_cache_disabled);
         assert_eq!(prefs.network_http_cache_size, weight);

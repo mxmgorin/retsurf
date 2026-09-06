@@ -63,8 +63,16 @@ pub(super) fn add_dial_edit(
         });
 }
 
-/// The tile grid: a deletable tile per regular pin, then the always-present
-/// settings toggle tile (the sentinel is hidden from the regular pins).
+/// Grid slots for `pins`: one per pin (slot index *is* the dial index), plus the
+/// trailing "Pin settings" tile while the ⚙ sentinel is off the dial. Shared with
+/// the navigation side ([`crate::ui::AppUi`]) so paint and nav can't drift.
+pub(super) fn slot_count(pins: &[String]) -> usize {
+    pins.len() + usize::from(!pins.iter().any(|u| u == SETTINGS_PIN))
+}
+
+/// The tile grid: a deletable tile per pin in dial order (the ⚙ sentinel among
+/// them, so the grid matches the start page), plus a trailing "Pin settings" slot
+/// while that sentinel is absent.
 fn add_grid(
     ui: &mut egui::Ui,
     edit: &DialEdit,
@@ -73,67 +81,58 @@ fn add_grid(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    // Real dial indices kept for deletion; the settings tile is the last slot.
-    let regular: Vec<(usize, &String)> = pins
-        .iter()
-        .enumerate()
-        .filter(|(_, u)| u.as_str() != SETTINGS_PIN)
-        .collect();
-    let settings_pinned = pins.iter().any(|u| u == SETTINGS_PIN);
-    let settings_slot = regular.len();
-
-    tile_grid(ui, width, cols, settings_slot + 1, |ui, slot| {
+    tile_grid(ui, width, cols, slot_count(pins), |ui, slot| {
         let selected = edit.tile() == Some(slot);
-        if slot == settings_slot {
-            if add_settings_tile(ui, selected, settings_pinned) {
-                commands.push(AppCommand::Menu(MenuAction::DialToggleSettings));
+        match pins.get(slot) {
+            Some(url) => {
+                if add_edit_tile(ui, url, selected, slot) {
+                    commands.push(AppCommand::Menu(MenuAction::DialRemoveAt(slot)));
+                }
             }
-        } else {
-            let (dial_index, url) = regular[slot];
-            if add_edit_tile(ui, url, selected, dial_index) {
-                commands.push(AppCommand::Menu(MenuAction::DialRemoveAt(dial_index)));
+            // slot == pins.len(): the trailing "Pin settings" tile.
+            None => {
+                if add_pin_settings_tile(ui, selected) {
+                    commands.push(AppCommand::Menu(MenuAction::DialPinSettings));
+                }
             }
         }
     });
 }
 
-/// The trailing settings toggle tile: the filled tile look when pinned, an outline
-/// action slot when not. Returns whether it was clicked (which toggles the pin).
-fn add_settings_tile(ui: &mut egui::Ui, selected: bool, pinned: bool) -> bool {
+/// The trailing "Pin settings" tile: an outline action slot (like the start page's
+/// Edit tile), drawn only while the ⚙ shortcut is off the dial. Returns whether it
+/// was clicked.
+fn add_pin_settings_tile(ui: &mut egui::Ui, selected: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     let active = selected || resp.hovered();
-    if pinned {
-        paint_tile(ui.painter(), rect, SETTINGS_PIN, active);
-    } else {
-        let painter = ui.painter();
-        let glyph = egui::Rect::from_center_size(
-            egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
-            egui::vec2(GLYPH, GLYPH),
-        );
-        painter.rect_stroke(
-            glyph,
-            12.0,
-            egui::Stroke::new(
-                if active { 2.0 } else { 1.0 },
-                if active { ACCENT } else { BORDER },
-            ),
-            egui::StrokeKind::Inside,
-        );
-        painter.text(
-            glyph.center(),
-            egui::Align2::CENTER_CENTER,
-            bold::GEAR,
-            egui::FontId::proportional(24.0),
-            if active { ACCENT } else { MUTED },
-        );
-        painter.text(
-            egui::pos2(rect.center().x, glyph.bottom() + 14.0),
-            egui::Align2::CENTER_CENTER,
-            "Settings",
-            egui::FontId::proportional(12.0),
-            if active { INK } else { MUTED },
-        );
-    }
+    let painter = ui.painter();
+    let glyph = egui::Rect::from_center_size(
+        egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
+        egui::vec2(GLYPH, GLYPH),
+    );
+    painter.rect_stroke(
+        glyph,
+        12.0,
+        egui::Stroke::new(
+            if active { 2.0 } else { 1.0 },
+            if active { ACCENT } else { BORDER },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    painter.text(
+        glyph.center(),
+        egui::Align2::CENTER_CENTER,
+        bold::GEAR,
+        egui::FontId::proportional(24.0),
+        if active { ACCENT } else { MUTED },
+    );
+    painter.text(
+        egui::pos2(rect.center().x, glyph.bottom() + 14.0),
+        egui::Align2::CENTER_CENTER,
+        "Pin settings",
+        egui::FontId::proportional(12.0),
+        if active { INK } else { MUTED },
+    );
     resp.clicked()
 }
 

@@ -1,3 +1,4 @@
+use super::BYTES_PER_PIXEL;
 use dpi::PhysicalSize;
 use gleam::gl::{self, Gl};
 use servo::{DeviceIntRect, RenderingContext, RgbaImage};
@@ -6,16 +7,9 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Create a surfman connection, or `None` if surfman can't initialize here.
-///
-/// Servo uses it only for WebGL/WebGPU external images. surfman 0.12 requires
-/// `eglGetPlatformDisplay` (EGL 1.5) and *panics* instead of returning `Err` when
-/// it's missing, as on EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX), so the call is
-/// guarded with `catch_unwind` — `None` there costs only WebGL, not rendering. Must
-/// run before other threads start: it briefly swaps the global panic hook (logging,
-/// not silencing, so an unexpected panic is still recorded).
-///
-/// The whole probe is behind the `webgl` feature, off in the handheld build.
+/// A surfman connection, or `None` (costs only WebGL). surfman 0.12 panics, not
+/// `Err`, on EGL 1.4 Mali blobs, so the probe runs under `catch_unwind` — and
+/// before other threads start, since it swaps the panic hook.
 fn create_surfman_connection() -> Option<surfman::Connection> {
     #[cfg(not(feature = "webgl"))]
     {
@@ -28,8 +22,7 @@ fn create_surfman_connection() -> Option<surfman::Connection> {
         log::debug!("probing surfman connection (WebGL)");
         let prev_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(|info| {
-            // Log rather than swallow: the expected EGL 1.4 panic is just noise at
-            // debug level, but if anything else panics in this window we still see it.
+            // Log, don't swallow: an unexpected panic here is still recorded.
             log::debug!("surfman connection probe panicked: {info}");
         }));
         let result = std::panic::catch_unwind(surfman::Connection::new);
@@ -48,22 +41,12 @@ fn create_surfman_connection() -> Option<surfman::Connection> {
     }
 }
 
-/// A [`servo::RenderingContext`] backed by SDL2's single GL/GLES context plus a
-/// self-managed framebuffer object.
-///
-/// Servo (WebRender) renders into the FBO; egui then draws the FBO's color
-/// texture into the window. Because there is only one GL context (SDL2's) and no
-/// CPU readback, this runs on the device's native Mali GLES driver — no surfman
-/// software adapter / llvmpipe, and none of the dual-context pitfalls of Path A.
-///
-/// WebRender renders into whichever framebuffer is bound after
-/// `prepare_for_rendering`, so we simply bind our FBO there.
+/// A [`servo::RenderingContext`] over SDL2's single GL/GLES context plus an FBO:
+/// WebRender renders into the FBO, egui draws its colour texture into the window.
 pub struct SdlRenderingContext {
     gl: Rc<dyn Gl>,
     glow: Arc<glow::Context>,
-    // surfman connection Servo uses for WebGL/WebGPU external images. `None` on
-    // devices where surfman can't initialize (e.g. EGL 1.4 Mali blobs); WebGL is
-    // then disabled but normal rendering is unaffected.
+    // For WebGL/WebGPU external images only; `None` costs WebGL, not rendering.
     connection: Option<surfman::Connection>,
     fbo: Cell<gl::GLuint>,
     color_tex: Cell<gl::GLuint>,
@@ -88,11 +71,8 @@ impl SdlRenderingContext {
         ctx
     }
 
-    /// Set the color texture's sampling/wrap params once, at creation. They
-    /// persist across the `tex_image_2d` reallocations in [`Self::allocate`], so
-    /// there's no need to re-set them on every resize. NEAREST is correct because
-    /// the composite is 1:1 (no scaling, see `ui/mod.rs`), so LINEAR would only
-    /// burn texture bandwidth without changing the output.
+    /// Set once: params survive the `tex_image_2d` reallocations in
+    /// [`Self::allocate`]. NEAREST because the composite is 1:1 (see `ui/mod.rs`).
     fn setup_texture_params(&self) {
         let gl = &self.gl;
         gl.bind_texture(gl::TEXTURE_2D, self.color_tex.get());
@@ -106,11 +86,9 @@ impl SdlRenderingContext {
         gl.bind_texture(gl::TEXTURE_2D, 0);
     }
 
-    /// (Re)allocate the color texture at `size` and attach it to the FBO. The GL
-    /// object names are kept stable, so any egui texture registration of the
-    /// color texture stays valid across resizes. No depth/stencil attachment:
-    /// WebRender draws flat 2D tiles with the depth test never enabled, so
-    /// `COLOR_ATTACHMENT0` alone makes the FBO complete.
+    /// (Re)allocate the colour texture and attach it; the GL names stay stable so
+    /// egui's registration survives resizes. No depth/stencil — WebRender never
+    /// enables the depth test.
     fn allocate(&self, size: PhysicalSize<u32>) {
         let w = size.width.max(1) as gl::GLsizei;
         let h = size.height.max(1) as gl::GLsizei;
@@ -142,9 +120,8 @@ impl SdlRenderingContext {
         gl.bind_framebuffer(gl::FRAMEBUFFER, 0);
     }
 
-    /// The FBO color texture, as an egui-/glow-facing handle. The browser frame
-    /// is rendered bottom-up (GL convention), so draw it with a vertically
-    /// flipped UV rect.
+    /// The FBO colour texture for egui/glow. Content is bottom-up (GL
+    /// convention); draw with flipped UVs.
     pub fn color_texture(&self) -> glow::NativeTexture {
         glow::NativeTexture(NonZeroU32::new(self.color_tex.get()).expect("color texture id is 0"))
     }
@@ -173,10 +150,8 @@ impl RenderingContext for SdlRenderingContext {
             gl::UNSIGNED_BYTE,
         );
 
-        // Flip vertically: GL returns rows bottom-up. Swap row pairs through a
-        // single stride-sized scratch buffer instead of cloning the whole frame
-        // (an odd middle row is already in place, so the half loop skips it).
-        let stride = w as usize * 4;
+        // GL rows are bottom-up; swap row pairs through one scratch row.
+        let stride = w as usize * BYTES_PER_PIXEL;
         let h = h as usize;
         let mut tmp = vec![0u8; stride];
         for row in 0..h / 2 {

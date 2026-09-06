@@ -2,27 +2,19 @@
 
 use crate::config::MemoryProfile;
 
-/// Trade allocator throughput for a smaller process, on every tier but the
-/// desktop one — what glibc holds is a function of the workload, not of how much
-/// RAM the device has (measured: ~150 MB on an image-heavy run at both `tight`
-/// and `balanced`). Must run before the first large allocation.
-/// `RETSURF_HEAP_TUNE=0|1` overrides the tier, which is how the two are compared
-/// in one sitting.
+/// Trade allocator throughput for a smaller process on every tier but desktop
+/// (measured: glibc holds ~150 MB on an image-heavy run regardless of tier).
+/// Must run before the first large allocation; `RETSURF_HEAP_TUNE=0|1` overrides.
 pub fn tune(profile: MemoryProfile) {
     let tier_wants = !matches!(profile, MemoryProfile::Desktop);
-    let on = match std::env::var("RETSURF_HEAP_TUNE") {
-        Ok(v) => v != "0",
-        Err(_) => tier_wants,
-    };
+    let on = crate::config::env_flag("RETSURF_HEAP_TUNE").unwrap_or(tier_wants);
     if on {
         glibc::tune();
     }
 }
 
-/// glibc keeps freed chunks reserved for reuse. After a heavy page is closed
-/// that is hundreds of MB the browser is not using and the device cannot have —
-/// on a 128 MB handheld it means the live working set gets swapped to the card
-/// instead.
+/// Return freed chunks glibc keeps reserved: hundreds of MB after a heavy page
+/// closes, which on a 128 MB handheld swaps the live working set to the card.
 pub fn trim() {
     glibc::trim();
 }
