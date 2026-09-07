@@ -1,12 +1,12 @@
 name: Linux ARMhf
 
-# The Miyoo Mini (SSD202D, armv7, OnionOS) build. Its own workflow rather than a
-# job in `Linux ARM`: that one runs natively on arm64 runners and this one
+# The Miyoo Mini (SSD202D, armv7) build. Its own workflow rather than a job in
+# `Linux ARM`: that one runs natively on arm64 runners and this one
 # cross-compiles from x86_64, so they share no runner, no cache and no wall
 # clock. Nothing here can slow the aarch64 build down.
 #
-# Two artifacts: the bare binary, and the Allium card layout around it. OnionOS
-# is still ahead of both.
+# Three artifacts: the bare binary, and the Allium and OnionOS card layouts
+# around it — the same binary in both.
 #
 # Kept in step with tools/armhf/, which builds the same thing locally; the
 # reasoning behind the toolchain choice lives in that Dockerfile.
@@ -345,17 +345,24 @@ jobs:
 
       # The same script that packages locally, minus its container: the toolchain
       # and the trust store are already on this runner, so it takes the runtime
-      # libraries the direct way (tools/armhf/runtime-libs.sh).
-      - name: Package for Allium
+      # libraries the direct way (tools/armhf/runtime-libs.sh). Both card layouts
+      # in one run, over one copy of the payload they share.
+      - name: Package for Allium and OnionOS
         env:
           RETSURF_NO_DOCKER: "1"
           RETSURF_ARM_BIN: ${{ github.workspace }}/dist/retsurf-linux-armhf
           RETSURF_SDL_LIB: /opt/retsend/Apps/Retsend.pak/lib
           RETSURF_FONTS_DIR: /usr/share/fonts/truetype/dejavu
-        run: tools/armhf/package-allium.sh -n
+        run: tools/armhf/package-miyoo.sh -n
 
       - name: Upload the Allium package
         uses: actions/upload-artifact@v4
         with:
           name: retsurf-allium
           path: dist/retsurf-allium.zip
+
+      - name: Upload the OnionOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: retsurf-onionos
+          path: dist/retsurf-onionos.zip

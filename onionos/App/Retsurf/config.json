@@ -1,0 +1,6 @@
+{
+  "label": "Retsurf",
+  "icon": "/mnt/SDCARD/App/Retsurf/icon.png",
+  "launch": "launch.sh",
+  "description": "Web browser (Servo engine)"
+}

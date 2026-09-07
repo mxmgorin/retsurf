@@ -1,4 +1,4 @@
-# retsurf for Allium
+# retsurf for OnionOS
 
 A web browser on a Miyoo Mini Plus or Flip. The engine is
 [Servo](https://servo.org); there is no GPU on this device, so the page is
@@ -9,10 +9,10 @@ drawn by SDL's 2D renderer.
 
 ## Install
 
-Unzip `retsurf-allium.zip` into the root of the SD card, so the app lands in
-`Apps/Retsurf.pak/`. It shows up on the Apps tab.
+Unzip `retsurf-onionos.zip` into the root of the SD card, so the app lands in
+`App/Retsurf/`. It shows up under Apps.
 
-Turn wifi on in Allium's settings first — it is off by default.
+Turn wifi on in Onion's settings first — the Plus keeps it off by default.
 
 ## Controls
 
@@ -28,10 +28,11 @@ Turn wifi on in Allium's settings first — it is off by default.
 | Start | Scroll mode | Reload |
 | Select | Menu — tabs, bookmarks, history, downloads | Settings |
 | Select + Start | Settings, and **quit** when settings is already open | |
-| MENU | Quit | (held with a pad it stays Allium's) |
+| MENU | Quit | (held with a pad it stays Onion's) |
 
 The full table is in Settings → Controls, where every one of them can be
-rebound. MENU is the exception and deliberately not a binding.
+rebound. MENU is the exception and deliberately not a binding: it is the one way
+out that has to survive whatever the tables are edited to.
 
 ## Where things go
 
@@ -46,15 +47,6 @@ Everything writable stays inside the app folder, so removing it removes the lot:
 | `log.txt` | the last run |
 | `retsurf-panic.log` | written only if it crashes |
 
-## In the Games tab as well
-
-Allium's **Ports Collection** console runs anything under `Roms/PORTS` whose
-name ends `.port`, by entering the folder and running its `launch.sh`.
-`ports/Retsurf.port/` in this package is that folder — copy it to
-`Roms/PORTS/Retsurf.port/` and the browser appears among the games too. It holds
-one line, which hands over to the install under `Apps/`, so there is one copy.
-Box art, if you want it: `Roms/PORTS/Imgs/Retsurf.png`.
-
 ## Credits
 
 - Developed and ported by [mxmgorin](https://github.com/mxmgorin/)
@@ -63,6 +55,6 @@ Box art, if you want it: `Roms/PORTS/Imgs/Retsurf.png`.
   [Steward Fu](https://github.com/steward-fu/sdl2) (zlib, with LGPL-2.1 drivers)
   — provenance and licences in `lib/README.md`
 - Fonts: [DejaVu](https://dejavu-fonts.github.io/), under its own free licence
-- [Allium](https://github.com/goweiwen/Allium) is goweiwen's; this package only
-  follows its `Apps/*.pak` layout
+- [OnionOS](https://github.com/OnionUI/Onion) is the OnionUI team's; this package
+  only follows its `App/*` layout
 - Source and issues: https://github.com/mxmgorin/retsurf

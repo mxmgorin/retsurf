@@ -20,13 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vsync — so `[display] max_fps` (30 by default) caps the whole loop, Servo's
   callbacks included.
 
-- **An Allium package for the Miyoo Mini Plus and Flip** (`allium/`), the first
-  device family with no GPU. `tools/armhf/` cross-builds the armv7 binary in a
-  container and packages it; `.github/workflows/build-linux-armhf.yml` is the
-  same recipe in CI. The launcher installs the device's default config once
-  (never over the user's), writes the font config, sets the clock before TLS
-  needs a valid `notBefore`, and adds a swapfile. `allium/README.md` documents
-  the device side, `docs/HANDHELD_PORT.md` the build. The compiler is Ubuntu's
+- **Allium and OnionOS packages for the Miyoo Mini Plus and Flip** (`allium/`,
+  `onionos/`), the first device family with no GPU. `tools/armhf/` cross-builds
+  the armv7 binary in a container and assembles both card layouts around it;
+  `.github/workflows/build-linux-armhf.yml` is the same recipe in CI. Each
+  launcher installs the device's default config once (never over the user's),
+  writes the font config, sets the clock before TLS needs a valid `notBefore`,
+  and adds a swapfile. The two differ in what the firmware brings: Onion's
+  library paths, and MENU taken by the browser rather than by `pressMenu2Kill`,
+  which would end it without letting it write its cookies and open tabs.
+  `allium/README.md` and `onionos/README.md` document the device side,
+  `docs/HANDHELD_PORT.md` the build. The compiler is Ubuntu's
   cross GCC 10 over the Miyoo toolchain's glibc-2.28 sysroot, with libstdc++
   linked statically — the engine's SpiderMonkey 153 requires GCC 10.1 where that
   toolchain's own is 8.3, and no C++ runtime exists that satisfies both it and a
@@ -34,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A `micro` memory profile for ~128 MB boards**: `embedded` with a quarter of
   the JS heap, no slack before a collection, and no page kept alive for back.
-  The Allium package also ships the per-page image cap on, which is what keeps an
+  Both Miyoo packages also ship the per-page image cap on, which is what keeps an
   image-heavy page from taking the device down.
 
 - **The chrome sizes itself to the panel it runs on.** It is drawn against a

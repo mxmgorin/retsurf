@@ -179,11 +179,13 @@ at runtime on the device, so they aren't bundled.
 ## Building for armhf (Miyoo Mini)
 
 A different device family — SSD202D, armv7, no GPU at all. The renderer for it is the
-`software` feature below, and `allium/` is the device-side package (`allium/README.md`).
+`software` feature below, and `allium/` and `onionos/` are the device-side packages
+(`allium/README.md`, `onionos/README.md`) — one binary, two card layouts.
 
 ```sh
 tools/armhf/build.sh              # prints the binary's path
 RETSURF_ARM_LTO=thin tools/armhf/build.sh   # lighter link when RAM is short
+tools/armhf/package-miyoo.sh -n   # both zips around the binary that is already built
 ```
 
 It cross-compiles from x86_64 in a container, unlike the aarch64 build above, which runs

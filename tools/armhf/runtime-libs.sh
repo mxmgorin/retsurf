@@ -7,7 +7,7 @@
 # Wants the Miyoo toolchain at $TOOLCHAIN and a network. Run it inside the build
 # image (where both are given) or on a host that unpacked the toolchain itself —
 # CI does the latter, and packaging locally does the former, which is why this is
-# a script and not a heredoc in [`package-allium.sh`].
+# a script and not a heredoc in [`package-miyoo.sh`].
 #
 # $HOST_UID/$HOST_GID, when set, hand the result back to the user who owns the
 # directory the container wrote into.

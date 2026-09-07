@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Assemble the Allium card layout around a freshly cross-built binary.
+# Assemble a Miyoo Mini card layout around a freshly cross-built binary.
 #
-#   tools/armhf/package-allium.sh [-n]      # -n: skip the build, package what is there
+#   tools/armhf/package-miyoo.sh [-n] [allium|onionos ...]
 #
-# Produces dist/allium/ (the SD-card tree) and dist/retsurf-allium.zip.
+# `-n` skips the build; naming no firmware does both. Produces dist/<firmware>/
+# (the SD-card tree) and dist/retsurf-<firmware>.zip. Only the card layout
+# differs between them, so the payload is collected once and copied into each.
 #
 # Three sets of files come from outside this repo, because none of them are ours
 # to keep a second copy of:
@@ -20,15 +22,23 @@
 set -euo pipefail
 
 build=yes
-[ "${1:-}" = "-n" ] && build=no
+firmwares=()
+for arg in "$@"; do
+  case $arg in
+    -n) build=no ;;
+    allium | onionos) firmwares+=("$arg") ;;
+    *) echo "usage: $(basename "$0") [-n] [allium|onionos ...]" >&2; exit 2 ;;
+  esac
+done
+[ ${#firmwares[@]} -gt 0 ] || firmwares=(allium onionos)
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 image=retsurf-armhf-cross
 sdl_lib=${RETSURF_SDL_LIB:-$HOME/Repos/retsend/onionos/App/Retsend/lib}
 fonts_dir=${RETSURF_FONTS_DIR:-/usr/share/fonts/TTF}
-dist=$repo/dist/allium
-app=$dist/Apps/Retsurf.pak
+shared=$repo/resources/miyoo
+payload=$repo/dist/miyoo-payload
 
 if [ "$build" = yes ]; then
   # The build log belongs on the terminal; the path it prints last is the value.
@@ -55,76 +65,76 @@ if [ -z "$ca" ]; then
 fi
 [ -s "$ca" ] || { echo "no CA bundle found (set RETSURF_CA_BUNDLE)" >&2; exit 1; }
 
-rm -rf "$dist"
-mkdir -p "$app/lib/fallback" "$app/fonts" "$app/etc/fonts" "$app/etc/ssl"
+rm -rf "$payload"
+mkdir -p "$payload/lib/fallback" "$payload/fonts"
 
 # The runtime the toolchain and Debian owe us, collected in the build image so
 # the C++ runtime is the one this compiler pairs with. `RETSURF_NO_DOCKER=1` runs
 # the same script directly, for a machine that already has the toolchain unpacked
 # — which is what CI is.
 if [ "${RETSURF_NO_DOCKER:-0}" = 1 ]; then
-  "$here/runtime-libs.sh" "$app/lib" "$bin"
+  "$here/runtime-libs.sh" "$payload/lib" "$bin"
 else
-  docker run --rm -i --network host -v "$app/lib":/out -v "$bin":/bin.arm:ro \
+  docker run --rm -i --network host -v "$payload/lib":/out -v "$bin":/bin.arm:ro \
     -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
     "$image" bash -s /out /bin.arm < "$here/runtime-libs.sh"
 fi
 
-cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5" "$app/lib/"
-cp -a "$sdl_lib/fallback/libGLESv2.so" "$sdl_lib/fallback/libshmvar.so" "$app/lib/fallback/"
-[ -f "$sdl_lib/README.md" ] && cp -a "$sdl_lib/README.md" "$app/lib/"
+cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5" "$payload/lib/"
+cp -a "$sdl_lib/fallback/libGLESv2.so" "$sdl_lib/fallback/libshmvar.so" "$payload/lib/fallback/"
+[ -f "$sdl_lib/README.md" ] && cp -a "$sdl_lib/README.md" "$payload/lib/"
 
 # Sans in three styles, serif in three, one mono: enough for the web's generic
 # families and the ones `fonts.conf.in` maps onto them, and small enough that the
 # cache and the open faces stay cheap on a 128 MB device.
 for f in DejaVuSans DejaVuSans-Bold DejaVuSans-Oblique \
          DejaVuSerif DejaVuSerif-Bold DejaVuSerif-Italic DejaVuSansMono; do
-  cp "$fonts_dir/$f.ttf" "$app/fonts/"
+  cp "$fonts_dir/$f.ttf" "$payload/fonts/"
 done
 
-cp "$repo/allium/Apps/Retsurf.pak/config.json" "$app/"
-cp "$repo/allium/Apps/Retsurf.pak/launch.sh" "$app/"
-cp "$repo/allium/Apps/Retsurf.pak/etc/fonts/fonts.conf.in" "$app/etc/fonts/"
-cp "$ca" "$app/etc/ssl/cacert.pem"
-cp -r "$repo/allium/Apps/Retsurf.pak/ports" "$app/"
-cp "$repo/allium/README.md" "$app/"
-cp "$repo/resources/icon.png" "$app/"
-install -m 755 "$bin" "$app/retsurf"
-chmod 755 "$app/launch.sh" "$app/ports/Retsurf.port/launch.sh"
+for fw in "${firmwares[@]}"; do
+  dist=$repo/dist/$fw
+  case $fw in
+    # Allium scales the icon it finds, so that one is the 256px source.
+    allium)
+      src=$repo/allium/Apps/Retsurf.pak
+      app=$dist/Apps/Retsurf.pak
+      root=Apps
+      icon=$repo/resources/icon.png
+      ;;
+    # Onion's MainUI draws it at native size, hence the package's own downscale.
+    onionos)
+      src=$repo/onionos/App/Retsurf
+      app=$dist/App/Retsurf
+      root=App
+      icon=$src/icon.png
+      ;;
+  esac
 
-# The tier `auto` would pick anyway on 128 MB, pinned so a device reporting an
-# odd MemTotal cannot choose a heavier one. A template, not `data/config.toml`:
-# the launcher installs it only when there is no config to keep, so updating the
-# package never costs the user their settings.
-cat > "$app/etc/config.toml" <<'EOF'
-[browser]
-# One tab: a second one is a second engine's worth of memory on a device that
-# already browses out of swap, and every navigation replaces rather than stacks.
-max_tabs = 1
+  rm -rf "$dist"
+  mkdir -p "$app/etc/fonts" "$app/etc/ssl"
+  cp -a "$payload/lib" "$payload/fonts" "$app/"
+  cp "$shared/fonts.conf.in" "$app/etc/fonts/"
+  cp "$shared/config.toml" "$app/etc/"
+  cp "$ca" "$app/etc/ssl/cacert.pem"
+  cp "$src/config.json" "$src/launch.sh" "$app/"
+  cp "$repo/$fw/README.md" "$icon" "$app/"
+  install -m 755 "$bin" "$app/retsurf"
+  chmod 755 "$app/launch.sh"
+  # Allium's Games tab entry, which hands over to the install under `Apps/`.
+  if [ -d "$src/ports" ]; then
+    cp -r "$src/ports" "$app/"
+    chmod 755 "$app/ports"/*/launch.sh
+  fi
 
-[performance]
-memory_profile = "micro"
-# The launcher runs as root, so this can drive the governor: `performance` while
-# a page loads is worth -16% page time here, and `ondemand` the rest of the time.
-cpu_boost_on_load = true
-
-# Decoded images are what this device runs out of memory on: 87 MB of WebRender
-# image memory on one gallery page, 9 MB at this cap. Settings -> Data saving.
-[data_saving]
-max_images_per_page = 12
-
-[display]
-software_render = true
-EOF
-
-zip_out=$repo/dist/retsurf-allium.zip
-rm -f "$zip_out"
-if command -v zip >/dev/null 2>&1; then
-  (cd "$dist" && zip -qr "$zip_out" Apps)
-else
-  # No zip on this host. Python's writes no permission bits, which costs nothing
-  # here: the card is FAT32 and the mount decides the mode for every file on it.
-  (cd "$dist" && python3 -m zipfile -c "$zip_out" Apps)
-fi
-du -sh "$app" "$zip_out"
-find "$dist" -type f | sed "s|$dist/||" | sort
+  zip_out=$repo/dist/retsurf-$fw.zip
+  rm -f "$zip_out"
+  if command -v zip >/dev/null 2>&1; then
+    (cd "$dist" && zip -qr "$zip_out" "$root")
+  else
+    # Python's writes no permission bits, which costs nothing on a FAT32 card.
+    (cd "$dist" && python3 -m zipfile -c "$zip_out" "$root")
+  fi
+  du -sh "$app" "$zip_out"
+  find "$dist" -type f | sed "s|$dist/||" | sort
+done

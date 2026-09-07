@@ -32,9 +32,9 @@ pub struct AppEventHandler {
     /// SDL2 offers no controller mapping and sends keys instead, so there they
     /// feed the pad machine and answer to the `[gamepad]` table like any button.
     keymap: Keymap,
-    /// MENU is the launcher's key nearly everywhere — OnionOS hands it to the
-    /// firmware's own kill helper — so the app answers it only where the
-    /// launcher says it keeps none (`RETSURF_MENU_QUIT`, which Allium sets).
+    /// MENU is the launcher's key nearly everywhere, so the app answers it only
+    /// where the launcher hands it over (`RETSURF_MENU_QUIT`, set by both Miyoo
+    /// packages: a firmware kill helper writes no session on the way out).
     menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,

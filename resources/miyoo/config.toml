@@ -1,0 +1,20 @@
+# The Miyoo Mini defaults, shipped as `etc/config.toml` and installed by the
+# launcher on a first run. Both firmware packages carry this file.
+
+[browser]
+# A second tab is a second engine's worth of memory on a device already in swap.
+max_tabs = 1
+
+[performance]
+# What `auto` picks on 128 MB anyway, pinned against an odd MemTotal.
+memory_profile = "micro"
+# The launcher runs as root: `performance` while a page loads is -16% page time.
+cpu_boost_on_load = true
+
+[data_saving]
+# Decoded images are what runs this device out of memory: 87 MB on one gallery
+# page, 9 MB at this cap.
+max_images_per_page = 12
+
+[display]
+software_render = true

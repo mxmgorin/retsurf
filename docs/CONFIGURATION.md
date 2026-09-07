@@ -310,7 +310,7 @@ files.
 | `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
 | `RETSURF_MAX_FPS` | — | Overrides `[display].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
 | `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
-| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that keeps no kill helper of its own (Allium sets it) |
+| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that hands the key over rather than spending it on a kill helper (both Miyoo packages set it) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
 | `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
 | `RETSURF_MEMORY_DETAIL` | `0` | `1` logs the 20 largest whole memory-report paths beside the rolled-up groups |
