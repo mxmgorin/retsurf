@@ -136,6 +136,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A manual scroll can leave the highlighted row.** The menu and the settings
+  asked egui to centre the highlighted row on every frame, and egui re-applies
+  such a request, so a touch drag or a wheel was undone before it was seen. The
+  row is centred on the frame the highlight moves and not after.
+
 - **A driver that refuses a GL attribute no longer ends the run** — the window
   falls back to software rendering where the build has it.
 
