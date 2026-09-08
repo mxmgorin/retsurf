@@ -16,13 +16,9 @@ crate-type = ["lib"]
 
 [features]
 default = ["webgl"]
-# WebGL/WebGPU via a surfman connection. Off for the handheld build: surfman can't
-# initialize on the EGL 1.4 Mali blobs (Knulli/muOS/ROCKNIX). See
-# `src/platform/render/sdl.rs::create_surfman_connection`.
-#
-# `servo/webgl` is what compiles the WebGL thread and the script-side API into the
-# engine; without it the handheld build drops both instead of shipping a WebGL that
-# can never get a connection.
+# WebGL/WebGPU through a surfman connection, which cannot initialize on the EGL 1.4
+# Mali blobs. The handheld build turns it off, and `servo/webgl` then leaves the
+# engine's WebGL thread and script API out of the binary rather than shipping both.
 webgl = ["servo/webgl"]
 # Software rendering end to end, for devices with no GPU at all (Miyoo Mini):
 # swgl rasterizes the page, SDL's own renderer paints the chrome. Opt-in because
@@ -31,12 +27,9 @@ software = ["dep:swgl", "egui-sdl2/canvas-backend"]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 
-# Fat LTO and codegen-units = 1 are CI-only, set via CARGO_PROFILE_RELEASE_* in
-# .github/workflows/*, so local `cargo build --release` stays fast.
-#
-# `panic = "abort"` must stay out of here: it makes `catch_unwind` inert and breaks the
-# surfman EGL-1.4 probe (`src/platform/render/sdl.rs`). Only the webgl-off handheld CI build
-# sets it, where there is no probe.
+# Fat LTO and codegen-units = 1 are CI-only (CARGO_PROFILE_RELEASE_* in the
+# workflows), so a local release build stays fast. `panic = "abort"` must stay out:
+# it makes the surfman probe's `catch_unwind` inert.
 [profile.release]
 # `strip` is for local and Android builds, which have no strip step of their own and
 # would otherwise ship symbols. The other two are release defaults, pinned so every
@@ -69,24 +62,17 @@ surfman = "0.13"
 swgl = { version = "0.70", optional = true }
 log = "0.4.28"
 env_logger = "0.11.8"
-# Named straight off the fork: no 0.5 exists on crates.io, so a version requirement
-# plus `[patch.crates-io]` reads as unresolvable to tools like deps.rs.
-#
-# bundled_freetype: a Servo default lost to default-features = false. Without it
-# freetype-sys wants a system FreeType newer than Ubuntu 22.04 (CI) ships.
-#
-# webcrypto: gates all of `window.crypto`, `getRandomValues` included, so scripts
-# that never touch SubtleCrypto still break without it. On for every build.
-servo = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
+# Named off the fork rather than a version plus a patch: no such version is on
+# crates.io, and deps.rs reads that as unresolvable. bundled_freetype, since
+# freetype-sys otherwise outgrows CI's system FreeType; webcrypto gates `window.crypto`.
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
-# WebAudio (src/media): our own servo-media backend renders the audio graph to an SDL2
-# device instead of Servo's silent dummy, which still supplies the no-op Player/WebRTC
-# types. Must resolve to the fork like `servo` does, or the backend registers into a
-# second copy of these crates.
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
+# WebAudio (src/media): our SDL2 backend in place of Servo's silent dummy. Must resolve
+# to the fork like `servo` does, or it registers into a second copy of these crates.
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -95,10 +81,8 @@ symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav
 # (no `fft_resampler`, so no FFT crates) is rubato's cheap end, which beats transition-band
 # purity on an A35.
 rubato = { version = "5", default-features = false }
-# `<video>` decode (src/media/video.rs): Cisco's OpenH264 built from source via cc — the
-# one C dependency, chosen because it cross-compiles with a plain toolchain (NEON asm
-# included) where dav1d/libvpx want meson/configure. Software-only; a handheld may not
-# hold real time, which is why [video] has its own switch.
+# `<video>` decode (src/media/video.rs): Cisco's OpenH264, built from source via cc
+# because it cross-compiles with a plain toolchain where dav1d and libvpx want meson.
 openh264 = "0.9.8"
 # Decoded YUV 420 -> the BGRA8 WebRender wants. SIMD paths (NEON/SSE) are its default
 # features; the conversion runs once per displayed frame.
@@ -120,20 +104,15 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 adblock = "0.13"
 content-security-policy = "0.8"
 keyboard-types = "0.8.1"
-# Rebindable input: the gesture machine (tap/hold/chord), `bindings.toml`, gesture
-# capture and the editor model. Not on crates.io, so it is pinned by rev like the
-# Servo fork. Its `sdl2` feature is the default and resolves to the same sdl2 as
-# ours, so the pad and key types are one set.
+# Rebindable input: the gesture machine, `bindings.toml` and the editor model. Its
+# `sdl2` feature resolves to the same sdl2 as ours, so pad and key types are one set.
 inputbind = { git = "https://github.com/mxmgorin/inputbind", rev = "e33376b103bc49ea450eec54c251dfcdb251eb8b" }
 # Draws the chrome: egui over SDL2. `glow-backend` is the GPU half; the software
 # build adds `canvas-backend` through the `software` feature above.
 egui-sdl2 = { version = "0.12.0", default-features = false, features = ["glow-backend"] }
-# Every chrome icon comes from this font (see `src/ui/theme.rs`). `bold` is the base
-# weight — the lighter ones wash out at the 15px icons the handhelds draw — and `fill`
-# supplies the solid halves of on/off pairs. Version tracks egui: 0.14 = egui 0.36.
-#
-# From the fork by rev: upstream's newest release is still on egui 0.35, and a second
-# egui in the graph would make `add_to_fonts` take a `FontDefinitions` we can't hand it.
+# Every chrome icon comes from this font: `bold` because lighter weights wash out at
+# the 15px the handhelds draw, `fill` for the solid halves of on/off pairs. From the
+# fork because upstream's newest release is still on egui 0.35, and two do not mix.
 egui-phosphor = { git = "https://github.com/mxmgorin/egui-phosphor", rev = "2450b628806faca64859caae129972852216c2b1", default-features = false, features = ["bold", "fill"] }
 sdl2-keyboard-types = "0.1.0"
 # Decodes the bundled window-icon PNG at startup for SDL's set_icon. Pinned to the
@@ -143,10 +122,8 @@ png = "0.18"
 # (src/browser/blob_download.rs). Already in the tree via servo.
 base64 = "0.23"
 
-# In-app self-update (PortMaster only; see src/update). serde_json/sha2/semver are already
-# in the tree via servo; serde_json also parses blob-capture payloads
-# (src/browser/blob_download.rs). `zip` is the one new crate: deflate is what the release
-# artifact uses, and its flate2 backend keeps the ARM cross-builds free of C.
+# In-app self-update (src/update); serde_json also parses blob-capture payloads. `zip`
+# is the one crate new to the tree, and its flate2 backend keeps ARM cross-builds C-free.
 serde_json = "1"
 sha2 = "0.11"
 semver = "1"
@@ -157,18 +134,12 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-# The engine comes from our Servo fork: `retsurf-main-0.8` is upstream `main` plus
-# the eight fixes in `patches/`, with `retsurf-0.5` (the released line) as the
-# fallback. See docs/SERVO_PATCH.md.
-#
-# Every entry must name one source: the Servo crates depend on each other by path,
-# so a mixed graph ends up with two of every crate. Pin a `rev`, never a branch —
-# the branch is rebased onto upstream, so each rev needs its `retsurf-main-<version>`
-# tag to stay reachable.
-#
-# Only catches transitive crates-io references now; a rev bump moves both lists.
+# The engine is our Servo fork: upstream `main` plus the patches in `patches/`.
+# Pinned by tag — a branch could be rewritten under us. See docs/SERVO_PATCH.md.
 [patch.crates-io]
-servo = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
-servo-base = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
-servo-media = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", rev = "2e902cb1814749559ffbd64f90927c04e07f954d" }
+# Every entry names the same source: the Servo crates depend on each other by path,
+# so a mixed graph ends up with two of every crate. Catches transitive refs only.
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.8.0-1" }

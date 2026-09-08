@@ -1,4 +1,4 @@
-From 2e902cb1814749559ffbd64f90927c04e07f954d Mon Sep 17 00:00:00 2001
+From eb4afa71b0b925ade8f994271b3a7c56a5f1629e Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Sun, 6 Sep 2026 15:32:10 +0300
 Subject: [PATCH 6/6] retsurf: drop a removed webview's display lists from the

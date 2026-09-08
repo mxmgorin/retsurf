@@ -1,4 +1,4 @@
-From 21173f2948f44d693ea9efdb41a75c50c44fd3e5 Mon Sep 17 00:00:00 2001
+From c9a131a6f77234cde3514cb083f41a8e546060c8 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Wed, 26 Aug 2026 12:28:58 +0300
 Subject: [PATCH 5/6] retsurf: allow removing a painter that registered no

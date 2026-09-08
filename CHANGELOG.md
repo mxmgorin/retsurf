@@ -69,6 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The engine sits on a fresh upstream**, Servo's `main` at `8ae6b28d707`, and the
+  pin is a tag (`retsurf-main-0.8.0`) rather than a rev. The fork's branch is now
+  named after the upstream commit it was cut from and a new one is made per sync, so
+  no rev a release pinned can be rewritten out from under it — until now every rev
+  was held by a single rebased branch. The bump cost one line of code: servo-media's
+  `Player` grew `set_download_buffering_enabled`, which our SDL backend accepts and
+  ignores, since it asks a gstreamer pipeline we do not have to buffer a download we
+  make ourselves.
+
 - **The aarch64 binaries require glibc 2.30 instead of 2.35**, which is what
   brings the port to ArkOS — the RK3326 and RK3566 handhelds it runs on were the
   reason `retsurf.a35` existed in the first place, and none of them could load
@@ -87,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   libstdc++ 11 is one a GCC 10 runtime cannot answer. It costs a SpiderMonkey
   build per binary — about twenty minutes on twelve cores.
 
-- The engine's patch set is six. Two are new: WebRender is kept off the two
+- The engine's patch set moved. Two are new: WebRender is kept off the two
   paths swgl does not implement (a quad-drawn cache clear and dithering, either
   of which aborted the process), and a painter can be removed when it registered
   no surfman details. The second is not software-only — it is the optional-
@@ -95,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handheld build. Two others left the set for Servo itself: the containing-block
   walk (servo/servo#47693) and the script-message unwrap (#47686) landed
   upstream, as did the pipeline-exit half of the display-list fix (#47651).
-  `patches/` mirrors all six.
+  `patches/` mirrors the set.
 
 - **The chrome is rasterized only where it changed**, and reused as it stands
   while egui draws the same frame. On the software renderer its corners are

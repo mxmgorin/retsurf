@@ -221,6 +221,12 @@ impl Player for SdlAudioPlayer {
         Ok(())
     }
 
+    /// Accepted and ignored: it asks gstreamer's pipeline to buffer a download it
+    /// makes itself, where our data arrives through [`Self::push_data`].
+    fn set_download_buffering_enabled(&self, _enabled: bool) -> Result<(), PlayerError> {
+        Ok(())
+    }
+
     /// Accepted but not applied: nothing here can time-stretch yet. Servo sets
     /// 1.0 before every play, so normal pages never hit the warning.
     fn set_playback_rate(&self, playback_rate: f64) -> Result<(), PlayerError> {

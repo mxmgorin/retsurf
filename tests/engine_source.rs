@@ -27,7 +27,8 @@ fn locked_source(lock: &str, package: &str) -> Option<String> {
         })
 }
 
-/// Panics unless every patched crate in `lock` comes from the fork, pinned by rev.
+/// Panics unless every patched crate in `lock` comes from the fork, pinned to an
+/// immovable ref.
 fn assert_patched_by_fork(lock: &str) {
     for &crate_name in PATCHED_CRATES {
         let source = locked_source(lock, crate_name)
@@ -40,8 +41,9 @@ fn assert_patched_by_fork(lock: &str) {
              and re-run `cargo build` to refresh Cargo.lock."
         );
         assert!(
-            source.contains("?rev="),
-            "`{crate_name}` comes from the fork but is not pinned by rev: `{source}`"
+            source.contains("?tag=") || source.contains("?rev="),
+            "`{crate_name}` comes from the fork but is pinned to neither tag nor \
+             rev, so a branch could move the engine under us: `{source}`"
         );
     }
 }
@@ -78,7 +80,7 @@ fn registry_source_is_rejected() {
 
 /// Following a branch instead of a rev builds a different engine on every fetch.
 #[test]
-#[should_panic(expected = "not pinned by rev")]
+#[should_panic(expected = "pinned to neither tag nor rev")]
 fn unpinned_fork_source_is_rejected() {
     assert_patched_by_fork(&lock_with_source(
         "git+https://github.com/mxmgorin/servo?branch=retsurf-0.4#df7b6a5c",
