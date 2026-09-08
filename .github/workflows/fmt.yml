@@ -1,0 +1,30 @@
+name: Format
+
+# The one check that needs no build: seconds on a runner, so it answers a pull
+# request long before any platform has finished compiling the engine.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          # rust-toolchain.toml pins the channel and asks for rustfmt.
+          rustup show
+          cargo fmt --version
+
+      - name: Check formatting
+        run: cargo fmt --all --check

@@ -144,9 +144,11 @@ fn micro() -> Preferences {
     p.js_mem_gc_high_frequency_heap_growth_max = 115; // %
     p.js_mem_gc_high_frequency_heap_growth_min = 105; // %
     p.js_mem_gc_low_frequency_heap_growth = 105; // %
+
     // A frame is 30 ms and more here, so a slice can be longer than `embedded`'s
     // without being felt, and a longer slice finishes the collection sooner.
     p.js_mem_gc_incremental_slice_ms = 5; // ms
+
     // Measured on the device: the malloc heap climbed 2.4 MB a navigation to
     // SpiderMonkey's 38 MB default before anything collected it, which is a
     // third of this machine's RAM.
@@ -192,6 +194,7 @@ fn embedded() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 3; // ms — keep a GC step well under a frame
+
     // The malloc heap is what `js_mem_max` does not cover, and SpiderMonkey's own
     // threshold for it (38 MB) assumes a desktop.
     p.js_mem_gc_malloc_threshold_mb = 12;
@@ -243,6 +246,7 @@ fn tight() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 4; // ms — keep a GC step well under a frame
+
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
@@ -298,6 +302,7 @@ fn balanced() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 6; // ms — desktop default is 10
+
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
@@ -338,6 +343,7 @@ fn generous() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 8; // ms — desktop default is 10
+
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
@@ -376,6 +382,7 @@ fn android() -> Preferences {
     p.js_mem_gc_compacting_enabled = true;
     p.js_mem_gc_incremental_enabled = true;
     p.js_mem_gc_incremental_slice_ms = 5; // ms — OoO cores, but stay battery-friendly
+
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path

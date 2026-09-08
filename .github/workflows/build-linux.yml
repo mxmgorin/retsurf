@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - "main"
+  # The one platform a pull request builds: it is also where the tests and clippy
+  # run, and six platforms per push is a lot of runner for one signal.
+  pull_request:
   release:
     types: [published]
 
@@ -13,7 +16,7 @@ on:
 # and never cancel, so a release can't lose its artifacts to a newer commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 permissions:
   contents: write
@@ -23,6 +26,16 @@ jobs:
     # 22.04 over latest: its glibc 2.35 keeps the binary runnable on older
     # distros (glibc only guarantees backward compatibility).
     runs-on: ubuntu-22.04
+    # Job-wide so the build, the tests and clippy share one set of artifacts: a
+    # profile flag that differs between steps makes cargo compile the graph twice.
+    env:
+      # clang-sys would take the newest libclang on this image, and mozangle's
+      # shader bindgen dies on clang 15: it dropped __builtin_ia32_* sat-math.
+      LIBCLANG_PATH: /usr/lib/llvm-14/lib
+      # CI performance build (see Cargo.toml [profile.release] note); kept out of
+      # Cargo.toml so local release builds stay fast to compile.
+      CARGO_PROFILE_RELEASE_LTO: "fat"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -71,21 +84,25 @@ jobs:
       # the windows/macos targets where a bundled static build is the only sane
       # option. Default features stay on: desktop GL has working surfman, so
       # webgl keeps its connection probe.
-      # LIBCLANG_PATH: the runner image ships several LLVMs; clang-sys picks the
-      # newest libclang while bindgen takes resource headers from the default
-      # clang (14). Clang 15 dropped the __builtin_ia32_* sat-math builtins those
-      # headers use, so mozangle's shader bindgen dies — pin libclang to 14.
       - name: Build
-        env:
-          LIBCLANG_PATH: /usr/lib/llvm-14/lib
-          # CI performance build (see Cargo.toml [profile.release] note); kept out
-          # of Cargo.toml so local release builds stay fast to compile.
-          CARGO_PROFILE_RELEASE_LTO: "fat"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           set -eux
           cargo build --release
           df -h /
+
+      # --release, not the default dev profile: the graph above is already built
+      # that way, and a profile switch would compile Servo a second time.
+      - name: Test
+        run: |
+          set -eux
+          cargo test --release
+
+      # Only workspace crates go through clippy-driver (RUSTC_WORKSPACE_WRAPPER),
+      # so the dependencies stay as the build left them.
+      - name: Clippy
+        run: |
+          set -eux
+          cargo clippy --release --all-targets -- -D warnings
 
       - name: Stage binary
         run: |
