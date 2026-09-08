@@ -417,15 +417,21 @@ pub(super) const GLYPH: f32 = 52.0;
 /// click response.
 fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    keep_visible(ui, rect, selected);
+    keep_visible(ui, &resp, rect, selected);
     paint_tile(ui.painter(), rect, url, selected || resp.hovered());
     resp
 }
 
-/// Scroll a selected tile into view. No-op outside a scroll area, where the clip
-/// rect is the whole page.
-fn keep_visible(ui: &egui::Ui, rect: egui::Rect, selected: bool) {
-    if selected && !ui.clip_rect().contains_rect(rect) {
+/// Scroll a selected tile into view on the frame the selection reaches it. Going
+/// by visibility alone would fight a manual scroll, re-centring every frame.
+/// No-op outside a scroll area, where the clip rect is the whole page.
+fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected: bool) {
+    let key = egui::Id::new(("dial_tile", resp.layer_id));
+    if !selected || ui.ctx().data(|d| d.get_temp::<egui::Id>(key)) == Some(resp.id) {
+        return;
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(key, resp.id));
+    if !ui.clip_rect().contains_rect(rect) {
         ui.scroll_to_rect(rect, None);
     }
 }
@@ -486,7 +492,7 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
 /// real tile but unfilled so it reads as an action slot. Opens the dial editor.
 fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    keep_visible(ui, rect, selected);
+    keep_visible(ui, &resp, rect, selected);
     let active = selected || resp.hovered();
     let painter = ui.painter();
 

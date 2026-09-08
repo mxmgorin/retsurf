@@ -2,7 +2,7 @@
 //! the section bar with the close action, and the four section lists
 //! (Tabs / Bookmarks / History / Downloads).
 
-use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::app::{AppCommand, MenuAction};
 use crate::browser::TabInfo;
@@ -162,7 +162,7 @@ fn clear_row(
     };
     let resp = row_button(ui, width, selected, text);
     if selected {
-        resp.scroll_to_me(Some(egui::Align::Center));
+        center_selected(&resp);
     }
     if resp.clicked() {
         commands.push(AppCommand::Menu(MenuAction::Clear));
@@ -260,7 +260,7 @@ fn add_tabs_section(
             egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
         );
         if selected == 0 {
-            new_tab.scroll_to_me(Some(egui::Align::Center));
+            center_selected(&new_tab);
         }
         if new_tab.clicked() {
             commands.push(AppCommand::Menu(MenuAction::NewTab));
@@ -279,7 +279,7 @@ fn add_tabs_section(
                 };
                 let resp = row_button(ui, row_w, sel, text);
                 if sel {
-                    resp.scroll_to_me(Some(egui::Align::Center));
+                    center_selected(&resp);
                 }
                 if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
@@ -332,7 +332,7 @@ fn add_bookmarks_section(
                 let atoms = url_atoms(ui, url, menu.dial.contains(url), row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
-                    resp.scroll_to_me(Some(egui::Align::Center));
+                    center_selected(&resp);
                 }
                 if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
@@ -384,7 +384,7 @@ fn add_downloads_section(
                     egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
                 );
                 if selected {
-                    resp.scroll_to_me(Some(egui::Align::Center));
+                    center_selected(&resp);
                 }
                 if resp.clicked() {
                     if let Some(url) = downloads.open_url(i) {
@@ -442,7 +442,7 @@ fn add_history_section(
                 let atoms = url_atoms(ui, &entry.url, false, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
-                    resp.scroll_to_me(Some(egui::Align::Center));
+                    center_selected(&resp);
                 }
                 if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));

@@ -89,9 +89,22 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     clicked
 }
 
+/// Bring the highlighted row into view on the frame the highlight moves: egui
+/// re-applies a scroll request every frame it is asked, which pins the list so
+/// no drag can leave that row. Keyed per overlay — two can be open at once.
+pub(super) fn center_selected(resp: &egui::Response) {
+    let key = egui::Id::new(("centered_row", resp.layer_id));
+    if resp.ctx.data(|d| d.get_temp::<egui::Id>(key)) == Some(resp.id) {
+        return;
+    }
+    resp.ctx.data_mut(|d| d.insert_temp(key, resp.id));
+    resp.scroll_to_me(Some(egui::Align::Center));
+}
+
 /// A section's scroll area, capped to the room down to the screen bottom: the
 /// panel's `Area` auto-sizes, so an unbounded `ScrollArea` would grow past the
-/// screen and clip instead of scrolling. Callers pair it with `scroll_to_me`.
+/// screen and clip instead of scrolling. Callers pair it with
+/// [`center_selected`].
 pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollArea {
     let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
     egui::ScrollArea::vertical()

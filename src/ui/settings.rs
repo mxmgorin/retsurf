@@ -3,7 +3,7 @@
 //! section's field rows. L1/R1 switch section, Up/Down move, Left/Right adjust,
 //! A edit, B save & close — all of it without an analog stick.
 
-use super::panel::{self, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::app::{AppCommand, SettingsAction};
 use crate::data::downloads::format_size;
@@ -200,7 +200,7 @@ fn add_update(
     let (label, value) = update_row_text(update);
     let resp = setting_row(ui, full_w, sel == 0, label, value);
     if sel == 0 {
-        resp.scroll_to_me(Some(egui::Align::Center));
+        center_selected(&resp);
     }
     if resp.clicked() {
         if let Some(action) = update_command(update) {
@@ -231,7 +231,7 @@ fn add_update(
             "Open page".to_string(),
         );
         if selected {
-            resp.scroll_to_me(Some(egui::Align::Center));
+            center_selected(&resp);
         }
         if resp.clicked() {
             commands.push(AppCommand::Settings(SettingsAction::OpenLink(page)));
@@ -313,7 +313,7 @@ fn add_about(
                 .trim_start_matches("http://");
             let resp = setting_row(ui, full_w, selected, label.to_string(), shown.to_string());
             if selected {
-                resp.scroll_to_me(Some(egui::Align::Center));
+                center_selected(&resp);
             }
             if resp.clicked() {
                 commands.push(AppCommand::Settings(SettingsAction::OpenLink(
@@ -337,7 +337,7 @@ fn control_row(
     let focused = index == selected;
     let resp = setting_row(ui, width, focused, label, value);
     if focused {
-        resp.scroll_to_me(Some(egui::Align::Center));
+        center_selected(&resp);
     }
     if resp.clicked() {
         commands.push(AppCommand::Settings(SettingsAction::Select(index)));
@@ -529,7 +529,7 @@ pub(super) fn add_settings(
                     let resp = setting_row(ui, row_w, selected, label, value);
                     // Keep the focused row in view — no cursor to drag the bar.
                     if selected {
-                        resp.scroll_to_me(Some(egui::Align::Center));
+                        center_selected(&resp);
                     }
                     // Clicking focuses and activates (or opens the OSK).
                     if resp.clicked() {
