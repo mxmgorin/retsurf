@@ -131,6 +131,7 @@ jobs:
         with:
           name: retsurf-macos-aarch64
           path: retsurf-macos-aarch64.dmg
+          retention-days: 14
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'

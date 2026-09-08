@@ -78,6 +78,7 @@ jobs:
         with:
           name: retsurf-windows-x86_64
           path: dist/retsurf.exe
+          retention-days: 14
 
       - name: Zip for release
         if: github.event_name == 'release'

@@ -160,6 +160,7 @@ jobs:
         with:
           name: retsurf-${{ matrix.suffix }}
           path: dist/retsurf.${{ matrix.suffix }}
+          retention-days: 1
 
   package:
     # Collect all three per-core binaries into one PortMaster port; Retsurf.sh
@@ -207,6 +208,7 @@ jobs:
         with:
           name: retsurf-portmaster
           path: portmaster-dist
+          retention-days: 14
 
       - name: Zip for release
         if: github.event_name == 'release'
@@ -308,6 +310,7 @@ jobs:
         with:
           name: retsurf-linux-aarch64
           path: dist/retsurf-linux-aarch64
+          retention-days: 14
 
       - name: Zip for release
         if: github.event_name == 'release'

@@ -340,6 +340,7 @@ jobs:
         with:
           name: retsurf-linux-armhf
           path: dist/retsurf-linux-armhf
+          retention-days: 14
 
       - name: Packaging inputs
         run: |
@@ -370,12 +371,14 @@ jobs:
         with:
           name: retsurf-allium
           path: dist/retsurf-allium.zip
+          retention-days: 14
 
       - name: Upload the OnionOS package
         uses: actions/upload-artifact@v4
         with:
           name: retsurf-onionos
           path: dist/retsurf-onionos.zip
+          retention-days: 14
 
       # No checksum sidecars beside these two: on armhf the in-app updater is
       # Kind::Manual (src/update), so nothing ever downloads them to verify.
