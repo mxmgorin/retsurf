@@ -1,0 +1,72 @@
+name: aarch64 build environment
+description: >
+  Install the toolchain the aarch64 handheld binaries are built with, inside the
+  ubuntu:20.04 container the build jobs declare: GCC 10, libclang 19, Python 3.11,
+  Rust, and Servo's native build dependencies. Runs after actions/checkout, which
+  needs git from the job's own bootstrap step.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+        # GCC 10 beside focal's 9.3: SpiderMonkey wants >= 10.1, and 12's libstdc++
+        # names `__libc_single_threaded`, a glibc 2.32 symbol above the floor.
+        apt-get update
+        # fontconfig by name: --no-install-recommends drops what the runner got free.
+        apt-get install -y --no-install-recommends \
+          build-essential gcc-10 g++-10 cmake gperf pkg-config \
+          gnupg xz-utils binutils file zip \
+          libssl-dev libdbus-1-dev libfreetype6-dev libfontconfig1-dev \
+          libexpat1-dev libglib2.0-dev libgl1-mesa-dev libegl1-mesa-dev \
+          libgles2-mesa-dev libharfbuzz-dev liblzma-dev libudev-dev \
+          libunwind-dev libsdl2-dev zlib1g-dev
+
+    - shell: bash
+      # Keep in step with tools/arm64/Dockerfile.
+      env:
+        PYTHON_VERSION: 3.11.16+20260901
+      run: |
+        set -eux
+        # focal stops at Python 3.9 and Servo's WebIDL codegen is written in
+        # `match`. 3.11 and not 3.12, which dropped `distutils` from the stdlib.
+        curl --retry 5 -fsSL \
+          "https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_VERSION#*+}/cpython-${PYTHON_VERSION}-$(uname -m)-unknown-linux-gnu-install_only.tar.gz" \
+          | tar -xz -C /opt
+        ln -sf /opt/python/bin/python3 /usr/local/bin/python3
+        ln -sf /opt/python/bin/python3 /usr/local/bin/python
+        python3 -V
+
+    - shell: bash
+      run: |
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+        # libclang for bindgen, from LLVM's own apt: focal stops at 10 and
+        # mozjs_sys 153 needs 19.
+        curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+          | gpg --dearmor > /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/focal/ llvm-toolchain-focal-19 main" \
+          > /etc/apt/sources.list.d/llvm19.list
+        apt-get update
+        apt-get install -y --no-install-recommends clang-19 libclang-19-dev llvm-19
+        ls /usr/lib/llvm-19/lib/libclang.so /usr/lib/llvm-19/bin/llvm-objdump
+
+    - shell: bash
+      run: |
+        set -eux
+        # cc-rs puts its own `-lstdc++` on the link line, which `-static-libstdc++`
+        # does not cover; a directory holding only the archive answers it statically.
+        mkdir -p /opt/cxx-static
+        ln -sf /usr/lib/gcc/aarch64-linux-gnu/10/libstdc++.a /opt/cxx-static/libstdc++.a
+        ls -l /opt/cxx-static/libstdc++.a
+
+    - shell: bash
+      run: |
+        set -eux
+        # rust-toolchain.toml pins the channel; the container has no rustup.
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+          | sh -s -- -y --no-modify-path --default-toolchain none
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        "$HOME/.cargo/bin/rustup" show
+        "$HOME/.cargo/bin/rustc" --version

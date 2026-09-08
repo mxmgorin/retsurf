@@ -61,21 +61,38 @@ docker run --rm -i --network host \
     cd /repo
     rustup target add "$TARGET"
 
-    export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-    export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
+    # GCC 10 and not focal's 9.3: SpiderMonkey wants >= 10.1, and 12's libstdc++
+    # names __libc_single_threaded, a glibc 2.32 symbol above the floor.
+    export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc-10
+    export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++-10
     export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
-    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc-10
 
     # bindgen runs the host libclang against target headers, so it needs the
     # triple and the multiarch include dir by hand -- it inherits nothing from
-    # the cross gcc.
+    # the cross gcc. The C++ headers are the cross compiler's: focal's own are
+    # libstdc++ 9 and SpiderMonkey requires 10 or newer.
     export BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_gnu="\
-      --target=$TARGET -I/usr/include/$LIBDIR"
+      --target=$TARGET -I/usr/include/$LIBDIR \
+      -isystem /usr/$LIBDIR/include/c++/10 \
+      -isystem /usr/$LIBDIR/include/c++/10/$LIBDIR \
+      -isystem /usr/lib/gcc-cross/$LIBDIR/10/include"
+    # Not the distro's clang: focal carries 10 and mozjs_sys 153 needs 19.
+    export LIBCLANG_PATH=/usr/lib/llvm-19/lib
+    export CLANG_PATH=/usr/bin/clang-19
+    # SpiderMonkey's configure gives up if there is no llvm-objdump beside the
+    # clang it found, and the compiler here is GCC.
+    export LLVM_OBJDUMP=/usr/lib/llvm-19/bin/llvm-objdump
 
     # SpiderMonkey builds tools that run on the build machine, and its configure
-    # falls back to the target compiler when these are unset.
-    export HOST_CC=clang
-    export HOST_CXX=clang++
+    # falls back to the target compiler when these are unset. GCC 10 for the same
+    # _GLIBCXX_RELEASE reason as the target side.
+    export HOST_CC=gcc-10
+    export HOST_CXX=g++-10
+
+    # Unset, mozjs_sys downloads a prebuilt SpiderMonkey built on Ubuntu 22.04:
+    # symbols above the floor, and a libstdc++ 11 GCC 10 cannot answer.
+    export MOZJS_FROM_SOURCE=1
 
     # Multiarch means the sysroot is `/`: only the library path differs, so
     # PKG_CONFIG_SYSROOT_DIR must stay unset or every -I would be doubled.
@@ -112,7 +129,10 @@ docker run --rm -i --network host \
       # major faults 191k -> 931 and no regression in the frame.
       #   --gc-sections drops what the C/C++ halves never reference;
       #   relocation-model=static skips a PIE's relocation work at every launch.
+      # Static libstdc++: the devices at the floor carry a GCC-9 C++ runtime.
+      # /opt/cxx-static covers cc-rs's own -lstdc++, which the flag does not.
       export RUSTFLAGS="${tune:+-C target-cpu=$tune} \
+        -C link-arg=-L/opt/cxx-static -C link-arg=-static-libstdc++ \
         -C link-arg=-Wl,--gc-sections \
         -C relocation-model=static -C link-arg=-no-pie"
       # One section per function/datum, so the link above can drop the unreached.
@@ -134,13 +154,20 @@ docker run --rm -i --network host \
         | grep -o "GLIBC_2\.[0-9]*" | sort -uV \
         | awk -F. -v f="${FLOOR#2.}" "\$2 > f" | tr "\n" " ")
       [ -z "$newer" ] || { echo "retsurf.$cpu requires $newer; the floor is GLIBC_$FLOOR" >&2; exit 1; }
+      # The C++ runtime carries no GLIBC_ version for the check above to catch.
+      if aarch64-linux-gnu-readelf -d "/repo/dist/arm64/retsurf.$cpu" | grep -q "NEEDED.*libstdc++"; then
+        echo "retsurf.$cpu links libstdc++ dynamically; it has to be static here" >&2
+        exit 1
+      fi
 
       # A per-core build differs from the last only in codegen flags, so cargo
       # would otherwise reuse the previous binary wholesale.
       cargo clean --release --target "$TARGET" -p retsurf
     done
 
-    chown -R "$HOST_UID:$HOST_GID" /repo/dist/arm64
+    # The caches too: SpiderMonkey's build state is written as the container's
+    # root, and the host cannot even delete it otherwise.
+    chown -R "$HOST_UID:$HOST_GID" /repo/dist/arm64 /target /cargo
 CONTAINER
 
 ls -la "$repo/dist/arm64"

@@ -69,6 +69,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The aarch64 binaries require glibc 2.30 instead of 2.35**, which is what
+  brings the port to ArkOS — the RK3326 and RK3566 handhelds it runs on were the
+  reason `retsurf.a35` existed in the first place, and none of them could load
+  it. No API was given up: every symbol above the new floor came from the build
+  host rather than the code (33 of the 45 from glibc's libpthread/libdl merge in
+  2.34), and the graph's own highest reference is `gettid@GLIBC_2.30`. CI now
+  builds in an `ubuntu:20.04` container on its arm64 runner and
+  `tools/arm64/Dockerfile` matches it, both with GCC 10 and libstdc++ linked
+  statically, because the devices at the floor carry a GCC-9 C++ runtime — the
+  binary now names no C++ runtime at all. `min_glibc` in `portmaster/port.json`
+  states the floor rather than leaving PortMaster to find out on the device.
+
+- **SpiderMonkey is compiled here now** (`MOZJS_FROM_SOURCE`). Unset, `mozjs_sys`
+  links a prebuilt archive instead of building one, and that archive comes off
+  Ubuntu 22.04: it carried most of the references above the floor, and its
+  libstdc++ 11 is one a GCC 10 runtime cannot answer. It costs a SpiderMonkey
+  build per binary — about twenty minutes on twelve cores.
+
 - The engine's patch set is six. Two are new: WebRender is kept off the two
   paths swgl does not implement (a quad-drawn cache clear and dithering, either
   of which aborted the process), and a painter can be removed when it registered

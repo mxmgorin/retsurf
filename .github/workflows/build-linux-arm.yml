@@ -18,6 +18,11 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # The oldest userland we target, ArkOS. Kept in step with
+  # tools/arm64/glibc-floor.
+  GLIBC_FLOOR: "2.30"
+
 jobs:
   build-arm:
     # Native arm64 runner (free for public repos) — no cross-compile, no qemu.
@@ -25,6 +30,9 @@ jobs:
     # 3× Servo compile is ~1× wall-clock. A pure codegen flag (RUSTFLAGS) — the
     # Graviton runner happily emits code for older cores it doesn't itself run.
     runs-on: ubuntu-22.04-arm
+    # A binary requires whatever glibc it links against, and the runner's is
+    # 2.35; focal's 2.31 keeps it on the floor above. Native on an arm64 runner.
+    container: ubuntu:20.04
     strategy:
       fail-fast: false
       matrix:
@@ -42,6 +50,15 @@ jobs:
           - cpu: cortex-a55
             suffix: a55
     steps:
+      # actions/checkout needs a git the container does not ship. safe.directory:
+      # the workspace belongs to the runner's user, and build.rs reads it.
+      - name: Bootstrap the container
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@v4
 
       # Gates the `package` job too (it needs build-arm), so a mismatched release
@@ -59,24 +76,8 @@ jobs:
           free -h || true
           df -h /
 
-      - name: Install Servo build dependencies
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake curl git gperf pkg-config \
-            python3 python3-pip ca-certificates \
-            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
-            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
-            libsdl2-dev zip
-
-      - name: Rust toolchain
-        run: |
-          set -eux
-          # rust-toolchain.toml pins the channel; rustup (preinstalled) honors it.
-          rustup show
-          rustc --version
+      - name: Build environment
+        uses: ./.github/actions/arm-build-env
 
       # The engine is a git dependency (our Servo fork), so a cold runner clones
       # ~1.7 GB before it can resolve. Cargo home only: a Servo release target/
@@ -89,7 +90,23 @@ jobs:
 
       - name: Build
         env:
-          RUSTFLAGS: "-C target-cpu=${{ matrix.cpu }}"
+          # Static libstdc++: the devices at the floor carry a GCC-9 C++ runtime.
+          # /opt/cxx-static covers cc-rs's own `-lstdc++`, which the flag does not.
+          RUSTFLAGS: >-
+            -C target-cpu=${{ matrix.cpu }}
+            -C link-arg=-L/opt/cxx-static
+            -C link-arg=-static-libstdc++
+          CC: gcc-10
+          CXX: g++-10
+          # bindgen: focal's own clang is 10 and mozjs_sys 153 needs 19.
+          LIBCLANG_PATH: /usr/lib/llvm-19/lib
+          CLANG_PATH: /usr/bin/clang-19
+          # SpiderMonkey's configure gives up if there is no llvm-objdump beside
+          # the clang it found, and the compiler here is GCC.
+          LLVM_OBJDUMP: /usr/lib/llvm-19/bin/llvm-objdump
+          # Unset, mozjs_sys downloads a prebuilt SpiderMonkey built on Ubuntu
+          # 22.04: symbols above the floor, and a libstdc++ 11 GCC 10 cannot answer.
+          MOZJS_FROM_SOURCE: "1"
           # CI performance build (kept out of Cargo.toml so local `cargo build
           # --release` stays fast): whole-program fat LTO across the huge Servo
           # graph + a single codegen unit.
@@ -109,6 +126,26 @@ jobs:
           # and `servo/webgl` leaves the engine's WebGL thread out of the binary.
           cargo build --release --no-default-features
           df -h /
+
+      # Above the floor the device's loader refuses the binary, so fail here
+      # instead of in a bug report.
+      - name: Check the glibc floor
+        run: |
+          set -eux
+          readelf -d target/release/retsurf | grep NEEDED
+          readelf -V target/release/retsurf | grep -o 'GLIBC_2\.[0-9]*' | sort -uV
+          newer=$(readelf -V target/release/retsurf \
+            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV \
+            | awk -F. -v f="${GLIBC_FLOOR#2.}" '$2 > f' | tr '\n' ' ')
+          if [ -n "$newer" ]; then
+            echo "binary requires $newer; the floor is GLIBC_$GLIBC_FLOOR" >&2
+            exit 1
+          fi
+          # The C++ runtime carries no GLIBC_ version for the check above to catch.
+          if readelf -d target/release/retsurf | grep -q 'NEEDED.*libstdc++'; then
+            echo "binary links libstdc++ dynamically; it has to be static here" >&2
+            exit 1
+          fi
 
       - name: Stage binary
         run: |
@@ -198,33 +235,39 @@ jobs:
     # a53 reuse, so it isn't tied to any specific core's tuning. Independent of
     # the per-core matrix above, so it runs in parallel.
     runs-on: ubuntu-22.04-arm
+    # Same floor as the per-core builds; a manual install lands on the same
+    # firmwares.
+    container: ubuntu:20.04
     steps:
+      - name: Bootstrap the container
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@v4
 
       - name: Verify tag matches Cargo.toml version
         if: github.event_name == 'release'
         uses: ./.github/actions/verify-version
 
-      - name: Install Servo build dependencies
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake curl git gperf pkg-config \
-            python3 python3-pip ca-certificates \
-            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
-            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
-            libsdl2-dev zip
-
-      - name: Rust toolchain
-        run: |
-          set -eux
-          rustup show
-          rustc --version
+      - name: Build environment
+        uses: ./.github/actions/arm-build-env
 
       - name: Build
         env:
+          # Static libstdc++, for the same reason as the per-core builds above.
+          RUSTFLAGS: >-
+            -C link-arg=-L/opt/cxx-static
+            -C link-arg=-static-libstdc++
+          CC: gcc-10
+          CXX: g++-10
+          LIBCLANG_PATH: /usr/lib/llvm-19/lib
+          CLANG_PATH: /usr/bin/clang-19
+          LLVM_OBJDUMP: /usr/lib/llvm-19/bin/llvm-objdump
+          # The prebuilt SpiderMonkey is an Ubuntu 22.04 build; see above.
+          MOZJS_FROM_SOURCE: "1"
           # CI performance build; no target-cpu so the binary runs on any aarch64.
           CARGO_PROFILE_RELEASE_LTO: "fat"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
@@ -234,6 +277,23 @@ jobs:
           # surfman probe's catch_unwind works on EGL 1.4 devices.
           cargo build --release
           df -h /
+
+      - name: Check the glibc floor
+        run: |
+          set -eux
+          readelf -d target/release/retsurf | grep NEEDED
+          newer=$(readelf -V target/release/retsurf \
+            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV \
+            | awk -F. -v f="${GLIBC_FLOOR#2.}" '$2 > f' | tr '\n' ' ')
+          if [ -n "$newer" ]; then
+            echo "binary requires $newer; the floor is GLIBC_$GLIBC_FLOOR" >&2
+            exit 1
+          fi
+          # The C++ runtime carries no GLIBC_ version for the check above to catch.
+          if readelf -d target/release/retsurf | grep -q 'NEEDED.*libstdc++'; then
+            echo "binary links libstdc++ dynamically; it has to be static here" >&2
+            exit 1
+          fi
 
       - name: Stage binary
         run: |

@@ -5,12 +5,14 @@
 <p align="center">A gamepad-native web browser for unconventional devices.</p>
 
 <div align="center">
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml/badge.svg" alt="Linux ARM"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml/badge.svg" alt="Windows"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml/badge.svg" alt="macOS"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml/badge.svg" alt="Linux"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml"><img src="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml/badge.svg" alt="Android"></a>
-  <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg" alt="Dependencies"></a>
+  <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&label=%20&color=3fb8a0" alt="Latest release"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux-arm.yml?branch=main&style=flat-square&logo=arm&logoColor=white&label=%20" alt="Linux ARM build"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux.yml?branch=main&style=flat-square&logo=linux&logoColor=white&label=%20" alt="Linux build"></a>
+  <!-- Inline glyph: simple-icons carries no Microsoft icon, and shields drops logo=windows without a word. -->
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-windows.yml?branch=main&style=flat-square&label=%20&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTMgM2g4djhIM3ptMTAgMGg4djhoLTh6TTMgMTNoOHY4SDN6bTEwIDBoOHY4aC04eiIvPjwvc3ZnPg%3D%3D" alt="Windows build"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-macos.yml?branch=main&style=flat-square&logo=apple&logoColor=white&label=%20" alt="macOS build"></a>
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-android.yml?branch=main&style=flat-square&logo=android&logoColor=white&label=%20" alt="Android build"></a>
+  <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg?style=flat-square&subject=deps" alt="Dependencies"></a>
 </div>
 
 retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, and egui for the UI, retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM and providing **gamepad-first navigation**.
@@ -73,8 +75,46 @@ Handheld Linux devices have no good browser options. Lightweight browsers often 
 - **Web Audio**<br>
   Custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and `decodeAudioData` for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
 
-- **Modern rendering**<br>
+- **Hardware-accelerated rendering**<br>
   Servo's WebRender uses OpenGL ES 3.x with a single GL context and zero CPU readback, drawing directly into the on-screen framebuffer.
+
+- **Software rendering**<br>
+  The `software` build replaces both renderers with CPU-based ones: SWGL rasterizes web pages, while SDL's 2D renderer draws the browser UI.
+
+## Install (PortMaster devices)
+
+Download `retsurf-portmaster.zip` from
+[Releases](https://github.com/mxmgorin/retsurf/releases) and unpack it into your
+ports folder (e.g. `/roms/ports/`).
+
+## Install (Miyoo Mini Plus / Flip)
+
+Download the appropriate zip from
+[Releases](https://github.com/mxmgorin/retsurf/releases) and unzip it at the root
+of the SD card.
+
+| OS      | Package               | Location            |
+| ------- | --------------------- | ------------------- |
+| OnionOS | `retsurf-onionos.zip` | `App/Retsurf/`      |
+| Allium  | `retsurf-allium.zip`  | `Apps/Retsurf.pak/` |
+
+The app appears in the respective Apps menu and **MENU quits** it on both.
+
+## Install (Android)
+
+Download `retsurf-android-arm64.apk` from
+[Releases](https://github.com/mxmgorin/retsurf/releases) and sideload it.
+
+## Install (desktop)
+
+Download the appropriate zip from
+[Releases](https://github.com/mxmgorin/retsurf/releases), unpack and run.
+
+| OS      | Package                                                 |
+| ------- | ------------------------------------------------------- |
+| Linux   | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` |
+| Windows | `retsurf-windows-x86_64.zip`                            |
+| macOS   | `retsurf-macos-aarch64.dmg`                             |
 
 ## Building & running
 
@@ -92,8 +132,6 @@ Then:
 ```sh
 cargo run
 ```
-
-On a Wayland desktop, retsurf auto-selects SDL's Wayland driver and a GLES context. Environment variables override the config, data, and download paths and set logging — see [Configuration](docs/CONFIGURATION.md#environment-variables).
 
 ### Android
 
@@ -113,10 +151,17 @@ user data dir (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Lin
 Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for every option and the
 full bindings reference.
 
-## References
+## Credits
 
-- [Handheld notes](docs/HANDHELD_PORT.md) — how it works, architecture, porting status
-- [Android notes](docs/ANDROID_PORT.md) — build/packaging, storage, touch, lifecycle, status
-- [Allium package](allium/README.md) — the Miyoo Mini build: install, controls, limits
-- [OnionOS package](onionos/README.md) — the same build in Onion's `App/` layout
-- [The Servo Book](https://book.servo.org/) — the embedded engine: architecture, concepts, build system
+- Web rendering by [Servo](https://servo.org)
+- [SDL2](https://libsdl.org) through [rust-sdl2](https://github.com/Rust-SDL2/rust-sdl2)
+  for window, input and audio
+- [egui](https://github.com/emilk/egui) draws every overlay, with icons from
+  [Phosphor](https://phosphoricons.com/)
+- Blocking by Brave's [adblock-rust](https://github.com/brave/adblock-rust), over
+  [EasyList](https://easylist.to/) and EasyPrivacy
+- Reader mode by Mozilla's [Readability](https://github.com/mozilla/readability)
+- Media by [Symphonia](https://github.com/pdeljanov/Symphonia) and
+  [openh264](https://github.com/ralfbiedert/openh264-rs) over Cisco's codec
+- TLS by [rustls](https://github.com/rustls/rustls)
+- SDL2 for the Miyoo Mini by [Steward Fu](https://github.com/steward-fu/sdl2)

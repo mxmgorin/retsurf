@@ -16,10 +16,15 @@ on:
   push:
     branches:
       - "main"
+  release:
+    types: [published]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
+
+permissions:
+  contents: write
 
 env:
   TARGET: armv7-unknown-linux-gnueabihf
@@ -47,6 +52,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      # A mismatched release must not produce the Miyoo packages either.
+      - name: Verify tag matches Cargo.toml version
+        if: github.event_name == 'release'
+        uses: ./.github/actions/verify-version
 
       - name: Host build tools
         run: |
@@ -366,3 +376,13 @@ jobs:
         with:
           name: retsurf-onionos
           path: dist/retsurf-onionos.zip
+
+      # No checksum sidecars beside these two: on armhf the in-app updater is
+      # Kind::Manual (src/update), so nothing ever downloads them to verify.
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/retsurf-allium.zip
+            dist/retsurf-onionos.zip

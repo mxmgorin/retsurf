@@ -2,7 +2,7 @@
 
 A lightweight, gamepad-native web browser powered by the Servo rendering engine.
 It renders modern websites over OpenGL ES with no X11 or Wayland compositor, and
-is driven entirely from the controller: a virtual cursor, Vimium-style link
+is driven entirely from the gamepad: a virtual cursor, Vimium-style link
 hints, and an on-screen keyboard. Tabs, bookmarks, history, downloads, real page
 zoom, reader mode, and network-level ad and tracker blocking are all built in.
 
@@ -26,21 +26,17 @@ Select + Start       Settings (press again while open to quit)
 
 Every gesture is rebindable in-app from the settings overlay, or by editing
 `bindings.toml` in the data folder. Devices without a right analog stick use the
-Start scroll toggle and Select to reach every function.
+Start scroll toggle.
 
 ## Notes
 
 - First launch fetches and compiles the ad/tracker block lists (EasyList +
-  EasyPrivacy); they are cached locally, so later starts are instant and work
-  offline.
-- Settings live in `config.toml` and controls in `bindings.toml`, both written
-  with defaults on first run inside the port's `data/` folder. Most settings are
-  editable in-app.
+  EasyPrivacy).
 - Downloads are saved to the port's `downloads/` folder.
 - On problems, check `log.txt` (and `retsurf-panic.log`) in the port folder.
 
 ## Credits
 
-- Developed and ported mxmgorin (Troidem)
+- Developed and ported [mxmgorin](https://github.com/mxmgorin)
 - Rendering by [Servo](https://github.com/servo/servo)
-- Source and issues: https://github.com/mxmgorin/retsurf
+- Source: https://github.com/mxmgorin/retsurf

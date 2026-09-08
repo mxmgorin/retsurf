@@ -1,4 +1,4 @@
-# Handheld Port (Knulli / muOS / ROCKNIX)
+# Handheld Port (ArkOS / Knulli / muOS / ROCKNIX)
 
 Notes on running retsurf as a PortMaster port on aarch64 handhelds.
 
@@ -6,7 +6,8 @@ Notes on running retsurf as a PortMaster port on aarch64 handhelds.
 
 Run retsurf on PortMaster-capable custom firmwares:
 
-- Knulli (Batocera-based), muOS, and ROCKNIX
+- Knulli (Batocera-based), muOS, ROCKNIX, and ArkOS — the last one sets the glibc floor
+  the binaries are built to (2.30), and is the only one of the four not yet run on a device
 - aarch64, with a bare kmsdrm display (no X11 or Wayland compositor by default)
 - Mali-G31 / G52 GPUs (RK3326 / RK3566), which expose OpenGL ES 3.2
 
@@ -154,27 +155,40 @@ SDL_VIDEODRIVER=wayland cargo run
 
 ## Building for aarch64
 
-The build runs inside PortMaster's prebuilt aarch64 builder image under qemu emulation,
-rather than a hand-rolled sysroot. The image ships the recommended toolchain, libs, and
-SDL2 with a broad-compatibility glibc. See <https://portmaster.games/docker.html>.
+CI builds this natively on free arm64 runners (`.github/workflows/build-linux-arm.yml`),
+one job per target core. `tools/arm64/build.sh` is the same recipe as a cross-build from
+x86_64, for when a fix still lives in a local Servo checkout and a runner therefore cannot
+see it (`tools/arm64/README.md`). `libGLESv2` and `libEGL` (the Mali blob) resolve at
+runtime on the device, so they aren't bundled.
 
-```bash
-# one-time: register qemu binfmt so arm64 containers run on x86
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+**Both build against Ubuntu 20.04, and that choice is the port's reach.** A binary links
+whatever symbol versions its build host offers and the device's loader refuses anything
+newer, so the build host — not the code — decides which firmware can run it. focal's glibc
+2.31 puts the link on `tools/arm64/glibc-floor` (2.30, what ArkOS ships); the runner's own
+jammy sat at 2.35 and locked those devices out for nothing, since the graph's own highest
+reference is `gettid@GLIBC_2.30`. CI gets there by running the build in an `ubuntu:20.04`
+container on the arm64 runner (`.github/actions/arm-build-env`) — native, no qemu. Both
+paths check the finished ELF against the floor and fail if it drifted, and `min_glibc` in
+`portmaster/port.json` states the same number to PortMaster.
 
-docker pull --platform=linux/arm64 \
-  ghcr.io/monkeyx-net/portmaster-build-templates/portmaster-builder:aarch64-latest
+Three things follow from the old base:
 
-docker run -it --name builder_aarch64 -v "$(pwd)":/workspace --platform=linux/arm64 \
-  ghcr.io/monkeyx-net/portmaster-build-templates/portmaster-builder:aarch64-latest
-```
-
-On top of the PM image the build needs Rust (rustup) and Servo's native build deps (clang,
-cmake, python3, gperf, the libssl/dbus/freetype/harfbuzz/glib/udev dev packages, and so on),
-which is more than a typical C/SDL port pulls in, especially `mozjs_sys` and `mozangle`.
-`cargo build --release` runs as a native arm64 build under qemu, so the first build is slow,
-with SpiderMonkey and ANGLE the long poles. `libGLESv2` and `libEGL` (the Mali blob) resolve
-at runtime on the device, so they aren't bundled.
+- **GCC 10 on both sides, libstdc++ static.** SpiderMonkey wants GCC >= 10.1 and
+  `_GLIBCXX_RELEASE >= 10` where focal's default is 9.3, and GCC 12 cannot be used at all:
+  its libstdc++ references `__libc_single_threaded`, a glibc 2.32 symbol. The devices at the
+  floor carry a GCC-9 C++ runtime, so linking that runtime statically is what makes the
+  binary portable — the same arrangement as the armhf build below.
+- **libclang 19 and Python 3.11 come from outside the archive**, which stops at clang 10
+  and Python 3.9. `mozjs_sys` 153 names clang 19 itself; Python has two floors, the
+  SpiderMonkey tree at 3.9 and Servo's WebIDL codegen at 3.11 (it is written in `match`),
+  so a portable CPython is unpacked into `/opt`. That is more than a typical C/SDL port
+  pulls in — PortMaster's own builder image is Ubuntu 20.04 too
+  (<https://portmaster.games/docker.html>), but it is assembled for that typical port.
+- **`MOZJS_FROM_SOURCE=1`, or none of the above applies.** Unset, `mozjs_sys` downloads a
+  prebuilt SpiderMonkey rather than compiling one, and that archive is an Ubuntu 22.04
+  build: it accounted for most of the symbols above the floor, and its libstdc++ 11 will
+  not link against a GCC 10 runtime (`std::__throw_bad_array_new_length`). The price is a
+  SpiderMonkey compile per binary, roughly twenty minutes on twelve cores.
 
 ## Building for armhf (Miyoo Mini)
 
