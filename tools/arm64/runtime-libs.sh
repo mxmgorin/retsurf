@@ -13,6 +13,9 @@ set -euxo pipefail
 
 out=${1:?usage: runtime-libs.sh <lib-dir>}
 mkdir -p "$out"
+# The extraction below cds into a temp dir, so a relative path from the caller
+# would resolve against that one.
+out=$(cd "$out" && pwd)
 
 pool=http://archive.debian.org/debian/pool/main
 work=$(mktemp -d)

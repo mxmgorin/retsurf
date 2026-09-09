@@ -18,6 +18,9 @@ bin=${2:-}
 toolchain=${TOOLCHAIN:-/opt/miyoomini-toolchain}
 tc=$toolchain/arm-linux-gnueabihf
 mkdir -p "$out"
+# The fontconfig extraction below cds into a temp dir, so a relative path from
+# the caller would resolve against that one.
+out=$(cd "$out" && pwd)
 
 # libgcc_s is always named; the binary links it dynamically on purpose.
 cp -a "$tc/libc/lib/libgcc_s.so.1" "$out/"
