@@ -9,7 +9,7 @@
     "attr": {
         "title": "retsurf",
         "porter": [
-            "Troidem"
+            "mxmgorin"
         ],
         "desc": "A lightweight, experimental web browser powered by the Servo rendering engine. Native gamepad navigation with a virtual cursor and Vimium-style link hints, an on-screen keyboard, tabs, bookmarks, history, downloads, real page zoom, reader mode, and network-level ad and tracker blocking. Renders modern websites over OpenGL ES with no X11 or Wayland compositor.",
         "desc_md": null,
@@ -25,7 +25,7 @@
             "video": null
         },
         "rtr": true,
-        "exp": true,
+        "exp": false,
         "runtime": [],
         "store": [
             {

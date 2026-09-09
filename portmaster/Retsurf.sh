@@ -145,6 +145,26 @@ swap_tuning_stop() {
 trap swap_tuning_stop EXIT
 swap_tuning_start
 
+# Bundled libraries are a fallback: a firmware carrying its own keeps using it.
+# The loader answers directly, since a busybox userland may ship no `ldd`.
+if [ -d "$GAMEDIR/libs" ] &&
+  LD_TRACE_LOADED_OBJECTS=1 "$BIN" 2>/dev/null | grep -q "not found"; then
+  echo "retsurf: a library is missing from this firmware, falling back to libs/"
+  export LD_LIBRARY_PATH="$GAMEDIR/libs:$LD_LIBRARY_PATH"
+  # Such a firmware has no /etc/fonts either, and fontconfig without a config
+  # finds no font at all. The template lists the system directories first.
+  fonts_in="$GAMEDIR/etc/fonts/fonts.conf.in"
+  fonts_conf="$GAMEDIR/data/fonts.conf"
+  if [ -f "$fonts_in" ]; then
+    if [ ! -s "$fonts_conf" ] || [ "$fonts_in" -nt "$fonts_conf" ] ||
+      ! grep -q "$GAMEDIR" "$fonts_conf"; then
+      mkdir -p "$GAMEDIR/data"
+      sed "s|@GAMEDIR@|$GAMEDIR|g" "$fonts_in" > "$fonts_conf"
+    fi
+    export FONTCONFIG_FILE="$fonts_conf"
+  fi
+fi
+
 export HOME="$GAMEDIR"
 export XDG_DATA_HOME="$GAMEDIR"
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"

@@ -37,6 +37,27 @@ cp "$bins"/retsurf.a35 "$bins"/retsurf.a53 "$bins"/retsurf.a55 "$pm/retsurf/"
 chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
   "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
 
+# The fontconfig fallback: `Retsurf.sh` reaches for these only where the firmware
+# has none of its own (see tools/arm64/runtime-libs.sh).
+"$here/runtime-libs.sh" "$pm/retsurf/libs" >/dev/null
+mkdir -p "$pm/retsurf/etc/fonts"
+cp "$repo/resources/portmaster/fonts.conf.in" "$pm/retsurf/etc/fonts/"
+
+# A device without fontconfig may register no fonts either, so the port carries
+# the three families its config names. RETSURF_FONTS_DIR overrides the search.
+fonts=${RETSURF_FONTS_DIR:-}
+if [ -z "$fonts" ]; then
+  for d in /usr/share/fonts/truetype/dejavu /usr/share/fonts/TTF /usr/share/fonts/dejavu; do
+    [ -f "$d/DejaVuSans.ttf" ] && { fonts=$d; break; }
+  done
+fi
+[ -n "$fonts" ] || { echo "no DejaVu fonts found; set RETSURF_FONTS_DIR" >&2; exit 1; }
+mkdir -p "$pm/retsurf/fonts"
+for f in DejaVuSans DejaVuSans-Bold DejaVuSerif DejaVuSerif-Bold \
+  DejaVuSansMono DejaVuSansMono-Bold; do
+  cp "$fonts/$f.ttf" "$pm/retsurf/fonts/"
+done
+
 ( cd "$pm" && rm -f "$repo/dist/retsurf-portmaster.zip" && zip -qr "$repo/dist/retsurf-portmaster.zip" . )
 sha256sum "$repo/dist/retsurf-portmaster.zip" > "$repo/dist/retsurf-portmaster.zip.sha256"
 

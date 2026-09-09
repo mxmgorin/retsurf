@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!--
+  Used only where the firmware ships no fontconfig, so there is no /etc/fonts and
+  none of the alias rules a desktop keeps in conf.d: the families pages ask for
+  are written out below. System directories come first — a device that has fonts
+  keeps its own — and the port's copies are the fallback under them.
+
+  @GAMEDIR@ is substituted by Retsurf.sh, since the port's path is only known
+  once it is installed.
+-->
+<fontconfig>
+  <dir>/usr/share/fonts</dir>
+  <dir>/usr/local/share/fonts</dir>
+  <dir>/usr/share/fonts/truetype</dir>
+  <dir>@GAMEDIR@/fonts</dir>
+  <cachedir>@GAMEDIR@/data/fccache</cachedir>
+
+  <alias>
+    <family>sans-serif</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>serif</family>
+    <prefer><family>DejaVu Serif</family></prefer>
+  </alias>
+  <alias>
+    <family>monospace</family>
+    <prefer><family>DejaVu Sans Mono</family></prefer>
+  </alias>
+  <alias>
+    <family>cursive</family>
+    <prefer><family>DejaVu Serif</family></prefer>
+  </alias>
+  <alias>
+    <family>fantasy</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>system-ui</family>
+    <prefer><family>DejaVu Sans</family></prefer>
+  </alias>
+
+  <!-- The families the web names, mapped onto the three we have. -->
+  <alias><family>Arial</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Helvetica</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Helvetica Neue</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Verdana</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Tahoma</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Segoe UI</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Roboto</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Liberation Sans</family><prefer><family>DejaVu Sans</family></prefer></alias>
+  <alias><family>Times</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Times New Roman</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Georgia</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Garamond</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Liberation Serif</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>Courier</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Courier New</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Consolas</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Menlo</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+  <alias><family>Monaco</family><prefer><family>DejaVu Sans Mono</family></prefer></alias>
+</fontconfig>

@@ -15,9 +15,9 @@
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg?style=flat-square&subject=deps" alt="Dependencies"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, and egui for the UI, retsurf runs **without X11 or Wayland**, rendering OpenGL ES directly through KMSDRM and providing **gamepad-first navigation**.
+retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, retsurf runs **without X11, Wayland, or even a GPU**,  and provides **gamepad-first navigation**.
 
-It runs on [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip / Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. On GPU-less devices such as the Miyoo Mini, retsurf uses CPU rasterization for both web pages and its UI.
+It supports [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip and Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. Where there is no compositor, retsurf renders straight to KMSDRM through OpenGL ES; on GPU-less devices such as the Miyoo Mini, the `software` build rasterizes both web pages and the UI on the CPU.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -49,7 +49,7 @@ Handheld Linux devices have no good browser options. Lightweight browsers often 
   Virtual cursor with stick/D-pad control, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
 
 - **Customizable controls**<br>
-  Every gesture is rebindable in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with D-pad scrolling for stickless devices.
+  Every action is rebindable in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml): with support for taps, holds and button chords.
 
 - **Tabs, bookmarks, history, and downloads**<br>
   Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation, with a toolbar chip for active downloads.
