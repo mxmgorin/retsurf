@@ -9,7 +9,7 @@
 Version=1.0
 Name=retsurf
 GenericName=Web Browser
-Comment=Lightweight gamepad-native web browser powered by Servo
+Comment=Lightweight gamepad-first web browser powered by Servo
 # Replace with the path to your built binary.
 Exec=retsurf %u
 Icon=retsurf

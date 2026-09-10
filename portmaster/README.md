@@ -1,6 +1,6 @@
 # retsurf
 
-A lightweight, gamepad-native web browser powered by the Servo rendering engine.
+A lightweight, gamepad-first web browser powered by the Servo rendering engine.
 It renders modern websites over OpenGL ES with no X11 or Wayland compositor, and
 is driven entirely from the gamepad: a virtual cursor, Vimium-style link
 hints, and an on-screen keyboard. Tabs, bookmarks, history, downloads, real page

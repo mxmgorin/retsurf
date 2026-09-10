@@ -2,7 +2,7 @@
   <img src="resources/images/retsurf-logo.png" alt="retsurf" width="100">
 </h1>
 
-<p align="center">A gamepad-native web browser for unconventional devices.</p>
+<p align="center">A lightweight, gamepad-first web browser for retro handhelds, Android, and desktops.</p>
 
 <div align="center">
   <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&label=%20&color=3fb8a0" alt="Latest release"></a>
@@ -15,21 +15,17 @@
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg?style=flat-square&subject=deps" alt="Dependencies"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is an experimental web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, retsurf runs **without X11, Wayland, or even a GPU**,  and provides **gamepad-first navigation**.
+<p align="center">
+  <img src="resources/images/retsurf-demo-rgb30.webp" alt="retsurf held in both hands on a Powkiddy RGB30, scrolling an image-heavy news site" width="640">
+</p>
+
+retsurf (**ret**ro + **surf**ing) is a web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, retsurf runs **without X11, Wayland, or even a GPU**,  and provides **gamepad-first navigation**.
 
 It supports [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip and Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. Where there is no compositor, retsurf renders straight to KMSDRM through OpenGL ES; on GPU-less devices such as the Miyoo Mini, the `software` build rasterizes both web pages and the UI on the CPU.
 
 > **Work in progress.** Early development — expect bugs.
 
-## Gallery
-
-<table>
-  <tr>
-    <td align="center"><img src="resources/images/retsurf-trimui-smart-pro.jpg" alt="retsurf on a TrimUI Smart Pro" width="260"></td>
-    <td align="center"><img src="resources/images/retsurf-rgb30.jpg" alt="retsurf on a Powkiddy RGB30" width="260"></td>
-    <td align="center"><img src="resources/images/retsurf-rg35xx-sp.jpg" alt="retsurf on an Anbernic RG35XX SP" width="260"></td>
-  </tr>
-</table>
+## Screenshots
 
 | Start page | Browsing | Link hints | Keyboard |
 |:---:|:---:|:---:|:---:|
@@ -45,7 +41,7 @@ Handheld Linux devices have no good browser options. Lightweight browsers often 
 
 ## Features
 
-- **Gamepad-native navigation**<br>
+- **Gamepad-first navigation**<br>
   Virtual cursor with stick/D-pad control, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
 
 - **Customizable controls**<br>
