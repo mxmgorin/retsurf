@@ -1,29 +1,27 @@
-<h1 align="center">
-  <img src="resources/images/retsurf-logo.png" alt="retsurf" width="100">
-</h1>
-
-<p align="center">A lightweight, gamepad-first web browser for retro handhelds, Android, and desktops.</p>
+<p align="center">
+  <img src="resources/images/retsurf-banner.png" alt="retsurf — a gamepad-first web browser for retro handhelds" width="830">
+</p>
 
 <div align="center">
-  <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&label=%20&color=3fb8a0" alt="Latest release"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux-arm.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux-arm.yml?branch=main&style=flat-square&logo=arm&logoColor=white&label=%20" alt="Linux ARM build"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux.yml?branch=main&style=flat-square&logo=linux&logoColor=white&label=%20" alt="Linux build"></a>
-  <!-- Inline glyph: simple-icons carries no Microsoft icon, and shields drops logo=windows without a word. -->
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-windows.yml?branch=main&style=flat-square&label=%20&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTMgM2g4djhIM3ptMTAgMGg4djhoLTh6TTMgMTNoOHY4SDN6bTEwIDBoOHY4aC04eiIvPjwvc3ZnPg%3D%3D" alt="Windows build"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-macos.yml?branch=main&style=flat-square&logo=apple&logoColor=white&label=%20" alt="macOS build"></a>
-  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-android.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-android.yml?branch=main&style=flat-square&logo=android&logoColor=white&label=%20" alt="Android build"></a>
+  <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&labelColor=16171a&color=3fb8a0&label=release" alt="Latest release"></a>
+  <!-- One CI badge, not six: the Linux workflow is the only one a pull request runs, and it carries the tests and clippy. -->
+  <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci" alt="CI"></a>
+  <a href="https://github.com/mxmgorin/retsurf/releases"><img src="https://img.shields.io/github/downloads/mxmgorin/retsurf/total?style=flat-square&labelColor=16171a&color=3fb8a0&label=downloads" alt="Downloads"></a>
   <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg?style=flat-square&subject=deps" alt="Dependencies"></a>
 </div>
 
-<p align="center">
-  <img src="resources/images/retsurf-demo-rgb30.webp" alt="retsurf held in both hands on a Powkiddy RGB30, scrolling an image-heavy news site" width="640">
-</p>
+retsurf (**ret**ro + **surf**ing) is a web browser powered by [Servo](https://servo.org/) for web rendering and SDL2 for windowing and input. It doesn't require **X11, Wayland, or a GPU**, and provides **gamepad-first navigation**. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on.
 
-retsurf (**ret**ro + **surf**ing) is a web browser written in Rust. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on. Powered by [Servo](https://servo.org/) for web rendering, SDL2 for windowing and input, retsurf runs **without X11, Wayland, or even a GPU**,  and provides **gamepad-first navigation**.
-
-It supports [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip and Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. Where there is no compositor, retsurf renders straight to KMSDRM through OpenGL ES; on GPU-less devices such as the Miyoo Mini, the `software` build rasterizes both web pages and the UI on the CPU.
+It runs on [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip and Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. It renders on the device's OpenGL ES driver, or on the CPU through the `software` build where there is no GPU, as on the Miyoo Mini.
 
 > **Work in progress.** Early development — expect bugs.
+
+## Demos
+
+| Powkiddy RGB30 | Miyoo Mini Flip |
+|:---:|:---:|
+| <img src="resources/images/retsurf-demo-rgb30.webp" alt="retsurf held in both hands on a Powkiddy RGB30, scrolling an image-heavy news site" height="250"> | <img src="resources/images/retsurf-demo-miyoo-mini-flip.webp" alt="retsurf on a Miyoo Mini Flip, scrolling servo.org with the D-pad" height="250"> |
+| <sub>OpenGL ES</sub> | <sub>`software` build, no GPU</sub> |
 
 ## Screenshots
 
@@ -37,7 +35,7 @@ It supports [PortMaster-compatible](https://portmaster.games/supported-devices.h
 
 ## Why?
 
-Handheld Linux devices have no good browser options. Lightweight browsers often struggle with modern, JS-heavy sites, while desktop browsers depend on a windowing system, mouse and keyboard, and hardware that these devices don't have. retsurf is an attempt to fill that gap: a modern web engine, gamepad-first controls, and direct rendering without a compositor.
+Handheld Linux devices lack good browser options. Lightweight browsers struggle with modern, JS-heavy sites, while desktop browsers rely on windowing systems, mouse and keyboard input, and more capable hardware. retsurf is an attempt to build a web browser for devices like this, combining a modern web engine with gamepad-first controls and direct rendering that requires no compositor.
 
 ## Features
 
@@ -60,16 +58,19 @@ Handheld Linux devices have no good browser options. Lightweight browsers often 
   Uses sites' own dark themes through `prefers-color-scheme`, or forces a dark appearance by inverting pages that don't provide one.
 
 - **Ad & tracker blocking**<br>
-  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are compiled and cached locally, making warm starts instant and allowing blocking to work offline.
+  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are compiled and cached locally for instant warm starts and offline blocking.
 
 - **Native start page**<br>
   A search/URL field over a speed-dial grid of pins (`retsurf:home`), fully controller-navigable like every other overlay.
 
 - **In-app updates**<br>
-  Checks GitHub for updates and shows release notes inline. On PortMaster handhelds and Linux desktops, updates can be installed in place; elsewhere, the release page is opened. Supports stable, beta, and dev channels.
+  Checks GitHub for updates, displays release notes, and installs updates in place on PortMaster handhelds and Linux desktops. Supports stable, beta, and dev channels.
 
 - **Web Audio**<br>
-  Custom Servo media backend with SDL2 output. Supports oscillators, gain, filters, panners, scripted buffers, and `decodeAudioData` for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
+  Custom servo-media backend over SDL2: oscillators, gain, filters, panners, buffers, and `decodeAudioData` for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
+
+- **Audio & video elements**<br>
+  `<audio>` streams MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A as they download, with HTTP Range seeking. `<video>` decodes H.264-in-MP4 in software through OpenH264 and syncs to the audio track. No MSE, so this supports direct files and embeds rather than streaming sites.
 
 - **Hardware-accelerated rendering**<br>
   Servo's WebRender uses OpenGL ES 3.x with a single GL context and zero CPU readback, drawing directly into the on-screen framebuffer.
@@ -77,68 +78,27 @@ Handheld Linux devices have no good browser options. Lightweight browsers often 
 - **Software rendering**<br>
   The `software` build replaces both renderers with CPU-based ones: SWGL rasterizes web pages, while SDL's 2D renderer draws the browser UI.
 
-## Install (PortMaster devices)
+## Install
 
-Download `retsurf-portmaster.zip` from
-[Releases](https://github.com/mxmgorin/retsurf/releases) and unpack it into your
-ports folder (e.g. `/roms/ports/`).
+Download from [Releases](https://github.com/mxmgorin/retsurf/releases), then:
 
-## Install (Miyoo Mini Plus / Flip)
+| Device                | Package                                                 | Where it goes                     |
+| --------------------- | ------------------------------------------------------- | --------------------------------- |
+| PortMaster handhelds  | `retsurf-portmaster.zip`                                | ports folder, e.g. `/roms/ports/` |
+| Miyoo Mini on OnionOS | `retsurf-onionos.zip`                                   | `App/Retsurf/` on the SD card     |
+| Miyoo Mini on Allium  | `retsurf-allium.zip`                                    | `Apps/Retsurf.pak/` on the SD card |
+| Android               | `retsurf-android-arm64.apk`                             | sideload it                       |
+| Linux                 | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` | unpack and run                    |
+| Windows               | `retsurf-windows-x86_64.zip`                            | unpack and run                    |
+| macOS                 | `retsurf-macos-aarch64.dmg`                             | open it and run `Retsurf.app`     |
 
-Download the appropriate zip from
-[Releases](https://github.com/mxmgorin/retsurf/releases) and unzip it at the root
-of the SD card.
+On both Miyoo firmwares the app shows up in the Apps menu, and **MENU quits** it.
 
-| OS      | Package               | Location            |
-| ------- | --------------------- | ------------------- |
-| OnionOS | `retsurf-onionos.zip` | `App/Retsurf/`      |
-| Allium  | `retsurf-allium.zip`  | `Apps/Retsurf.pak/` |
+## Building
 
-The app appears in the respective Apps menu and **MENU quits** it on both.
-
-## Install (Android)
-
-Download `retsurf-android-arm64.apk` from
-[Releases](https://github.com/mxmgorin/retsurf/releases) and sideload it.
-
-## Install (desktop)
-
-Download the appropriate zip from
-[Releases](https://github.com/mxmgorin/retsurf/releases), unpack and run.
-
-| OS      | Package                                                 |
-| ------- | ------------------------------------------------------- |
-| Linux   | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` |
-| Windows | `retsurf-windows-x86_64.zip`                            |
-| macOS   | `retsurf-macos-aarch64.dmg`                             |
-
-## Building & running
-
-You need Servo's build dependencies. On Debian/Ubuntu:
-
-```sh
-sudo apt-get install -y build-essential clang cmake curl git gperf pkg-config python3 \
-  libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
-  libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-  libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev libsdl2-dev
-```
-
-Then:
-
-```sh
-cargo run
-```
-
-### Android
-
-With the Android SDK/NDK installed:
-
-```sh
-rustup target add aarch64-linux-android
-cargo install cargo-ndk --locked
-./android/scripts/build.sh release   # android/app/build/outputs/apk/release/app-release.apk
-adb install -r android/app/build/outputs/apk/release/app-release.apk
-```
+`cargo run`, once Servo's build dependencies are installed. See **[Building from
+source](docs/BUILDING.md)** for the prerequisites on each OS, the Cargo features,
+Android, and the handheld cross-builds.
 
 ## Configuration
 
@@ -146,6 +106,14 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 user data dir (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
 Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for every option and the
 full bindings reference.
+
+## Support
+
+If you find the project useful, here is how you can help:
+
+- **Tell other people about it.** Sharing the project helps it reach more users.
+- **Report bugs and request features** in [Issues](https://github.com/mxmgorin/retsurf/issues). If something is broken or you have an idea, let me know.
+- **Star the repo.** It helps the project get noticed and keeps me motivated.
 
 ## Credits
 
