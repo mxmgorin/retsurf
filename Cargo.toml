@@ -143,3 +143,7 @@ servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" 
 servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
 servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
 servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
+# Our surfman: upstream asks eglChooseConfig for a desktop-GL config unconditionally,
+# which no Mali blob has, so every WebGL context failed on the handhelds. Graph-wide,
+# so Servo resolves to the same copy.
+surfman = { git = "https://github.com/mxmgorin/surfman", tag = "retsurf-main-0.9.0" }
