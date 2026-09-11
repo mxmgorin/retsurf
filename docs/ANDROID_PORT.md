@@ -196,8 +196,8 @@ jar, `jniLibs/`, mipmaps) are git-ignored and regenerated.
    re-registered, or the page goes black. See Phase 5 of the plan.
 4. WebGL surfman context survival across background. Its context lives in Servo's WebGL
    thread with no embedder handle, so we rely on lazy recreation and, worst case, recreate
-   the WebView. The `create_surfman_connection()` `catch_unwind` probe keeps WebGL failures
-   non-fatal (the page still renders).
+   the WebView. Moot until the composite path is ported off linux — see
+   `src/platform/render/webgl.rs` — since Android has no connection at all today.
 5. Signing. Both build types sign with one keystore (`app/debug.keystore` locally) so
    `adb install -r` updates in place instead of forcing a reinstall. CI restores a stable
    key from the `RETSURF_KEYSTORE_BASE64` secret (decoded to `app/release.keystore`, passed

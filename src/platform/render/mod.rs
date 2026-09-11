@@ -5,6 +5,13 @@
 mod sdl;
 #[cfg(feature = "software")]
 mod swgl;
+/// The composite path is EGL-only, and surfman's EGL backends are unix-only.
+#[cfg_attr(all(feature = "webgl", target_os = "linux"), path = "webgl.rs")]
+#[cfg_attr(
+    not(all(feature = "webgl", target_os = "linux")),
+    path = "webgl_off.rs"
+)]
+mod webgl;
 
 pub use self::sdl::SdlRenderingContext;
 #[cfg(feature = "software")]

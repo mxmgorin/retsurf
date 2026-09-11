@@ -22,6 +22,40 @@ fn set_gl_attr(attr: sys::SDL_GLattr, value: i32) -> Result<(), String> {
     Ok(())
 }
 
+/// A window with its GL context current, or the SDL error that stopped it.
+fn open_gl_window(
+    video_subsystem: &VideoSubsystem,
+    config: &DisplayConfig,
+) -> Result<(sdl2::video::Window, GLContext), String> {
+    let mut window = build_window(video_subsystem, config, true)?;
+    set_window_icon(&mut window);
+
+    let gl_context = window
+        .gl_create_context()
+        .map_err(|e| format!("failed to create GL context: {e}"))?;
+    window
+        .gl_make_current(&gl_context)
+        .map_err(|e| format!("failed to make GL context current: {e}"))?;
+    Ok((window, gl_context))
+}
+
+/// SDL's own name for "use EGL on X11, not GLX".
+const FORCE_EGL_HINT: &str = "SDL_VIDEO_X11_FORCE_EGL";
+
+/// Ask X11 for EGL rather than GLX, which SDL would otherwise pick for an ES
+/// context wherever Mesa can serve one — leaving no EGL display for WebGL's
+/// front buffers. Never over a choice already made through the environment.
+fn prefer_egl_on_x11(video_subsystem: &VideoSubsystem, config: &DisplayConfig) -> bool {
+    if !cfg!(feature = "webgl")
+        || !config.use_gles
+        || video_subsystem.current_video_driver() != "x11"
+        || std::env::var_os(FORCE_EGL_HINT).is_some()
+    {
+        return false;
+    }
+    sdl2::hint::set(FORCE_EGL_HINT, "1")
+}
+
 /// Everything through SDL2's single GL/GLES context: WebRender renders into an
 /// FBO, egui draws its colour texture into the window. SDL2 owns the context
 /// because on bare kmsdrm it cannot hand surfman a usable window handle.
@@ -58,15 +92,16 @@ impl GlBackend {
         set_gl_attr(sys::SDL_GLattr::SDL_GL_CONTEXT_MINOR_VERSION, minor)?;
         set_gl_attr(sys::SDL_GLattr::SDL_GL_DOUBLEBUFFER, 1)?;
 
-        let mut window = build_window(video_subsystem, config, true)?;
-        set_window_icon(&mut window);
-
-        let gl_context = window
-            .gl_create_context()
-            .map_err(|e| format!("failed to create GL context: {e}"))?;
-        window
-            .gl_make_current(&gl_context)
-            .map_err(|e| format!("failed to make GL context current: {e}"))?;
+        let forced_egl = prefer_egl_on_x11(video_subsystem, config);
+        let (window, gl_context) = match open_gl_window(video_subsystem, config) {
+            Ok(pair) => pair,
+            Err(e) if forced_egl => {
+                log::warn!("EGL refused ({e}); retrying on the GL backend SDL picks itself");
+                sdl2::hint::set(FORCE_EGL_HINT, "0");
+                open_gl_window(video_subsystem, config)?
+            }
+            Err(e) => return Err(e),
+        };
 
         // Caps the loop; on a panning fbdev it also lands the flip in the
         // blanking interval (muOS tears a band off the top frame without it).
@@ -100,7 +135,7 @@ impl GlBackend {
         let (w, h) = window.drawable_size();
         log::info!("window: GL context current ({w}x{h}); creating rendering context");
         let rendering_ctx =
-            SdlRenderingContext::new(gl, glow_ctx.clone(), dpi::PhysicalSize::new(w, h));
+            SdlRenderingContext::new(gl, glow_ctx.clone(), dpi::PhysicalSize::new(w, h), get_proc);
         log::info!("window: rendering context created");
 
         let mut egui = EguiGlow::new(&window, glow_ctx.clone(), None, false);

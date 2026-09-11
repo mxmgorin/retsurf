@@ -109,12 +109,8 @@ jobs:
           # graph + a single codegen unit.
           CARGO_PROFILE_RELEASE_LTO: "fat"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
-          # panic=abort: webgl is off here (--no-default-features) so the only
-          # catch_unwind in our code (the surfman probe) is gone — drop unwind
-          # tables for a smaller, tighter binary. Trade-off: a panic in a Servo
-          # worker/layout thread now aborts the process instead of unwinding it;
-          # the RETSURF_PANIC_FILE hook (src/lib.rs) still runs first, so it's
-          # logged. Desktop/Android keep unwind (webgl on → probe is compiled).
+          # panic=abort drops the unwind tables for a smaller binary: a Servo
+          # worker's panic ends the process, but RETSURF_PANIC_FILE still logs it.
           CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux
@@ -239,12 +235,8 @@ jobs:
 
   build-universal:
     # A single generic aarch64 binary for non-PortMaster installs: no -C
-    # target-cpu (runs on any ARMv8.0+ core), default features (webgl ON, like
-    # the desktop builds — the surfman probe falls back gracefully on EGL 1.4),
-    # so panic stays `unwind` (the probe needs catch_unwind). Still a CI
-    # performance build (fat LTO + one codegen unit). A dedicated build, not the
-    # a53 reuse, so it isn't tied to any specific core's tuning. Independent of
-    # the per-core matrix above, so it runs in parallel.
+    # target-cpu, default features (webgl on, as on the desktop). Its own build
+    # rather than the a53 reuse, so no core's tuning leaks in.
     runs-on: ubuntu-22.04-arm
     # Same floor as the per-core builds; a manual install lands on the same
     # firmwares.
@@ -284,8 +276,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           set -eux
-          # Default features (webgl ON) + panic=unwind (the default), so the
-          # surfman probe's catch_unwind works on EGL 1.4 devices.
+          # Default features, so webgl is ON here unlike the per-core builds.
           cargo build --release
           df -h /
 

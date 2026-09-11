@@ -1,0 +1,333 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>webgl2 feature probe</title>
+<!-- What a game engine can actually count on: the WebGL 2 calls three.js, Pixi
+     and Phaser reach for, and the platform APIs an emulator port needs (workers,
+     IndexedDB, SharedArrayBuffer). Every probe is beaconed as name=ok|FAIL so a
+     headless run produces the compatibility list. Run with tests/serve.py. -->
+<style>
+  body { margin: 0; font: 13px monospace; background: #fff; color: #000 }
+  #log { padding: 4px; white-space: pre-wrap }
+  .bad { color: #c00 }
+</style>
+<pre id="log"></pre>
+<canvas id="c" width="64" height="64" style="display:none"></canvas>
+<script>
+  var out = document.getElementById('log');
+
+  function log(msg) {
+    var line = document.createElement('span');
+    line.textContent = msg + '\n';
+    if (/FAIL/.test(msg)) line.className = 'bad';
+    out.appendChild(line);
+    fetch('/report?page=webgl2&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  /// Each probe returns truthy for a pass; a throw is a failure, not a crash.
+  /// A failure carries the GL error that caused it, or the plain verdict.
+  function group(name, probes) {
+    var parts = [];
+    for (var key in probes) {
+      var verdict;
+      try {
+        if (gl) gl.getError();
+        var result = probes[key]();
+        verdict = typeof result === 'string' ? result : result ? 'ok' : 'FAIL';
+      } catch (e) {
+        verdict = 'THREW';
+      }
+      parts.push(key + '=' + verdict);
+    }
+    log(name + ' ' + parts.join(' '));
+  }
+
+  /// `true`, or the failing GL error by name for the beacon to carry.
+  function glOk() {
+    var code = gl.getError();
+    return code === 0 ? true : 'FAIL' + errorName(code);
+  }
+
+  function errorName(code) {
+    if (!code) return '';
+    var names = {
+      0x0500: ':INVALID_ENUM', 0x0501: ':INVALID_VALUE', 0x0502: ':INVALID_OPERATION',
+      0x0505: ':OUT_OF_MEMORY', 0x0506: ':INVALID_FRAMEBUFFER_OPERATION'
+    };
+    return names[code] || ':' + code;
+  }
+
+  var gl = document.getElementById('c').getContext('webgl2');
+  log('context webgl2=' + (gl ? 'ok' : 'FAIL'));
+
+  if (gl) {
+    log('info version=' + JSON.stringify(gl.getParameter(gl.VERSION))
+        + ' glsl=' + JSON.stringify(gl.getParameter(gl.SHADING_LANGUAGE_VERSION))
+        // Separates "the enum is missing" from "the enum is rejected".
+        + ' halffloat=' + gl.HALF_FLOAT + ' rgba16f=' + gl.RGBA16F);
+    log('limits maxtex=' + gl.getParameter(gl.MAX_TEXTURE_SIZE)
+        + ' units=' + gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS)
+        + ' varyings=' + gl.getParameter(gl.MAX_VARYING_COMPONENTS)
+        + ' drawbuf=' + gl.getParameter(gl.MAX_DRAW_BUFFERS)
+        + ' samples=' + gl.getParameter(gl.MAX_SAMPLES)
+        + ' uboslots=' + gl.getParameter(gl.MAX_UNIFORM_BUFFER_BINDINGS));
+
+    var exts = gl.getSupportedExtensions() || [];
+    log('extensions count=' + exts.length);
+    log('extlist ' + (exts.join(',') || 'none'));
+
+    // GLSL ES 3.00 is what every WebGL 2 renderer emits; a failure here means
+    // the engine falls back to its WebGL 1 path at best.
+    function compile(type, src) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      var ok = gl.getShaderParameter(s, gl.COMPILE_STATUS);
+      if (!ok) log('shaderlog ' + JSON.stringify(gl.getShaderInfoLog(s) || ''));
+      return ok ? s : null;
+    }
+
+    var vs300 = compile(gl.VERTEX_SHADER,
+      '#version 300 es\nin vec2 p; out vec2 uv;\nvoid main(){ uv=p; gl_Position=vec4(p,0.0,1.0); }');
+    var fs300 = compile(gl.FRAGMENT_SHADER,
+      '#version 300 es\nprecision mediump float; in vec2 uv; out vec4 o;\n' +
+      'uniform Block { vec4 tint; };\nvoid main(){ o=vec4(uv,0.0,1.0)*tint; }');
+    var prog = null;
+    if (vs300 && fs300) {
+      prog = gl.createProgram();
+      gl.attachShader(prog, vs300);
+      gl.attachShader(prog, fs300);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        log('linklog ' + JSON.stringify(gl.getProgramInfoLog(prog) || ''));
+        prog = null;
+      }
+    }
+    group('glsl3', {
+      vertex: function () { return vs300; },
+      fragment: function () { return fs300; },
+      link: function () { return prog; }
+    });
+
+    group('core', {
+      vao: function () {
+        var v = gl.createVertexArray();
+        gl.bindVertexArray(v);
+        gl.bindVertexArray(null);
+        return v;
+      },
+      instancing: function () {
+        var b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(8), gl.STATIC_DRAW);
+        gl.vertexAttribDivisor(0, 1);
+        gl.vertexAttribDivisor(0, 0);
+        return glOk();
+      },
+      ubo: function () {
+        if (!prog) return false;
+        var index = gl.getUniformBlockIndex(prog, 'Block');
+        var b = gl.createBuffer();
+        gl.bindBuffer(gl.UNIFORM_BUFFER, b);
+        gl.bufferData(gl.UNIFORM_BUFFER, 16, gl.DYNAMIC_DRAW);
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, b);
+        gl.uniformBlockBinding(prog, index, 0);
+        return index === gl.INVALID_INDEX ? 'FAIL:NO_BLOCK' : glOk();
+      },
+      sampler: function () {
+        var s = gl.createSampler();
+        gl.bindSampler(0, s);
+        gl.bindSampler(0, null);
+        return s;
+      },
+      query: function () { return gl.createQuery(); },
+      sync: function () { return gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); },
+      transformfeedback: function () { return gl.createTransformFeedback(); },
+      getbufsubdata: function () {
+        var b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1, 2, 3, 4]), gl.STATIC_DRAW);
+        var read = new Float32Array(4);
+        gl.getBufferSubData(gl.ARRAY_BUFFER, 0, read);
+        return read[2] === 3;
+      }
+    });
+
+    group('textures', {
+      tex3d: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_3D, t);
+        gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, 2, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        return glOk();
+      },
+      texarray: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, t);
+        gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, 2, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        return glOk();
+      },
+      storage: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 4, 4);
+        return glOk();
+      },
+      depth: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, 4, 4, 0,
+                      gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+        return glOk();
+      },
+      half: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 4, 4, 0, gl.RGBA, gl.HALF_FLOAT, null);
+        return glOk();
+      },
+      float: function () {
+        var t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, 4, 0, gl.RGBA, gl.FLOAT, null);
+        return glOk();
+      },
+      // Every HDR/postprocessing path in three.js asks for this by name.
+      floatrender: function () { return gl.getExtension('EXT_color_buffer_float'); },
+      potmip: function () { return mipmap(8, 8); },
+      npotmip: function () { return mipmap(5, 3); }
+    });
+
+    function mipmap(w, h) {
+      var t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      return glOk();
+    }
+
+    function colorFbo(size) {
+      var fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      var t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, size, size);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return fb;
+    }
+
+    group('framebuffer', {
+      mrt: function () {
+        var fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        for (var i = 0; i < 2; i++) {
+          var t = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, t);
+          gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 4, 4);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, t, 0);
+        }
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+        var complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return complete;
+      },
+      multisample: function () {
+        var rb = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, 4, gl.RGBA8, 4, 4);
+        return glOk();
+      },
+      blit: function () {
+        // Between two FBOs: blitting the default framebuffer onto itself is
+        // INVALID_OPERATION, which would say nothing about support.
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, colorFbo(4));
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, colorFbo(4));
+        gl.blitFramebuffer(0, 0, 4, 4, 0, 0, 4, 4, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        var ok = glOk();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return ok;
+      },
+      invalidate: function () {
+        gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
+        return glOk();
+      }
+    });
+
+    // Losing the context is how a handheld reports GPU pressure; an engine that
+    // never hears about it draws to nothing forever.
+    group('context-loss', {
+      loseext: function () { return gl.getExtension('WEBGL_lose_context'); },
+      event: function () { return 'onwebglcontextlost' in document.getElementById('c'); }
+    });
+  }
+
+  group('platform', {
+    gamepad: function () { return navigator.getGamepads; },
+    pointerlock: function () { return 'requestPointerLock' in Element.prototype; },
+    fullscreen: function () { return 'requestFullscreen' in Element.prototype; },
+    offscreen: function () { return typeof OffscreenCanvas !== 'undefined'; },
+    worker: function () { return typeof Worker !== 'undefined'; },
+    sab: function () { return typeof SharedArrayBuffer !== 'undefined'; },
+    wasm: function () { return typeof WebAssembly === 'object'; },
+    wasmstream: function () { return WebAssembly && WebAssembly.instantiateStreaming; },
+    indexeddb: function () { return typeof indexedDB !== 'undefined'; },
+    localstorage: function () { return typeof localStorage !== 'undefined'; },
+    audiocontext: function () { return typeof AudioContext !== 'undefined'; },
+    fetchrange: function () { return typeof fetch !== 'undefined'; },
+    performancenow: function () { return typeof performance.now === 'function'; },
+    visibility: function () { return typeof document.hidden === 'boolean'; }
+  });
+
+  // IndexedDB is where an emulator keeps its saves, and `typeof` says nothing
+  // about whether a store can actually be opened.
+  (function () {
+    if (typeof indexedDB === 'undefined') return;
+    var request;
+    try {
+      request = indexedDB.open('retsurf-probe', 1);
+    } catch (e) {
+      log('idb open=THREW');
+      return;
+    }
+    request.onupgradeneeded = function () {
+      request.result.createObjectStore('saves');
+    };
+    request.onerror = function () { log('idb open=FAIL'); };
+    request.onsuccess = function () {
+      var db = request.result;
+      try {
+        var tx = db.transaction('saves', 'readwrite');
+        tx.objectStore('saves').put(new Uint8Array([1, 2, 3]), 'slot0');
+        tx.oncomplete = function () { log('idb open=ok write=ok'); };
+        tx.onerror = function () { log('idb open=ok write=FAIL'); };
+      } catch (e) {
+        log('idb open=ok write=THREW');
+      }
+    };
+  })();
+
+  // Basis/KTX2 transcoders hand a compiled module to a worker, so a clone
+  // failure here stops an engine loading compressed textures at all.
+  (function () {
+    if (typeof Worker === 'undefined' || typeof WebAssembly !== 'object') return;
+    var worker = new Worker('webgl2-worker.js');
+    var probes = {
+      plain: function () { return { hello: 1 }; },
+      buffer: function () { return new ArrayBuffer(8); },
+      // Magic + version: the smallest module that compiles.
+      module: function () {
+        return new WebAssembly.Module(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]));
+      }
+    };
+    var parts = [];
+    for (var key in probes) {
+      try {
+        worker.postMessage(probes[key]());
+        parts.push(key + '=ok');
+      } catch (e) {
+        parts.push(key + '=' + (e.name || 'THREW'));
+      }
+    }
+    log('postmessage ' + parts.join(' '));
+  })();
+
+  log('done');
+</script>

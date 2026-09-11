@@ -89,9 +89,9 @@ it needs llvmpipe on the device and does a CPU copy every frame.
 ### Pitfalls during Path A (the two-GL-context era)
 
 These showed up while Path A ran SDL's context and surfman's context together in one
-thread. Path B uses a single context, so #2 no longer applies and #1 and #3 are
-precautionary. #4 still applies, because `connection()` still calls
-`surfman::Connection::new()`.
+thread. Path B uses a single context, and the WebGL composite path now wraps that one
+rather than opening its own, so #4 is gone with `Connection::new()` and the rest are
+precautionary — #2 most of all, since surfman does still call `eglMakeCurrent`.
 
 1. eglBindAPI clash. SDL's GLES context versus surfman's desktop-GL software context
    caused a startup panic. Fixed by forcing `SURFMAN_FORCE_GLES=1` so both stacks are GLES.
@@ -123,10 +123,10 @@ just isn't there. Servo's `register_rendering_context` hard-`expect()`s a surfma
 
 The fix has two parts:
 
-- `src/platform/render/sdl.rs`: `connection()` is now optional. `surfman::Connection::new()`
-  is wrapped in `catch_unwind`, since surfman panics rather than returning `Err` on
-  missing EGL symbols. Capable platforms (desktop, EGL 1.5) keep a real connection and
-  WebGL; EGL 1.4 devices get `None`.
+- `src/platform/render/sdl.rs`: `connection()` is now optional, and
+  `src/platform/render/webgl.rs` builds it from SDL's own `EGLDisplay` rather than
+  through `Connection::new()` — so nothing calls `eglGetPlatformDisplay` and EGL 1.4
+  is no longer the deciding factor. Where SDL is not on EGL, `connection()` is `None`.
 - `components/paint/paint.rs` in our Servo fork (pinned via `[patch.crates-io]`,
   see `docs/SERVO_PATCH.md`): `register_rendering_context` treats the connection as
   optional instead of calling `.expect()`. WebGL is disabled when the connection is
