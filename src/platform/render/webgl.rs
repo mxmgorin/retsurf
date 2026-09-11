@@ -10,7 +10,7 @@
 
 use euclid::default::Size2D;
 use std::cell::RefCell;
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void, CStr};
 use std::mem;
 use surfman::{Connection, Context, Device, Surface, SurfaceTexture};
 
@@ -45,7 +45,8 @@ impl FrontBuffers {
     /// Must run with SDL's context current: every handle below is read off it,
     /// and surfman loads its GL entry points from it. `None` costs WebGL only.
     pub fn new(get_proc: impl Fn(&str) -> *const c_void) -> Option<Self> {
-        let egl = EglState::current(get_proc)?;
+        let egl = EglState::current(&get_proc)?;
+        egl.log_image_extensions(&get_proc);
         let connection = connection(&egl)?;
         let adapter = connection.create_adapter().ok()?;
         let device = match connection.create_device(&adapter) {
@@ -120,7 +121,61 @@ impl EglState {
     /// `None` when SDL is not on EGL (desktop GLX). Goes through SDL's loader
     /// because it falls back to `dlsym`: EGL 1.4 promises `eglGetProcAddress`
     /// for extensions only.
-    fn current(get_proc: impl Fn(&str) -> *const c_void) -> Option<Self> {
+    /// The extensions the composite path is built on. A blob without them cannot
+    /// wrap a surface in an `EGLImageKHR`, and no amount of embedder work helps.
+    fn log_image_extensions(&self, get_proc: &dyn Fn(&str) -> *const c_void) {
+        type EglQueryString = unsafe extern "C" fn(*const c_void, i32) -> *const c_char;
+        const EGL_VENDOR: i32 = 0x3053;
+        const EGL_VERSION: i32 = 0x3054;
+        const EGL_EXTENSIONS: i32 = 0x3055;
+
+        let Some(query) = non_null(get_proc("eglQueryString")) else {
+            log::warn!("gl: no eglQueryString; cannot report EGL extensions");
+            return;
+        };
+        let query: EglQueryString = unsafe { mem::transmute(query) };
+        let read = |name: i32| unsafe {
+            let ptr = query(self.display, name);
+            if ptr.is_null() {
+                String::new()
+            } else {
+                CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            }
+        };
+
+        let extensions = read(EGL_EXTENSIONS);
+        let has = |name: &str| extensions.split_whitespace().any(|e| e == name);
+        log::info!(
+            "gl: EGL {} ({}); image_base={} texture_2d_image={}",
+            read(EGL_VERSION),
+            read(EGL_VENDOR),
+            has("EGL_KHR_image_base"),
+            has("EGL_KHR_gl_texture_2D_image"),
+        );
+
+        // GLES 3 still answers this; a desktop core profile returns null, where
+        // the import path is not the one in use anyway.
+        type GlGetString = unsafe extern "C" fn(u32) -> *const c_char;
+        const GL_EXTENSIONS: u32 = 0x1f03;
+        let gl_extensions = non_null(get_proc("glGetString")).map(|f| unsafe {
+            let f: GlGetString = mem::transmute(f);
+            let ptr = f(GL_EXTENSIONS);
+            if ptr.is_null() {
+                String::new()
+            } else {
+                CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            }
+        });
+        match gl_extensions {
+            Some(list) if !list.is_empty() => log::info!(
+                "gl: OES_EGL_image={}",
+                list.split_whitespace().any(|e| e == "GL_OES_EGL_image")
+            ),
+            _ => log::info!("gl: GL extension list unavailable on this context"),
+        }
+    }
+
+    fn current(get_proc: &dyn Fn(&str) -> *const c_void) -> Option<Self> {
         let display: EglGetCurrent =
             unsafe { mem::transmute(non_null(get_proc("eglGetCurrentDisplay"))?) };
         let context: EglGetCurrent =
