@@ -1,7 +1,7 @@
 From 830ce30571b543ce6bb96019ff482c0d10a83d5e Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Tue, 28 Jul 2026 15:55:18 +0300
-Subject: [PATCH 1/6] retsurf: make the surfman connection optional
+Subject: [PATCH 1/7] retsurf: make the surfman connection optional
 
 ---
  components/paint/paint.rs | 36 +++++++++++++++++++++++-------------

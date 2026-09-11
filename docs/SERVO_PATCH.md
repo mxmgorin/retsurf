@@ -19,7 +19,7 @@ installed under the internals pref. It takes `js::DefineTestingFunctions` by its
 Itanium-mangled symbol name, which MSVC does not produce — it fails to link on
 Windows, so it stays off the line every platform builds.
 
-The three below have a design worth writing down. The rest are short fixes whose
+The four below have a design worth writing down. The rest are short fixes whose
 commit messages carry the reasoning, with the diffs in `patches/`:
 
 - **`components/config`: let the malloc heap's GC thresholds be set by pref.**
@@ -55,9 +55,9 @@ The patch makes both optional: when the connection/adapter is unavailable, it
 skips inserting into `painter_surfman_details_map` instead of panicking. WebGL/
 WebGPU is then disabled for that painter; everything else renders normally.
 
-The matching half is in retsurf: `surfman::Connection::new()` *panics* (rather
-than returning `Err`) when EGL symbols are missing, so `render.rs` wraps it in
-`catch_unwind` and returns `None` on failure.
+The matching half is in retsurf: the connection is built from SDL's own
+`EGLDisplay`, and where SDL is not on EGL there is none to build, so
+`connection()` returns `None`.
 
 ### Why
 
@@ -114,6 +114,38 @@ handheld builds are `--no-default-features`, so `webgl` is off, `connection()`
 returns `None`, nothing is inserted, and the same panic is waiting there. It
 went unnoticed because `panic = "abort"` turns it into an exit code at the very
 end of a run, after the window is already gone.
+
+## `components/paint`: hand the front buffer back when it cannot be sampled
+
+A page that opened a WebGL context killed the process one frame later:
+
+```
+thread 'main' panicked at surfman-0.13.0/src/renderbuffers.rs:30:
+Should have destroyed the FBO renderbuffers with `destroy()`!
+Segmentation fault (core dumped)
+```
+
+`WebGLExternalImages::lock_swap_chain` takes the front buffer out of the swap
+chain and passes it **by value** to `RenderingContext::create_texture`, whose
+default returns `None` — so the `Surface` died inside that default body, and
+surfman panics on any surface not destroyed through its device.
+
+`create_texture` now returns `Result<_, Surface>` (default `Err(surface)`), and
+the caller recycles the surface into the swap chain. A `SurfaceTexture` for the
+compositor to sample needs a GL texture name created in *our* context, which is
+the surfman fork this does not attempt; until then the canvas stays empty.
+
+### Why
+
+- **`Option` cannot express the failure.** The surface is consumed before the
+  embedder can refuse, so the only safe refusal is one that gives it back.
+  surfman's own `create_surface_texture` returns `Result<_, (Error, Surface)>`.
+- **The API already documents the absence.** `create_texture` is a defaulted
+  trait method whose contract is "may not be implemented"; an embedder taking
+  that path should get an empty canvas, not a dead process.
+- **It ships broken.** Every build with the `webgl` feature reaches this:
+  desktop Linux/Windows/macOS, the Android APK, and the arm64 `universal`
+  variant. Only the `a35`/`a53`/`a55` builds, which compile WebGL out, are safe.
 
 ## Cost
 

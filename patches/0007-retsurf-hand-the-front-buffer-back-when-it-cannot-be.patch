@@ -1,0 +1,115 @@
+From 546f48308c0d1b876be92fd26a1f2a869dec7c41 Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 12:26:09 +0300
+Subject: [PATCH 7/7] retsurf: hand the front buffer back when it cannot be
+ sampled
+
+---
+ components/paint/webrender_external_images.rs | 13 +++++++--
+ components/shared/paint/rendering_context.rs  | 27 ++++++++++++-------
+ 2 files changed, 28 insertions(+), 12 deletions(-)
+
+diff --git a/components/paint/webrender_external_images.rs b/components/paint/webrender_external_images.rs
+index 66ad1994df9..0e9ace75154 100644
+--- a/components/paint/webrender_external_images.rs
++++ b/components/paint/webrender_external_images.rs
+@@ -47,9 +47,18 @@ impl WebGLExternalImages {
+             *busy_webgl_context_map.entry(id).or_default() += 1;
+         }
+ 
+-        let front_buffer = self.swap_chains.get(id)?.take_surface()?;
++        let swap_chain = self.swap_chains.get(id)?;
++        let front_buffer = swap_chain.take_surface()?;
+         let (surface_texture, gl_texture, size) =
+-            self.rendering_context.create_texture(front_buffer)?;
++            match self.rendering_context.create_texture(front_buffer) {
++                Ok(texture) => texture,
++                Err(front_buffer) => {
++                    // An embedder that leaves `create_texture` defaulted gets an
++                    // empty canvas; dropping the surface here would panic instead.
++                    swap_chain.recycle_surface(front_buffer);
++                    return None;
++                },
++            };
+         self.locked_front_buffers.insert(id, surface_texture);
+ 
+         Some((gl_texture, size))
+diff --git a/components/shared/paint/rendering_context.rs b/components/shared/paint/rendering_context.rs
+index 6eda5da3941..2eb3b249955 100644
+--- a/components/shared/paint/rendering_context.rs
++++ b/components/shared/paint/rendering_context.rs
+@@ -65,12 +65,13 @@ pub trait RenderingContext {
+     /// Returns the OpenGL or GLES API.
+     fn glow_gl_api(&self) -> Arc<glow::Context>;
+     /// Creates a texture from a given surface and returns the surface texture,
+-    /// the OpenGL texture object, and the size of the surface. Default to `None`.
++    /// the OpenGL texture object, and the size of the surface. A context that
++    /// cannot do this hands the surface back: dropping one panics inside surfman.
+     fn create_texture(
+         &self,
+-        _surface: Surface,
+-    ) -> Option<(SurfaceTexture, u32, UntypedSize2D<i32>)> {
+-        None
++        surface: Surface,
++    ) -> Result<(SurfaceTexture, u32, UntypedSize2D<i32>), Surface> {
++        Err(surface)
+     }
+     /// Destroys the texture and returns the surface. Default to `None`.
+     fn destroy_texture(&self, _surface_texture: SurfaceTexture) -> Option<Surface> {
+@@ -246,7 +247,7 @@ impl SurfmanRenderingContext {
+     fn create_texture(
+         &self,
+         surface: Surface,
+-    ) -> Option<(SurfaceTexture, u32, UntypedSize2D<i32>)> {
++    ) -> Result<(SurfaceTexture, u32, UntypedSize2D<i32>), Surface> {
+         let device = &self.device.borrow();
+         let context = &mut self.context.borrow_mut();
+         let SurfaceInfo {
+@@ -255,12 +256,18 @@ impl SurfmanRenderingContext {
+             ..
+         } = device.surface_info(&surface);
+         debug!("... getting texture for surface {:?}", front_buffer_id);
+-        let surface_texture = device.create_surface_texture(context, surface).unwrap();
++        let surface_texture = match device.create_surface_texture(context, surface) {
++            Ok(surface_texture) => surface_texture,
++            Err((error, surface)) => {
++                warn!("Failed to create a surface texture: {error:?}");
++                return Err(surface);
++            },
++        };
+         let gl_texture = device
+             .surface_texture_object(&surface_texture)
+             .map(|tex| tex.0.get())
+             .unwrap_or(0);
+-        Some((surface_texture, gl_texture, size))
++        Ok((surface_texture, gl_texture, size))
+     }
+ 
+     fn destroy_texture(&self, surface_texture: SurfaceTexture) -> Option<Surface> {
+@@ -383,7 +390,7 @@ impl RenderingContext for SoftwareRenderingContext {
+     fn create_texture(
+         &self,
+         surface: Surface,
+-    ) -> Option<(SurfaceTexture, u32, UntypedSize2D<i32>)> {
++    ) -> Result<(SurfaceTexture, u32, UntypedSize2D<i32>), Surface> {
+         self.surfman_rendering_info.create_texture(surface)
+     }
+ 
+@@ -570,7 +577,7 @@ impl RenderingContext for WindowRenderingContext {
+     fn create_texture(
+         &self,
+         surface: Surface,
+-    ) -> Option<(SurfaceTexture, u32, UntypedSize2D<i32>)> {
++    ) -> Result<(SurfaceTexture, u32, UntypedSize2D<i32>), Surface> {
+         self.surfman_context.create_texture(surface)
+     }
+ 
+@@ -882,7 +889,7 @@ impl RenderingContext for OffscreenRenderingContext {
+     fn create_texture(
+         &self,
+         surface: Surface,
+-    ) -> Option<(SurfaceTexture, u32, UntypedSize2D<i32>)> {
++    ) -> Result<(SurfaceTexture, u32, UntypedSize2D<i32>), Surface> {
+         self.parent_context.create_texture(surface)
+     }
+ 

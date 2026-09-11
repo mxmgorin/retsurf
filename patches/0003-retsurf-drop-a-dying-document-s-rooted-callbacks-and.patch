@@ -1,7 +1,7 @@
 From 8b65ed2b530cb8687987146dd1850b6874570250 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Fri, 28 Aug 2026 10:53:52 +0300
-Subject: [PATCH 3/6] retsurf: drop a dying document's rooted callbacks and
+Subject: [PATCH 3/7] retsurf: drop a dying document's rooted callbacks and
  promises
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
