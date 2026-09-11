@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>webgl probe</title>
+<!-- Probe for the WebGL path: does a context exist, does it draw, and does the
+     result reach the compositor. The canvas clears to magenta and spins a green
+     triangle, so a screenshot separates "no context" (white) from "context but
+     never composited" (also white/black) from "working" (magenta). Game-relevant
+     APIs are beaconed alongside. Run headless with tests/serve.py. -->
+<style>
+  body { margin: 0; font: 14px monospace; background: #fff; color: #000 }
+  #log { padding: 4px; white-space: pre }
+  canvas { display: block; border: 2px solid #000 }
+</style>
+<pre id="log"></pre>
+<canvas id="c" width="320" height="200"></canvas>
+<script>
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=webgl&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  log('api'
+      + ' gamepad=' + (navigator.getGamepads ? 'yes' : 'MISSING')
+      + ' wasm=' + (typeof WebAssembly === 'object' ? 'yes' : 'MISSING')
+      + ' pointerlock=' + ('requestPointerLock' in Element.prototype ? 'yes' : 'MISSING')
+      + ' fullscreen=' + ('requestFullscreen' in Element.prototype ? 'yes' : 'MISSING')
+      + ' offscreen=' + (typeof OffscreenCanvas !== 'undefined' ? 'yes' : 'MISSING'));
+
+  var c = document.getElementById('c');
+  var gl = null, version = 'none';
+  try { gl = c.getContext('webgl2'); version = gl ? 'webgl2' : version; } catch (e) {}
+  if (!gl) {
+    try { gl = c.getContext('webgl'); version = gl ? 'webgl1' : version; } catch (e) {}
+  }
+  log('context which=' + version);
+
+  if (!gl) {
+    log('result state=no-context');
+  } else {
+    log('info version=' + JSON.stringify(gl.getParameter(gl.VERSION))
+        + ' renderer=' + JSON.stringify(gl.getParameter(gl.RENDERER))
+        + ' maxtex=' + gl.getParameter(gl.MAX_TEXTURE_SIZE));
+
+    var vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, 'attribute vec2 p; uniform float a;' +
+      'void main(){ float s=sin(a), c=cos(a);' +
+      'gl_Position=vec4(p.x*c-p.y*s, p.x*s+p.y*c, 0.0, 1.0); }');
+    gl.compileShader(vs);
+    var fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, 'precision mediump float; void main(){ gl_FragColor=vec4(0.0,1.0,0.0,1.0); }');
+    gl.compileShader(fs);
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    log('shader vs=' + gl.getShaderParameter(vs, gl.COMPILE_STATUS)
+        + ' fs=' + gl.getShaderParameter(fs, gl.COMPILE_STATUS)
+        + ' link=' + gl.getProgramParameter(prog, gl.LINK_STATUS));
+
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0.7, -0.7, -0.5, 0.7, -0.5]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    var angle = gl.getUniformLocation(prog, 'a');
+    gl.useProgram(prog);
+
+    // Magenta clear + one frame, then read back: proves the GL side works even
+    // if nothing ever reaches the screen.
+    gl.clearColor(1, 0, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    var px = new Uint8Array(4);
+    gl.readPixels(4, 4, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    log('readback rgba=' + px[0] + '.' + px[1] + '.' + px[2] + '.' + px[3]
+        + ' expect=255.0.255.255 error=' + gl.getError());
+
+    var frames = 0, t0 = performance.now(), last = t0;
+    (function tick(now) {
+      frames++;
+      gl.clearColor(1, 0, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1f(angle, frames * 0.05);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (now - last >= 2000) {
+        log('fps frames=' + frames + ' fps=' + (frames * 1000 / (now - t0)).toFixed(1));
+        last = now;
+      }
+      requestAnimationFrame(tick);
+    })(t0);
+  }
+</script>
