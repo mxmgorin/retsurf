@@ -7,6 +7,9 @@ its counters and this server timestamps them to stdout.
     python3 tests/serve.py 8099
     # then point [browser] home_page at http://127.0.0.1:8099/<page>.html
 
+    python3 tests/serve.py 8099 0.0.0.0
+    # a handheld on the LAN can reach this one; the host firewall has to allow it
+
 Beacons are a no-op against any other static server (they just 404).
 
 /tone.wav is synthesized at startup (441 Hz, 3 s, stereo, peak 0.5) and served
@@ -32,6 +35,8 @@ import urllib.parse
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pages")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
+# Loopback by default; a device on the LAN needs an address it can route to.
+BIND = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
 START = time.time()
 
 TONE_HZ = 441.0
@@ -123,6 +128,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
-    print(f"serving {ROOT} on http://127.0.0.1:{PORT}", flush=True)
+with socketserver.TCPServer((BIND, PORT), Handler) as httpd:
+    print(f"serving {ROOT} on http://{BIND}:{PORT}", flush=True)
     httpd.serve_forever()
