@@ -302,8 +302,8 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "fat"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
           CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
-          # webgl off, so the surfman probe — our only catch_unwind — is gone and
-          # unwind tables with it. Same trade as the aarch64 handheld build.
+          # panic=abort drops the unwind tables for a smaller binary, as on the
+          # aarch64 per-core builds; RETSURF_PANIC_FILE still logs the panic.
           CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux

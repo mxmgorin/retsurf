@@ -16,9 +16,8 @@ crate-type = ["lib"]
 
 [features]
 default = ["webgl"]
-# WebGL/WebGPU through a surfman connection over SDL's own EGL display. surfman
-# asks Mali blobs for a desktop-GL config and is refused, so the handheld build
-# turns this off; `servo/webgl` then leaves the WebGL thread out of the binary.
+# WebGL/WebGPU through a surfman connection over SDL's own EGL display. Off, it
+# leaves the engine's WebGL thread out — what the EGL-less software build wants.
 webgl = ["servo/webgl"]
 # Software rendering end to end, for devices with no GPU at all (Miyoo Mini):
 # swgl rasterizes the page, SDL's own renderer paints the chrome. Opt-in because

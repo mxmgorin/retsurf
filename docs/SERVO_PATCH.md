@@ -109,11 +109,11 @@ longer asserts.
 
 ### Why
 
-This is that patch's missing half, and it is **not** software-only: the aarch64
-handheld builds are `--no-default-features`, so `webgl` is off, `connection()`
-returns `None`, nothing is inserted, and the same panic is waiting there. It
-went unnoticed because `panic = "abort"` turns it into an exit code at the very
-end of a run, after the window is already gone.
+This is that patch's missing half, and it is **not** software-only: any target
+where `connection()` returns `None` — SDL not on EGL, or a blob the composite
+path cannot use — inserts nothing and has the same panic waiting. It went
+unnoticed because `panic = "abort"` turns it into an exit code at the very end
+of a run, after the window is already gone.
 
 ## `components/paint`: hand the front buffer back when it cannot be sampled
 

@@ -165,8 +165,8 @@ docker run --rm -i --network host \
     export PKG_CONFIG_LIBDIR="/opt/sysroot/usr/lib/$LIBDIR/pkgconfig"
     export CARGO_PROFILE_RELEASE_LTO="$LTO"
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
-    # webgl off, so the surfman probe -- our only catch_unwind -- is gone and
-    # unwind tables with it. Same trade as the aarch64 handheld build.
+    # panic=abort drops the unwind tables for a smaller binary, as on the
+    # aarch64 per-core builds; RETSURF_PANIC_FILE still logs the panic.
     export CARGO_PROFILE_RELEASE_PANIC=abort
     # Size over speed for the bulk of the Rust: the engine's code is cold and
     # there is a lot of it. The rasterizers keep -O3, see Cargo.toml.

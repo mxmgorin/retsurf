@@ -134,15 +134,12 @@ The fix has two parts:
   optional instead of calling `.expect()`. WebGL is disabled when the connection is
   absent, but everything else renders fine.
 
-WebGL on EGL 1.4 would need a surfman patch to fall back to `eglGetDisplay` (EGL 1.0), or
-to wrap SDL's current EGL display.
-
-Since 2026-08-17 Servo also has a `webgl` cargo feature, so the handheld build leaves the
-engine's WebGL out of the binary instead of shipping a WebGL that can never get a
-connection: retsurf's own `webgl` feature (default on, off under `--no-default-features`)
-enables `servo/webgl`. The patch above still matters for the *default* build on a device
-whose driver can't provide a connection — an Android GPU, or a desktop build run on
-EGL 1.4.
+Wrapping SDL's current EGL display is the route that was taken, and it carries WebGL on
+EGL 1.4 too: measured on a Mali-G31 blob, with the surfman fork supplying the GLES config
+bit. So every aarch64 build ships `webgl` (retsurf's own feature, which enables
+`servo/webgl`); only the armhf/software targets turn it off, having no EGL at all. The
+patch above still matters wherever the driver can't provide a connection, since WebGL then
+goes quiet rather than taking the process with it.
 
 ## Running it
 
