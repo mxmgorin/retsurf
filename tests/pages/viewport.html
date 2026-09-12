@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>viewport probe</title>
+<!-- What a page is given to lay out in, and what that costs a canvas. A game
+     sizes its drawing buffer as CSS pixels times the device pixel ratio, so the
+     two numbers decide both whether its layout fits and how many pixels it has
+     to fill. The panel is 640x480; anything below that in CSS pixels is what the
+     chrome took, and the ratio is what the embedder chose. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #eee; font: 13px monospace }
+  #log { padding: 6px; white-space: pre }
+  canvas { display: block; width: 100%; height: 40px; background: #248 }
+</style>
+<pre id="log"></pre>
+<canvas id="c"></canvas>
+<script>
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=viewport&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  // Sampled twice: the embedder may install its scale after the first frame, and
+  // a page that reads at parse time would record the ratio it had before that.
+  function sample(tag) {
+    var d = window.devicePixelRatio;
+    log(tag + ' inner=' + window.innerWidth + 'x' + window.innerHeight
+        + ' dpr=' + d
+        + ' screen=' + screen.width + 'x' + screen.height
+        + ' outer=' + window.outerWidth + 'x' + window.outerHeight);
+  }
+  setTimeout(function () { sample('late'); }, 3000);
+
+  var dpr = window.devicePixelRatio;
+  var c = document.getElementById('c');
+  // The idiom every engine uses: CSS size times the ratio is the backing store.
+  var rect = c.getBoundingClientRect();
+  c.width = Math.round(rect.width * dpr);
+  c.height = Math.round(rect.height * dpr);
+
+  log('view'
+      + ' inner=' + window.innerWidth + 'x' + window.innerHeight
+      + ' dpr=' + dpr
+      + ' screen=' + screen.width + 'x' + screen.height
+      + ' device=' + Math.round(window.innerWidth * dpr) + 'x'
+                   + Math.round(window.innerHeight * dpr));
+  log('canvas'
+      + ' css=' + Math.round(rect.width) + 'x' + Math.round(rect.height)
+      + ' backing=' + c.width + 'x' + c.height);
+  // What a layout written for a desktop would get: the breakpoints most games and
+  // sites branch on.
+  log('fits'
+      + ' w1280=' + (window.innerWidth >= 1280)
+      + ' w1024=' + (window.innerWidth >= 1024)
+      + ' w768=' + (window.innerWidth >= 768)
+      + ' w640=' + (window.innerWidth >= 640));
+</script>

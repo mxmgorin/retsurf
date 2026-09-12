@@ -48,7 +48,7 @@ const ASSUMED_PANEL_INTERVAL: Duration = Duration::from_micros(16_667);
 /// The window, its renderer, and the egui drawing the chrome — one bundle,
 /// because which renderer came up decides all three.
 pub struct AppWindow {
-    _video_subsystem: VideoSubsystem,
+    video_subsystem: VideoSubsystem,
     backend: Backend,
     /// The size the window opened at — what [`Self::remembered_size`] measures against.
     initial_size: (u32, u32),
@@ -84,7 +84,7 @@ impl AppWindow {
         ctx_init(ctx);
         apply_feathering(ctx, software);
         let mut window = Self {
-            _video_subsystem: video_subsystem,
+            video_subsystem,
             backend,
             initial_size: (0, 0),
             #[cfg(feature = "software")]
@@ -235,6 +235,39 @@ impl AppWindow {
     /// browser's rendering context are sized in.
     pub fn drawable_size(&self) -> (u32, u32) {
         self.sdl2_window().drawable_size()
+    }
+
+    /// The panel this window is on, in device pixels, and the window's own rect
+    /// within it — what the page reads as `screen` and `outerWidth`. SDL reports
+    /// display bounds in logical units, so they take the window's own ratio.
+    pub fn screen_geometry(&self) -> ((u32, u32), (i32, i32, u32, u32)) {
+        let window = self.sdl2_window();
+        let (logical_w, logical_h) = window.size();
+        let (drawable_w, drawable_h) = window.drawable_size();
+        let ratio = |logical: u32, drawable: u32, value: i32| match logical {
+            0 => value,
+            _ => (value as f64 * drawable as f64 / logical as f64).round() as i32,
+        };
+        let screen = window
+            .display_index()
+            .and_then(|index| self.video_subsystem.display_bounds(index))
+            .map(|bounds| {
+                (
+                    ratio(logical_w, drawable_w, bounds.width() as i32).max(1) as u32,
+                    ratio(logical_h, drawable_h, bounds.height() as i32).max(1) as u32,
+                )
+            })
+            .unwrap_or((drawable_w, drawable_h));
+        let (x, y) = window.position();
+        (
+            screen,
+            (
+                ratio(logical_w, drawable_w, x),
+                ratio(logical_h, drawable_h, y),
+                drawable_w,
+                drawable_h,
+            ),
+        )
     }
 
     /// The size to reopen at: `None` unless the user resized the window — a

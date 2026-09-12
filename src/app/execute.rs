@@ -18,7 +18,10 @@ impl App {
             AppCommand::Shutdown => self.shutdown(),
             // On a window resize, size the browser to the new central area straight
             // away from the actual window (egui's reactive sizing can lag a frame).
-            AppCommand::Resize => self.ui.resize_browser(&self.window, &self.browser),
+            AppCommand::Resize => {
+                self.sync_screen_geometry();
+                self.ui.resize_browser(&self.window, &self.browser);
+            }
             AppCommand::Browser(command) => {
                 self.browser.execute_command(command, &self.config.browser)
             }

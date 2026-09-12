@@ -69,6 +69,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
     }
 
+    /// Without this Servo answers `screen.width`, `availWidth` and `outerWidth`
+    /// with zeroes, and a page that branches on them takes its narrowest layout.
+    fn screen_geometry(&self, _webview: WebView) -> Option<servo::ScreenGeometry> {
+        Some(self.screen.get())
+    }
+
     /// The page enters and leaves fullscreen internally whatever we do, so this
     /// is where the chrome follows it, not a gate on the request.
     fn notify_fullscreen_state_changed(&self, webview: WebView, fullscreen: bool) {

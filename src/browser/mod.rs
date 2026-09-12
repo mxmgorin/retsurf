@@ -193,6 +193,9 @@ struct AppBrowserInner {
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
     forced_dark: Rc<servo::user_contents::UserStyleSheet>,
+    /// The panel and the window on it, for the page's `screen` and `outerWidth`.
+    /// Servo answers those with zeroes unless the delegate supplies them.
+    screen: Cell<servo::ScreenGeometry>,
     /// Latest memory report from Servo (see [`AppBrowser::request_memory_report`]).
     /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
     /// main loop. Drained by [`AppBrowser::take_memory_report`].
@@ -256,6 +259,7 @@ impl AppBrowserInner {
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             forced_dark,
+            screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
         }
     }
@@ -537,6 +541,22 @@ impl AppBrowser {
         }
 
         false
+    }
+
+    /// Tell the page which panel it is on and where the window sits on it. In
+    /// device pixels; Servo divides by the webview's ratio for the CSS values.
+    pub fn set_screen_geometry(&self, screen: (u32, u32), window: (i32, i32, u32, u32)) {
+        let (width, height) = screen;
+        let (x, y, window_width, window_height) = window;
+        self.inner.screen.set(servo::ScreenGeometry {
+            size: euclid::Size2D::new(width as i32, height as i32),
+            // No docks or system bars on any target we ship to.
+            available_size: euclid::Size2D::new(width as i32, height as i32),
+            window_rect: euclid::Box2D::from_origin_and_size(
+                euclid::Point2D::new(x, y),
+                euclid::Size2D::new(window_width as i32, window_height as i32),
+            ),
+        });
     }
 
     /// Follow the chrome's zoom with the page's device pixel ratio. Every open

@@ -151,7 +151,18 @@ impl App {
         })
     }
 
+    /// Hand the page the panel it is on. Only a resize or a move can change it,
+    /// so it is pushed at those rather than measured every frame.
+    pub(super) fn sync_screen_geometry(&self) {
+        let (screen, window) = self.window.screen_geometry();
+        self.browser.set_screen_geometry(screen, window);
+    }
+
     pub fn run(mut self) {
+        self.sync_screen_geometry();
+        // Both before the first tab: a page reads `devicePixelRatio` and
+        // `screen` while it parses, and only some read them again on resize.
+        self.ui.seed_scale(&self.window, &self.browser);
         self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
