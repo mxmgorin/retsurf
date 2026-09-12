@@ -8,7 +8,8 @@ Run retsurf on PortMaster-capable custom firmwares:
 
 - Knulli (Batocera-based), muOS, ROCKNIX, and ArkOS — the last one sets the glibc floor
   the binaries are built to (2.30), and is the only one of the four not yet run on a device
-- aarch64, with a bare kmsdrm display (no X11 or Wayland compositor by default)
+- aarch64, and no two of them reach the screen the same way: Knulli and muOS run no
+  display server at all, ROCKNIX runs Sway, and not one has kmsdrm in its SDL
 - Mali-G31 / G52 GPUs (RK3326 / RK3566), which expose OpenGL ES 3.2
 
 The approach was to get a software renderer working first (Path A), then move to GPU
@@ -26,10 +27,11 @@ Servo's `RenderingContext` auto-selects GLES 3.0 when surfman reports `GLApi::GL
 wayland backend honors `SURFMAN_FORCE_GLES=1`, the pure-EGL backend is GLES-native, and
 the x11 backend is always desktop GL.
 
-The real blocker on bare kmsdrm is that the `sdl2` crate (0.38) exposes no DRM/GBM
-raw-window-handle, only Wayland/Xlib/Win32 and friends. So surfman can't create its own
-context from SDL's window handle on kmsdrm. That means SDL2 has to own the GL context
-itself (it does this over EGL/GBM, like every other SDL2 port) and Servo renders into it.
+The real blocker is that the `sdl2` crate (0.38) exposes a raw-window-handle only for
+Wayland/Xlib/Win32 and friends — nothing for DRM/GBM, and nothing for a firmware's own
+video backend, which is what these devices actually run. So surfman can't create its own
+context from SDL's window handle. That means SDL2 has to own the GL context itself (it
+does this over EGL, like every other SDL2 port) and Servo renders into it.
 
 ## How it works
 
@@ -109,8 +111,8 @@ precautionary — #2 most of all, since surfman does still call `eglMakeCurrent`
    destroyed explicitly`). The symptom is that plain `cargo run` panics while
    `SDL_VIDEODRIVER=wayland cargo run` works. Fixed in `main.rs`: when `WAYLAND_DISPLAY`
    is set and `SDL_VIDEODRIVER` is unset, force SDL to the wayland driver so the two agree.
-   On the handheld there's no `WAYLAND_DISPLAY`, so this is skipped and SDL uses kmsdrm as
-   intended; an explicit `SDL_VIDEODRIVER` always wins.
+   Where there's no `WAYLAND_DISPLAY` this is skipped and SDL takes the firmware's own
+   backend; an explicit `SDL_VIDEODRIVER` always wins.
 
 ### EGL 1.4 versus surfman: the device blocker (fixed)
 

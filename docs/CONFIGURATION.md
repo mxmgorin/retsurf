@@ -323,7 +323,7 @@ files.
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
 | `RETSURF_LOG_FILE` | — | Write logs to this file |
 | `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
-| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`/`kmsdrm`); auto-set to `wayland` on a Wayland desktop |
+| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`, or whatever the firmware's SDL ships); auto-set to `wayland` on a Wayland desktop |
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.

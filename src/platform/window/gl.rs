@@ -58,7 +58,7 @@ fn prefer_egl_on_x11(video_subsystem: &VideoSubsystem, config: &DisplayConfig) -
 
 /// Everything through SDL2's single GL/GLES context: WebRender renders into an
 /// FBO, egui draws its colour texture into the window. SDL2 owns the context
-/// because on bare kmsdrm it cannot hand surfman a usable window handle.
+/// because the sdl2 crate hands surfman no window handle for a vendor backend.
 pub(super) struct GlBackend {
     pub(super) window: sdl2::video::Window,
     // Kept alive for the lifetime of the window; dropping it destroys the context.

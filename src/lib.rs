@@ -78,13 +78,8 @@ pub fn run_app() {
         std::env::set_var("SURFMAN_FORCE_GLES", "1");
     }
 
-    // surfman picks its display backend from the environment (Wayland if
-    // WAYLAND_DISPLAY is set), independent of SDL. If SDL and surfman end up on
-    // different display servers their GL contexts conflict and context creation
-    // fails. On a Wayland desktop SDL still often defaults to x11, so align it to
-    // Wayland. On the handheld (no WAYLAND_DISPLAY) this is skipped and SDL falls
-    // back to its kmsdrm driver as intended. An explicit SDL_VIDEODRIVER wins.
-    // Android has its own SDL video driver and no WAYLAND_DISPLAY, so skip it.
+    // SDL defaults to x11 on a Wayland desktop while surfman reads WAYLAND_DISPLAY,
+    // and two different display servers fail GL context creation.
     #[cfg(not(target_os = "android"))]
     if std::env::var_os("SDL_VIDEODRIVER").is_none()
         && std::env::var_os("WAYLAND_DISPLAY").is_some()
