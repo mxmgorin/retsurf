@@ -8,6 +8,7 @@ use sdl2::video::GLContext;
 use sdl2::VideoSubsystem;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// One GL attribute, refusal as `Err`: sdl2's `gl_attr` setters panic instead,
 /// which under `panic = "abort"` ends the run before the software fallback.
@@ -37,6 +38,19 @@ fn open_gl_window(
         .gl_make_current(&gl_context)
         .map_err(|e| format!("failed to make GL context current: {e}"))?;
     Ok((window, gl_context))
+}
+
+/// The panel's own frame period, or [`super::ASSUMED_PANEL_INTERVAL`] where the
+/// driver reports no rate (Xvfb, and some fbdev firmwares).
+fn panel_interval(video_subsystem: &VideoSubsystem, window: &sdl2::video::Window) -> Duration {
+    window
+        .display_index()
+        .and_then(|index| video_subsystem.current_display_mode(index))
+        .ok()
+        .filter(|mode| mode.refresh_rate > 0)
+        .map_or(super::ASSUMED_PANEL_INTERVAL, |mode| {
+            Duration::from_secs_f64(1.0 / f64::from(mode.refresh_rate))
+        })
 }
 
 /// SDL's own name for "use EGL on X11, not GLX".
@@ -69,9 +83,9 @@ pub(super) struct GlBackend {
     /// egui's handle to the FBO colour texture; the GL name is stable across
     /// resizes, so this stays valid for the program's lifetime.
     pub(super) browser_tex: egui::TextureId,
-    /// Whether the swap actually blocks: fbdev + Mali on muOS refuses the
-    /// interval, and the loop leans on it for pacing.
-    pub(super) vsync: bool,
+    /// One panel refresh. A swap that blocks holds the loop on its own, so this
+    /// only binds where the driver ignores the interval it accepted.
+    pub(super) frame_interval: Duration,
     /// See [`DisplayConfig::dark_last_row`].
     dark_last_row: bool,
 }
@@ -108,13 +122,15 @@ impl GlBackend {
         let vsync = video_subsystem
             .gl_set_swap_interval(sdl2::video::SwapInterval::VSync)
             .is_ok();
+        let frame_interval = panel_interval(video_subsystem, &window);
         log::info!(
-            "gl: vsync {}",
+            "gl: vsync {}, panel {:.1?} a frame",
             if vsync {
                 "on"
             } else {
                 "REFUSED, pacing by hand"
-            }
+            },
+            frame_interval,
         );
 
         // One loader closure feeds glow (egui) and gleam (Servo/WebRender).
@@ -150,7 +166,7 @@ impl GlBackend {
             egui,
             rendering_ctx,
             browser_tex,
-            vsync,
+            frame_interval,
             dark_last_row: config.dark_last_row,
         })
     }

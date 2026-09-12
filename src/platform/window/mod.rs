@@ -42,8 +42,8 @@ impl CompositeTiming {
     }
 }
 
-/// Fallback frame pace when the driver refused vsync: every panel here is 60 Hz.
-const NO_VSYNC_INTERVAL: Duration = Duration::from_micros(16_667);
+/// Stands in where the driver reports no refresh rate: every panel here is 60 Hz.
+const ASSUMED_PANEL_INTERVAL: Duration = Duration::from_micros(16_667);
 
 /// The window, its renderer, and the egui drawing the chrome — one bundle,
 /// because which renderer came up decides all three.
@@ -195,11 +195,12 @@ impl AppWindow {
         }
     }
 
-    /// Minimum frame time; `None` when presenting paces the loop itself (GL with
-    /// the swap interval granted).
+    /// Shortest time between two presents: the panel's period on GL, the frame
+    /// cap on software (`None` there means uncapped, which is what `max_fps = 0`
+    /// asks for).
     pub fn frame_interval(&self) -> Option<Duration> {
         match &self.backend {
-            Backend::Gl(b) => (!b.vsync).then_some(NO_VSYNC_INTERVAL),
+            Backend::Gl(b) => Some(b.frame_interval),
             #[cfg(feature = "software")]
             Backend::Software(b) => b.frame_interval,
         }

@@ -18,6 +18,10 @@ use std::time::{Duration, Instant};
 /// Give up on an idle capture: a handheld has no Esc to cancel with.
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
 
+/// Longest an animating page's pass waits on the queue. Only a wake Servo failed
+/// to send is paid at this rate; a delivered frame returns the wait at once.
+const ANIMATION_WAIT: Duration = Duration::from_millis(16);
+
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
@@ -94,13 +98,15 @@ impl AppEventHandler {
         self.gamepad.reset(commands);
     }
 
+    /// Reports whether this pass waited on the event queue. The loop's other
+    /// pacing ([`crate::app::App::pace_frame`]) is for the passes that did not.
     pub fn wait(
         &mut self,
         window: &mut AppWindow,
         ui: &mut AppUi,
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
-    ) {
+    ) -> bool {
         // The pad drops what it holds either way, so a button held across the
         // transition cannot resolve as both a gesture to bind and a bound action.
         let capturing = ui.settings.capturing();
@@ -110,11 +116,19 @@ impl AppEventHandler {
             self.gamepad.reset(commands);
         }
 
-        // Block for the next event only when idle. When the gamepad is active or
-        // the page is animating, return promptly so the main loop keeps ticking
-        // (vsync caps the rate); blocking here would stall cursor/scroll motion.
-        if !browser.is_animating() && !self.gamepad.is_active() && !self.capture.is_on() {
-            match ui.take_repain_delay() {
+        // An active pad returns promptly: it drives the cursor from a held stick,
+        // which produces no event to wake on, so blocking would stall the motion.
+        let waited = !self.gamepad.is_active() && !self.capture.is_on();
+        if waited {
+            // An animating page waits too: Servo rings the queue through its
+            // event-loop waker on every paint message, so this wakes on the frame.
+            let delay = ui.take_repain_delay();
+            let delay = if browser.is_animating() {
+                Some(delay.map_or(ANIMATION_WAIT, |delay| delay.min(ANIMATION_WAIT)))
+            } else {
+                delay
+            };
+            match delay {
                 Some(delay) => {
                     if let Some(event) =
                         self.event_pump.wait_event_timeout(delay.as_millis() as u32)
@@ -142,11 +156,12 @@ impl AppEventHandler {
                 Tick::GaveUp => commands.push(AppCommand::Settings(SettingsAction::CaptureCancel)),
                 Tick::Waiting => {}
             }
-            return;
+            return waited;
         }
         // Emit this frame's analog state as a command for the router to apply,
         // and fire any hold or repeat whose deadline just passed.
         self.gamepad.tick(commands);
+        waited
     }
 
     /// A raw event taken before egui sees it, which would eat Tab/arrows/Enter/Esc
