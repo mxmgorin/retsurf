@@ -53,6 +53,9 @@ pub struct BrowserState {
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
+    /// Whether the page holds the Fullscreen API. Per tab, so switching tabs and
+    /// closing one need no reset of their own.
+    fullscreen: bool,
 }
 
 impl BrowserState {
@@ -80,6 +83,7 @@ impl Default for BrowserState {
             location: "".into(),
             page_url: "".into(),
             loading: false,
+            fullscreen: false,
         }
     }
 }
@@ -326,6 +330,14 @@ impl AppBrowser {
             .active_webview()
             .map(|tab| tab.animating())
             .unwrap_or(false)
+    }
+
+    /// Whether the active tab's page holds fullscreen, which hides the chrome.
+    #[inline]
+    pub fn is_fullscreen(&self) -> bool {
+        let tabs = self.inner.tabs.borrow();
+        tabs.get(self.inner.active.get())
+            .is_some_and(|t| t.state.fullscreen)
     }
 
     /// Whether the active tab is showing the built-in start page (see [`home`]).

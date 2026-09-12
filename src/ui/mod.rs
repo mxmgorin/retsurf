@@ -121,6 +121,8 @@ struct FrameInputs {
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
     osk_caret: usize,
+    /// Whether the active tab's page holds fullscreen; the chrome hides for it.
+    fullscreen: bool,
 }
 
 pub struct AppUi {
@@ -494,6 +496,7 @@ impl AppUi {
             tab_infos,
             osk_field: self.osk_target_field(),
             osk_caret: self.osk.caret(),
+            fullscreen: browser.is_fullscreen(),
         }
     }
 
@@ -519,11 +522,13 @@ impl AppUi {
     /// Auto-hide forces the bar visible while typing and floats it on either
     /// edge: a strip that came and went would resize the web view, and that is
     /// a full Servo reflow mid-scroll. Otherwise the bar is a panel.
-    fn toolbar_layout(&self) -> ToolbarLayout {
+    fn toolbar_layout(&self, fullscreen: bool) -> ToolbarLayout {
         let typing = self.focus() != Focus::Page;
         ToolbarLayout {
             position: self.toolbar_position,
-            shown: !self.toolbar_autohide || self.toolbar_shown || typing,
+            // Typing still wins: auto-hide forces the bar up for a focused field,
+            // and fullscreen must not leave an invisible address bar to type into.
+            shown: typing || (!fullscreen && (!self.toolbar_autohide || self.toolbar_shown)),
             overlay: self.toolbar_autohide,
         }
     }
@@ -565,13 +570,14 @@ impl AppUi {
                 tab_infos,
                 osk_field,
                 osk_caret,
+                fullscreen,
             } = snapshot;
             let caret_for = |f| (osk_field == f).then_some(osk_caret);
             let ToolbarLayout {
                 position,
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
-            } = self.toolbar_layout();
+            } = self.toolbar_layout(fullscreen);
             // Snapshot the self-update state here (the About tab reads it): the
             // `self.update` borrow can't overlap the `self`-borrowing closure below.
             let update = self.update.snapshot();

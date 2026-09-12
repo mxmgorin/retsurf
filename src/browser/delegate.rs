@@ -69,6 +69,17 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
     }
 
+    /// The page enters and leaves fullscreen internally whatever we do, so this
+    /// is where the chrome follows it, not a gate on the request.
+    fn notify_fullscreen_state_changed(&self, webview: WebView, fullscreen: bool) {
+        if let Some(i) = self.tab_index(webview.id()) {
+            self.tabs.borrow_mut()[i].state.fullscreen = fullscreen;
+        }
+        // The chrome is rebuilt after the wait in the same pass, so without an
+        // event of its own the bar would hide only on whatever came next.
+        self.event_sender.send(UserEvent::BrowserFrameReady);
+    }
+
     /// Servo can't download: navigating to a file URL would just fail to render.
     /// Deny those navigations and queue the URL for our own fetch instead (see
     /// [`crate::data::downloads`]). Everything else proceeds normally.

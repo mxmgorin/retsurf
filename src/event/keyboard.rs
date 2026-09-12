@@ -6,7 +6,7 @@
 //! isn't consumed is forwarded to the page as a Servo keyboard event.
 
 use crate::app::{AppCommand, InputCommand, MenuAction};
-use crate::browser::AppBrowser;
+use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::bindings::Action;
 use crate::ui::{AppUi, Focus};
 use inputbind::sdl::{key_code, mods_for};
@@ -274,6 +274,13 @@ fn on_key_down(
             commands.push(AppCommand::Input(InputCommand::Cancel));
             return;
         }
+    }
+
+    // Esc leaves fullscreen, as it does in every desktop browser — and only
+    // then, since on a page of its own Esc is not a Back key.
+    if key.pressed && matches!(key.kc, Keycode::Escape) && browser.is_fullscreen() {
+        commands.push(AppCommand::Browser(BrowserCommand::ExitFullscreen));
+        return;
     }
 
     // Overlays whose navigation comes from the `nav_*` bindings, so vim hjkl

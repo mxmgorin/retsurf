@@ -100,10 +100,15 @@ impl App {
                 }
                 // B in the editor returns to the start page.
                 Focus::DialEdit => self.ui.close_pins_editor(),
-                // B on the start page goes back like a normal page.
-                Focus::Home | Focus::Page => self
-                    .browser
-                    .execute_command(&BrowserCommand::Back, &self.config.browser),
+                // B on the start page goes back like a normal page — except that
+                // it is also the only way out of a page holding fullscreen.
+                Focus::Home | Focus::Page => {
+                    let command = match self.browser.is_fullscreen() {
+                        true => BrowserCommand::ExitFullscreen,
+                        false => BrowserCommand::Back,
+                    };
+                    self.browser.execute_command(&command, &self.config.browser);
+                }
             },
             InputCommand::ToggleOsk => {
                 if focus == Focus::Menu {

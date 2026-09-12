@@ -1,0 +1,117 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fullscreen probe</title>
+<!-- Probe for the Fullscreen API and what the chrome does with it. Three targets,
+     because Servo's UA rule is `*|*:not(:root):fullscreen` — the root element is
+     excluded from it, so it may reach the screen where a div does not. The canvas
+     animates, which is the case a game actually hits. A screenshot separates
+     "chrome still there" (magenta band) from "page has the panel"; the beacons
+     carry the viewport and the painted rect, since those disagree here. Run
+     headless with tests/serve.py; entering needs a gesture, so the rig clicks. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #c0f; color: #000; font: 14px monospace }
+  #bar { padding: 4px; display: flex; gap: 6px }
+  button { font: 14px monospace; padding: 4px 8px }
+  #target { width: 100%; height: 45%; background: #3f6; display: flex; align-items: center;
+            justify-content: center }
+  #canvas { display: block; background: #036 }
+  #log { padding: 4px; white-space: pre }
+  /* Control: a plain fixed box, to tell "fixed is broken" from "the top layer
+     is". It must paint and measure whether or not fullscreen works. */
+  #fixed { position: fixed; right: 0; bottom: 0; width: 40px; height: 40px; background: #0ff }
+</style>
+<div id="bar">
+  <button id="b-div">div</button>
+  <button id="b-canvas">canvas</button>
+  <button id="b-root">root</button>
+  <button id="b-exit">exit</button>
+</div>
+<div id="target">click me for fullscreen</div>
+<canvas id="canvas" width="320" height="120"></canvas>
+<div id="fixed"></div>
+<pre id="log"></pre>
+<script>
+  var target = document.getElementById('target');
+  var canvas = document.getElementById('canvas');
+  var targets = { div: target, canvas: canvas, root: document.documentElement };
+  var asked = 'div';
+
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=fullscreen&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  function viewport(tag) {
+    // The computed position and the painted rect separate the two ways this can
+    // fail: a UA `:fullscreen` rule that never matched, and one that matched but
+    // whose box is not painted.
+    var el = document.fullscreenElement || targets[asked];
+    var cs = getComputedStyle(el);
+    var rect = el.getBoundingClientRect();
+    log(tag
+        + ' asked=' + asked
+        + ' inner=' + window.innerWidth + 'x' + window.innerHeight
+        + ' element=' + (document.fullscreenElement ? 'set' : 'none')
+        + ' position=' + cs.position
+        + ' rect=' + Math.round(rect.width) + 'x' + Math.round(rect.height)
+        + ' control=' + Math.round(document.getElementById('fixed')
+            .getBoundingClientRect().width));
+  }
+
+  log('api'
+      + ' request=' + ('requestFullscreen' in Element.prototype ? 'yes' : 'MISSING')
+      + ' exit=' + ('exitFullscreen' in Document.prototype ? 'yes' : 'MISSING')
+      + ' enabled=' + document.fullscreenEnabled);
+  viewport('before');
+
+  // Twice: the change event measures the frame it fires in, the later sample
+  // catches the resize the embedder makes in reaction to it.
+  document.addEventListener('fullscreenchange', function () {
+    viewport('change');
+    setTimeout(function () { viewport('after'); }, 2000);
+  });
+  document.addEventListener('fullscreenerror', function () { log('error asked=' + asked); });
+
+  function enter(which) {
+    asked = which;
+    if (document.fullscreenElement) { return; }
+    try {
+      var r = targets[which].requestFullscreen();
+      if (r && r.catch) { r.catch(function (e) { log('reject reason=' + e.name); }); }
+    } catch (e) {
+      log('throw reason=' + e.name);
+    }
+  }
+
+  for (var name in targets) {
+    document.getElementById('b-' + name).addEventListener('click', function (n) {
+      return function (e) { e.stopPropagation(); enter(n); };
+    }(name));
+  }
+  document.getElementById('b-exit').addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.exitFullscreen();
+  });
+
+  // Without a transient activation the request is refused, so the on-load try is
+  // only there to record that; a click anywhere else asks for the div.
+  enter('div');
+  document.addEventListener('click', function () { enter('div'); });
+  document.addEventListener('keydown', function () { enter('div'); });
+
+  // An animating canvas is the case a game hits: if fullscreen blanks it, the
+  // motion stops being visible even though rAF keeps running.
+  var ctx = canvas.getContext('2d');
+  var x = 0, ticks = 0;
+  (function tick() {
+    x = (x + 4) % canvas.width;
+    ctx.fillStyle = '#036';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fd0';
+    ctx.fillRect(x, 40, 40, 40);
+    ticks++;
+    requestAnimationFrame(tick);
+  })();
+  // Proof the page is still running even when nothing of it reaches the screen.
+  setInterval(function () { log('alive ticks=' + ticks); }, 5000);
+</script>

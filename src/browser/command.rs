@@ -16,6 +16,9 @@ pub enum BrowserCommand {
     /// Step the active tab's page zoom along [`ZOOM_LADDER`] (+1 in, -1 out);
     /// `0` resets to the config default.
     Zoom(i32),
+    /// Hand fullscreen back to the chrome. The page keeps its own state per
+    /// spec, so Servo has to be told to leave — redrawing the bar is not enough.
+    ExitFullscreen,
 }
 
 /// The page-zoom steps (Firefox's ladder), walked by [`BrowserCommand::Zoom`].
@@ -35,6 +38,11 @@ impl AppBrowser {
                 }
             }
             BrowserCommand::Reader => self.toggle_reader(),
+            BrowserCommand::ExitFullscreen => {
+                if let Some(webview) = self.inner.active_webview() {
+                    webview.exit_fullscreen();
+                }
+            }
             BrowserCommand::Zoom(delta) => self.zoom(*delta),
             BrowserCommand::Load => {
                 let active = self.inner.active.get();
@@ -72,6 +80,9 @@ impl AppBrowser {
         let active = self.inner.active.get();
         if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
             tab.state.loading = true;
+            // Not left to Servo's notify: a page that never sends it would hide
+            // the chrome for the rest of the session.
+            tab.state.fullscreen = false;
         }
     }
 
