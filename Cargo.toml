@@ -64,14 +64,14 @@ env_logger = "0.11.8"
 # Named off the fork rather than a version plus a patch: no such version is on
 # crates.io, and deps.rs reads that as unresolvable. bundled_freetype, since
 # freetype-sys otherwise outgrows CI's system FreeType; webcrypto gates `window.crypto`.
-servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
 # WebAudio (src/media): our SDL2 backend in place of Servo's silent dummy. Must resolve
 # to the fork like `servo` does, or it registers into a second copy of these crates.
-servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -138,10 +138,10 @@ android_logger = "0.15"
 [patch.crates-io]
 # Every entry names the same source: the Servo crates depend on each other by path,
 # so a mixed graph ends up with two of every crate. Catches transitive refs only.
-servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
-servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
-servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0" }
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }
 # Our surfman: upstream asks eglChooseConfig for a desktop-GL config unconditionally,
 # which no Mali blob has, so every WebGL context failed on the handhelds. Graph-wide,
 # so Servo resolves to the same copy.
