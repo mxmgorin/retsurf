@@ -143,9 +143,43 @@ the surfman fork this does not attempt; until then the canvas stays empty.
 - **The API already documents the absence.** `create_texture` is a defaulted
   trait method whose contract is "may not be implemented"; an embedder taking
   that path should get an empty canvas, not a dead process.
-- **It ships broken.** Every build with the `webgl` feature reaches this:
-  desktop Linux/Windows/macOS, the Android APK, and the arm64 `universal`
-  variant. Only the `a35`/`a53`/`a55` builds, which compile WebGL out, are safe.
+- **It ships broken.** Every build with the `webgl` feature reaches this, which
+  since the per-core builds gained it is every build we ship: desktop
+  Linux/Windows/macOS, the Android APK and all four arm64 variants. Only an
+  armhf/software build, which compiles WebGL out, is safe.
+
+## `components/layout`: an in-flow box that becomes absolutely positioned
+
+A flex or grid container, a `display: flow-root`, or a block-level replaced
+element such as `canvas { display: block }` lost its box when script or a
+stylesheet gave it `position: absolute` or `fixed` after it had been laid out:
+`getBoundingClientRect()` returned `0x0` and nothing painted, while the computed
+`position` and `clientWidth/Height` still read as though the box were there. An
+element created out of flow was fine, so it was the incremental path, not the box.
+
+### Why
+
+`position` carries `rebuild_box` damage, so layout takes
+`BoxDamageAction::TryRebuild` and calls
+`rebuild_box_tree_from_independent_formatting_context` (`components/layout/dom.rs`).
+Every arm there guards against the box kind changing under it — floats check
+`is_floating()`, the out-of-flow arms and `FlexLevelBox::FlexItem` check
+`is_absolutely_positioned()` — except `BlockLevelBox::Independent`, which checked
+only the display and `BlockLevelCreator::new_for_inflow_block_level_element`.
+Neither looks at `position`, so a just-absolutely-positioned element was rebuilt
+in place as an in-flow formatting context and the function returned `true`: no
+ancestor rebuilt, and the box never joined its containing block's out-of-flow
+list. The patch adds the missing guard, which falls back to the ancestor rebuild
+that plain blocks (`SameFormattingContextBlock`) already take.
+
+Floats need no guard: a float stays in its parent's box list, so rebuilding it
+there loses nothing — measured.
+
+This is what blanked a page that entered fullscreen, since Servo's UA rule
+`*|*:not(:root):fullscreen` sets `position: fixed` on the element a page
+fullscreens, and games and modals usually fullscreen a flex wrapper or a canvas.
+`tests/pages/fixed-overlay.html` is the reduction; the analysis, including what
+remains unexplained, is in the workshop notes (`UPSTREAM_SERVO_IFC_OUT_OF_FLOW.md`).
 
 ## Cost
 
