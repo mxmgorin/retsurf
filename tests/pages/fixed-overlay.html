@@ -1,0 +1,169 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fixed overlay probe</title>
+<!-- Narrows which boxes Servo drops when they are restyled out of flow. Each case
+     is one element with one combination; the beacon carries its rect, so a `0x0`
+     names what killed it. This is the shape every modal, lightbox and the UA
+     `:fullscreen` rule use, so it is not an exotic corner.
+     `?paint=flex|block` sets up one still scene instead of the sweep, for a
+     screenshot: the sibling below the restyled box keeps a rect either way, so if
+     it is missing from the shot the failure is in painting, not in layout. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; color: #000; font: 13px monospace }
+  .case { background: #3f6; opacity: 0.35 }
+  /* Two insets and an explicit size — the shape that is known to work. */
+  #two-insets { position: fixed; top: 0; left: 0; width: 200px; height: 100px }
+  /* All four insets, no size: the box is defined by the insets alone. */
+  #insets-only { position: fixed; top: 0; right: 0; bottom: 0; left: 0 }
+  /* All four insets plus a percentage size: over-constrained, and what the UA
+     `:fullscreen` rule asks for. */
+  #insets-and-size { position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+                     width: 100%; height: 100% }
+  /* Percentage size with only the two start insets: not over-constrained. */
+  #size-only { position: fixed; top: 0; left: 0; width: 100%; height: 100% }
+  /* The same as over-constrained, but sized in px rather than per cent. */
+  #insets-and-px { position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+                   width: 300px; height: 200px }
+  /* Out of flow and flex/grid from the start, never restyled: separates "flex is
+     the trigger" from "restyling a flex box is". */
+  #fresh-flex { position: fixed; display: flex; top: 0; left: 0;
+                width: 200px; height: 100px }
+  #fresh-grid { position: fixed; display: grid; top: 0; left: 0;
+                width: 200px; height: 100px }
+
+  /* The restyle cases start life in flow and are made out-of-flow afterwards —
+     the path a modal, a lightbox and the UA `:fullscreen` rule all take. */
+  .was-block { display: block; width: 50%; height: 60px; background: #f93 }
+  .was-flex { display: flex; align-items: center; justify-content: center;
+              width: 50%; height: 60px; background: #f93 }
+  .was-inline-flex { display: inline-flex; width: 50%; height: 60px; background: #f93 }
+  .was-grid { display: grid; width: 50%; height: 60px; background: #f93 }
+  .was-flow-root { display: flow-root; width: 50%; height: 60px; background: #f93 }
+  .to-small { position: fixed !important; top: 0 !important; left: 0 !important;
+              width: 200px !important; height: 100px !important }
+  /* Absolute rather than fixed, to see whether the trigger is out-of-flow in
+     general or the fixed containing block in particular. */
+  .to-abs { position: absolute !important; top: 0 !important; left: 0 !important;
+            width: 200px !important; height: 100px !important }
+  /* Servo's UA `:fullscreen` rule, declaration for declaration, minus the
+     internal `-servo-top-layer` a page cannot set. */
+  .ua-rule { position: fixed !important; top: 0 !important; right: 0 !important;
+             bottom: 0 !important; left: 0 !important; margin: 0 !important;
+             box-sizing: border-box !important; min-width: 0 !important;
+             max-width: none !important; min-height: 0 !important;
+             max-height: none !important; width: 100% !important;
+             height: 100% !important; transform: none !important;
+             object-fit: contain }
+</style>
+<pre id="log"></pre>
+<script>
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=fixed-overlay&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  function size(el) {
+    var r = el.getBoundingClientRect();
+    return Math.round(r.width) + 'x' + Math.round(r.height);
+  }
+
+  // One still scene for a screenshot: a box restyled out of flow, and a plain
+  // sibling after it that never moves.
+  function paintScene(kind) {
+    // `-ua` switches the end style to the full UA `:fullscreen` rule, which is
+    // what a fullscreened element actually gets.
+    var as = /-ua$/.test(kind) ? 'ua-rule' : 'to-small';
+    kind = kind.replace(/-ua$/, '');
+    var box = document.createElement('div');
+    box.className = kind === 'flex' ? 'was-flex' : 'was-block';
+    box.textContent = 'restyled out of flow';
+    document.body.appendChild(box);
+    var sib = document.createElement('div');
+    sib.style.cssText = 'width:60%;height:80px;background:#09f';
+    sib.textContent = 'plain sibling after it';
+    document.body.appendChild(sib);
+    setTimeout(function () {
+      box.classList.add(as);
+      setTimeout(function () {
+        log('paint=' + kind + '&as=' + as + ' box=' + size(box) + ' sibling=' + size(sib));
+      }, 500);
+    }, 1000);
+  }
+
+  // An element laid out in flow and then made out-of-flow: same end style as the
+  // fresh cases, different path to it. Measures a following sibling too.
+  function restyle(name, kind, done) {
+    var isCanvas = kind.indexOf('canvas') === 0;
+    var el = document.createElement(isCanvas ? 'canvas' : 'div');
+    if (isCanvas) {
+      el.width = 200;
+      el.height = 80;
+      // A canvas is inline by default; a page that styles one `display: block`
+      // lands in the broken class instead.
+      el.style.display = kind === 'canvas-block' ? 'block' : '';
+    } else {
+      el.className = kind;
+      el.textContent = 'x';
+    }
+    document.body.appendChild(el);
+    var sib = document.createElement('div');
+    sib.className = 'was-block';
+    document.body.appendChild(sib);
+    setTimeout(function () {
+      var before = size(el);
+      var sibBefore = size(sib);
+      el.classList.add(name);
+      setTimeout(function () {
+        log('restyle=' + name + '&from=' + kind
+            + ' before=' + before + ' after=' + size(el)
+            + ' sibling=' + sibBefore + '>' + size(sib));
+        el.remove();
+        sib.remove();
+        setTimeout(done, 300);
+      }, 400);
+    }, 400);
+  }
+
+  var fresh = ['two-insets', 'insets-only', 'insets-and-size', 'size-only', 'insets-and-px',
+               'fresh-flex', 'fresh-grid'];
+  var restyles = ['to-small', 'to-abs', 'ua-rule'];
+  var kinds = ['was-block', 'was-flex', 'was-inline-flex', 'was-grid', 'was-flow-root',
+               'canvas', 'canvas-block'];
+
+  function sweep() {
+    var i = 0;
+    (function nextFresh() {
+      if (i >= fresh.length) {
+        var pairs = [];
+        restyles.forEach(function (r) {
+          kinds.forEach(function (k) { pairs.push([r, k]); });
+        });
+        var j = 0;
+        (function nextRestyle() {
+          if (j >= pairs.length) { log('done'); return; }
+          var pair = pairs[j++];
+          restyle(pair[0], pair[1], nextRestyle);
+        })();
+        return;
+      }
+      var name = fresh[i++];
+      var el = document.createElement('div');
+      el.id = name;
+      el.className = 'case';
+      document.body.appendChild(el);
+      // One at a time: overlapping full-viewport boxes would hide each other.
+      setTimeout(function () {
+        log('case=' + name + ' rect=' + size(el));
+        el.remove();
+        setTimeout(nextFresh, 300);
+      }, 400);
+    })();
+  }
+
+  var paint = /paint=([\w-]+)/.exec(location.search);
+  if (paint) {
+    paintScene(paint[1]);
+  } else {
+    sweep();
+  }
+</script>

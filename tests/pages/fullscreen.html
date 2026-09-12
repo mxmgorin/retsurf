@@ -15,25 +15,44 @@
   #target { width: 100%; height: 45%; background: #3f6; display: flex; align-items: center;
             justify-content: center }
   #canvas { display: block; background: #036 }
+  /* A plain block target: `#target` is a flex container, and a flex box restyled
+     out of flow loses its box on its own (tests/pages/fixed-overlay.html). This
+     one separates that from anything fullscreen does. */
+  #block { width: 100%; height: 60px; background: #f93 }
   #log { padding: 4px; white-space: pre }
   /* Control: a plain fixed box, to tell "fixed is broken" from "the top layer
      is". It must paint and measure whether or not fullscreen works. */
   #fixed { position: fixed; right: 0; bottom: 0; width: 40px; height: 40px; background: #0ff }
+  /* The UA `:fullscreen` rule's own geometry, applied by hand and without the
+     top layer: if this paints and the real thing does not, the top layer is the
+     difference, not the box. */
+  .ua-geometry { position: fixed !important; top: 0 !important; right: 0 !important;
+                 bottom: 0 !important; left: 0 !important; margin: 0 !important;
+                 box-sizing: border-box !important; width: 100% !important;
+                 height: 100% !important }
 </style>
 <div id="bar">
   <button id="b-div">div</button>
   <button id="b-canvas">canvas</button>
+  <button id="b-block">block</button>
   <button id="b-root">root</button>
+  <button id="b-manual">manual</button>
   <button id="b-exit">exit</button>
 </div>
 <div id="target">click me for fullscreen</div>
 <canvas id="canvas" width="320" height="120"></canvas>
+<div id="block">plain block target</div>
 <div id="fixed"></div>
 <pre id="log"></pre>
 <script>
   var target = document.getElementById('target');
   var canvas = document.getElementById('canvas');
-  var targets = { div: target, canvas: canvas, root: document.documentElement };
+  var targets = {
+    div: target,
+    canvas: canvas,
+    block: document.getElementById('block'),
+    root: document.documentElement,
+  };
   var asked = 'div';
 
   function log(msg) {
@@ -88,6 +107,18 @@
       return function (e) { e.stopPropagation(); enter(n); };
     }(name));
   }
+  // Same geometry, no fullscreen call: isolates the top layer from the box.
+  document.getElementById('b-manual').addEventListener('click', function (e) {
+    e.stopPropagation();
+    target.classList.toggle('ua-geometry');
+    setTimeout(function () {
+      var r = target.getBoundingClientRect();
+      var cs = getComputedStyle(target);
+      log('manual position=' + cs.position
+          + ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height));
+    }, 300);
+  });
+
   document.getElementById('b-exit').addEventListener('click', function (e) {
     e.stopPropagation();
     document.exitFullscreen();
