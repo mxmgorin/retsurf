@@ -97,6 +97,9 @@ pub(super) fn select_all(ctx: &egui::Context, id: egui::Id, char_count: usize) {
     egui::TextEdit::store_state(ctx, id, state);
 }
 
+/// How long the Game Mode entry toast stays before fading.
+const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
+
 /// Toolbar layout decided before the egui closure ([`AppUi::toolbar_layout`]):
 /// these reads borrow all of `self`, which can't overlap `egui.run`.
 struct ToolbarLayout {
@@ -175,6 +178,9 @@ pub struct AppUi {
     /// the chrome hides. Read by [`crate::event::keyboard`] to decide whether to
     /// resolve a key against the bindings or forward it.
     game_mode: bool,
+    /// When Game Mode was entered; the chrome hides with nothing else on screen,
+    /// so a toast names the way out for [`GAME_MODE_TOAST`], then fades.
+    game_mode_toast: Option<Instant>,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -268,6 +274,7 @@ impl AppUi {
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
             game_mode: false,
+            game_mode_toast: None,
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -365,6 +372,7 @@ impl AppUi {
             || self.repaint_pending
             || window.repaint_delay() < Duration::MAX
             || self.cursor_visible_for().is_some()
+            || self.toast_visible_for().is_some()
     }
 
     /// Move the toolbar to a window edge (live config change). The next frame
@@ -494,6 +502,10 @@ impl AppUi {
         if self.memory_reports_wanted() {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
+        }
+        // The Game Mode toast needs one wake at its expiry to be erased.
+        if let Some(left) = self.toast_visible_for() {
+            self.repaint_delay = Some(self.repaint_delay.map_or(left, |d| d.min(left)));
         }
     }
 
@@ -766,6 +778,10 @@ impl AppUi {
                     cursor::paint_cursor(ctx, pos, self.scroll_mode);
                 }
 
+                if self.toast_visible_for().is_some() {
+                    add_game_mode_toast(ctx);
+                }
+
                 // Debug memory overlay (opt-in), drawn last so it sits above
                 // everything; non-interactive, so it never blocks input.
                 if self.memory_overlay {
@@ -845,10 +861,30 @@ impl AppUi {
     /// see it, so a focused address bar would go on eating them.
     pub fn set_game_mode(&mut self, on: bool) {
         self.game_mode = on;
+        self.game_mode_toast = on.then(Instant::now);
         if on {
             drop_egui_focus(&self.egui_ctx);
         }
     }
+
+    /// Time left on the entry toast, or `None` once it has faded.
+    fn toast_visible_for(&self) -> Option<Duration> {
+        self.game_mode_toast
+            .and_then(|t| GAME_MODE_TOAST.checked_sub(t.elapsed()))
+    }
+}
+
+/// The Game Mode entry toast: the chrome just hid, so name the way out.
+fn add_game_mode_toast(ctx: &egui::Context) {
+    egui::Area::new(egui::Id::new("game_mode_toast"))
+        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
+        .order(egui::Order::Foreground)
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label("Game Mode - hold Select or Ctrl+Alt+G to exit");
+            });
+        });
 }
 
 #[cfg(test)]
