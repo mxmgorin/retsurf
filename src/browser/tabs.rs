@@ -46,6 +46,7 @@ impl AppBrowser {
                 .url(url)
                 .hidpi_scale_factor(euclid::Scale::new(self.inner.hidpi.get()))
                 .delegate(self.inner.clone())
+                .gamepad_delegate(self.inner.clone())
                 .user_content_manager(self.inner.user_content.clone())
                 .build();
         if self.inner.default_zoom != 1.0 {

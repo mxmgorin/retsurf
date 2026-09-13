@@ -24,6 +24,14 @@ const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
 /// to send is paid at this rate; a delivered frame returns the wait at once.
 const ANIMATION_WAIT: Duration = Duration::from_millis(16);
 
+/// Cap on one rumble effect, matching Chrome; SDL wants milliseconds.
+const MAX_RUMBLE_MS: f64 = 5000.0;
+
+/// A spec magnitude (0..1) as SDL's u16 motor intensity.
+fn rumble_magnitude(magnitude: f64) -> u16 {
+    (magnitude.clamp(0.0, 1.0) * f64::from(u16::MAX)).round() as u16
+}
+
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
@@ -210,6 +218,43 @@ impl AppEventHandler {
         {
             browser.pad_connected(id, name);
         }
+    }
+
+    /// Play or stop a page's rumble on the pad it named. Every request reports
+    /// success: the engine reads `false` as "superseded, settled elsewhere", so
+    /// a bare failure strands the page's promise; a motorless pad completes.
+    pub fn haptic(&mut self, browser: &AppBrowser, request: servo::GamepadHapticEffectRequest) {
+        use servo::{GamepadHapticEffectRequestType, GamepadHapticEffectType};
+        let controller = browser
+            .pad_instance(request.gamepad_index())
+            .and_then(|id| {
+                self.game_controllers
+                    .iter_mut()
+                    .find(|c| c.instance_id() == id)
+            });
+        let Some(controller) = controller else {
+            log::debug!("rumble: pad slot {} is gone", request.gamepad_index());
+            return request.succeeded();
+        };
+        let (low, high, ms) = match request.request_type() {
+            GamepadHapticEffectRequestType::Play(GamepadHapticEffectType::DualRumble(params)) => {
+                // The spec's strong magnitude is the low-frequency motor. SDL has
+                // no start delay; the effect simply plays now.
+                (
+                    rumble_magnitude(params.strong_magnitude),
+                    rumble_magnitude(params.weak_magnitude),
+                    params.duration.clamp(0.0, MAX_RUMBLE_MS) as u32,
+                )
+            }
+            GamepadHapticEffectRequestType::Stop => (0, 0, 0),
+        };
+        let instance_id = controller.instance_id();
+        match controller.set_rumble(low, high, ms) {
+            Ok(()) => log::debug!("rumble: pad {instance_id} low {low} high {high} for {ms} ms"),
+            // A pad without motors: the effect "completes" silently.
+            Err(err) => log::debug!("rumble unavailable on pad {instance_id}: {err}"),
+        }
+        request.succeeded();
     }
 
     /// A button in Game Mode: through the translator, and to the Gamepad API

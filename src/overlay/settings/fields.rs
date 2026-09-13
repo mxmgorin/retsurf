@@ -258,6 +258,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
     f(S::Input,  "Input",     "Cursor mode",            choice!(input.cursor_mode: CursorMode), true),
     f(S::Input,  "Input",     "Hint badges",            flag!(input.hint_badges), false),
+    f(S::Input,  "Input",     "Gamepad rumble",         flag!(input.haptics), false),
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),

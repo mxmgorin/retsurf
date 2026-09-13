@@ -73,7 +73,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         if !loading {
             for (slot, name) in self.pads.borrow().live() {
                 webview.notify_input_event(servo::InputEvent::Gamepad(
-                    crate::event::gamepad_api::connected(slot, name),
+                    crate::event::gamepad_api::connected(slot, name, self.haptics.get()),
                 ));
             }
         }
@@ -268,6 +268,21 @@ impl servo::WebViewDelegate for AppBrowserInner {
             let response = servo::WebResourceResponse::new(url);
             finish_intercepted(load, response, Vec::new());
         }
+    }
+}
+
+impl servo::GamepadDelegate for AppBrowserInner {
+    /// Queued for the main loop, which owns the SDL controllers this must play
+    /// on (see [`crate::event::handler::AppEventHandler::haptic`]).
+    fn handle_haptic_effect_request(&self, request: servo::GamepadHapticEffectRequest) {
+        if !self.haptics.get() {
+            // Only a document told rumble was supported before the toggle flipped
+            // gets here; "complete" — reporting failure strands its promise.
+            request.succeeded();
+            return;
+        }
+        log::debug!("haptics: queued for pad slot {}", request.gamepad_index());
+        self.haptic_requests.borrow_mut().push(request);
     }
 }
 

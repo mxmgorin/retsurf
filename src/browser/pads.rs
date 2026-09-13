@@ -43,6 +43,12 @@ impl PadSlots {
             .position(|pad| pad.as_ref().is_some_and(|p| p.instance_id == instance_id))
     }
 
+    /// The SDL instance in a slot — the reverse of [`Self::slot_of`], for
+    /// playing a page's rumble on the device it named.
+    pub fn instance_of(&self, slot: usize) -> Option<u32> {
+        self.slots.get(slot)?.as_ref().map(|p| p.instance_id)
+    }
+
     /// Free the slot, reporting which one it was.
     pub fn disconnect(&mut self, instance_id: u32) -> Option<usize> {
         let slot = self.slot_of(instance_id)?;
@@ -86,6 +92,16 @@ mod tests {
         assert_eq!(slots.connect(3, pad("one")), 0);
         assert_eq!(slots.disconnect(3), Some(0));
         assert_eq!(slots.disconnect(3), None);
+    }
+
+    #[test]
+    fn a_slot_resolves_back_to_its_instance() {
+        let mut slots = PadSlots::default();
+        slots.connect(7, pad("one"));
+        assert_eq!(slots.instance_of(0), Some(7));
+        slots.disconnect(7);
+        assert_eq!(slots.instance_of(0), None);
+        assert_eq!(slots.instance_of(3), None);
     }
 
     #[test]

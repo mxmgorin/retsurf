@@ -253,6 +253,12 @@ impl App {
             for request in self.browser.take_download_requests() {
                 self.ui.menu.downloads.start(request, &self.event_sender);
             }
+            // Rumble a page asked for, played here because the main loop owns
+            // the SDL controllers.
+            for request in self.browser.take_haptic_requests() {
+                self.event_handler.haptic(&self.browser, request);
+            }
+
             // Files a page built in JS and handed us whole: ask the signalling
             // pages for them, then save whatever earlier reads returned.
             self.browser.poll_blob_downloads();

@@ -22,16 +22,19 @@ const BOUNDS: GamepadInputBounds = GamepadInputBounds {
     button_bounds: (0.0, 1.0),
 };
 
-pub fn connected(slot: usize, name: String) -> GamepadEvent {
+/// `haptics` is the user's rumble toggle: advertised here so a page that checks
+/// before playing sees the truth. SDL exposes rumble on every pad and reports
+/// failure per call, so a pad without motors simply does nothing.
+pub fn connected(slot: usize, name: String, haptics: bool) -> GamepadEvent {
     GamepadEvent::Connected(
         GamepadIndex(slot),
         name,
         BOUNDS,
-        // SDL exposes rumble on both, and reports failure per call rather than
-        // up front; a pad without motors simply does nothing.
         GamepadSupportedHapticEffects {
-            supports_dual_rumble: true,
-            supports_trigger_rumble: true,
+            supports_dual_rumble: haptics,
+            // Servo has no trigger-rumble effect type to request, so claiming
+            // it would only mislead a page.
+            supports_trigger_rumble: false,
         },
     )
 }
