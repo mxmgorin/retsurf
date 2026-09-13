@@ -297,6 +297,14 @@ analog stick) · `none`.
 Invalid buttons, keys, actions, or gestures are logged and skipped at startup —
 check the log if a binding doesn't respond.
 
+**Upgrades.** The file is written only when it is missing, so an action added in a
+later release would be unreachable in a file written before it. At startup any
+action with *nothing* bound on a device gets its default gestures back there (one
+log line each); a gesture the file already spells is never taken back, and an
+action you rebound is not missing, so your layout stands. The one consequence:
+clearing an action's last gesture doesn't stick — to make an action inert, bind
+it to a gesture you never press rather than removing it.
+
 ## Environment variables
 
 Set at launch; they override paths and control logging without touching the config

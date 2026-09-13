@@ -399,9 +399,34 @@ fn bindings_path() -> String {
     format!("{}bindings.toml", config::data_dir())
 }
 
-/// Load `bindings.toml`, writing the defaults as a template on first run.
+/// Load `bindings.toml`, writing the defaults as a template on first run and
+/// merging in the ones an older file predates (see [`merge_missing_defaults`]).
 pub fn load_store() -> Store {
-    Store::load(bindings_path(), default_store)
+    let mut store = Store::load(bindings_path(), default_store);
+    merge_missing_defaults(&mut store);
+    store
+}
+
+/// Give back the default gestures of an action with no binding at all in that
+/// device's table: the file is written only when absent, so an action added after
+/// a user's first run would otherwise ship unreachable.
+fn merge_missing_defaults(store: &mut Store) {
+    for (table, defaults) in [
+        (&mut store.gamepad, default_gamepad_bindings()),
+        (&mut store.keyboard, default_keyboard_bindings()),
+    ] {
+        // Snapshot first, so every gesture of an unbound action comes back
+        // together — the first insertion would otherwise hide the rest.
+        let bound: Vec<String> = table.values().cloned().collect();
+        let missing: Vec<(String, String)> = defaults
+            .into_iter()
+            .filter(|(gesture, action)| !table.contains_key(gesture) && !bound.contains(action))
+            .collect();
+        for (gesture, action) in missing {
+            log::info!("bindings: `{action}` had nothing bound; restoring `{gesture}`");
+            table.insert(gesture, action);
+        }
+    }
 }
 
 /// Write an edited store back (the settings overlay saving on close).
@@ -505,6 +530,60 @@ mod tests {
             assert!(!gesture.mods.is_plain(), "`{text}` is a plain key");
         }
         assert_eq!(found, 1, "game_mode needs exactly one default key");
+    }
+
+    /// The case this exists for: a file written before `game_mode` existed. It
+    /// is unreachable on both devices until the defaults are merged back.
+    #[test]
+    fn an_action_the_file_predates_gets_its_defaults_back() {
+        let mut store = default_store();
+        store.gamepad.retain(|_, name| name != "game_mode");
+        store.keyboard.retain(|_, name| name != "game_mode");
+        merge_missing_defaults(&mut store);
+        assert_eq!(store, default_store());
+    }
+
+    /// A rebound action is not missing, so the user's choice survives — and the
+    /// *other* device still gets its default, which is how one file can be half
+    /// upgraded (measured on a real one, 2026-09-15).
+    #[test]
+    fn a_rebound_action_is_left_alone_device_by_device() {
+        let mut store = default_store();
+        store.keyboard.retain(|_, name| name != "game_mode");
+        store.keyboard.insert("ctrl+g".into(), "game_mode".into());
+        store.gamepad.retain(|_, name| name != "game_mode");
+        merge_missing_defaults(&mut store);
+        assert_eq!(
+            store.keyboard.get("ctrl+g").map(String::as_str),
+            Some("game_mode")
+        );
+        assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
+        assert_eq!(
+            store.gamepad.get("select+y").map(String::as_str),
+            Some("game_mode")
+        );
+    }
+
+    /// A gesture the file already spells is the user's, whatever it names — the
+    /// merge may never take one back.
+    #[test]
+    fn a_taken_gesture_is_never_reclaimed() {
+        let mut store = default_store();
+        store.gamepad.retain(|_, name| name != "game_mode");
+        store.gamepad.insert("select+y".into(), "reader".into());
+        merge_missing_defaults(&mut store);
+        assert_eq!(
+            store.gamepad.get("select+y").map(String::as_str),
+            Some("reader")
+        );
+    }
+
+    /// Merging the stock file changes nothing, so it cannot churn on launch.
+    #[test]
+    fn merging_the_defaults_is_a_no_op() {
+        let mut store = default_store();
+        merge_missing_defaults(&mut store);
+        assert_eq!(store, default_store());
     }
 
     /// `scroll` latches inside the pad, so a key bound to it would do nothing.
