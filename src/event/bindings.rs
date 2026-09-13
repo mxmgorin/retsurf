@@ -57,6 +57,9 @@ pub enum Action {
     /// Quit immediately. Unbound by default: the stock exit is a second
     /// Select+Start while settings is open (see [`default_store`]).
     Quit,
+    /// Enter or leave Game Mode. Inside it this is the only binding that still
+    /// fires, so the gesture bound to it is also the way out.
+    GameMode,
     /// Switch to the next open tab (wraps around).
     TabNext,
     /// Switch to the previous open tab (wraps around).
@@ -80,7 +83,7 @@ pub enum Action {
 }
 
 /// Every action. [`GROUPS`] decides display order, so this only has to be complete.
-const ALL: [Action; 24] = [
+const ALL: [Action; 25] = [
     Action::Confirm,
     Action::Cancel,
     Action::Osk,
@@ -94,6 +97,7 @@ const ALL: [Action; 24] = [
     Action::Menu,
     Action::Settings,
     Action::Quit,
+    Action::GameMode,
     Action::TabNext,
     Action::TabPrev,
     Action::NewTab,
@@ -123,6 +127,7 @@ impl Bindable for Action {
             Action::Menu => "menu",
             Action::Settings => "settings",
             Action::Quit => "quit",
+            Action::GameMode => "game_mode",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
             Action::NewTab => "new_tab",
@@ -161,6 +166,7 @@ impl Bindable for Action {
             Action::Menu => "Menu",
             Action::Settings => "Settings",
             Action::Quit => "Quit",
+            Action::GameMode => "Game Mode",
             Action::TabNext => "Next tab",
             Action::TabPrev => "Previous tab",
             Action::NewTab => "New tab",
@@ -228,6 +234,7 @@ impl Action {
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
+            Action::GameMode => AppCommand::ToggleGameMode,
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
@@ -255,6 +262,7 @@ pub const GROUPS: Groups<Action> = &[
             Action::Menu,
             Action::Settings,
             Action::Osk,
+            Action::GameMode,
             Action::Quit,
         ],
     ),
@@ -346,6 +354,9 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
         ("ctrl+,", Action::Settings),
+        // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
+        // is the only key the browser still answers.
+        ("ctrl+alt+g", Action::GameMode),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
         ("ctrl+t", Action::TabNext),
@@ -473,6 +484,24 @@ mod tests {
             let action = Action::parse(name).unwrap_or_else(|| panic!("`{name}` is not an action"));
             assert_eq!(bindings.key(code, gesture.mods), Some(action), "`{text}`");
         }
+    }
+
+    /// The way into Game Mode is also the only way out, and inside it every
+    /// other key goes to the page — so a plain key would be one the game wanted.
+    #[test]
+    fn the_game_mode_key_carries_a_modifier() {
+        let store = default_store();
+        let mut found = 0;
+        for (text, name) in &store.keyboard {
+            if Action::parse(name) != Some(Action::GameMode) {
+                continue;
+            }
+            found += 1;
+            let gesture = inputbind::KeyGesture::parse(text)
+                .unwrap_or_else(|| panic!("`{text}` is not a key gesture"));
+            assert!(!gesture.mods.is_plain(), "`{text}` is a plain key");
+        }
+        assert_eq!(found, 1, "game_mode needs exactly one default key");
     }
 
     /// `scroll` latches inside the pad, so a key bound to it would do nothing.

@@ -28,6 +28,7 @@ impl App {
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
+            AppCommand::ToggleGameMode => self.toggle_game_mode(out),
             AppCommand::Prompt(action) => match action {
                 PromptAction::Activate => self.ui.prompt.activate(),
                 PromptAction::Cancel => self.ui.prompt.cancel(),
@@ -52,6 +53,21 @@ impl App {
         ) {
             self.ui.request_repaint();
         }
+    }
+
+    /// Enter or leave Game Mode. Entering closes whatever overlay is up: the
+    /// point is that the page owns the input, and an overlay would still hold it.
+    fn toggle_game_mode(&mut self, out: &mut Vec<AppCommand>) {
+        self.ui.set_game_mode(!self.ui.game_mode());
+        if self.ui.game_mode() {
+            self.ui.osk(OskCommand::Hide, &self.browser, out);
+            self.ui.menu.close();
+            self.ui.hints.hide();
+            if self.ui.settings.visible() {
+                self.settings_close(out);
+            }
+        }
+        log::info!("game mode: {}", self.ui.game_mode());
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).

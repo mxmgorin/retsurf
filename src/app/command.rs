@@ -21,6 +21,9 @@ pub enum AppCommand {
     Menu(MenuAction),
     /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
     ToggleBookmark,
+    /// Enter or leave Game Mode, where the browser stops consuming input so the
+    /// page gets it (see [`crate::ui::AppUi::game_mode`]).
+    ToggleGameMode,
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),

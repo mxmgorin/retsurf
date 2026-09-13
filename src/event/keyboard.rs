@@ -41,6 +41,20 @@ pub fn on_key(
         return;
     }
 
+    // Game Mode hands the keyboard to the page while the page owns the focus;
+    // an overlay in front (a prompt the game opened, the OSK) takes it back.
+    if ui.game_mode() && ui.focus() == Focus::Page {
+        if bindings.key(key_code(key.kc), mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {
+            // Both edges, so the page never sees a key-up it had no down for.
+            if key.pressed && !key.repeat {
+                commands.push(AppCommand::ToggleGameMode);
+            }
+            return;
+        }
+        browser.handle_input(servo::InputEvent::Keyboard(into_servo(key)));
+        return;
+    }
+
     // A modal page prompt (select picker / JS dialog) captures the keyboard
     // first: Enter activates, Esc dismisses, the `nav_*` bindings move the
     // focus, and everything else is muted so a shortcut can't fire under the

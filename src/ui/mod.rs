@@ -121,8 +121,23 @@ struct FrameInputs {
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
     osk_caret: usize,
-    /// Whether the active tab's page holds fullscreen; the chrome hides for it.
-    fullscreen: bool,
+    /// Why the chrome is hidden this frame, if it is.
+    chrome_hidden: ChromeHidden,
+}
+
+/// The reasons the chrome hides, kept apart so leaving one does not reveal the
+/// bar while the other still holds it.
+#[derive(Clone, Copy, Default)]
+struct ChromeHidden {
+    /// The active tab's page holds the Fullscreen API.
+    page_fullscreen: bool,
+    game_mode: bool,
+}
+
+impl ChromeHidden {
+    fn any(self) -> bool {
+        self.page_fullscreen || self.game_mode
+    }
 }
 
 pub struct AppUi {
@@ -156,6 +171,10 @@ pub struct AppUi {
     browser_tex_id: Option<egui::TextureId>,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
+    /// Game Mode: the browser stops consuming input so the page can have it, and
+    /// the chrome hides. Read by [`crate::event::keyboard`] to decide whether to
+    /// resolve a key against the bindings or forward it.
+    game_mode: bool,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -248,6 +267,7 @@ impl AppUi {
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
+            game_mode: false,
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -496,7 +516,10 @@ impl AppUi {
             tab_infos,
             osk_field: self.osk_target_field(),
             osk_caret: self.osk.caret(),
-            fullscreen: browser.is_fullscreen(),
+            chrome_hidden: ChromeHidden {
+                page_fullscreen: browser.is_fullscreen(),
+                game_mode: self.game_mode,
+            },
         }
     }
 
@@ -522,13 +545,14 @@ impl AppUi {
     /// Auto-hide forces the bar visible while typing and floats it on either
     /// edge: a strip that came and went would resize the web view, and that is
     /// a full Servo reflow mid-scroll. Otherwise the bar is a panel.
-    fn toolbar_layout(&self, fullscreen: bool) -> ToolbarLayout {
+    fn toolbar_layout(&self, chrome_hidden: ChromeHidden) -> ToolbarLayout {
         let typing = self.focus() != Focus::Page;
         ToolbarLayout {
             position: self.toolbar_position,
             // Typing still wins: auto-hide forces the bar up for a focused field,
-            // and fullscreen must not leave an invisible address bar to type into.
-            shown: typing || (!fullscreen && (!self.toolbar_autohide || self.toolbar_shown)),
+            // and a hidden chrome must not leave an invisible address bar to type into.
+            shown: typing
+                || (!chrome_hidden.any() && (!self.toolbar_autohide || self.toolbar_shown)),
             overlay: self.toolbar_autohide,
         }
     }
@@ -570,14 +594,14 @@ impl AppUi {
                 tab_infos,
                 osk_field,
                 osk_caret,
-                fullscreen,
+                chrome_hidden,
             } = snapshot;
             let caret_for = |f| (osk_field == f).then_some(osk_caret);
             let ToolbarLayout {
                 position,
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
-            } = self.toolbar_layout(fullscreen);
+            } = self.toolbar_layout(chrome_hidden);
             // Snapshot the self-update state here (the About tab reads it): the
             // `self.update` borrow can't overlap the `self`-borrowing closure below.
             let update = self.update.snapshot();
@@ -810,5 +834,46 @@ impl AppUi {
     pub fn point_over_webview(&self, y_px: f32) -> bool {
         let y = y_px / self.egui_ctx.pixels_per_point();
         !self.toolbar_rect.y_range().contains(y)
+    }
+
+    #[inline]
+    pub fn game_mode(&self) -> bool {
+        self.game_mode
+    }
+
+    /// Entering drops egui's keyboard focus: egui is offered every key before we
+    /// see it, so a focused address bar would go on eating them.
+    pub fn set_game_mode(&mut self, on: bool) {
+        self.game_mode = on;
+        if on {
+            drop_egui_focus(&self.egui_ctx);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ChromeHidden;
+
+    /// The reasons are separate so that a page dropping fullscreen inside Game
+    /// Mode — which it does on every navigation — cannot flash the chrome back.
+    #[test]
+    fn one_reason_ending_does_not_reveal_the_chrome_while_the_other_holds() {
+        let both = ChromeHidden {
+            page_fullscreen: true,
+            game_mode: true,
+        };
+        assert!(both.any());
+        assert!(ChromeHidden {
+            page_fullscreen: false,
+            ..both
+        }
+        .any());
+        assert!(ChromeHidden {
+            game_mode: false,
+            ..both
+        }
+        .any());
+        assert!(!ChromeHidden::default().any());
     }
 }

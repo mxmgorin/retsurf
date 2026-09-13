@@ -289,7 +289,11 @@ impl AppEventHandler {
         // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
         // while the caret sat in the address bar. Modified keys stay ours (egui
         // still saw the event above, so typing is unaffected).
-        let egui_first = !self.is_pad_as_keys(&event);
+        // Game Mode hands the keyboard to the page, so egui must not be offered
+        // it: it consumes Tab and the arrows with nothing focused. Only while
+        // the page owns the focus — an overlay in front needs its keys back.
+        let to_game = ui.game_mode() && ui.focus() == crate::ui::Focus::Page;
+        let egui_first = !self.is_pad_as_keys(&event) && !(to_game && is_key(&event));
         if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
@@ -468,6 +472,17 @@ impl AppEventHandler {
             _ => {}
         }
     }
+}
+
+/// Anything the keyboard produces, including the text edge SDL derives from it.
+fn is_key(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::KeyDown { .. }
+            | Event::KeyUp { .. }
+            | Event::TextInput { .. }
+            | Event::TextEditing { .. }
+    )
 }
 
 /// `keyboard` tells the tables apart: their gesture text collides (`"a"` is both).
