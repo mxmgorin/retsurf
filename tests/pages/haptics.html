@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>haptics</title>
+<!--
+    The Gamepad API rumble path, end to end: what the pad advertises at
+    connect, and how playEffect resolves. On a pad without motors the promise
+    outcome still proves the request crossed the embedder and came back.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #e8e8f0; }
+  body { font: 700 24px/1.4 monospace; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: 10px; }
+  #state { color: #3fb8a0; }
+  #result { color: #ff8a6b; }
+</style>
+
+<div id="state">waiting for a pad</div>
+<div id="result"></div>
+
+<script>
+  function report(msg) {
+    fetch('/report?page=haptics&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+  function show(id, text) { document.getElementById(id).textContent = text; }
+
+  window.addEventListener('gamepadconnected', function (e) {
+    var gp = navigator.getGamepads()[e.gamepad.index];
+    var act = gp && gp.vibrationActuator;
+    var effects = act && act.effects ? act.effects.join('+') : 'none';
+    show('state', 'actuator=' + (act ? 'yes' : 'no') + ' effects=' + effects);
+    report('connected=1 actuator=' + (act ? 'yes' : 'no') + ' effects=' + effects);
+    if (!act) return;
+    try {
+      var p = act.playEffect('dual-rumble', {
+        duration: 400, startDelay: 0, strongMagnitude: 1.0, weakMagnitude: 0.5
+      });
+      report('called=1 promise=' + (p && typeof p.then === 'function'));
+      p.then(function (r) {
+        show('result', 'play=' + r);
+        report('play=' + r);
+      }, function (err) {
+        show('result', 'playerr=' + err.name);
+        report('playerr=' + err.name + ' msg=' + String(err.message).replace(/[^a-zA-Z0-9.]/g, '_'));
+      });
+    } catch (err) {
+      show('result', 'threw=' + err.name);
+      report('threw=' + err.name + ' msg=' + String(err.message).replace(/[^a-zA-Z0-9.]/g, '_'));
+    }
+  });
+  report('ready=1');
+</script>
