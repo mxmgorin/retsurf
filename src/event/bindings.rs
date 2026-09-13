@@ -334,6 +334,9 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("hold:y", Action::Bookmark),
         ("select", Action::Menu),
         ("hold:select", Action::Settings),
+        // The pad's way in; the way out inside is hold:select, hardcoded there
+        // because Game Mode bypasses these tables (see `event::game_mode`).
+        ("select+y", Action::GameMode),
         // Pressed again while settings is open this quits — the only gamepad
         // exit on a handheld. Bind `quit` directly for a one-press exit.
         ("select+start", Action::Settings),

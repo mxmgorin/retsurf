@@ -45,7 +45,8 @@ pub fn on_key(
     // an overlay in front (a prompt the game opened, the OSK) takes it back.
     if ui.game_mode() && ui.focus() == Focus::Page {
         if bindings.key(key_code(key.kc), mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {
-            // Both edges, so the page never sees a key-up it had no down for.
+            // Both edges while the chord holds. An up after the modifiers drop
+            // leaks, as every consumed binding's up already does (measured: no-op).
             if key.pressed && !key.repeat {
                 commands.push(AppCommand::ToggleGameMode);
             }

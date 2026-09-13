@@ -17,6 +17,7 @@ mod debug;
 mod display;
 mod downloads;
 mod experimental;
+mod game_mode;
 mod history;
 mod input;
 mod osk;
@@ -34,6 +35,7 @@ pub use debug::DebugConfig;
 pub use display::{DisplayConfig, ToolbarPosition};
 pub use downloads::DownloadsConfig;
 pub use experimental::{ExperimentalConfig, ExperimentalPreset};
+pub use game_mode::{GameModeConfig, GameProfile};
 pub use history::HistoryConfig;
 pub use input::{CursorMode, InputConfig};
 pub use osk::OskConfig;
@@ -47,6 +49,7 @@ pub use video::VideoConfig;
 pub struct AppConfig {
     pub browser: BrowserConfig,
     pub experimental: ExperimentalConfig,
+    pub game_mode: GameModeConfig,
     pub display: DisplayConfig,
     pub input: InputConfig,
     pub history: HistoryConfig,

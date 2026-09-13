@@ -67,7 +67,8 @@ fn into_device_point(x: f32, y: f32) -> servo::WebViewPoint {
     servo::DevicePoint::new(x, y).into()
 }
 
-/// A keyboard event for a printable character, for on-screen-keyboard input.
+/// A keyboard event for a printable character, for on-screen-keyboard and
+/// game-mode input.
 pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardEvent {
     let state = if down {
         keyboard_types::KeyState::Down
@@ -82,13 +83,59 @@ pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardE
     let event = keyboard_types::KeyboardEvent {
         state,
         key: keyboard_types::Key::Character(c.to_string()),
-        code: keyboard_types::Code::Unidentified,
+        code: code_for_char(c),
         location: keyboard_types::Location::Standard,
         modifiers,
         repeat: false,
         is_composing: false,
     };
     servo::KeyboardEvent::new(event)
+}
+
+/// The `code` for a printable character where the standard defines one; games
+/// branch on `e.code` (`KeyW` for WASD) for layout-independent input.
+fn code_for_char(c: char) -> keyboard_types::Code {
+    use keyboard_types::Code;
+    match c.to_ascii_lowercase() {
+        'a' => Code::KeyA,
+        'b' => Code::KeyB,
+        'c' => Code::KeyC,
+        'd' => Code::KeyD,
+        'e' => Code::KeyE,
+        'f' => Code::KeyF,
+        'g' => Code::KeyG,
+        'h' => Code::KeyH,
+        'i' => Code::KeyI,
+        'j' => Code::KeyJ,
+        'k' => Code::KeyK,
+        'l' => Code::KeyL,
+        'm' => Code::KeyM,
+        'n' => Code::KeyN,
+        'o' => Code::KeyO,
+        'p' => Code::KeyP,
+        'q' => Code::KeyQ,
+        'r' => Code::KeyR,
+        's' => Code::KeyS,
+        't' => Code::KeyT,
+        'u' => Code::KeyU,
+        'v' => Code::KeyV,
+        'w' => Code::KeyW,
+        'x' => Code::KeyX,
+        'y' => Code::KeyY,
+        'z' => Code::KeyZ,
+        '0' => Code::Digit0,
+        '1' => Code::Digit1,
+        '2' => Code::Digit2,
+        '3' => Code::Digit3,
+        '4' => Code::Digit4,
+        '5' => Code::Digit5,
+        '6' => Code::Digit6,
+        '7' => Code::Digit7,
+        '8' => Code::Digit8,
+        '9' => Code::Digit9,
+        ' ' => Code::Space,
+        _ => Code::Unidentified,
+    }
 }
 
 /// A keyboard event for a named key (Enter, Backspace, …).
@@ -112,4 +159,19 @@ pub fn named_keyboard_event(
         is_composing: false,
     };
     servo::KeyboardEvent::new(event)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::code_for_char;
+    use keyboard_types::Code;
+
+    #[test]
+    fn a_character_carries_its_code_where_the_standard_has_one() {
+        assert_eq!(code_for_char('w'), Code::KeyW);
+        assert_eq!(code_for_char('W'), Code::KeyW);
+        assert_eq!(code_for_char('5'), Code::Digit5);
+        assert_eq!(code_for_char(' '), Code::Space);
+        assert_eq!(code_for_char('?'), Code::Unidentified);
+    }
 }

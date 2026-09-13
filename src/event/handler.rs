@@ -1,3 +1,4 @@
+use super::game_mode::GameInput;
 use super::gamepad::Gamepad;
 use super::gamepad_api;
 use super::keyboard::KeyEvent;
@@ -5,10 +6,10 @@ use crate::event::bindings::{self, Action};
 use crate::{
     app::{AppCommand, SettingsAction},
     browser::AppBrowser,
-    config::InputConfig,
+    config::{GameModeConfig, InputConfig},
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,
-    ui::AppUi,
+    ui::{AppUi, Focus},
 };
 use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames, Keymap};
 use inputbind::{Bindings, Capture, Captured, Store, Tick};
@@ -43,12 +44,20 @@ pub struct AppEventHandler {
     menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,
+    /// Game Mode's pad translator: the pad drives the game, not the chrome.
+    game_input: GameInput,
+    /// Whether the pad routed to the game last pass, to release on a transition.
+    game_active: bool,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
     touch: super::touch::TouchState,
 }
 
 impl AppEventHandler {
-    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
+    pub fn new(
+        sdl: &sdl2::Sdl,
+        gamepad_cfg: InputConfig,
+        game_mode: &GameModeConfig,
+    ) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
         // `RETSURF_KEYMAP=miyoo|desktop` wins over the driver name, and has to:
@@ -70,6 +79,7 @@ impl AppEventHandler {
 
         let key_names = KeyNames::new();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
+        let game_input = GameInput::new(game_mode.profile, &gamepad_cfg);
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
@@ -80,6 +90,8 @@ impl AppEventHandler {
             keymap,
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
+            game_input,
+            game_active: false,
             touch: super::touch::TouchState::new(),
         })
     }
@@ -89,6 +101,7 @@ impl AppEventHandler {
     /// live (see [`crate::app::App::apply_config`]).
     pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
         self.capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
+        self.game_input.set_config(&cfg);
         self.gamepad.set_config(cfg);
     }
 
@@ -117,9 +130,25 @@ impl AppEventHandler {
             self.gamepad.reset(commands);
         }
 
+        // Game Mode routes the pad to the game while the page owns the focus; on
+        // the way out everything the page holds is released, so no key sticks.
+        let game_on = ui.game_mode() && ui.focus() == Focus::Page && !self.capture.is_on();
+        if game_on != self.game_active {
+            self.game_active = game_on;
+            if game_on {
+                self.gamepad.reset(commands);
+            } else {
+                self.game_input.release(browser, commands);
+            }
+        }
+
         // An active pad returns promptly: it drives the cursor from a held stick,
         // which produces no event to wake on, so blocking would stall the motion.
-        let waited = !self.gamepad.is_active() && !self.capture.is_on();
+        let device_active = match self.game_active {
+            true => self.game_input.is_active(),
+            false => self.gamepad.is_active(),
+        };
+        let waited = !device_active && !self.capture.is_on();
         if waited {
             // An animating page waits too: Servo rings the queue through its
             // event-loop waker on every paint message, so this wakes on the frame.
@@ -161,7 +190,11 @@ impl AppEventHandler {
         }
         // Emit this frame's analog state as a command for the router to apply,
         // and fire any hold or repeat whose deadline just passed.
-        self.gamepad.tick(commands);
+        if self.game_active {
+            self.game_input.tick(commands);
+        } else {
+            self.gamepad.tick(commands);
+        }
         waited
     }
 
@@ -176,6 +209,25 @@ impl AppEventHandler {
             .collect::<Vec<_>>()
         {
             browser.pad_connected(id, name);
+        }
+    }
+
+    /// A button in Game Mode: through the translator, and to the Gamepad API
+    /// only when the translator leaves the source unbound.
+    fn game_button(
+        &mut self,
+        instance_id: u32,
+        button: sdl2::controller::Button,
+        pressed: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        let withheld = pad_of(button)
+            .is_some_and(|pad| self.game_input.on_pad(pad, pressed, browser, commands));
+        if !withheld {
+            self.to_page(browser, instance_id, |slot| {
+                gamepad_api::button(slot, button, pressed)
+            });
         }
     }
 
@@ -292,8 +344,7 @@ impl AppEventHandler {
         // Game Mode hands the keyboard to the page, so egui must not be offered
         // it: it consumes Tab and the arrows with nothing focused. Only while
         // the page owns the focus — an overlay in front needs its keys back.
-        let to_game = ui.game_mode() && ui.focus() == crate::ui::Focus::Page;
-        let egui_first = !self.is_pad_as_keys(&event) && !(to_game && is_key(&event));
+        let egui_first = !self.is_pad_as_keys(&event) && !(self.game_active && is_key(&event));
         if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
@@ -407,6 +458,10 @@ impl AppEventHandler {
                     return;
                 }
                 if let Some(pad) = self.keymap.pad(kc) {
+                    if self.game_active {
+                        self.game_input.on_pad(pad, true, browser, commands);
+                        return;
+                    }
                     ui.note_input_keyboard(false);
                     self.gamepad.on_pad(pad, true, &self.bindings, commands);
                     return;
@@ -431,7 +486,11 @@ impl AppEventHandler {
                     pressed: false,
                 };
                 if let Some(pad) = self.keymap.pad(kc) {
-                    self.gamepad.on_pad(pad, false, &self.bindings, commands);
+                    if self.game_active {
+                        self.game_input.on_pad(pad, false, browser, commands);
+                    } else {
+                        self.gamepad.on_pad(pad, false, &self.bindings, commands);
+                    }
                     return;
                 }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
@@ -439,10 +498,22 @@ impl AppEventHandler {
             Event::ControllerAxisMotion {
                 which, axis, value, ..
             } => {
+                // In Game Mode a bound source is withheld from the Gamepad API,
+                // so a press the translator turned into a key is never seen twice.
+                if self.game_active {
+                    if !self.game_input.on_axis(axis, value, browser, commands) {
+                        self.to_page(browser, which, |slot| gamepad_api::axis(slot, axis, value));
+                    }
+                    return;
+                }
                 self.to_page(browser, which, |slot| gamepad_api::axis(slot, axis, value));
                 self.gamepad.on_axis(axis, value, &self.bindings, commands);
             }
             Event::ControllerButtonDown { which, button, .. } => {
+                if self.game_active {
+                    self.game_button(which, button, true, browser, commands);
+                    return;
+                }
                 // A pad press reclaims hint badges as button combos (see KeyDown).
                 ui.note_input_keyboard(false);
                 self.to_page(browser, which, |slot| {
@@ -452,6 +523,10 @@ impl AppEventHandler {
                     .on_button(button, true, &self.bindings, commands);
             }
             Event::ControllerButtonUp { which, button, .. } => {
+                if self.game_active {
+                    self.game_button(which, button, false, browser, commands);
+                    return;
+                }
                 self.to_page(browser, which, |slot| {
                     gamepad_api::button(slot, button, false)
                 });
