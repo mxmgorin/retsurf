@@ -67,6 +67,16 @@ impl servo::WebViewDelegate for AppBrowserInner {
         if let Some(i) = self.tab_index(webview.id()) {
             self.tabs.borrow_mut()[i].state.loading = loading;
         }
+        // A `Connected` only reaches the document loaded when it was sent, so
+        // each new one is told again — otherwise a page that started after the
+        // pad was plugged in lists none.
+        if !loading {
+            for (slot, name) in self.pads.borrow().live() {
+                webview.notify_input_event(servo::InputEvent::Gamepad(
+                    crate::event::gamepad_api::connected(slot, name),
+                ));
+            }
+        }
     }
 
     /// Without this Servo answers `screen.width`, `availWidth` and `outerWidth`

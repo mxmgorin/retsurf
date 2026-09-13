@@ -25,6 +25,9 @@ pub use engine::effective_user_agent;
 pub use home::HOME_URL;
 pub use url::try_into_url;
 
+mod pads;
+pub use pads::PadSlots;
+
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
@@ -193,6 +196,10 @@ struct AppBrowserInner {
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
     forced_dark: Rc<servo::user_contents::UserStyleSheet>,
+    /// Pads the page has been told about, by the slot it sees them under. Held
+    /// here rather than in the event handler because every fresh document has to
+    /// be told again: a `Connected` only reaches the document that is loaded.
+    pads: RefCell<PadSlots>,
     /// The panel and the window on it, for the page's `screen` and `outerWidth`.
     /// Servo answers those with zeroes unless the delegate supplies them.
     screen: Cell<servo::ScreenGeometry>,
@@ -259,6 +266,7 @@ impl AppBrowserInner {
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             forced_dark,
+            pads: RefCell::new(PadSlots::default()),
             screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
         }
@@ -541,6 +549,33 @@ impl AppBrowser {
         }
 
         false
+    }
+
+    /// A pad the page should see. Sent now for the document that is loaded, and
+    /// again from [`Self::announce_pads`] for every document that follows.
+    pub fn pad_connected(&self, instance_id: u32, name: String) {
+        let slot = self
+            .inner
+            .pads
+            .borrow_mut()
+            .connect(instance_id, name.clone());
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::connected(slot, name),
+        ));
+    }
+
+    pub fn pad_disconnected(&self, instance_id: u32) {
+        let Some(slot) = self.inner.pads.borrow_mut().disconnect(instance_id) else {
+            return;
+        };
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::disconnected(slot),
+        ));
+    }
+
+    /// The slot a pad's input belongs to, or `None` for one never announced.
+    pub fn pad_slot(&self, instance_id: u32) -> Option<usize> {
+        self.inner.pads.borrow().slot_of(instance_id)
     }
 
     /// Tell the page which panel it is on and where the window sits on it. In

@@ -1,4 +1,5 @@
 use super::gamepad::Gamepad;
+use super::gamepad_api;
 use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
@@ -164,6 +165,36 @@ impl AppEventHandler {
         waited
     }
 
+    /// Announce the pads that were already plugged in at startup. They arrive
+    /// through no `ControllerDeviceAdded`, and without a `Connected` the engine
+    /// has no `Gamepad` object to route their input to.
+    pub fn announce_pads(&mut self, browser: &AppBrowser) {
+        for (id, name) in self
+            .game_controllers
+            .iter()
+            .map(|controller| (controller.instance_id(), controller.name()))
+            .collect::<Vec<_>>()
+        {
+            browser.pad_connected(id, name);
+        }
+    }
+
+    /// Hand the page a pad event alongside the chrome's own reading of it. The
+    /// Gamepad API is polled, so nothing is taken from the chrome by doing both.
+    fn to_page(
+        &self,
+        browser: &AppBrowser,
+        instance_id: u32,
+        event: impl FnOnce(usize) -> Option<servo::GamepadEvent>,
+    ) {
+        let Some(slot) = browser.pad_slot(instance_id) else {
+            return;
+        };
+        if let Some(event) = event(slot) {
+            browser.handle_input(servo::InputEvent::Gamepad(event));
+        }
+    }
+
     /// A raw event taken before egui sees it, which would eat Tab/arrows/Enter/Esc
     /// and leave them unbindable. Returns whether capture consumed it.
     fn on_capture_event(&mut self, event: &Event, commands: &mut Vec<AppCommand>) -> bool {
@@ -266,13 +297,16 @@ impl AppEventHandler {
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
                 if let Ok(controller) = self.game_controller_subsystem.open(which) {
+                    let (id, name) = (controller.instance_id(), controller.name());
                     self.game_controllers.push(controller);
                     log::info!("Controller {which} connected");
+                    browser.pad_connected(id, name);
                 }
             }
             Event::ControllerDeviceRemoved { which, .. } => {
                 self.game_controllers.retain(|c| c.instance_id() != which);
                 log::info!("Controller {which} disconnected");
+                browser.pad_disconnected(which);
             }
             Event::MouseButtonUp {
                 mouse_btn, x, y, ..
@@ -398,16 +432,25 @@ impl AppEventHandler {
                 }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
-            Event::ControllerAxisMotion { axis, value, .. } => {
+            Event::ControllerAxisMotion {
+                which, axis, value, ..
+            } => {
+                self.to_page(browser, which, |slot| gamepad_api::axis(slot, axis, value));
                 self.gamepad.on_axis(axis, value, &self.bindings, commands);
             }
-            Event::ControllerButtonDown { button, .. } => {
+            Event::ControllerButtonDown { which, button, .. } => {
                 // A pad press reclaims hint badges as button combos (see KeyDown).
                 ui.note_input_keyboard(false);
+                self.to_page(browser, which, |slot| {
+                    gamepad_api::button(slot, button, true)
+                });
                 self.gamepad
                     .on_button(button, true, &self.bindings, commands);
             }
-            Event::ControllerButtonUp { button, .. } => {
+            Event::ControllerButtonUp { which, button, .. } => {
+                self.to_page(browser, which, |slot| {
+                    gamepad_api::button(slot, button, false)
+                });
                 self.gamepad
                     .on_button(button, false, &self.bindings, commands);
             }

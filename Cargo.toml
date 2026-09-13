@@ -64,7 +64,7 @@ env_logger = "0.11.8"
 # Named off the fork rather than a version plus a patch: no such version is on
 # crates.io, and deps.rs reads that as unresolvable. bundled_freetype, since
 # freetype-sys otherwise outgrows CI's system FreeType; webcrypto gates `window.crypto`.
-servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1", default-features = false, features = ["bundled_freetype", "clipboard", "js_jit", "webcrypto"] }
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1", default-features = false, features = ["bundled_freetype", "clipboard", "gamepad", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
 servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-1" }

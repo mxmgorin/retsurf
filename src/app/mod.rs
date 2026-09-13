@@ -163,6 +163,8 @@ impl App {
         // Both before the first tab: a page reads `devicePixelRatio` and
         // `screen` while it parses, and only some read them again on resize.
         self.ui.seed_scale(&self.window, &self.browser);
+        // A pad plugged in before we started sends no connect event of its own.
+        self.event_handler.announce_pads(&self.browser);
         self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
