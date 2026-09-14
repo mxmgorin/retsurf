@@ -43,10 +43,10 @@ impl App {
                         out.push(AppCommand::GameMenu(GameMenuAction::Activate));
                     }
                 }
-                // A picks the focused row's key, through the keyboard.
+                // A opens the focused row's list, then takes what it lands on.
                 Focus::GameEdit => {
                     if *pressed {
-                        out.push(AppCommand::GameEdit(GameEditAction::Pick));
+                        out.push(AppCommand::GameEdit(GameEditAction::Activate));
                     }
                 }
                 // The settings overlay: A toggles / cycles / steps the focused
@@ -187,13 +187,7 @@ impl App {
                         out.push(AppCommand::GameMenu(GameMenuAction::CycleProfile(*dx)));
                     }
                 }
-                Focus::GameEdit => {
-                    if *dy != 0 {
-                        self.ui.game_edit.move_sel(*dy);
-                    } else if *dx != 0 {
-                        out.push(AppCommand::GameEdit(GameEditAction::Step(*dx)));
-                    }
-                }
+                Focus::GameEdit => self.ui.game_edit.move_sel(*dy),
                 // Up/Down moves between rows, Left/Right adjusts the focused value.
                 Focus::Settings => {
                     if *dy != 0 {

@@ -8,42 +8,42 @@
 
 use inputbind::Pad;
 
-/// The targets a row can take without leaving the list: the specials, plus
-/// "a key", which hands over to the on-screen keyboard.
+/// What a row can be set to. One list, so nothing about a row is hidden behind a
+/// verb the screen cannot show.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Special {
-    /// Unbound: the button reaches the page as a gamepad button, as it would
-    /// with no profile at all.
-    Unbound,
-    Passthrough,
+pub enum Kind {
+    /// Hands over to the on-screen keyboard, which picks the key itself.
+    Key,
     Click,
-    None,
+    /// The page reads the button through the Gamepad API. An unbound button
+    /// does the same thing; this is the file saying so out loud, and the two
+    /// are one entry here because they are one behaviour.
+    Passthrough,
+    /// Consumed and dropped: the button does nothing at all.
+    Ignore,
 }
 
-impl Special {
-    /// What Left/Right steps through, ahead of the keys.
-    pub const ALL: [Special; 4] = [
-        Special::Unbound,
-        Special::Passthrough,
-        Special::Click,
-        Special::None,
-    ];
+impl Kind {
+    /// Top to bottom, keys first — it is what a row is usually set to.
+    pub const ALL: [Kind; 4] = [Kind::Key, Kind::Click, Kind::Passthrough, Kind::Ignore];
 
-    /// How the file spells it; `Unbound` has no spelling — it is the absence of
-    /// an entry.
-    pub fn text(self) -> Option<&'static str> {
+    pub fn label(self) -> &'static str {
         match self {
-            Special::Unbound => None,
-            Special::Passthrough => Some("passthrough"),
-            Special::Click => Some("click"),
-            Special::None => Some("none"),
+            Kind::Key => "Key...",
+            Kind::Click => "Mouse click",
+            Kind::Passthrough => "Gamepad button",
+            Kind::Ignore => "Ignore",
         }
     }
 
-    fn from_text(text: Option<&str>) -> Option<Special> {
-        Special::ALL
-            .into_iter()
-            .find(|special| special.text() == text)
+    /// How the file spells it; `Key` has none — the keyboard supplies it.
+    pub fn text(self) -> Option<&'static str> {
+        match self {
+            Kind::Key => None,
+            Kind::Click => Some("click"),
+            Kind::Passthrough => Some("passthrough"),
+            Kind::Ignore => Some("none"),
+        }
     }
 }
 
@@ -59,6 +59,8 @@ pub fn sources() -> Vec<Pad> {
 pub struct GameEdit {
     visible: bool,
     selected: usize,
+    /// The row's kind list, open over it; `None` while the rows are.
+    kind: Option<usize>,
     /// Whether the on-screen keyboard is up to pick this row's key.
     picking: bool,
     /// What it picked, as the file spells it — read and cleared by the app.
@@ -72,6 +74,7 @@ impl GameEdit {
         Self {
             visible: false,
             selected: 0,
+            kind: None,
             picking: false,
             picked: None,
             dirty: false,
@@ -85,6 +88,7 @@ impl GameEdit {
     pub fn open(&mut self) {
         self.visible = true;
         self.selected = 0;
+        self.kind = None;
         self.picking = false;
         self.picked = None;
         self.dirty = false;
@@ -93,6 +97,7 @@ impl GameEdit {
     /// Close it, reporting whether the profile needs writing.
     pub fn close(&mut self) -> bool {
         self.visible = false;
+        self.kind = None;
         self.picking = false;
         std::mem::take(&mut self.dirty)
     }
@@ -106,9 +111,37 @@ impl GameEdit {
         sources()[self.selected.min(sources().len() - 1)]
     }
 
+    /// Move within whichever list is up.
     pub fn move_sel(&mut self, dy: i32) {
-        let last = sources().len() as i32 - 1;
-        self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+        match &mut self.kind {
+            Some(at) => {
+                let last = Kind::ALL.len() as i32 - 1;
+                *at = (*at as i32 + dy).clamp(0, last) as usize;
+            }
+            None => {
+                let last = sources().len() as i32 - 1;
+                self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+            }
+        }
+    }
+
+    /// The kind list this row has open, if any.
+    pub fn kind_open(&self) -> Option<usize> {
+        self.kind
+    }
+
+    /// Open it on the focused row, or close it again (B).
+    pub fn open_kinds(&mut self) {
+        self.kind = Some(0);
+    }
+
+    pub fn close_kinds(&mut self) {
+        self.kind = None;
+    }
+
+    /// The kind the list is on.
+    pub fn kind(&self) -> Option<Kind> {
+        self.kind.map(|at| Kind::ALL[at.min(Kind::ALL.len() - 1)])
     }
 
     pub fn select(&mut self, index: usize) {
@@ -139,17 +172,6 @@ impl GameEdit {
     pub fn take_picked(&mut self) -> Option<String> {
         self.picked.take()
     }
-
-    /// Step the focused row through the specials, from whatever it says now.
-    /// Returns what to write, or `None` to unbind — a key target steps out of
-    /// the list at its nearest end, since the list cannot name every key.
-    pub fn step_special(&self, current: Option<&str>, delta: i32) -> Option<&'static str> {
-        let at = Special::from_text(current).unwrap_or(Special::Unbound);
-        let index = Special::ALL.iter().position(|s| *s == at).unwrap_or(0);
-        let count = Special::ALL.len() as i32;
-        let next = (index as i32 + delta).rem_euclid(count) as usize;
-        Special::ALL[next].text()
-    }
 }
 
 #[cfg(test)]
@@ -165,24 +187,28 @@ mod tests {
         assert_eq!(sources.len(), Pad::COUNT - 1);
     }
 
+    /// Every kind is on screen, and only the key one defers to the keyboard.
     #[test]
-    fn the_specials_step_in_a_ring_from_wherever_the_row_is() {
-        let edit = GameEdit::new();
-        assert_eq!(edit.step_special(None, 1), Some("passthrough"));
-        assert_eq!(edit.step_special(Some("passthrough"), 1), Some("click"));
-        assert_eq!(edit.step_special(Some("none"), 1), None);
-        assert_eq!(edit.step_special(None, -1), Some("none"));
-        // A key target is not in the ring; stepping enters it at an end.
-        assert_eq!(edit.step_special(Some("Space"), 1), Some("passthrough"));
+    fn a_row_can_be_set_to_anything_the_list_shows() {
+        for kind in Kind::ALL {
+            assert!(!kind.label().is_empty());
+            assert_eq!(kind.text().is_none(), kind == Kind::Key);
+        }
     }
 
     #[test]
-    fn the_highlight_stops_at_the_ends() {
+    fn the_highlight_stops_at_the_ends_of_whichever_list_is_up() {
         let mut edit = GameEdit::new();
         edit.open();
         edit.move_sel(-1);
         assert_eq!(edit.selected(), 0);
         edit.move_sel(99);
         assert_eq!(edit.selected(), sources().len() - 1);
+        // The kind list moves instead while it is open, and the row stays put.
+        let row = edit.selected();
+        edit.open_kinds();
+        edit.move_sel(99);
+        assert_eq!(edit.kind(), Some(Kind::Ignore));
+        assert_eq!(edit.selected(), row);
     }
 }

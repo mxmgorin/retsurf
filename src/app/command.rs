@@ -73,11 +73,10 @@ pub enum GameMenuAction {
 pub enum GameEditAction {
     /// Save what changed and go back to the menu (B / ✖).
     Close,
-    /// Pick a key for the focused row, through the on-screen keyboard (A).
-    Pick,
-    /// Step the focused row through the specials (Left / Right).
-    Step(i32),
-    /// Focus row `index` and pick for it (clicking it).
+    /// Act on what is focused (A): open the focused row's list of kinds, or
+    /// take the kind the list is on.
+    Activate,
+    /// Focus row `index` and open its list (clicking it).
     Click(usize),
 }
 

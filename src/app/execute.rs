@@ -155,29 +155,45 @@ impl App {
     /// Apply an action on the profile editor (see [`crate::overlay::game_edit`]).
     fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
         match action {
-            // Saving on the way out, and only if something changed, keeps an
-            // untouched visit from rewriting a file the user hand-edited.
+            // B backs out of the kind list first, then out of the editor —
+            // saving on the way, and only if something changed, so an untouched
+            // visit never rewrites a file the user hand-edited.
             GameEditAction::Close => {
+                if self.ui.game_edit.kind_open().is_some() {
+                    self.ui.game_edit.close_kinds();
+                    return;
+                }
                 if self.ui.game_edit.close() {
                     let name = self.event_handler.save_game_profile(&self.browser, out);
                     self.ui.set_game_profile_name(name);
                 }
                 self.ui.game_menu.open(self.ui.game_mode());
             }
-            // The keyboard becomes a key picker; the pick lands in the editor's
-            // slot, which the loop drains (see [`App::drain_game_pick`]).
-            GameEditAction::Pick => {
-                self.ui.game_edit.set_picking(true);
-                self.ui.osk(OskCommand::Show, &self.browser, out);
-            }
-            GameEditAction::Step(delta) => {
-                let pad = self.ui.game_edit.source();
-                let current = self.event_handler.game_pad_text(pad);
-                let next = self.ui.game_edit.step_special(current.as_deref(), *delta);
-                self.set_game_pad(pad, next.map(str::to_string));
-            }
+            GameEditAction::Activate => self.game_edit_activate(out),
             GameEditAction::Click(index) => {
                 self.ui.game_edit.select(*index);
+                self.game_edit_activate(out);
+            }
+        }
+    }
+
+    /// A in the editor: open the focused row's list of kinds, or take the one
+    /// it is on — a key defers to the on-screen keyboard, the rest are written
+    /// straight away.
+    fn game_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
+        let Some(kind) = self.ui.game_edit.kind() else {
+            self.ui.game_edit.open_kinds();
+            return;
+        };
+        self.ui.game_edit.close_kinds();
+        match kind.text() {
+            Some(text) => {
+                let pad = self.ui.game_edit.source();
+                self.set_game_pad(pad, Some(text.to_string()));
+            }
+            // The keyboard becomes a key picker; the pick lands in the editor's
+            // slot, which the loop drains (see [`App::drain_game_pick`]).
+            None => {
                 self.ui.game_edit.set_picking(true);
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }

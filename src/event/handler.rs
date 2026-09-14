@@ -144,14 +144,6 @@ impl AppEventHandler {
             .collect()
     }
 
-    /// What the file says one pad sends, or `None` where it says nothing.
-    pub fn game_pad_text(&self, pad: Pad) -> Option<String> {
-        self.game_input
-            .profile()
-            .raw_pad(pad)
-            .map(|raw| raw.text().to_string())
-    }
-
     /// Rewrite one pad in the live profile (the editor). Held in memory until
     /// [`Self::save_game_profile`] writes it.
     pub fn set_game_pad(&mut self, pad: Pad, text: Option<String>) {
