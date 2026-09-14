@@ -53,11 +53,6 @@ fn stick_axis(axis: Axis) -> Option<(usize, bool)> {
     })
 }
 
-/// One pad's bit in the down mask; `inputbind` caps the set at sixteen.
-fn bit(pad: Pad) -> u16 {
-    1 << pad as u16
-}
-
 /// The pad a trigger axis stands for.
 fn trigger_pad(axis: Axis) -> Option<Pad> {
     Some(match axis {
@@ -72,8 +67,13 @@ pub struct GameInput {
     /// Key targets the page holds, and how many sources hold each: a D-pad and
     /// a stick can name one key, and the first release must not end it.
     held: Vec<(KeyTarget, u32)>,
-    /// Pads currently down, so a key-wired pad's autorepeat is not a new press.
-    down: u16,
+    /// What each pad took when it went down: a layer may have been held then
+    /// and released since, and the release owes the target the press sent.
+    pads: Vec<Option<Target>>,
+    /// What each held key took, for the same reason.
+    keys: Vec<(u32, Target)>,
+    /// Activators held, most recent last — which is the one that wins.
+    active: Vec<usize>,
     /// Each stick's digital state per axis, for [`axis_digital`].
     digital: [(i32, i32); 2],
     /// Which of each stick's four directions the page is holding, so a target is
@@ -95,7 +95,9 @@ impl GameInput {
         Self {
             profile,
             held: Vec::new(),
-            down: 0,
+            pads: vec![None; Pad::COUNT],
+            keys: Vec::new(),
+            active: Vec::new(),
             digital: [(0, 0); 2],
             engaged: [0; 2],
             vectors: [(0.0, 0.0); 2],
@@ -135,6 +137,12 @@ impl GameInput {
         &self.profile.id
     }
 
+    /// The layer held right now, if any: the most recent activator wins, and a
+    /// button it leaves alone still falls through to the base.
+    fn layer(&self) -> Option<usize> {
+        self.active.last().copied()
+    }
+
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
     /// Returns whether the source is bound here, i.e. withheld from the page.
     pub fn on_pad(
@@ -152,20 +160,24 @@ impl GameInput {
             };
             return true;
         }
-        // An autorepeat from a key-wired pad, or a release of a press that was
-        // never seen: either would unbalance the target's hold count.
-        let was_down = self.down & bit(pad) != 0;
-        if pressed == was_down {
-            return self.profile.pad(pad).is_some_and(bound);
+        let slot = pad as usize;
+        match (pressed, self.pads[slot].clone()) {
+            // An autorepeat from a key-wired pad: the press already resolved.
+            (true, Some(target)) => bound(&target),
+            (true, None) => {
+                let Some(target) = self.profile.pad(self.layer(), pad).cloned() else {
+                    return false;
+                };
+                self.pads[slot] = Some(target.clone());
+                self.fire(&target, true, browser, commands)
+            }
+            (false, Some(target)) => {
+                self.pads[slot] = None;
+                self.fire(&target, false, browser, commands)
+            }
+            // A release of a press that was never seen; nothing to unwind.
+            (false, None) => self.profile.pad(self.layer(), pad).is_some_and(bound),
         }
-        match pressed {
-            true => self.down |= bit(pad),
-            false => self.down &= !bit(pad),
-        }
-        let Some(target) = self.profile.pad(pad).cloned() else {
-            return false;
-        };
-        self.fire(&target, pressed, browser, commands)
     }
 
     /// One axis. Returns whether the source is bound here (withheld from the page).
@@ -186,7 +198,7 @@ impl GameInput {
                     self.on_pad(pad, down, browser, commands);
                 }
             }
-            return self.profile.pad(pad).is_some_and(bound);
+            return self.profile.pad(self.layer(), pad).is_some_and(bound);
         }
         let Some((index, is_y)) = stick_axis(axis) else {
             return false;
@@ -226,14 +238,27 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        let Some(target) = self.profile.key(code).cloned() else {
-            return false;
-        };
-        // The OS repeat would be a second press with no release behind it.
+        let held = self.keys.iter().position(|(c, _)| *c == code);
+        // The OS repeat of a key we took would be a press with no release; one
+        // we did not take is the game's, repeat and all.
         if repeat {
-            return bound(&target);
+            return held.is_some_and(|i| bound(&self.keys[i].1));
         }
-        self.fire(&target, pressed, browser, commands)
+        match (pressed, held) {
+            (true, Some(i)) => bound(&self.keys[i].1),
+            (true, None) => {
+                let Some(target) = self.profile.key(self.layer(), code).cloned() else {
+                    return false;
+                };
+                self.keys.push((code, target.clone()));
+                self.fire(&target, true, browser, commands)
+            }
+            (false, Some(i)) => {
+                let (_, target) = self.keys.swap_remove(i);
+                self.fire(&target, false, browser, commands)
+            }
+            (false, None) => self.profile.key(self.layer(), code).is_some_and(bound),
+        }
     }
 
     /// Apply one source's edge. Returns whether it was consumed, i.e. withheld
@@ -250,10 +275,25 @@ impl GameInput {
             Target::Click => self.set_click(pressed, commands),
             // Refused at load for every source that reaches here.
             Target::Cursor { .. } | Target::Scroll { .. } => {}
+            // An activator sends nothing of its own, which is what makes a
+            // layer free of buffering: there is never a press to retract.
+            Target::Layer(index) => self.hold_layer(*index, pressed),
             Target::Passthrough => return false,
             Target::None => {}
         }
         true
+    }
+
+    /// Take or release an activator's hold on its layer.
+    fn hold_layer(&mut self, index: usize, pressed: bool) {
+        match pressed {
+            true => self.active.push(index),
+            false => {
+                if let Some(at) = self.active.iter().rposition(|held| *held == index) {
+                    self.active.remove(at);
+                }
+            }
+        }
     }
 
     /// Take or release one source's hold on a key. The page sees an edge only
@@ -400,7 +440,9 @@ impl GameInput {
         for (key, _) in self.held.drain(..) {
             send(browser, &key, false);
         }
-        self.down = 0;
+        self.pads.fill(None);
+        self.keys.clear();
+        self.active.clear();
         self.digital = [(0, 0); 2];
         self.engaged = [0; 2];
         self.vectors = [(0.0, 0.0); 2];

@@ -19,6 +19,9 @@
 //!
 //! [keyboard]             # physical keys, resolved after the pad keymap
 //! w = "ArrowUp"
+//!
+//! [layer.aim.pad]        # while `l2 = "layer:aim"` is held
+//! a = "Shift"
 //! ```
 
 use crate::config;
@@ -85,6 +88,9 @@ pub enum Target {
     Passthrough,
     /// Consumed and dropped: the source is inert while the profile is active.
     None,
+    /// Holds a layer open while the source is held, and sends nothing itself —
+    /// which is why an activator needs no buffering and can never leak.
+    Layer(usize),
 }
 
 impl Target {
@@ -114,6 +120,15 @@ pub enum StickRole {
     Unbound,
 }
 
+/// One alternate set, held open by its activator. Only buttons and keys: a
+/// stick that changed role mid-hold would have to release and re-engage its
+/// directions, which buys less than it costs.
+#[derive(Clone, Default)]
+struct Layer {
+    pad: Vec<Option<Target>>,
+    keys: Vec<(u32, Target)>,
+}
+
 #[derive(Clone)]
 pub struct Profile {
     /// The file stem, or the built-in's id; `[game_mode] profile` names this.
@@ -125,23 +140,38 @@ pub struct Profile {
     sticks: [StickRole; 2],
     /// Physical keys by SDL keycode, sorted for lookup.
     keys: Vec<(u32, Target)>,
+    /// Alternate sets, in the order `[layer.<name>]` declares them.
+    layers: Vec<Layer>,
 }
 
 impl Profile {
-    pub fn pad(&self, pad: Pad) -> Option<&Target> {
-        self.pad.get(pad as usize).and_then(Option::as_ref)
+    /// What a pad sends, under the held layer if one names it — a button the
+    /// layer leaves alone falls through to the base rather than going inert.
+    pub fn pad(&self, layer: Option<usize>, pad: Pad) -> Option<&Target> {
+        let from_layer = layer
+            .and_then(|i| self.layers.get(i))
+            .and_then(|l| l.pad.get(pad as usize))
+            .and_then(Option::as_ref);
+        from_layer.or_else(|| self.pad.get(pad as usize).and_then(Option::as_ref))
     }
 
     pub fn stick(&self, right: bool) -> &StickRole {
         &self.sticks[usize::from(right)]
     }
 
-    pub fn key(&self, code: u32) -> Option<&Target> {
-        self.keys
-            .binary_search_by_key(&code, |(c, _)| *c)
-            .ok()
-            .map(|i| &self.keys[i].1)
+    /// The same fall-through for a physical key.
+    pub fn key(&self, layer: Option<usize>, code: u32) -> Option<&Target> {
+        let from_layer = layer
+            .and_then(|i| self.layers.get(i))
+            .and_then(|l| find_key(&l.keys, code));
+        from_layer.or_else(|| find_key(&self.keys, code))
     }
+}
+
+fn find_key(keys: &[(u32, Target)], code: u32) -> Option<&Target> {
+    keys.binary_search_by_key(&code, |(c, _)| *c)
+        .ok()
+        .map(|i| &keys[i].1)
 }
 
 // --- the file, as TOML spells it ---
@@ -167,16 +197,26 @@ enum RawTarget {
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
+struct RawLayer {
+    pad: BTreeMap<String, RawTarget>,
+    keyboard: BTreeMap<String, RawTarget>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
 struct RawProfile {
     name: Option<String>,
     pad: BTreeMap<String, RawTarget>,
     /// Keyed by stick (`left` / `right`), then by direction or `analog`.
     stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
     keyboard: BTreeMap<String, RawTarget>,
+    /// Alternate sets by name, each held open by whatever names it.
+    layer: BTreeMap<String, RawLayer>,
 }
 
-/// Resolve one written target. `None` is a refusal, already logged.
-fn parse_target(raw: &RawTarget, whose: &str) -> Option<Target> {
+/// Resolve one written target against the layers the file declares. `None` is a
+/// refusal, already logged.
+fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Target> {
     let (text, code, modifiers, speed) = match raw {
         RawTarget::Short(text) => (text.as_str(), None, Modifiers::empty(), None),
         RawTarget::Long {
@@ -195,6 +235,15 @@ fn parse_target(raw: &RawTarget, whose: &str) -> Option<Target> {
         }
     };
     let speed = speed.unwrap_or(1.0);
+    if let Some(name) = text.strip_prefix("layer:") {
+        return match layers.iter().position(|l| l == name) {
+            Some(index) => Some(Target::Layer(index)),
+            None => {
+                log::warn!("game profile: `{whose}` holds no layer `{name}`; ignored");
+                None
+            }
+        };
+    }
     match text {
         "passthrough" => return Some(Target::Passthrough),
         "none" => return Some(Target::None),
@@ -260,6 +309,8 @@ impl Profile {
     /// Resolve a written profile. Refusals are logged and dropped rather than
     /// failing the file: a typo should cost one binding, not the profile.
     fn resolve(id: &str, raw: RawProfile, keys: &KeyNames) -> Profile {
+        // Names first: an activator in any table resolves to an index here.
+        let names: Vec<String> = raw.layer.keys().cloned().collect();
         let mut pad = vec![None; Pad::COUNT];
         for (name, raw) in &raw.pad {
             let whose = format!("{id}.pad.{name}");
@@ -273,7 +324,7 @@ impl Profile {
                 log::warn!("game profile: `{whose}` is reserved for the Game Mode menu");
                 continue;
             }
-            if let Some(target) = parse_target(raw, &whose) {
+            if let Some(target) = parse_target(raw, &whose, &names) {
                 if target.is_analog() {
                     log::warn!("game profile: `{whose}` is a button, not a stick");
                     continue;
@@ -292,28 +343,44 @@ impl Profile {
                     continue;
                 }
             };
-            sticks[index] = resolve_stick(id, name, table);
+            sticks[index] = resolve_stick(id, name, table, &names);
         }
 
-        let mut resolved_keys: Vec<(u32, Target)> = raw
-            .keyboard
+        let resolved_keys = resolve_keys(id, "keyboard", &raw.keyboard, keys, &names);
+
+        // A layer's own tables, in the order its names were collected. Layers
+        // hold no activators: a set that opens another is a knot to debug, not
+        // a feature anyone asked for.
+        let layers = names
             .iter()
-            .filter_map(|(name, raw)| {
-                let whose = format!("{id}.keyboard.{name}");
-                let Some(code) = keys.code(name) else {
-                    log::warn!("game profile: SDL has no key `{name}` (`{whose}`); ignored");
-                    return None;
-                };
-                let target = parse_target(raw, &whose)?;
-                if target.is_analog() {
-                    log::warn!("game profile: `{whose}` is a key, not a stick");
-                    return None;
+            .map(|name| {
+                let raw_layer = &raw.layer[name];
+                let mut pad = vec![None; Pad::COUNT];
+                for (source, raw) in &raw_layer.pad {
+                    let whose = format!("{id}.layer.{name}.pad.{source}");
+                    let Some(slot) = Pad::parse(source) else {
+                        log::warn!("game profile: `{whose}` is not a pad; ignored");
+                        continue;
+                    };
+                    if slot == Pad::Select {
+                        log::warn!("game profile: `{whose}` is reserved for the Game Mode menu");
+                        continue;
+                    }
+                    match parse_target(raw, &whose, &[]) {
+                        Some(target) if target.is_analog() => {
+                            log::warn!("game profile: `{whose}` is a button, not a stick");
+                        }
+                        Some(target) => pad[slot as usize] = Some(target),
+                        None => {}
+                    }
                 }
-                Some((code, target))
+                let scope = format!("layer.{name}.keyboard");
+                Layer {
+                    pad,
+                    keys: resolve_keys(id, &scope, &raw_layer.keyboard, keys, &[]),
+                }
             })
             .collect();
-        resolved_keys.sort_by_key(|(code, _)| *code);
-        resolved_keys.dedup_by_key(|(code, _)| *code);
 
         Profile {
             id: id.to_string(),
@@ -321,18 +388,54 @@ impl Profile {
             pad,
             sticks,
             keys: resolved_keys,
+            layers,
         }
     }
 }
 
+/// One `[keyboard]` table, base or layer: names resolved through SDL, sorted so
+/// the runtime can binary-search them.
+fn resolve_keys(
+    id: &str,
+    scope: &str,
+    raw: &BTreeMap<String, RawTarget>,
+    keys: &KeyNames,
+    layers: &[String],
+) -> Vec<(u32, Target)> {
+    let mut resolved: Vec<(u32, Target)> = raw
+        .iter()
+        .filter_map(|(name, raw)| {
+            let whose = format!("{id}.{scope}.{name}");
+            let Some(code) = keys.code(name) else {
+                log::warn!("game profile: SDL has no key `{name}` (`{whose}`); ignored");
+                return None;
+            };
+            let target = parse_target(raw, &whose, layers)?;
+            if target.is_analog() {
+                log::warn!("game profile: `{whose}` is a key, not a stick");
+                return None;
+            }
+            Some((code, target))
+        })
+        .collect();
+    resolved.sort_by_key(|(code, _)| *code);
+    resolved.dedup_by_key(|(code, _)| *code);
+    resolved
+}
+
 /// One stick table: four directions, or `analog` for the whole stick. Both at
 /// once is a contradiction — the directions win, since they are the specific ones.
-fn resolve_stick(id: &str, name: &str, table: &BTreeMap<String, RawTarget>) -> StickRole {
+fn resolve_stick(
+    id: &str,
+    name: &str,
+    table: &BTreeMap<String, RawTarget>,
+    layers: &[String],
+) -> StickRole {
     let mut dirs: [Option<Target>; 4] = [None, None, None, None];
     let mut analog = None;
     for (key, raw) in table {
         let whose = format!("{id}.stick.{name}.{key}");
-        let Some(target) = parse_target(raw, &whose) else {
+        let Some(target) = parse_target(raw, &whose, layers) else {
             continue;
         };
         if key == "analog" {
@@ -479,7 +582,7 @@ mod tests {
             start = "Enter"
             "#,
         );
-        let key = |pad| match profile.pad(pad) {
+        let key = |pad| match profile.pad(None, pad) {
             Some(Target::Key(k)) => k.clone(),
             other => panic!("{pad:?} resolved to {other:?}"),
         };
@@ -498,7 +601,7 @@ mod tests {
             x = { to = "x", code = "KeyY", shift = true }
             "#,
         );
-        let Some(Target::Key(key)) = profile.pad(Pad::X) else {
+        let Some(Target::Key(key)) = profile.pad(None, Pad::X) else {
             panic!("x is not a key");
         };
         assert_eq!(key.code, Code::KeyY);
@@ -516,8 +619,8 @@ mod tests {
             a = "Space"
             "#,
         );
-        assert_eq!(profile.pad(Pad::Select), None);
-        assert!(profile.pad(Pad::A).is_some());
+        assert_eq!(profile.pad(None, Pad::Select), None);
+        assert!(profile.pad(None, Pad::A).is_some());
     }
 
     #[test]
@@ -551,7 +654,52 @@ mod tests {
             b = "z"
             "#,
         );
-        assert_eq!(profile.pad(Pad::A), None);
-        assert!(profile.pad(Pad::B).is_some());
+        assert_eq!(profile.pad(None, Pad::A), None);
+        assert!(profile.pad(None, Pad::B).is_some());
+    }
+
+    /// The point of a layer: the same button means two things, and the one the
+    /// layer leaves alone still means what the base says.
+    #[test]
+    fn a_layer_overrides_what_it_names_and_falls_through_for_the_rest() {
+        let profile = resolve(
+            r#"
+            [pad]
+            l2 = "layer:aim"
+            a = "Space"
+            b = "z"
+
+            [layer.aim.pad]
+            a = "Shift"
+            "#,
+        );
+        assert_eq!(profile.pad(None, Pad::L2), Some(&Target::Layer(0)));
+        let named = |layer, pad| match profile.pad(layer, pad) {
+            Some(Target::Key(key)) => key.key.clone(),
+            other => panic!("{pad:?} resolved to {other:?}"),
+        };
+        assert_eq!(named(None, Pad::A), Key::Character(" ".into()));
+        assert_eq!(named(Some(0), Pad::A), Key::Named(NamedKey::Shift));
+        // B is the base's in both, which is what makes a layer worth holding.
+        assert_eq!(named(Some(0), Pad::B), named(None, Pad::B));
+    }
+
+    /// A layer that opens a layer is a knot to debug, and a name that is not
+    /// there is a typo — both refused rather than half-applied.
+    #[test]
+    fn an_activator_needs_a_layer_that_exists_and_layers_hold_none() {
+        let profile = resolve(
+            r#"
+            [pad]
+            l1 = "layer:nosuch"
+            l2 = "layer:aim"
+
+            [layer.aim.pad]
+            x = "layer:aim"
+            "#,
+        );
+        assert_eq!(profile.pad(None, Pad::L1), None);
+        assert_eq!(profile.pad(None, Pad::L2), Some(&Target::Layer(0)));
+        assert_eq!(profile.pad(Some(0), Pad::X), None);
     }
 }
