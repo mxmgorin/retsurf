@@ -1,4 +1,5 @@
 use super::game_mode::GameInput;
+use super::game_profile::{self, Profile};
 use super::gamepad::Gamepad;
 use super::gamepad_api;
 use super::keyboard::KeyEvent;
@@ -6,12 +7,12 @@ use crate::event::bindings::{self, Action};
 use crate::{
     app::{AppCommand, SettingsAction},
     browser::AppBrowser,
-    config::{GameModeConfig, GameProfile, InputConfig},
+    config::{GameModeConfig, InputConfig},
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
-use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames, Keymap};
+use inputbind::sdl::{is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap};
 use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -55,8 +56,10 @@ pub struct AppEventHandler {
     menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,
-    /// Game Mode's pad translator: the pad drives the game, not the chrome.
+    /// Game Mode's translator: the pad and the keyboard drive the game.
     game_input: GameInput,
+    /// Every profile this run offers, in the order the mode's menu cycles them.
+    game_profiles: Vec<Profile>,
     /// Whether the pad routed to the game last pass, to release on a transition.
     game_active: bool,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
@@ -90,7 +93,16 @@ impl AppEventHandler {
 
         let key_names = KeyNames::new();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
-        let game_input = GameInput::new(game_mode.profile, &gamepad_cfg);
+        let game_profiles = game_profile::load_all(&key_names);
+        let profile = game_profile::pick(&game_profiles, &game_mode.profile);
+        if profile.id != game_mode.profile {
+            log::warn!(
+                "game profile: no `{}`; using `{}`",
+                game_mode.profile,
+                profile.id
+            );
+        }
+        let game_input = GameInput::new(profile.clone(), &gamepad_cfg);
         let store = bindings::load_store();
         Ok(Self {
             event_pump: sdl.event_pump()?,
@@ -104,6 +116,7 @@ impl AppEventHandler {
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             game_input,
+            game_profiles,
             game_active: false,
             touch: super::touch::TouchState::new(),
         })
@@ -118,14 +131,32 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
-    /// Switch Game Mode's pad mapping live (its menu's Profile row).
+    /// The profile driving the mode right now, as the menu shows it.
+    pub fn game_profile_name(&self) -> &str {
+        &game_profile::pick(&self.game_profiles, self.game_input.profile_id()).name
+    }
+
+    /// Switch Game Mode's profile live — by id (an edited config), or `delta`
+    /// steps along the list (the menu's Profile row). Returns the new id and
+    /// name; what the page holds is released before the new one starts.
     pub fn set_game_profile(
         &mut self,
-        profile: GameProfile,
+        id: &str,
+        delta: i32,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
-    ) {
+    ) -> (String, String) {
+        let at = self
+            .game_profiles
+            .iter()
+            .position(|p| p.id == id)
+            .unwrap_or(0);
+        let count = self.game_profiles.len() as i32;
+        let next = (at as i32 + delta).rem_euclid(count.max(1)) as usize;
+        let profile = self.game_profiles[next].clone();
+        let named = (profile.id.clone(), profile.name.clone());
         self.game_input.set_profile(profile, browser, commands);
+        named
     }
 
     /// Rebuild both devices' tables from an edited store. The pad forgets what it
@@ -403,6 +434,28 @@ impl AppEventHandler {
         }
     }
 
+    /// A key while Game Mode has the page: the mode's own gesture first, then
+    /// the profile's own table, then the game — which is where the rest go.
+    fn game_key(&mut self, key: &KeyEvent, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        let code = key_code(key.kc);
+        if self.bindings.key(code, mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {
+            // Both edges while the chord holds. An up after the modifiers drop
+            // leaks, as every consumed binding's up already does (measured: no-op).
+            if key.pressed && !key.repeat {
+                commands.push(AppCommand::GameMode);
+            }
+            return;
+        }
+        if self
+            .game_input
+            .on_key(code, key.pressed, key.repeat, browser, commands)
+        {
+            return;
+        }
+        let event = super::keyboard::into_servo(key);
+        browser.handle_input(servo::InputEvent::Keyboard(event));
+    }
+
     fn handle_event(
         &mut self,
         event: Event,
@@ -547,6 +600,10 @@ impl AppEventHandler {
                 // Remember the input came from the keyboard so hint mode picks
                 // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
                 ui.note_input_keyboard(true);
+                if self.game_active {
+                    self.game_key(&key, browser, commands);
+                    return;
+                }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
             }
             Event::KeyUp {
@@ -569,6 +626,10 @@ impl AppEventHandler {
                     } else {
                         self.gamepad.on_pad(pad, false, &self.bindings, commands);
                     }
+                    return;
+                }
+                if self.game_active {
+                    self.game_key(&key, browser, commands);
                     return;
                 }
                 super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);

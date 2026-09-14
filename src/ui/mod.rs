@@ -25,8 +25,8 @@ use crate::{
     app::AppCommand,
     browser::AppBrowser,
     config::{
-        DebugConfig, DisplayConfig, DownloadsConfig, GameProfile, HistoryConfig, InputConfig,
-        OskConfig, ToolbarPosition, UpdateConfig,
+        DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
+        ToolbarPosition, UpdateConfig,
     },
     overlay::dial_edit::DialEdit,
     overlay::game_menu::GameMenu,
@@ -189,9 +189,9 @@ pub struct AppUi {
     /// Game Mode's own menu (the reserved Select hold). Public — driven
     /// directly, like the other overlays.
     pub game_menu: GameMenu,
-    /// The live pad profile, mirrored from `[game_mode] profile` so the menu can
-    /// show and cycle it (the config stays the source of truth).
-    game_profile: GameProfile,
+    /// The live profile's name, mirrored for the menu's row; the profiles
+    /// themselves live in the event handler, which resolved them.
+    game_profile_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -270,7 +270,7 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
-        game_mode: &crate::config::GameModeConfig,
+        game_profile_name: String,
         user_agent: String,
     ) -> Self {
         Self {
@@ -289,7 +289,7 @@ impl AppUi {
             game_mode_toast: None,
             game_mode_toast_text: String::new(),
             game_menu: GameMenu::new(),
-            game_profile: game_mode.profile,
+            game_profile_name,
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -787,7 +787,7 @@ impl AppUi {
                     game_menu::add_game_menu(
                         ctx,
                         &self.game_menu,
-                        self.game_profile,
+                        &self.game_profile_name,
                         self.game_mode,
                         commands,
                     );
@@ -900,16 +900,11 @@ impl AppUi {
         self.game_mode_toast = None;
     }
 
-    /// The pad profile the menu shows (mirrored from the config).
+    /// Adopt the name of a profile chosen in the menu, or set by an edited
+    /// config.
     #[inline]
-    pub fn game_profile(&self) -> GameProfile {
-        self.game_profile
-    }
-
-    /// Adopt a profile chosen in the menu, or an edited config.
-    #[inline]
-    pub fn set_game_profile(&mut self, profile: GameProfile) {
-        self.game_profile = profile;
+    pub fn set_game_profile_name(&mut self, name: String) {
+        self.game_profile_name = name;
     }
 
     /// Time left on the entry toast, or `None` once it has faded.

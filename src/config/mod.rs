@@ -35,7 +35,7 @@ pub use debug::DebugConfig;
 pub use display::{DisplayConfig, ToolbarPosition};
 pub use downloads::DownloadsConfig;
 pub use experimental::{ExperimentalConfig, ExperimentalPreset};
-pub use game_mode::{GameModeConfig, GameProfile};
+pub use game_mode::GameModeConfig;
 pub use history::HistoryConfig;
 pub use input::{CursorMode, InputConfig};
 pub use osk::OskConfig;

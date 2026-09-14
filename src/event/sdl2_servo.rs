@@ -67,34 +67,49 @@ fn into_device_point(x: f32, y: f32) -> servo::WebViewPoint {
     servo::DevicePoint::new(x, y).into()
 }
 
-/// A keyboard event for a printable character, for on-screen-keyboard and
-/// game-mode input.
-pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardEvent {
+/// One synthesized key edge, spelled out: `code` is what games branch on and
+/// `modifiers` what a profile target may carry.
+pub fn key_event(
+    key: keyboard_types::Key,
+    code: keyboard_types::Code,
+    modifiers: keyboard_types::Modifiers,
+    down: bool,
+) -> servo::KeyboardEvent {
     let state = if down {
         keyboard_types::KeyState::Down
     } else {
         keyboard_types::KeyState::Up
     };
+    servo::KeyboardEvent::new(keyboard_types::KeyboardEvent {
+        state,
+        key,
+        code,
+        location: keyboard_types::Location::Standard,
+        modifiers,
+        repeat: false,
+        is_composing: false,
+    })
+}
+
+/// A keyboard event for a printable character, for on-screen-keyboard and
+/// game-mode input.
+pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardEvent {
     let modifiers = if shift {
         keyboard_types::Modifiers::SHIFT
     } else {
         keyboard_types::Modifiers::empty()
     };
-    let event = keyboard_types::KeyboardEvent {
-        state,
-        key: keyboard_types::Key::Character(c.to_string()),
-        code: code_for_char(c),
-        location: keyboard_types::Location::Standard,
+    key_event(
+        keyboard_types::Key::Character(c.to_string()),
+        code_for_char(c),
         modifiers,
-        repeat: false,
-        is_composing: false,
-    };
-    servo::KeyboardEvent::new(event)
+        down,
+    )
 }
 
 /// The `code` for a printable character where the standard defines one; games
 /// branch on `e.code` (`KeyW` for WASD) for layout-independent input.
-fn code_for_char(c: char) -> keyboard_types::Code {
+pub(super) fn code_for_char(c: char) -> keyboard_types::Code {
     use keyboard_types::Code;
     match c.to_ascii_lowercase() {
         'a' => Code::KeyA,
@@ -144,21 +159,12 @@ pub fn named_keyboard_event(
     code: keyboard_types::Code,
     down: bool,
 ) -> servo::KeyboardEvent {
-    let state = if down {
-        keyboard_types::KeyState::Down
-    } else {
-        keyboard_types::KeyState::Up
-    };
-    let event = keyboard_types::KeyboardEvent {
-        state,
-        key: keyboard_types::Key::Named(key),
+    key_event(
+        keyboard_types::Key::Named(key),
         code,
-        location: keyboard_types::Location::Standard,
-        modifiers: keyboard_types::Modifiers::empty(),
-        repeat: false,
-        is_composing: false,
-    };
-    servo::KeyboardEvent::new(event)
+        keyboard_types::Modifiers::empty(),
+        down,
+    )
 }
 
 #[cfg(test)]

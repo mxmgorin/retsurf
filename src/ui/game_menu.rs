@@ -5,7 +5,6 @@
 use super::panel::{ROW_GAP, ROW_RADIUS};
 use super::theme::{ACCENT, PANEL_FILL, ROW_FONT};
 use crate::app::{AppCommand, GameMenuAction};
-use crate::config::GameProfile;
 use crate::overlay::game_menu::{GameMenu, GameRow};
 use egui_sdl2::egui;
 
@@ -22,7 +21,7 @@ const SIDE_MARGIN: f32 = 48.0;
 pub(super) fn add_game_menu(
     ctx: &egui::Context,
     menu: &GameMenu,
-    profile: GameProfile,
+    profile_name: &str,
     in_game_mode: bool,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -50,7 +49,7 @@ pub(super) fn add_game_menu(
                     ui.spacing_mut().item_spacing.y = ROW_GAP;
                     for (index, row) in GameRow::ALL.into_iter().enumerate() {
                         let value = match row {
-                            GameRow::Profile => profile.label(),
+                            GameRow::Profile => profile_name,
                             _ => "",
                         };
                         let label = row.label(in_game_mode);

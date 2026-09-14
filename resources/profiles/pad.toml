@@ -1,0 +1,10 @@
+# The pad reaches the page raw, for games that read the Gamepad API themselves.
+# Only the right stick and R2 are spent, on the pointer path that is the one
+# measured on hardware; everything else is the game's, untouched.
+name = "Gamepad passthrough"
+
+[pad]
+r2 = "click"
+
+[stick.right]
+analog = "cursor"

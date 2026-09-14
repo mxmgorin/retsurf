@@ -8,7 +8,7 @@ use super::{
     App, AppCommand, GameMenuAction, InputCommand, MenuAction, PromptAction, SettingsAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::{AppConfig, GameProfile};
+use crate::config::AppConfig;
 use crate::event::bindings::Action;
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::game_menu::GameRow;
@@ -112,7 +112,7 @@ impl App {
             GameMenuAction::Activate => self.game_menu_activate(out),
             GameMenuAction::CycleProfile(delta) => {
                 if self.ui.game_menu.row() == GameRow::Profile {
-                    self.set_game_profile(self.ui.game_profile().cycle(*delta), out);
+                    self.cycle_game_profile(*delta, out);
                 }
             }
             GameMenuAction::Click(index) => {
@@ -126,9 +126,7 @@ impl App {
     fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.game_menu.row() {
             GameRow::Resume => self.ui.game_menu.close(),
-            GameRow::Profile => {
-                self.set_game_profile(self.ui.game_profile().cycle(1), out);
-            }
+            GameRow::Profile => self.cycle_game_profile(1, out),
             // The keyboard types into the page and outranks this menu, so close
             // it first — the two would fight over the pad otherwise.
             GameRow::TypeText => {
@@ -146,20 +144,26 @@ impl App {
         }
     }
 
-    /// Push a pad profile into the live UI and translator, which releases what
-    /// the page holds first. The config is the source of truth; callers save it.
-    fn adopt_game_profile(&mut self, profile: GameProfile, out: &mut Vec<AppCommand>) {
-        self.ui.set_game_profile(profile);
-        self.event_handler
-            .set_game_profile(profile, &self.browser, out);
+    /// Adopt the profile the config names, for a settings restore. The config
+    /// is the source of truth here, so nothing is written back.
+    fn adopt_game_profile(&mut self, out: &mut Vec<AppCommand>) {
+        let id = self.config.game_mode.profile.clone();
+        let (_, name) = self
+            .event_handler
+            .set_game_profile(&id, 0, &self.browser, out);
+        self.ui.set_game_profile_name(name);
     }
 
-    /// The menu's Profile row: adopt it, and make it the new default.
-    fn set_game_profile(&mut self, profile: GameProfile, out: &mut Vec<AppCommand>) {
-        self.config.game_mode.profile = profile;
+    /// The menu's Profile row: step to the next profile and make it the default.
+    fn cycle_game_profile(&mut self, delta: i32, out: &mut Vec<AppCommand>) {
+        let id = self.config.game_mode.profile.clone();
+        let (id, name) = self
+            .event_handler
+            .set_game_profile(&id, delta, &self.browser, out);
+        self.ui.set_game_profile_name(name);
+        self.config.game_mode.profile = id;
         self.config.save();
-        self.adopt_game_profile(profile, out);
-        log::info!("game mode profile: {}", profile.as_str());
+        log::info!("game mode profile: {}", self.config.game_mode.profile);
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
@@ -414,7 +418,7 @@ impl App {
         self.config.save();
         // Restoring the defaults can move the pad profile under a live Game
         // Mode, so push it the same way the menu does.
-        self.adopt_game_profile(self.config.game_mode.profile, out);
+        self.adopt_game_profile(out);
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler

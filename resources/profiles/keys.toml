@@ -1,0 +1,33 @@
+# The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
+# js13k entries share. Copy this into <data dir>/profiles/keys.toml to change it;
+# deleting that copy restores this one.
+name = "Keyboard keys"
+
+[pad]
+up = "ArrowUp"
+down = "ArrowDown"
+left = "ArrowLeft"
+right = "ArrowRight"
+a = "Space"
+b = "z"
+x = "x"
+y = "c"
+l1 = "q"
+r1 = "e"
+start = "Enter"
+# The pointer path is the one measured on hardware, so both built-ins keep it.
+r2 = "click"
+# Unbound buttons reach the page as themselves; a game reading the Gamepad API
+# still sees these two.
+l2 = "passthrough"
+l3 = "passthrough"
+r3 = "passthrough"
+
+[stick.left]
+up = "ArrowUp"
+down = "ArrowDown"
+left = "ArrowLeft"
+right = "ArrowRight"
+
+[stick.right]
+analog = "cursor"

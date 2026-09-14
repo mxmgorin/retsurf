@@ -118,7 +118,7 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
-            &config.game_mode,
+            event_handler.game_profile_name().to_string(),
             crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");

@@ -1,54 +1,27 @@
-//! Game Mode's pad translator: the pad drives the game, not the chrome. The two
-//! built-in mappings are [`crate::config::GameProfile`]; a bound source is
-//! withheld from the Gamepad API (the `bool` returns here), so the page never
-//! sees one press twice. Select is reserved in every profile — held past the
-//! hold it opens Game Mode's menu ([`crate::overlay::game_menu`]).
+//! Game Mode's translator: the pad and the keyboard drive the game, not the
+//! chrome. What each source sends is the active [`Profile`]; a source with a
+//! target is withheld from the page's raw input (the `bool` returns here), so
+//! one press is never seen twice. Select is reserved in every profile — held
+//! past the hold it opens the Game Mode menu.
 
 use crate::app::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
-use crate::config::{GameProfile, InputConfig};
-use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
+use crate::config::InputConfig;
+use crate::event::game_profile::{Dir, KeyTarget, Profile, StickRole, Target};
+use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::axis_value;
 use inputbind::{Pad, Trigger};
-use keyboard_types::{Code, NamedKey};
 use sdl2::controller::Axis;
 use std::time::{Duration, Instant};
 
-/// Stick-to-arrow hysteresis: engage at the dead zone, release below this
+/// Stick-to-direction hysteresis: engage at the dead zone, release below this
 /// fraction of it, so a stick resting at the edge cannot spam edges.
 const STICK_RELEASE_RATIO: f32 = 0.8;
 
-/// What a bound pad sends to the page — the same calls the OSK types with.
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum KeyTarget {
-    Char(char),
-    Named(NamedKey, Code),
-}
+/// Left, then right — the order [`Profile::stick`] and the state arrays use.
+const STICKS: [bool; 2] = [false, true];
 
-/// The arrows in [`dirs`] index order: up, down, left, right.
-const ARROWS: [KeyTarget; 4] = [
-    KeyTarget::Named(NamedKey::ArrowUp, Code::ArrowUp),
-    KeyTarget::Named(NamedKey::ArrowDown, Code::ArrowDown),
-    KeyTarget::Named(NamedKey::ArrowLeft, Code::ArrowLeft),
-    KeyTarget::Named(NamedKey::ArrowRight, Code::ArrowRight),
-];
-
-/// The `keys` mapping for the non-directional pads — the retro convention
-/// (z/x + Space/Enter) that PICO-8 exports and js13k entries share.
-fn keys_target(pad: Pad) -> Option<KeyTarget> {
-    Some(match pad {
-        Pad::A => KeyTarget::Char(' '),
-        Pad::B => KeyTarget::Char('z'),
-        Pad::X => KeyTarget::Char('x'),
-        Pad::Y => KeyTarget::Char('c'),
-        Pad::L1 => KeyTarget::Char('q'),
-        Pad::R1 => KeyTarget::Char('e'),
-        Pad::Start => KeyTarget::Named(NamedKey::Enter, Code::Enter),
-        _ => return None,
-    })
-}
-
-/// Arrow directions down for a digital (-1/0/1) x/y pair.
+/// Arrow directions down for a digital (-1/0/1) x/y pair, in [`Dir::ALL`] order.
 fn dirs(x: i32, y: i32) -> [bool; 4] {
     [y < 0, y > 0, x < 0, x > 0]
 }
@@ -69,30 +42,48 @@ fn axis_digital(value: f32, prev: i32, deadzone: f32) -> i32 {
     }
 }
 
-/// One synthesized key edge to the page.
-fn send(browser: &AppBrowser, target: KeyTarget, down: bool) {
-    let event = match target {
-        KeyTarget::Char(c) => char_keyboard_event(c, false, down),
-        KeyTarget::Named(key, code) => named_keyboard_event(key, code, down),
-    };
-    browser.handle_input(servo::InputEvent::Keyboard(event));
+/// Which stick an axis belongs to, and whether it is the Y one.
+fn stick_axis(axis: Axis) -> Option<(usize, bool)> {
+    Some(match axis {
+        Axis::LeftX => (0, false),
+        Axis::LeftY => (0, true),
+        Axis::RightX => (1, false),
+        Axis::RightY => (1, true),
+        _ => return None,
+    })
+}
+
+/// One pad's bit in the down mask; `inputbind` caps the set at sixteen.
+fn bit(pad: Pad) -> u16 {
+    1 << pad as u16
+}
+
+/// The pad a trigger axis stands for.
+fn trigger_pad(axis: Axis) -> Option<Pad> {
+    Some(match axis {
+        Axis::TriggerLeft => Pad::L2,
+        Axis::TriggerRight => Pad::R2,
+        _ => return None,
+    })
 }
 
 pub struct GameInput {
-    profile: GameProfile,
-    /// D-pad digital state, per axis so a held diagonal keeps both.
-    dpad: (i32, i32),
-    /// Left stick as digital directions (see [`axis_digital`]).
-    stick: (i32, i32),
-    /// The arrow keys the page currently holds, d-pad and stick merged.
-    arrows: [bool; 4],
-    /// Non-directional pads currently down, for release on a transition.
-    held: Vec<(Pad, KeyTarget)>,
-    /// Right stick raw; the dead zone applies when it is read as the aim.
-    right: (f32, f32),
-    /// Whether the page holds the left mouse button (R2).
+    profile: Profile,
+    /// Key targets the page holds, and how many sources hold each: a D-pad and
+    /// a stick can name one key, and the first release must not end it.
+    held: Vec<(KeyTarget, u32)>,
+    /// Pads currently down, so a key-wired pad's autorepeat is not a new press.
+    down: u16,
+    /// Each stick's digital state per axis, for [`axis_digital`].
+    digital: [(i32, i32); 2],
+    /// Which of each stick's four directions the page is holding, so a target is
+    /// released exactly once (see [`Dir::ALL`] for the bit order).
+    engaged: [u8; 2],
+    /// Each stick's raw vector, read by the analog roles.
+    vectors: [(f32, f32); 2],
+    /// Whether the page holds the left mouse button.
     click: bool,
-    r2: Trigger,
+    triggers: [Trigger; 2],
     /// When Select went down; held past `hold` it opens the Game Mode menu.
     select_at: Option<Instant>,
     deadzone: f32,
@@ -100,16 +91,19 @@ pub struct GameInput {
 }
 
 impl GameInput {
-    pub fn new(profile: GameProfile, cfg: &InputConfig) -> Self {
+    pub fn new(profile: Profile, cfg: &InputConfig) -> Self {
         Self {
             profile,
-            dpad: (0, 0),
-            stick: (0, 0),
-            arrows: [false; 4],
             held: Vec::new(),
-            right: (0.0, 0.0),
+            down: 0,
+            digital: [(0, 0); 2],
+            engaged: [0; 2],
+            vectors: [(0.0, 0.0); 2],
             click: false,
-            r2: Trigger::new(Pad::R2, cfg.trigger_threshold),
+            triggers: [
+                Trigger::new(Pad::L2, cfg.trigger_threshold),
+                Trigger::new(Pad::R2, cfg.trigger_threshold),
+            ],
             select_at: None,
             deadzone: cfg.deadzone,
             hold: Duration::from_millis(cfg.hold_ms),
@@ -118,16 +112,18 @@ impl GameInput {
 
     /// Retuned in place, like [`super::gamepad::Gamepad::set_config`].
     pub fn set_config(&mut self, cfg: &InputConfig) {
-        self.r2.set_threshold(cfg.trigger_threshold);
+        for trigger in &mut self.triggers {
+            trigger.set_threshold(cfg.trigger_threshold);
+        }
         self.deadzone = cfg.deadzone;
         self.hold = Duration::from_millis(cfg.hold_ms);
     }
 
-    /// Switch mapping without leaving Game Mode (the menu's Profile row): what
-    /// the page holds under the old table is released before the new one starts.
+    /// Switch profile without leaving Game Mode (the menu's Profile row): what
+    /// the page holds under the old one is released before the new one starts.
     pub fn set_profile(
         &mut self,
-        profile: GameProfile,
+        profile: Profile,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
@@ -135,8 +131,12 @@ impl GameInput {
         self.profile = profile;
     }
 
+    pub fn profile_id(&self) -> &str {
+        &self.profile.id
+    }
+
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
-    /// Returns whether the source is bound here, i.e. withheld from the API.
+    /// Returns whether the source is bound here, i.e. withheld from the page.
     pub fn on_pad(
         &mut self,
         pad: Pad,
@@ -152,44 +152,23 @@ impl GameInput {
             };
             return true;
         }
-        // R2 clicks in both profiles. The axis form lands in `on_axis`; this is
-        // the key form (the Miyoo wires R2 to a key).
-        if pad == Pad::R2 {
-            self.set_click(pressed, commands);
-            return true;
+        // An autorepeat from a key-wired pad, or a release of a press that was
+        // never seen: either would unbalance the target's hold count.
+        let was_down = self.down & bit(pad) != 0;
+        if pressed == was_down {
+            return self.profile.pad(pad).is_some_and(bound);
         }
-        if self.profile == GameProfile::Pad {
-            return false;
+        match pressed {
+            true => self.down |= bit(pad),
+            false => self.down &= !bit(pad),
         }
-        if let Some((dx, dy)) = pad.vector() {
-            if dx != 0 {
-                self.dpad.0 = if pressed { dx } else { 0 };
-            } else {
-                self.dpad.1 = if pressed { dy } else { 0 };
-            }
-            self.refresh_arrows(browser);
-            return true;
-        }
-        let Some(target) = keys_target(pad) else {
+        let Some(target) = self.profile.pad(pad).cloned() else {
             return false;
         };
-        let down = self.held.iter().position(|(p, _)| *p == pad);
-        match (pressed, down) {
-            (true, None) => {
-                self.held.push((pad, target));
-                send(browser, target, true);
-            }
-            (false, Some(i)) => {
-                self.held.swap_remove(i);
-                send(browser, target, false);
-            }
-            // Autorepeat on a key-wired pad, or a release that never went down.
-            _ => {}
-        }
-        true
+        self.fire(&target, pressed, browser, commands)
     }
 
-    /// One axis. Returns whether the source is bound here (withheld from the API).
+    /// One axis. Returns whether the source is bound here (withheld from the page).
     pub fn on_axis(
         &mut self,
         axis: Axis,
@@ -198,52 +177,160 @@ impl GameInput {
         commands: &mut Vec<AppCommand>,
     ) -> bool {
         let value = axis_value(value);
-        // R2 clicks in both profiles; L2 stays the page's.
-        if axis == Axis::TriggerRight {
-            let (released, pressed) = self.r2.axis(value);
-            if released.is_some() {
-                self.set_click(false, commands);
+        // A trigger is a pad with a threshold; the edges it crosses are presses.
+        if let Some(pad) = trigger_pad(axis) {
+            let index = usize::from(pad == Pad::R2);
+            let (released, pressed) = self.triggers[index].axis(value);
+            for (edge, down) in [(released, false), (pressed, true)] {
+                if edge.is_some() {
+                    self.on_pad(pad, down, browser, commands);
+                }
             }
-            if pressed.is_some() {
-                self.set_click(true, commands);
+            return self.profile.pad(pad).is_some_and(bound);
+        }
+        let Some((index, is_y)) = stick_axis(axis) else {
+            return false;
+        };
+        // Read the role before touching the state: both borrow `self`.
+        let role = self.profile.stick(STICKS[index]);
+        let (analog, digital_role) = (role.is_analog(), role.is_digital());
+        // The whole stick is one vector; `tick` reads it each frame.
+        if analog {
+            match is_y {
+                true => self.vectors[index].1 = value,
+                false => self.vectors[index].0 = value,
             }
             return true;
         }
-        // The right stick is the cursor in both profiles.
-        match axis {
-            Axis::RightX => {
-                self.right.0 = value;
-                return true;
-            }
-            Axis::RightY => {
-                self.right.1 = value;
-                return true;
-            }
-            _ => {}
-        }
-        if self.profile == GameProfile::Pad {
+        if !digital_role {
             return false;
         }
-        match axis {
-            Axis::LeftX => self.stick.0 = axis_digital(value, self.stick.0, self.deadzone),
-            Axis::LeftY => self.stick.1 = axis_digital(value, self.stick.1, self.deadzone),
-            // TriggerLeft: unbound, the page's.
-            _ => return false,
+        let digital = axis_digital(value, self.axis_state(index, is_y), self.deadzone);
+        match is_y {
+            true => self.digital[index].1 = digital,
+            false => self.digital[index].0 = digital,
         }
-        self.refresh_arrows(browser);
+        self.refresh_stick(index, browser, commands);
+        // Half an axis cannot be withheld, so a stick read as directions keeps
+        // the whole axis from the page.
         true
     }
 
-    /// Re-derive the merged arrow state and send the page the edges that changed.
-    fn refresh_arrows(&mut self, browser: &AppBrowser) {
-        let d = dirs(self.dpad.0, self.dpad.1);
-        let s = dirs(self.stick.0, self.stick.1);
-        for (i, &target) in ARROWS.iter().enumerate() {
-            let want = d[i] || s[i];
-            if want != self.arrows[i] {
-                self.arrows[i] = want;
-                send(browser, target, want);
+    /// One physical key edge while the mode is on, resolved after the pad keymap
+    /// (a Miyoo's D-pad is a pad, not a key). Returns whether it was consumed.
+    pub fn on_key(
+        &mut self,
+        code: u32,
+        pressed: bool,
+        repeat: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
+        let Some(target) = self.profile.key(code).cloned() else {
+            return false;
+        };
+        // The OS repeat would be a second press with no release behind it.
+        if repeat {
+            return bound(&target);
+        }
+        self.fire(&target, pressed, browser, commands)
+    }
+
+    /// Apply one source's edge. Returns whether it was consumed, i.e. withheld
+    /// from the page's raw input.
+    fn fire(
+        &mut self,
+        target: &Target,
+        pressed: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
+        match target {
+            Target::Key(key) => self.hold_key(key, pressed, browser),
+            Target::Click => self.set_click(pressed, commands),
+            // Refused at load for every source that reaches here.
+            Target::Cursor { .. } | Target::Scroll { .. } => {}
+            Target::Passthrough => return false,
+            Target::None => {}
+        }
+        true
+    }
+
+    /// Take or release one source's hold on a key. The page sees an edge only
+    /// when the last source lets go, so two sources naming one key never send a
+    /// release the other still wants.
+    fn hold_key(&mut self, key: &KeyTarget, pressed: bool, browser: &AppBrowser) {
+        let at = self.held.iter().position(|(held, _)| held == key);
+        match (pressed, at) {
+            (true, Some(i)) => self.held[i].1 += 1,
+            (true, None) => {
+                self.held.push((key.clone(), 1));
+                send(browser, key, true);
             }
+            (false, Some(i)) => {
+                self.held[i].1 -= 1;
+                if self.held[i].1 == 0 {
+                    let (key, _) = self.held.swap_remove(i);
+                    send(browser, &key, false);
+                }
+            }
+            (false, None) => {}
+        }
+    }
+
+    fn axis_state(&self, index: usize, is_y: bool) -> i32 {
+        match is_y {
+            true => self.digital[index].1,
+            false => self.digital[index].0,
+        }
+    }
+
+    /// Re-derive one stick's four directions and send the edges that changed.
+    /// Only a direction that actually flipped is cloned out of the profile —
+    /// axis samples arrive in floods, edges do not.
+    fn refresh_stick(
+        &mut self,
+        index: usize,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        let (x, y) = self.digital[index];
+        let want = dirs(x, y);
+        let mut edges: [Option<Target>; 4] = [None, None, None, None];
+        {
+            let StickRole::Digital(targets) = self.profile.stick(STICKS[index]) else {
+                return;
+            };
+            for dir in Dir::ALL {
+                let slot = dir as usize;
+                if want[slot] != self.digital_engaged(index, dir) {
+                    edges[slot] = targets[slot].clone();
+                }
+            }
+        }
+        for dir in Dir::ALL {
+            let slot = dir as usize;
+            if want[slot] == self.digital_engaged(index, dir) {
+                continue;
+            }
+            self.set_engaged(index, dir, want[slot]);
+            if let Some(target) = &edges[slot] {
+                self.fire(target, want[slot], browser, commands);
+            }
+        }
+    }
+
+    /// Whether a stick direction is currently counted as down. Derived from the
+    /// engaged mask rather than the axes, which have already moved on.
+    fn digital_engaged(&self, index: usize, dir: Dir) -> bool {
+        self.engaged[index] & (1 << dir as u8) != 0
+    }
+
+    fn set_engaged(&mut self, index: usize, dir: Dir, on: bool) {
+        let bit = 1u8 << dir as u8;
+        match on {
+            true => self.engaged[index] |= bit,
+            false => self.engaged[index] &= !bit,
         }
     }
 
@@ -255,8 +342,8 @@ impl GameInput {
         }
     }
 
-    /// Per-frame: fire a due Select hold, and emit the right stick as the aim
-    /// (the router moves the cursor and hovers the page from it).
+    /// Per-frame: fire a due Select hold, and emit whatever the sticks are
+    /// bound to (the router moves the cursor and scrolls the page from it).
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
         if let Some(at) = self.select_at {
             if at.elapsed() >= self.hold {
@@ -264,42 +351,73 @@ impl GameInput {
                 commands.push(AppCommand::GameMode);
             }
         }
+        let (aim, scroll) = self.analog();
         commands.push(AppCommand::Input(InputCommand::Analog {
-            aim: self.aim(),
+            aim,
             stick: (0.0, 0.0),
-            scroll: 0.0,
+            scroll,
             scroll_mode: false,
         }));
     }
 
-    /// Right stick with the dead zone applied, like [`inputbind::Stick::vector`].
-    fn aim(&self) -> (f32, f32) {
-        let live = |v: f32| if v.abs() < self.deadzone { 0.0 } else { v };
-        (live(self.right.0), live(self.right.1))
+    /// The cursor vector and the scroll amount the sticks ask for this frame,
+    /// summed so a profile may put both on either stick.
+    fn analog(&self) -> ((f32, f32), f32) {
+        let mut aim = (0.0, 0.0);
+        let mut scroll = 0.0;
+        for (index, right) in STICKS.into_iter().enumerate() {
+            let (speed, to_cursor) = match self.profile.stick(right) {
+                StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
+                StickRole::Analog(Target::Scroll { speed }) => (*speed, false),
+                _ => continue,
+            };
+            let (x, y) = self.vectors[index];
+            let live = |v: f32| match v.abs() < self.deadzone {
+                true => 0.0,
+                false => v * speed,
+            };
+            match to_cursor {
+                true => aim = (aim.0 + live(x), aim.1 + live(y)),
+                false => scroll += live(y),
+            }
+        }
+        (
+            (aim.0.clamp(-1.0, 1.0), aim.1.clamp(-1.0, 1.0)),
+            scroll.clamp(-1.0, 1.0),
+        )
     }
 
-    /// Whether the loop must keep ticking: cursor gliding, or a hold pending.
+    /// Whether the loop must keep ticking: a stick still driving something, or
+    /// a hold pending.
     pub fn is_active(&self) -> bool {
-        self.aim() != (0.0, 0.0) || self.select_at.is_some()
+        let (aim, scroll) = self.analog();
+        aim != (0.0, 0.0) || scroll != 0.0 || self.select_at.is_some()
     }
 
     /// Release everything the page holds — a mode or focus transition must
     /// never leave it with a stuck key or a stuck click.
     pub fn release(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
-        for (_, target) in self.held.drain(..) {
-            send(browser, target, false);
+        for (key, _) in self.held.drain(..) {
+            send(browser, &key, false);
         }
-        for (down, &target) in self.arrows.iter_mut().zip(ARROWS.iter()) {
-            if *down {
-                *down = false;
-                send(browser, target, false);
-            }
-        }
-        self.dpad = (0, 0);
-        self.stick = (0, 0);
+        self.down = 0;
+        self.digital = [(0, 0); 2];
+        self.engaged = [0; 2];
+        self.vectors = [(0.0, 0.0); 2];
         self.set_click(false, commands);
         self.select_at = None;
     }
+}
+
+/// Whether a target withholds its source from the page's raw input.
+fn bound(target: &Target) -> bool {
+    !matches!(target, Target::Passthrough)
+}
+
+/// One synthesized key edge to the page.
+fn send(browser: &AppBrowser, key: &KeyTarget, down: bool) {
+    let event = key_event(key.key.clone(), key.code, key.modifiers, down);
+    browser.handle_input(servo::InputEvent::Keyboard(event));
 }
 
 #[cfg(test)]
@@ -321,21 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn the_keys_table_covers_faces_and_shoulders_only() {
-        assert_eq!(keys_target(Pad::A), Some(KeyTarget::Char(' ')));
-        assert_eq!(
-            keys_target(Pad::Start),
-            Some(KeyTarget::Named(NamedKey::Enter, Code::Enter))
-        );
-        // Select and R2 are system (menu, click); L2 and the D-pad live elsewhere.
-        assert_eq!(keys_target(Pad::Select), None);
-        assert_eq!(keys_target(Pad::R2), None);
-        assert_eq!(keys_target(Pad::L2), None);
-        assert_eq!(keys_target(Pad::Up), None);
-    }
-
-    #[test]
-    fn a_diagonal_holds_both_arrows() {
+    fn a_diagonal_holds_both_directions() {
         assert_eq!(dirs(1, -1), [true, false, false, true]);
         assert_eq!(dirs(0, 0), [false; 4]);
     }
