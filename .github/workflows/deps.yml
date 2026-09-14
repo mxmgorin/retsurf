@@ -1,0 +1,36 @@
+name: Dependencies
+
+# Advisories only, and only from Cargo.lock: cargo-audit resolves nothing, so
+# this needs neither a build nor the 1.7 GB clone of the engine fork.
+on:
+  workflow_dispatch:
+  schedule:
+    # Advisories are published on RustSec's clock, not ours, so a weekly sweep
+    # catches what a push-triggered run never would.
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Prebuilt binary; `cargo install` would compile it on every run.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Exceptions and their reasons live in .cargo/audit.toml, so a local run
+      # gives the same verdict as this one.
+      - name: Audit
+        run: cargo audit

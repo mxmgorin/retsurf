@@ -1,0 +1,7 @@
+# cargo-audit, read by CI and by a local `cargo audit` alike.
+
+[advisories]
+# RUSTSEC-2023-0071 (Marvin attack, rsa 0.10.0-rc): reached only through
+# servo-script, and RustSec publishes no fixed version to move to. Kept listed
+# rather than silenced with --ignore so a new advisory still turns the job red.
+ignore = ["RUSTSEC-2023-0071"]

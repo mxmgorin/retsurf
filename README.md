@@ -4,10 +4,9 @@
 
 <div align="center">
   <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&labelColor=16171a&color=3fb8a0&label=release" alt="Latest release"></a>
+  <a href="https://github.com/mxmgorin/retsurf/releases"><img src="https://img.shields.io/github/downloads/mxmgorin/retsurf/total?style=flat-square&labelColor=16171a&color=3fb8a0&label=downloads" alt="Downloads"></a>
   <!-- One CI badge, not six: the Linux workflow is the only one a pull request runs, and it carries the tests and clippy. -->
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/build-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/build-linux.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci" alt="CI"></a>
-  <a href="https://github.com/mxmgorin/retsurf/releases"><img src="https://img.shields.io/github/downloads/mxmgorin/retsurf/total?style=flat-square&labelColor=16171a&color=3fb8a0&label=downloads" alt="Downloads"></a>
-  <a href="https://deps.rs/repo/github/mxmgorin/retsurf"><img src="https://deps.rs/repo/github/mxmgorin/retsurf/status.svg?style=flat-square&subject=deps" alt="Dependencies"></a>
 </div>
 
 retsurf (**ret**ro + **surf**ing) is a web browser powered by [Servo](https://servo.org/) for web rendering and SDL2 for windowing and input. It doesn't require **X11, Wayland, or a GPU**, and provides **gamepad-first navigation**. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on.
