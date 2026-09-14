@@ -13,7 +13,7 @@ use crate::{
     ui::{AppUi, Focus},
 };
 use inputbind::sdl::{is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap};
-use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
+use inputbind::{Action as _, Bindings, Capture, Captured, Pad, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
@@ -129,6 +129,55 @@ impl AppEventHandler {
         self.capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
         self.game_input.set_config(&cfg);
         self.gamepad.set_config(cfg);
+    }
+
+    /// What each pad sends under the live profile, by pad index — the editor's
+    /// rows. An unbound pad reads as the dash its row shows.
+    pub fn game_pad_texts(&self) -> Vec<String> {
+        let profile = self.game_input.profile();
+        Pad::ALL
+            .into_iter()
+            .map(|pad| match profile.raw_pad(pad) {
+                Some(raw) => raw.text().to_string(),
+                None => "-".to_string(),
+            })
+            .collect()
+    }
+
+    /// What the file says one pad sends, or `None` where it says nothing.
+    pub fn game_pad_text(&self, pad: Pad) -> Option<String> {
+        self.game_input
+            .profile()
+            .raw_pad(pad)
+            .map(|raw| raw.text().to_string())
+    }
+
+    /// Rewrite one pad in the live profile (the editor). Held in memory until
+    /// [`Self::save_game_profile`] writes it.
+    pub fn set_game_pad(&mut self, pad: Pad, text: Option<String>) {
+        self.game_input
+            .profile_mut()
+            .set_raw_pad(pad, text.map(game_profile::RawTarget::Short));
+    }
+
+    /// Write the edited profile to its file and adopt what comes back, so the
+    /// change takes effect without a restart. Returns its name.
+    pub fn save_game_profile(
+        &mut self,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> String {
+        let saved = self.game_input.profile().save(&self.key_names);
+        let name = saved.name.clone();
+        // The list holds the old copy; replace it so cycling away and back does
+        // not resurrect what was just edited.
+        if let Some(slot) = self.game_profiles.iter_mut().find(|p| p.id == saved.id) {
+            *slot = saved.clone();
+        } else {
+            self.game_profiles.push(saved.clone());
+        }
+        self.game_input.set_profile(saved, browser, commands);
+        name
     }
 
     /// The profile driving the mode right now, as the menu shows it.

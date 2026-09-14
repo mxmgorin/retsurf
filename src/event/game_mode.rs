@@ -137,6 +137,16 @@ impl GameInput {
         &self.profile.id
     }
 
+    pub fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    /// The editor writes through this; what the page holds is untouched, since
+    /// a target is resolved when its source goes down.
+    pub fn profile_mut(&mut self) -> &mut Profile {
+        &mut self.profile
+    }
+
     /// The layer held right now, if any: the most recent activator wins, and a
     /// button it leaves alone still falls through to the base.
     fn layer(&self) -> Option<usize> {

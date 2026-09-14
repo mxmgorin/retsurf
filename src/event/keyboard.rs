@@ -74,9 +74,11 @@ pub fn on_key(
         return;
     }
 
-    // Game Mode's menu captures it the same way, so a key meant for the row
-    // list cannot also reach the game still running underneath.
-    if ui.game_menu.visible {
+    // Game Mode's own screens capture it the same way, so a key meant for a row
+    // list cannot also reach the game still running underneath. Keyed on the
+    // focus, not visibility: the keyboard opens over the editor to pick a key,
+    // and while it is up the keys are its own.
+    if matches!(ui.focus(), Focus::GameMenu | Focus::GameEdit) {
         if key.pressed {
             on_game_menu_key(key, bindings, commands);
         }
@@ -129,9 +131,9 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
     }
 }
 
-/// Game Mode's menu: arrows move between rows and cycle the focused value,
-/// Enter activates, Esc resumes. Everything else goes through the bindings,
-/// which Game Mode has already narrowed to its own vocabulary.
+/// Game Mode's menu and its profile editor: arrows move between rows and step
+/// the focused value, Enter activates, Esc goes back. Everything else goes
+/// through the bindings, which Game Mode has already narrowed to its own.
 fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
     if let Some((dx, dy)) = arrow_nav(key.kc) {
         commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));

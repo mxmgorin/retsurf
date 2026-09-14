@@ -5,7 +5,8 @@
 //! mapped earlier, in [`super::router`].
 
 use super::{
-    App, AppCommand, GameMenuAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+    App, AppCommand, GameEditAction, GameMenuAction, InputCommand, MenuAction, PromptAction,
+    SettingsAction,
 };
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
@@ -41,6 +42,7 @@ impl App {
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
+            AppCommand::GameEdit(action) => self.game_edit_action(action, out),
             AppCommand::Prompt(action) => match action {
                 PromptAction::Activate => self.ui.prompt.activate(),
                 PromptAction::Cancel => self.ui.prompt.cancel(),
@@ -127,6 +129,12 @@ impl App {
         match self.ui.game_menu.row() {
             GameRow::Resume => self.ui.game_menu.close(),
             GameRow::Profile => self.cycle_game_profile(1, out),
+            // The editor is its own screen; the menu is what B returns to.
+            GameRow::Edit => {
+                self.ui.game_menu.close();
+                self.ui.game_edit.open();
+                self.refresh_game_edit();
+            }
             // The keyboard types into the page and outranks this menu, so close
             // it first — the two would fight over the pad otherwise.
             GameRow::TypeText => {
@@ -142,6 +150,63 @@ impl App {
                 }
             },
         }
+    }
+
+    /// Apply an action on the profile editor (see [`crate::overlay::game_edit`]).
+    fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
+        match action {
+            // Saving on the way out, and only if something changed, keeps an
+            // untouched visit from rewriting a file the user hand-edited.
+            GameEditAction::Close => {
+                if self.ui.game_edit.close() {
+                    let name = self.event_handler.save_game_profile(&self.browser, out);
+                    self.ui.set_game_profile_name(name);
+                }
+                self.ui.game_menu.open(self.ui.game_mode());
+            }
+            // The keyboard becomes a key picker; the pick lands in the editor's
+            // slot, which the loop drains (see [`App::drain_game_pick`]).
+            GameEditAction::Pick => {
+                self.ui.game_edit.set_picking(true);
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+            GameEditAction::Step(delta) => {
+                let pad = self.ui.game_edit.source();
+                let current = self.event_handler.game_pad_text(pad);
+                let next = self.ui.game_edit.step_special(current.as_deref(), *delta);
+                self.set_game_pad(pad, next.map(str::to_string));
+            }
+            GameEditAction::Click(index) => {
+                self.ui.game_edit.select(*index);
+                self.ui.game_edit.set_picking(true);
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+        }
+    }
+
+    /// A key the picker took: it becomes the focused row's target, and the
+    /// keyboard's work is done.
+    pub(super) fn drain_game_pick(&mut self, out: &mut Vec<AppCommand>) {
+        let Some(text) = self.ui.game_edit.take_picked() else {
+            return;
+        };
+        self.ui.game_edit.set_picking(false);
+        self.ui.osk(OskCommand::Hide, &self.browser, out);
+        let pad = self.ui.game_edit.source();
+        self.set_game_pad(pad, Some(text));
+    }
+
+    /// Write one row into the live profile and refresh what the editor shows.
+    fn set_game_pad(&mut self, pad: inputbind::Pad, text: Option<String>) {
+        self.event_handler.set_game_pad(pad, text);
+        self.ui.game_edit.mark_dirty();
+        self.refresh_game_edit();
+    }
+
+    /// Re-snapshot the editor's rows from the live profile.
+    fn refresh_game_edit(&mut self) {
+        let targets = self.event_handler.game_pad_texts();
+        self.ui.set_game_edit_targets(targets);
     }
 
     /// Adopt the profile the config names, for a settings restore. The config

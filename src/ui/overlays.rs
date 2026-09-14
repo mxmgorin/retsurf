@@ -28,6 +28,8 @@ pub enum Focus {
     Menu,
     /// Game Mode's own menu, over the still-running game.
     GameMenu,
+    /// Its profile editor, opened from that menu.
+    GameEdit,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).
     Settings,
@@ -53,6 +55,8 @@ impl AppUi {
             Focus::Menu
         } else if self.game_menu.visible {
             Focus::GameMenu
+        } else if self.game_edit.visible() {
+            Focus::GameEdit
         } else if self.settings.visible() {
             Focus::Settings
         } else if self.hints.visible {
@@ -77,6 +81,9 @@ impl AppUi {
             // The settings overlay's focused text row: typing lands in the draft
             // (the OSK only opens over a text row — see `App::settings_confirm`).
             OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
+        } else if self.game_edit.picking() {
+            // The profile editor turned the keyboard into a key picker.
+            OskTarget::Capture(self.game_edit.picked_mut())
         } else if self.dial_edit.visible() {
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             OskTarget::DialEdit(self.dial_edit.input_mut())

@@ -32,6 +32,10 @@ pub enum OskTarget<'a> {
     /// A settings-overlay text field (see [`crate::overlay::settings`]); Enter
     /// just hides the keyboard (the value already lives in the draft).
     Settings(&'a mut String),
+    /// The Game Mode profile editor picking a key for a row: the keyboard is a
+    /// key *picker* here, so a press is recorded as the profile spells it and
+    /// nothing reaches the page (see [`crate::overlay::game_edit`]).
+    Capture(&'a mut Option<String>),
     Page,
 }
 
@@ -358,6 +362,20 @@ impl Osk {
             }
             // On the page, the arrow keys (and Tab) are sent to the focused
             // element as real key events.
+            // Picking: the frame keys name themselves, which is how a row gets
+            // an arrow or Tab without the grid carrying one.
+            Tab | Left | Right | Up | Down if matches!(target, OskTarget::Capture(_)) => {
+                let name = match self.current() {
+                    Tab => "Tab",
+                    Left => "ArrowLeft",
+                    Right => "ArrowRight",
+                    Up => "ArrowUp",
+                    _ => "ArrowDown",
+                };
+                if let OskTarget::Capture(slot) = target {
+                    *slot = Some(name.to_string());
+                }
+            }
             Tab if matches!(target, OskTarget::Page) => {
                 send_named(browser, NamedKey::Tab, Code::Tab)
             }
@@ -396,6 +414,8 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf) => buf.clear(),
+            // Picking has no buffer to clear; the row keeps what it had.
+            OskTarget::Capture(_) => {}
             OskTarget::Page => browser.clear_focused_field(),
         }
         self.caret = 0;
@@ -417,6 +437,7 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf) => self.caret = remove_before(buf, self.caret),
+            OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
     }
@@ -432,6 +453,7 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf) => self.caret = insert_at(buf, self.caret, c),
+            OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
                 browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
                     c, shift, true,
@@ -467,6 +489,8 @@ impl Osk {
             // A settings text field already holds the typed value in the draft;
             // Enter just dismisses the keyboard, back to the settings list.
             OskTarget::Settings(_) => {}
+            // The one key the grid cannot otherwise name for a row.
+            OskTarget::Capture(slot) => *slot = Some("Enter".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
         }
         self.visible = false;
@@ -490,7 +514,7 @@ fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
         | OskTarget::Home(buf)
         | OskTarget::DialEdit(buf)
         | OskTarget::Settings(buf) => buf.chars().count(),
-        OskTarget::Page => 0,
+        OskTarget::Capture(_) | OskTarget::Page => 0,
     }
 }
 

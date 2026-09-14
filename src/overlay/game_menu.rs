@@ -11,6 +11,8 @@ pub enum GameRow {
     /// The active pad mapping, cycled in place (A / Left / Right). Settable from
     /// outside the mode too, which is the point of opening the menu there.
     Profile,
+    /// Open the profile editor (see [`super::game_edit`]).
+    Edit,
     /// Summon the on-screen keyboard; it types into the page.
     TypeText,
     /// Enter or leave Game Mode — the only row whose action depends on state.
@@ -19,9 +21,10 @@ pub enum GameRow {
 
 impl GameRow {
     /// Top-to-bottom order, which is also the selection index.
-    pub const ALL: [GameRow; 4] = [
+    pub const ALL: [GameRow; 5] = [
         GameRow::Resume,
         GameRow::Profile,
+        GameRow::Edit,
         GameRow::TypeText,
         GameRow::Toggle,
     ];
@@ -34,6 +37,7 @@ impl GameRow {
             (GameRow::Resume, true) => "Resume",
             (GameRow::Resume, false) => "Close",
             (GameRow::Profile, _) => "Profile",
+            (GameRow::Edit, _) => "Edit profile...",
             (GameRow::TypeText, _) => "Type text...",
             (GameRow::Toggle, true) => "Disable",
             (GameRow::Toggle, false) => "Enable",
@@ -116,7 +120,10 @@ mod tests {
         for row in GameRow::ALL {
             assert!(!row.label(true).is_empty() && !row.label(false).is_empty());
             let same = row.label(true) == row.label(false);
-            assert_eq!(same, matches!(row, GameRow::Profile | GameRow::TypeText));
+            assert_eq!(
+                same,
+                matches!(row, GameRow::Profile | GameRow::Edit | GameRow::TypeText)
+            );
         }
     }
 }

@@ -27,6 +27,8 @@ pub enum AppCommand {
     GameMode,
     /// An action on Game Mode's own menu (see [`crate::overlay::game_menu`]).
     GameMenu(GameMenuAction),
+    /// An action on its profile editor (see [`crate::overlay::game_edit`]).
+    GameEdit(GameEditAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
@@ -46,6 +48,7 @@ impl AppCommand {
                 | AppCommand::Input(_)
                 | AppCommand::Prompt(_)
                 | AppCommand::GameMenu(_)
+                | AppCommand::GameEdit(_)
                 | AppCommand::GameMode
         )
     }
@@ -61,6 +64,20 @@ pub enum GameMenuAction {
     /// Step the pad profile by a direction (Left / Right on the Profile row).
     CycleProfile(i32),
     /// Focus row `index` and activate it (clicking it).
+    Click(usize),
+}
+
+/// Actions on the Game Mode profile editor. The pad pushes the relative ones
+/// through the router; the mouse pushes `Click` with the row it hit.
+#[derive(Clone)]
+pub enum GameEditAction {
+    /// Save what changed and go back to the menu (B / ✖).
+    Close,
+    /// Pick a key for the focused row, through the on-screen keyboard (A).
+    Pick,
+    /// Step the focused row through the specials (Left / Right).
+    Step(i32),
+    /// Focus row `index` and pick for it (clicking it).
     Click(usize),
 }
 

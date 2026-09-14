@@ -8,7 +8,8 @@ mod execute;
 mod router;
 
 pub use command::{
-    AppCommand, GameMenuAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+    AppCommand, GameEditAction, GameMenuAction, InputCommand, MenuAction, PromptAction,
+    SettingsAction,
 };
 
 use crate::browser::AppBrowser;
@@ -249,6 +250,10 @@ impl App {
                 &mut self.browser,
                 &mut commands,
             );
+
+            // A key the profile editor's picker took, before the UI is built:
+            // the row has to show it on this frame, not the next.
+            self.drain_game_pick(&mut commands);
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.

@@ -28,7 +28,7 @@ use crate::config;
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
 use keyboard_types::{Code, Key, Modifiers, NamedKey};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -142,6 +142,9 @@ pub struct Profile {
     keys: Vec<(u32, Target)>,
     /// Alternate sets, in the order `[layer.<name>]` declares them.
     layers: Vec<Layer>,
+    /// The file as written, kept so an edit can be saved without rebuilding
+    /// what the editor does not touch (sticks, keys, layers, comments aside).
+    raw: RawProfile,
 }
 
 impl Profile {
@@ -178,39 +181,56 @@ fn find_key(keys: &[(u32, Target)], code: u32) -> Option<&Target> {
 
 /// A target as written: a bare string for the common case, a table when the
 /// `code`, a modifier or a speed has to be said out loud.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
-enum RawTarget {
+pub enum RawTarget {
     Short(String),
     Long {
         to: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         code: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         shift: bool,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         ctrl: bool,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         alt: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
         speed: Option<f32>,
     },
 }
 
-#[derive(Deserialize, Default)]
+impl RawTarget {
+    /// How the file spells it, for the editor's rows.
+    pub fn text(&self) -> &str {
+        match self {
+            RawTarget::Short(text) => text,
+            RawTarget::Long { to, .. } => to,
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 struct RawLayer {
     pad: BTreeMap<String, RawTarget>,
     keyboard: BTreeMap<String, RawTarget>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 struct RawProfile {
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pad: BTreeMap<String, RawTarget>,
     /// Keyed by stick (`left` / `right`), then by direction or `analog`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     keyboard: BTreeMap<String, RawTarget>,
     /// Alternate sets by name, each held open by whatever names it.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     layer: BTreeMap<String, RawLayer>,
 }
 
@@ -384,12 +404,45 @@ impl Profile {
 
         Profile {
             id: id.to_string(),
-            name: raw.name.unwrap_or_else(|| id.to_string()),
+            name: raw.name.clone().unwrap_or_else(|| id.to_string()),
             pad,
             sticks,
             keys: resolved_keys,
             layers,
+            raw,
         }
+    }
+
+    /// What the file says this pad sends, for the editor's row.
+    pub fn raw_pad(&self, pad: Pad) -> Option<&RawTarget> {
+        self.raw.pad.get(pad.name())
+    }
+
+    /// Rewrite one pad's entry; `None` unbinds it (the page gets it raw again).
+    pub fn set_raw_pad(&mut self, pad: Pad, target: Option<RawTarget>) {
+        match target {
+            Some(target) => self.raw.pad.insert(pad.name().to_string(), target),
+            None => self.raw.pad.remove(pad.name()),
+        };
+    }
+
+    /// Write the profile to `profiles/<id>.toml`, which is also how a built-in
+    /// is replaced. Returns the re-resolved profile, so the edit takes effect
+    /// without a restart.
+    pub fn save(&self, keys: &KeyNames) -> Profile {
+        let dir = format!("{}{PROFILE_DIR}", config::data_dir());
+        let path = format!("{dir}/{}.toml", self.id);
+        match toml::to_string_pretty(&self.raw) {
+            Ok(text) => {
+                let _ = std::fs::create_dir_all(&dir);
+                match std::fs::write(&path, text) {
+                    Ok(()) => log::info!("game profile: wrote `{path}`"),
+                    Err(e) => log::warn!("game profile: could not write `{path}`: {e}"),
+                }
+            }
+            Err(e) => log::warn!("game profile: could not serialize `{}`: {e}", self.id),
+        }
+        Profile::resolve(&self.id, self.raw.clone(), keys)
     }
 }
 

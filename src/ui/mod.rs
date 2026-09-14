@@ -5,6 +5,7 @@
 
 mod cursor;
 mod dial_edit;
+mod game_edit;
 mod game_menu;
 mod hints;
 mod home;
@@ -29,6 +30,7 @@ use crate::{
         ToolbarPosition, UpdateConfig,
     },
     overlay::dial_edit::DialEdit,
+    overlay::game_edit::GameEdit,
     overlay::game_menu::GameMenu,
     overlay::hints::Hints,
     overlay::home::Home,
@@ -189,9 +191,14 @@ pub struct AppUi {
     /// Game Mode's own menu (the reserved Select hold). Public — driven
     /// directly, like the other overlays.
     pub game_menu: GameMenu,
+    /// Its profile editor, opened from that menu. Public for the same reason.
+    pub game_edit: GameEdit,
     /// The live profile's name, mirrored for the menu's row; the profiles
     /// themselves live in the event handler, which resolved them.
     game_profile_name: String,
+    /// What each pad sends under it, by pad index — refreshed whenever the
+    /// editor changes something (see [`AppUi::set_game_edit_targets`]).
+    game_edit_targets: Vec<String>,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -289,7 +296,9 @@ impl AppUi {
             game_mode_toast: None,
             game_mode_toast_text: String::new(),
             game_menu: GameMenu::new(),
+            game_edit: GameEdit::new(),
             game_profile_name,
+            game_edit_targets: Vec::new(),
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -759,6 +768,20 @@ impl AppUi {
                     settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
+                // The Game Mode profile editor: like settings, its own block
+                // rather than the chain below, so the keyboard can open over it
+                // to pick a key for a row.
+                if self.game_edit.visible() {
+                    drop_egui_focus(ctx);
+                    game_edit::add_game_edit(
+                        ctx,
+                        &self.game_edit,
+                        &self.game_profile_name,
+                        &self.game_edit_targets,
+                        commands,
+                    );
+                }
+
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
@@ -905,6 +928,13 @@ impl AppUi {
     #[inline]
     pub fn set_game_profile_name(&mut self, name: String) {
         self.game_profile_name = name;
+    }
+
+    /// What each pad row shows in the editor, by [`inputbind::Pad`] index — a
+    /// snapshot, since the profile itself lives in the event handler.
+    #[inline]
+    pub fn set_game_edit_targets(&mut self, targets: Vec<String>) {
+        self.game_edit_targets = targets;
     }
 
     /// Time left on the entry toast, or `None` once it has faded.
