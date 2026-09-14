@@ -275,6 +275,15 @@ to add a profile of your own, or name it after a built-in to replace that one â€
 deleting the file restores it. A file is read at startup; a typo costs its own
 binding and is logged, not the whole profile.
 
+**The Game Mode menu's "Edit profile..." row** edits the buttons without a
+keyboard or a text editor, which is the only way to do it on a handheld: a row
+per button, **A** picks what it sends from the on-screen keyboard, Left/Right
+steps it through `passthrough` / `click` / `none` / unbound, and **B** saves.
+Editing a built-in writes the `profiles/<id>.toml` that replaces it, so deleting
+that file is still how you get the original back. The sticks, the `[keyboard]`
+table and the layers below are the file's: they need names the screen has no
+room to pick.
+
 ```toml
 name = "Vampire Survivors"    # what the menu shows; the file name is the id
 
