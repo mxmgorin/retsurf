@@ -21,14 +21,47 @@ pub enum AppCommand {
     Menu(MenuAction),
     /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
     ToggleBookmark,
-    /// Enter or leave Game Mode, where the browser stops consuming input so the
-    /// page gets it (see [`crate::ui::AppUi::game_mode`]).
-    ToggleGameMode,
+    /// The Game Mode gesture, whatever produced it — a binding or the pad's
+    /// reserved hold. What it does depends on the mode's state (see
+    /// [`crate::app::App::game_mode_gesture`]).
+    GameMode,
+    /// An action on Game Mode's own menu (see [`crate::overlay::game_menu`]).
+    GameMenu(GameMenuAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
     /// An action on the settings overlay (see [`crate::overlay::settings`]).
     Settings(SettingsAction),
+}
+
+impl AppCommand {
+    /// Whether this still fires while Game Mode is on: the mode's own menu and
+    /// overlays, the way out, the loop's upkeep. A shortcut reaching the browser
+    /// behind the game is the thing the mode exists to stop.
+    pub fn in_game_mode(&self) -> bool {
+        matches!(
+            self,
+            AppCommand::Shutdown
+                | AppCommand::Resize
+                | AppCommand::Input(_)
+                | AppCommand::Prompt(_)
+                | AppCommand::GameMenu(_)
+                | AppCommand::GameMode
+        )
+    }
+}
+
+/// Actions on Game Mode's menu. The gamepad pushes the relative ones through
+/// the router; the mouse pushes `Click` with the row it hit.
+#[derive(Clone)]
+pub enum GameMenuAction {
+    /// Act on the focused row (A / Enter): resume, cycle the profile, open the
+    /// keyboard, or leave Game Mode.
+    Activate,
+    /// Step the pad profile by a direction (Left / Right on the Profile row).
+    CycleProfile(i32),
+    /// Focus row `index` and activate it (clicking it).
+    Click(usize),
 }
 
 /// Actions on the settings overlay. The mouse pushes `Select` then `Activate` /
@@ -184,4 +217,34 @@ pub enum InputCommand {
         scroll: f32,
         scroll_mode: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The reserved Select must not open the browser's menu over a game, and no
+    /// shortcut resolved under Game Mode's overlays may navigate out of one.
+    #[test]
+    fn game_mode_drops_the_browser_vocabulary_and_keeps_its_own() {
+        for command in [
+            AppCommand::Menu(MenuAction::Open),
+            AppCommand::Settings(SettingsAction::Open),
+            AppCommand::Browser(BrowserCommand::Back),
+            AppCommand::ToggleBookmark,
+        ] {
+            assert!(!command.in_game_mode());
+        }
+        // The mode's own controls, and what the loop needs whatever is on screen.
+        for command in [
+            AppCommand::GameMode,
+            AppCommand::GameMenu(GameMenuAction::Activate),
+            AppCommand::Input(InputCommand::Cancel),
+            AppCommand::Prompt(PromptAction::Cancel),
+            AppCommand::Shutdown,
+            AppCommand::Resize,
+        ] {
+            assert!(command.in_game_mode());
+        }
+    }
 }

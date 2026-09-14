@@ -26,6 +26,8 @@ pub enum Focus {
     Prompt,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
     Menu,
+    /// Game Mode's own menu, over the still-running game.
+    GameMenu,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).
     Settings,
@@ -49,6 +51,8 @@ impl AppUi {
             Focus::Prompt
         } else if self.menu.visible {
             Focus::Menu
+        } else if self.game_menu.visible {
+            Focus::GameMenu
         } else if self.settings.visible() {
             Focus::Settings
         } else if self.hints.visible {

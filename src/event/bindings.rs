@@ -57,8 +57,9 @@ pub enum Action {
     /// Quit immediately. Unbound by default: the stock exit is a second
     /// Select+Start while settings is open (see [`default_store`]).
     Quit,
-    /// Enter or leave Game Mode. Inside it this is the only binding that still
-    /// fires, so the gesture bound to it is also the way out.
+    /// The Game Mode gesture, resolved against the mode's state: enter it, open
+    /// its menu inside, or close that menu. Leaving is the menu's Exit row, so
+    /// one gesture covers the whole mode (see [`crate::app`]).
     GameMode,
     /// Switch to the next open tab (wraps around).
     TabNext,
@@ -234,7 +235,7 @@ impl Action {
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
-            Action::GameMode => AppCommand::ToggleGameMode,
+            Action::GameMode => AppCommand::GameMode,
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
@@ -514,8 +515,8 @@ mod tests {
         }
     }
 
-    /// The way into Game Mode is also the only way out, and inside it every
-    /// other key goes to the page — so a plain key would be one the game wanted.
+    /// The one key that still fires inside Game Mode, where every other one goes
+    /// to the page — so a plain key would be one the game wanted.
     #[test]
     fn the_game_mode_key_carries_a_modifier() {
         let store = default_store();

@@ -1,10 +1,12 @@
-//! State machines of the full-screen / modal overlays: the [`menu`], the
-//! on-screen keyboard ([`osk`]), link-hint navigation ([`hints`]), and the
-//! modal page prompts ([`prompt`]). They hold state and input handling only —
+//! State machines of the full-screen / modal overlays: the [`menu`], Game
+//! Mode's own [`game_menu`], the on-screen keyboard ([`osk`]), link-hint
+//! navigation ([`hints`]), and the modal page prompts ([`prompt`]). They hold
+//! state and input handling only —
 //! the matching egui renderers live in [`crate::ui`]'s submodules, and the
 //! central router ([`crate::app`]) decides which overlay owns the input.
 
 pub mod dial_edit;
+pub mod game_menu;
 pub mod hints;
 pub mod home;
 pub mod menu;

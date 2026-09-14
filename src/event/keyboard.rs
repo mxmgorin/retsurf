@@ -44,11 +44,13 @@ pub fn on_key(
     // Game Mode hands the keyboard to the page while the page owns the focus;
     // an overlay in front (a prompt the game opened, the OSK) takes it back.
     if ui.game_mode() && ui.focus() == Focus::Page {
+        // The one gesture the mode answers for itself; everything else is the
+        // game's.
         if bindings.key(key_code(key.kc), mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {
             // Both edges while the chord holds. An up after the modifiers drop
             // leaks, as every consumed binding's up already does (measured: no-op).
             if key.pressed && !key.repeat {
-                commands.push(AppCommand::ToggleGameMode);
+                commands.push(AppCommand::GameMode);
             }
             return;
         }
@@ -85,6 +87,15 @@ pub fn on_key(
     if ui.menu.visible {
         if key.pressed {
             on_menu_key(key, bindings, commands);
+        }
+        return;
+    }
+
+    // Game Mode's menu captures it the same way, so a key meant for the row
+    // list cannot also reach the game still running underneath.
+    if ui.game_menu.visible {
+        if key.pressed {
+            on_game_menu_key(key, bindings, commands);
         }
         return;
     }
@@ -132,6 +143,29 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
         // dial (Y's role) — a no-op in the other sections (handled in the router).
         Keycode::P => commands.push(AppCommand::Input(InputCommand::Hints)),
         _ => {}
+    }
+}
+
+/// Game Mode's menu: arrows move between rows and cycle the focused value,
+/// Enter activates, Esc resumes. Everything else goes through the bindings,
+/// which Game Mode has already narrowed to its own vocabulary.
+fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
+    if let Some((dx, dy)) = arrow_nav(key.kc) {
+        commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+        return;
+    }
+    match key.kc {
+        Keycode::Return | Keycode::KpEnter => {
+            if !key.repeat {
+                commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+            }
+        }
+        Keycode::Escape => commands.push(AppCommand::Input(InputCommand::Cancel)),
+        _ => {
+            if let Some(action) = lookup(key, bindings, true, false) {
+                action.push_tap(commands);
+            }
+        }
     }
 }
 

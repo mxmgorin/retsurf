@@ -3,7 +3,7 @@
 //! over the page or toolbar?" branches live — the gamepad itself stays
 //! state-agnostic and only emits intents.
 
-use super::{App, AppCommand, InputCommand, PromptAction};
+use super::{App, AppCommand, GameMenuAction, InputCommand, PromptAction};
 use crate::browser::BrowserCommand;
 use crate::overlay::hints::{HintInput, Sym};
 use crate::overlay::osk::OskCommand;
@@ -36,6 +36,11 @@ impl App {
                 Focus::Menu => {
                     if *pressed {
                         self.menu_open_selected();
+                    }
+                }
+                Focus::GameMenu => {
+                    if *pressed {
+                        out.push(AppCommand::GameMenu(GameMenuAction::Activate));
                     }
                 }
                 // The settings overlay: A toggles / cycles / steps the focused
@@ -88,6 +93,8 @@ impl App {
                 Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
+                // B resumes the game; leaving Game Mode is a row of its own.
+                Focus::GameMenu => self.ui.game_menu.close(),
                 // B saves the draft and closes (same as the close button).
                 Focus::Settings => self.settings_close(out),
                 // B drops a half-typed combo first, then exits hint mode.
@@ -120,6 +127,8 @@ impl App {
                     self.ui.dial_edit_remove_selected();
                 } else if focus == Focus::Settings {
                     // X is unused in settings (rows edit with A and Left/Right).
+                } else if focus == Focus::GameMenu {
+                    // X is unused here too: the keyboard has a row of its own.
                 } else if focus == Focus::Hints && self.config.input.hint_badges {
                     // In hint mode X is a combo symbol, not the OSK toggle (unless
                     // combos are disabled, when it falls through to the OSK below).
@@ -143,7 +152,7 @@ impl App {
             // Tab switching is parked while a modal prompt is up — it belongs
             // to the page that opened it.
             InputCommand::CycleTab(delta) => {
-                if !self.ui.prompt.visible() && focus != Focus::Settings {
+                if !self.ui.prompt.visible() && !takes_over(focus) {
                     self.browser.cycle_tab(*delta);
                 }
             }
@@ -159,6 +168,15 @@ impl App {
                         self.ui.menu.switch_section(*dx);
                     } else if *dy != 0 {
                         self.ui.menu.move_sel(*dy);
+                    }
+                }
+                // Up/Down move between rows; Left/Right cycle the Profile row's
+                // value (a no-op on the others, resolved in `game_menu_action`).
+                Focus::GameMenu => {
+                    if *dy != 0 {
+                        self.ui.game_menu.move_sel(*dy);
+                    } else if *dx != 0 {
+                        out.push(AppCommand::GameMenu(GameMenuAction::CycleProfile(*dx)));
                     }
                 }
                 // Up/Down moves between rows, Left/Right adjusts the focused value.
@@ -203,6 +221,7 @@ impl App {
                 Focus::Menu => self.menu_y_action(),
                 Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
+                Focus::GameMenu => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
@@ -216,6 +235,9 @@ impl App {
                 Focus::Menu => self.ui.menu.switch_section(*delta),
                 // L1/R1 switch the settings section (Left/Right edits values).
                 Focus::Settings => self.ui.settings.switch_section(*delta),
+                // One screen, so there is no section to switch — and page
+                // navigation under an open menu would leave the game.
+                Focus::GameMenu => {}
                 // In the dial editor they reorder the focused pin (Left/Right
                 // moves the selection there).
                 Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
@@ -246,7 +268,7 @@ impl App {
                     } else {
                         self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
-                } else if *pressed && !self.ui.prompt.visible() && focus != Focus::Settings {
+                } else if *pressed && !self.ui.prompt.visible() && !takes_over(focus) {
                     // Quick tab switch: L2 previous, R2 next (wraps).
                     self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
@@ -256,7 +278,7 @@ impl App {
             InputCommand::Osk(cmd) => {
                 if focus == Focus::Osk {
                     self.ui.osk(*cmd, &self.browser, out);
-                } else if matches!(cmd, OskCommand::Space) && focus != Focus::Settings {
+                } else if matches!(cmd, OskCommand::Space) && !takes_over(focus) {
                     self.browser
                         .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }
@@ -488,6 +510,12 @@ impl App {
         }
         false
     }
+}
+
+/// Overlays that own the device outright, so a browser-level shortcut — tab
+/// switching, reload, back/forward — must not fire underneath them.
+fn takes_over(focus: Focus) -> bool {
+    matches!(focus, Focus::Settings | Focus::GameMenu)
 }
 
 /// Map a discrete D-pad press direction to its combo symbol (hint mode).

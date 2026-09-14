@@ -4,16 +4,27 @@
 //! to (menu / settings / speed-dial / bookmarks) live here too. Input intents are
 //! mapped earlier, in [`super::router`].
 
-use super::{App, AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
+use super::{
+    App, AppCommand, GameMenuAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+};
 use crate::browser::BrowserCommand;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, GameProfile};
+use crate::event::bindings::Action;
 use crate::overlay::dial_edit::EditItem;
+use crate::overlay::game_menu::GameRow;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
+        // Game Mode shrinks the browser's vocabulary to what the mode itself
+        // needs, so a shortcut resolved under one of its overlays cannot act on
+        // the browser behind it (see [`AppCommand::in_game_mode`]). Its menu
+        // counts either way: it owns the input wherever it was opened.
+        if (self.ui.game_mode() || self.ui.game_menu.visible) && !command.in_game_mode() {
+            return;
+        }
         match command {
             AppCommand::Shutdown => self.shutdown(),
             // On a window resize, size the browser to the new central area straight
@@ -28,7 +39,8 @@ impl App {
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
-            AppCommand::ToggleGameMode => self.toggle_game_mode(out),
+            AppCommand::GameMode => self.game_mode_gesture(),
+            AppCommand::GameMenu(action) => self.game_menu_action(action, out),
             AppCommand::Prompt(action) => match action {
                 PromptAction::Activate => self.ui.prompt.activate(),
                 PromptAction::Cancel => self.ui.prompt.cancel(),
@@ -55,19 +67,99 @@ impl App {
         }
     }
 
-    /// Enter or leave Game Mode. Entering closes whatever overlay is up: the
-    /// point is that the page owns the input, and an overlay would still hold it.
-    fn toggle_game_mode(&mut self, out: &mut Vec<AppCommand>) {
-        self.ui.set_game_mode(!self.ui.game_mode());
-        if self.ui.game_mode() {
-            self.ui.osk(OskCommand::Hide, &self.browser, out);
-            self.ui.menu.close();
-            self.ui.hints.hide();
-            if self.ui.settings.visible() {
-                self.settings_close(out);
+    /// The Game Mode gesture: the menu, always. One gesture means one screen in
+    /// either state, entering and leaving are its one row, and the profile can
+    /// be set before a game rather than only under a running one.
+    pub(super) fn game_mode_gesture(&mut self) {
+        match self.ui.game_menu.visible {
+            true => self.ui.game_menu.close(),
+            false => self.ui.game_menu.open(self.ui.game_mode()),
+        }
+    }
+
+    /// Enter Game Mode, closing whatever overlay is up: the point is that the
+    /// page owns the input, and an overlay would still hold it.
+    fn enter_game_mode(&mut self, out: &mut Vec<AppCommand>) {
+        // Read at entry, not at startup: a pad can be plugged in later, and the
+        // gestures named have to be the ones the tables actually hold.
+        let handler = &self.event_handler;
+        let toast = crate::ui::game_mode_toast_text(
+            handler.has_pad(),
+            &handler.key_gestures(Action::GameMode),
+        );
+        self.ui.enter_game_mode(toast);
+        self.ui.osk(OskCommand::Hide, &self.browser, out);
+        self.ui.menu.close();
+        self.ui.hints.hide();
+        if self.ui.settings.visible() {
+            self.settings_close(out);
+        }
+        log::info!("game mode: true");
+    }
+
+    /// Leave it (the menu's Exit row), taking the menu with it.
+    fn leave_game_mode(&mut self) {
+        self.ui.leave_game_mode();
+        self.ui.game_menu.close();
+        log::info!("game mode: false");
+    }
+
+    /// Apply an action on Game Mode's menu (see [`crate::overlay::game_menu`]).
+    /// It is the only screen reachable while the mode is on, so every row either
+    /// returns to the game or leaves the mode.
+    fn game_menu_action(&mut self, action: &GameMenuAction, out: &mut Vec<AppCommand>) {
+        match action {
+            GameMenuAction::Activate => self.game_menu_activate(out),
+            GameMenuAction::CycleProfile(delta) => {
+                if self.ui.game_menu.row() == GameRow::Profile {
+                    self.set_game_profile(self.ui.game_profile().cycle(*delta), out);
+                }
+            }
+            GameMenuAction::Click(index) => {
+                self.ui.game_menu.select(*index);
+                self.game_menu_activate(out);
             }
         }
-        log::info!("game mode: {}", self.ui.game_mode());
+    }
+
+    /// A / Enter on the focused Game Mode row.
+    fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.game_menu.row() {
+            GameRow::Resume => self.ui.game_menu.close(),
+            GameRow::Profile => {
+                self.set_game_profile(self.ui.game_profile().cycle(1), out);
+            }
+            // The keyboard types into the page and outranks this menu, so close
+            // it first — the two would fight over the pad otherwise.
+            GameRow::TypeText => {
+                self.ui.game_menu.close();
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+            // The menu is the only way in and the only way out.
+            GameRow::Toggle => match self.ui.game_mode() {
+                true => self.leave_game_mode(),
+                false => {
+                    self.ui.game_menu.close();
+                    self.enter_game_mode(out);
+                }
+            },
+        }
+    }
+
+    /// Push a pad profile into the live UI and translator, which releases what
+    /// the page holds first. The config is the source of truth; callers save it.
+    fn adopt_game_profile(&mut self, profile: GameProfile, out: &mut Vec<AppCommand>) {
+        self.ui.set_game_profile(profile);
+        self.event_handler
+            .set_game_profile(profile, &self.browser, out);
+    }
+
+    /// The menu's Profile row: adopt it, and make it the new default.
+    fn set_game_profile(&mut self, profile: GameProfile, out: &mut Vec<AppCommand>) {
+        self.config.game_mode.profile = profile;
+        self.config.save();
+        self.adopt_game_profile(profile, out);
+        log::info!("game mode profile: {}", profile.as_str());
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
@@ -297,7 +389,7 @@ impl App {
     /// — the config and the gamepad bindings, each saved and re-applied live.
     pub(super) fn settings_close(&mut self, out: &mut Vec<AppCommand>) {
         let (config, bindings) = self.ui.settings_close();
-        self.apply_config(config);
+        self.apply_config(config, out);
         if let Some(store) = bindings {
             self.apply_bindings(store, out);
         }
@@ -317,9 +409,12 @@ impl App {
     /// re-apply the parts the running app can change without a restart. The rest
     /// (window size, GL backend, engine threads, ad-block lists, persisted site
     /// data) take effect on the next launch — those rows are flagged with `*`.
-    fn apply_config(&mut self, config: AppConfig) {
+    fn apply_config(&mut self, config: AppConfig, out: &mut Vec<AppCommand>) {
         self.config = config;
         self.config.save();
+        // Restoring the defaults can move the pad profile under a live Game
+        // Mode, so push it the same way the menu does.
+        self.adopt_game_profile(self.config.game_mode.profile, out);
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler

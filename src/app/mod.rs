@@ -7,7 +7,9 @@ mod command;
 mod execute;
 mod router;
 
-pub use command::{AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
+pub use command::{
+    AppCommand, GameMenuAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+};
 
 use crate::browser::AppBrowser;
 use crate::data::session::Session;
@@ -116,6 +118,7 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
+            &config.game_mode,
             crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");

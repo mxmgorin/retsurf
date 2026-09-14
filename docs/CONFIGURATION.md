@@ -245,6 +245,22 @@ osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held na
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
 cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
+haptics = true             # let a page rumble the pad (the Gamepad vibration API)
+
+[game_mode]
+# Game Mode hands the input to the page and hides the chrome, so a web game gets
+# the keys and buttons the browser would otherwise take. The `game_mode` binding
+# (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
+# mode; inside, a held Select does the same, reserved and never the game's. That
+# menu is the only way in and out — its last row reads Enable or Disable — and it
+# also switches this profile (written back here), which is why it opens outside
+# the mode too, or summons the on-screen keyboard over the game.
+# The profile is how the pad reaches the game while the mode is on: "keys" maps
+# the D-pad and face buttons to the retro keyboard convention (arrows, z/x/c,
+# Space, Enter), "pad" passes the buttons through untouched for games that read
+# the Gamepad API themselves. Both keep the right stick as the cursor and R2 as
+# the click.
+profile = "keys"
 ```
 
 ## Bindings (`bindings.toml`)
@@ -293,6 +309,9 @@ is open — menu, on-screen keyboard, or link hints; with none open the key goes
 to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
 cursor and page scroll — the scroll fallback for devices without a right
 analog stick) · `none`.
+
+Also `game_mode` (hand the input to the page for a web game — see `[game_mode]`
+above — the gesture opens that mode's menu, which carries the way in and out).
 
 Invalid buttons, keys, actions, or gestures are logged and skipped at startup —
 check the log if a binding doesn't respond.

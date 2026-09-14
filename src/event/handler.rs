@@ -6,13 +6,13 @@ use crate::event::bindings::{self, Action};
 use crate::{
     app::{AppCommand, SettingsAction},
     browser::AppBrowser,
-    config::{GameModeConfig, InputConfig},
+    config::{GameModeConfig, GameProfile, InputConfig},
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
 use inputbind::sdl::{is_modifier, key_name, mods_for, pad_of, KeyNames, Keymap};
-use inputbind::{Bindings, Capture, Captured, Store, Tick};
+use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
@@ -38,6 +38,9 @@ pub struct AppEventHandler {
     game_controller_subsystem: sdl2::GameControllerSubsystem,
     /// Gesture → action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
+    /// The text the tables were built from, so the chrome can name a gesture
+    /// the way the file spells it (see [`Self::key_gestures`]).
+    store: Store,
     /// Derived once, so the `[keyboard]` table resolves its names at load.
     key_names: KeyNames,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
@@ -88,11 +91,13 @@ impl AppEventHandler {
         let key_names = KeyNames::new();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
         let game_input = GameInput::new(game_mode.profile, &gamepad_cfg);
+        let store = bindings::load_store();
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            bindings: bindings::build(&bindings::load_store(), &key_names),
+            bindings: bindings::build(&store, &key_names),
+            store,
             key_names,
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
@@ -113,11 +118,39 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
+    /// Switch Game Mode's pad mapping live (its menu's Profile row).
+    pub fn set_game_profile(
+        &mut self,
+        profile: GameProfile,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        self.game_input.set_profile(profile, browser, commands);
+    }
+
     /// Rebuild both devices' tables from an edited store. The pad forgets what it
     /// holds, so a press begun under the old table cannot resolve against the new.
     pub fn set_bindings(&mut self, store: &Store, commands: &mut Vec<AppCommand>) {
         self.bindings = bindings::build(store, &self.key_names);
+        self.store = store.clone();
         self.gamepad.reset(commands);
+    }
+
+    /// The gestures `action` answers to on the keyboard, as `bindings.toml`
+    /// spells them — for naming a way out on screen rather than assuming one.
+    pub fn key_gestures(&self, action: Action) -> Vec<String> {
+        self.store
+            .keyboard
+            .iter()
+            .filter(|(_, name)| name.as_str() == action.name())
+            .map(|(gesture, _)| gesture.clone())
+            .collect()
+    }
+
+    /// Whether this device has a pad at all — a controller, or a panel that
+    /// wires its buttons to keys (the Miyoos).
+    pub fn has_pad(&self) -> bool {
+        !self.game_controllers.is_empty() || self.keymap != Keymap::Desktop
     }
 
     /// Reports whether this pass waited on the event queue. The loop's other

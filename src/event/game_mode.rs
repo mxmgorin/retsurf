@@ -2,7 +2,7 @@
 //! built-in mappings are [`crate::config::GameProfile`]; a bound source is
 //! withheld from the Gamepad API (the `bool` returns here), so the page never
 //! sees one press twice. Select is reserved in every profile — held past the
-//! hold it leaves Game Mode.
+//! hold it opens Game Mode's menu ([`crate::overlay::game_menu`]).
 
 use crate::app::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
@@ -93,7 +93,7 @@ pub struct GameInput {
     /// Whether the page holds the left mouse button (R2).
     click: bool,
     r2: Trigger,
-    /// When Select went down; held past `hold` it leaves Game Mode.
+    /// When Select went down; held past `hold` it opens the Game Mode menu.
     select_at: Option<Instant>,
     deadzone: f32,
     hold: Duration,
@@ -123,6 +123,18 @@ impl GameInput {
         self.hold = Duration::from_millis(cfg.hold_ms);
     }
 
+    /// Switch mapping without leaving Game Mode (the menu's Profile row): what
+    /// the page holds under the old table is released before the new one starts.
+    pub fn set_profile(
+        &mut self,
+        profile: GameProfile,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        self.release(browser, commands);
+        self.profile = profile;
+    }
+
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
     /// Returns whether the source is bound here, i.e. withheld from the API.
     pub fn on_pad(
@@ -132,7 +144,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        // Select is reserved in every profile: the hold that leaves.
+        // Select is reserved in every profile: the hold that opens the menu.
         if pad == Pad::Select {
             self.select_at = match pressed {
                 true => self.select_at.or_else(|| Some(Instant::now())),
@@ -249,7 +261,7 @@ impl GameInput {
         if let Some(at) = self.select_at {
             if at.elapsed() >= self.hold {
                 self.select_at = None;
-                commands.push(AppCommand::ToggleGameMode);
+                commands.push(AppCommand::GameMode);
             }
         }
         commands.push(AppCommand::Input(InputCommand::Analog {
@@ -315,7 +327,7 @@ mod tests {
             keys_target(Pad::Start),
             Some(KeyTarget::Named(NamedKey::Enter, Code::Enter))
         );
-        // Select and R2 are system (exit, click); L2 and the D-pad live elsewhere.
+        // Select and R2 are system (menu, click); L2 and the D-pad live elsewhere.
         assert_eq!(keys_target(Pad::Select), None);
         assert_eq!(keys_target(Pad::R2), None);
         assert_eq!(keys_target(Pad::L2), None);
