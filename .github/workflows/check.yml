@@ -1,0 +1,45 @@
+name: Check
+
+# The signal every push gets: does it build, do the tests pass, is clippy clean.
+# Deliberately not the shipping build — no fat LTO, no packaging, no artifact.
+# Binaries come from Nightly and from releases, so nothing here has a consumer.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # 22.04 over latest to match the shipping build's glibc, so a link error
+    # shows up here rather than at release time.
+    runs-on: ubuntu-22.04
+    env:
+      # clang-sys would take the newest libclang on this image, and mozangle's
+      # shader bindgen dies on clang 15: it dropped __builtin_ia32_* sat-math.
+      LIBCLANG_PATH: /usr/lib/llvm-14/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/linux-build-env
+
+      # One profile for all three steps: a profile switch would compile Servo a
+      # second time. Release without the LTO knobs the Nightly build sets.
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test --release
+
+      # Only workspace crates go through clippy-driver (RUSTC_WORKSPACE_WRAPPER),
+      # so the dependencies stay as the build left them.
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings

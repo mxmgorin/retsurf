@@ -13,15 +13,15 @@ name: Linux ARMhf
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
+  workflow_call:
   release:
     types: [published]
 
+# A release or a nightly run must never lose its artifacts to a newer commit, so
+# only a manual re-run supersedes anything.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:
   contents: write

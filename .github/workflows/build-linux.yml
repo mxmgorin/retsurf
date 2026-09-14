@@ -1,22 +1,16 @@
 name: Linux
 
+# The shipping build: fat LTO, packaged, uploaded. Correctness is Check's job, so
+# a push does not come through here — this runs for a release and for Nightly.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-  # The one platform a pull request builds: it is also where the tests and clippy
-  # run, and six platforms per push is a lot of runner for one signal.
-  pull_request:
+  workflow_call:
   release:
     types: [published]
 
-# Only pushes supersede each other: a second push to main cancels the build the
-# first one started. Release and manual runs get their own group (the ref differs)
-# and never cancel, so a release can't lose its artifacts to a newer commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:
   contents: write
@@ -26,8 +20,6 @@ jobs:
     # 22.04 over latest: its glibc 2.35 keeps the binary runnable on older
     # distros (glibc only guarantees backward compatibility).
     runs-on: ubuntu-22.04
-    # Job-wide so the build, the tests and clippy share one set of artifacts: a
-    # profile flag that differs between steps makes cargo compile the graph twice.
     env:
       # clang-sys would take the newest libclang on this image, and mozangle's
       # shader bindgen dies on clang 15: it dropped __builtin_ia32_* sat-math.
@@ -52,33 +44,7 @@ jobs:
           free -h || true
           df -h /
 
-      - name: Install Servo build dependencies
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential clang libclang-14-dev cmake curl git gperf pkg-config \
-            python3 python3-pip ca-certificates \
-            libssl-dev libdbus-1-dev libfreetype6-dev libglib2.0-dev \
-            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
-            libsdl2-dev zip
-
-      - name: Rust toolchain
-        run: |
-          set -eux
-          # rust-toolchain.toml pins the channel; rustup (preinstalled) honors it.
-          rustup show
-          rustc --version
-
-      # The engine is a git dependency (our Servo fork), so a cold runner clones
-      # ~1.7 GB before it can resolve. Cargo home only: a Servo release target/
-      # would blow the 10 GB cache budget. `shared-key` shares one entry per OS.
-      - name: Cache cargo home
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-targets: false
-          shared-key: cargo-home
+      - uses: ./.github/actions/linux-build-env
 
       # System SDL2, dynamically linked — desktop distros all package it, unlike
       # the windows/macos targets where a bundled static build is the only sane
@@ -89,20 +55,6 @@ jobs:
           set -eux
           cargo build --release
           df -h /
-
-      # --release, not the default dev profile: the graph above is already built
-      # that way, and a profile switch would compile Servo a second time.
-      - name: Test
-        run: |
-          set -eux
-          cargo test --release
-
-      # Only workspace crates go through clippy-driver (RUSTC_WORKSPACE_WRAPPER),
-      # so the dependencies stay as the build left them.
-      - name: Clippy
-        run: |
-          set -eux
-          cargo clippy --release --all-targets -- -D warnings
 
       - name: Stage binary
         run: |

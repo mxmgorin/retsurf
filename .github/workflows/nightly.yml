@@ -1,0 +1,139 @@
+name: Nightly
+
+# One rolling pre-release on the `nightly` tag, rebuilt from main once a day.
+# Release assets are public, so the app's nightly channel needs no GitHub token —
+# Actions artifacts, which the channel used to read, require auth even here.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if the last nightly is already this commit"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: write
+
+# Never two at once: they would race for the tag.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      sha: ${{ steps.check.outputs.sha }}
+      short: ${{ steps.check.outputs.short }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          # The published nightly records the commit it was built from, so a quiet
+          # day costs nothing. No release yet means there is nothing to compare to.
+          last="$(gh release view nightly --json body --jq .body 2>/dev/null \
+                  | sed -n 's/^commit: //p' || true)"
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "forced: rebuilding $sha"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [ "$sha" = "$last" ]; then
+            echo "no commits since the last nightly ($last)"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "building $sha (last was ${last:-none})"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-linux.yml
+
+  linux-arm:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-linux-arm.yml
+
+  linux-armhf:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-linux-armhf.yml
+
+  macos:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-macos.yml
+
+  windows:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-windows.yml
+
+  android:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/build-android.yml
+
+  publish:
+    needs: [changed, linux, linux-arm, linux-armhf, macos, windows, android]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+
+      # Asset names must match the release ones exactly: the updater asks for a
+      # file by name. Some artifacts are already the finished asset, the rest are
+      # the tree or binary the release step would have zipped.
+      - name: Package
+        run: |
+          set -eux
+          mkdir -p out
+          cp art/retsurf-allium/retsurf-allium.zip out/
+          cp art/retsurf-onionos/retsurf-onionos.zip out/
+          cp art/retsurf-macos-aarch64/*.dmg out/retsurf-macos-aarch64.dmg
+          cp art/retsurf-android-arm64/*.apk out/retsurf-android-arm64.apk
+          for a in retsurf-linux-x86_64 retsurf-linux-aarch64 retsurf-portmaster \
+                   retsurf-windows-x86_64; do
+            (cd "art/$a" && zip -r "../../out/$a.zip" .)
+          done
+          # Sidecars for the three the updater installs in place; it verifies the
+          # download against them (src/update).
+          cd out
+          for a in retsurf-linux-x86_64 retsurf-linux-aarch64 retsurf-portmaster; do
+            sha256sum "$a.zip" > "$a.zip.sha256"
+          done
+          ls -la
+
+      # The tag follows main rather than accumulating one tag per night.
+      - name: Move the nightly tag
+        run: |
+          set -eux
+          git tag -f nightly "${{ needs.changed.outputs.sha }}"
+          git push origin nightly --force
+
+      # prerelease + make_latest keep this out of the way of the stable channel,
+      # which picks the highest semver tag and cannot parse `nightly` anyway.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly
+          prerelease: true
+          make_latest: false
+          files: out/*
+          body: |
+            Automated build from the latest commit on main. Expect bugs.
+
+            commit: ${{ needs.changed.outputs.sha }}
