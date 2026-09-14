@@ -1,6 +1,6 @@
 //! In-app self-update. A manual "Check for updates" on the Settings -> About tab
 //! queries GitHub for a newer build on the configured channel (stable releases,
-//! `beta` pre-releases, or `ci` per-commit artifacts); what it can then do depends
+//! `beta` pre-releases, or the rolling `nightly` build); what it can then do depends
 //! on the detected install [`Kind`]:
 //! - **PortMaster** (handheld port): download the release zip, verify, atomically
 //!   swap the launcher + three per-core binaries in place, quit-to-relaunch.
@@ -43,11 +43,9 @@ pub enum UpdateState {
     },
     Available {
         version: String,
-        /// Release notes (the GitHub release body), shown read-only on the About
-        /// tab. `None` on the CI channel (per-commit artifacts carry no notes).
+        /// Release notes (the GitHub release body), shown read-only on the About tab.
         notes: Option<String>,
-        /// The release's web page, offered as a "View on GitHub" link beside the
-        /// notes. `None` on the CI channel (artifacts have no public page).
+        /// The release's web page, offered as a "View on GitHub" link beside the notes.
         page: Option<String>,
         offer: Offer,
     },
@@ -102,24 +100,15 @@ impl Kind {
             Kind::Manual => None,
         }
     }
-
-    /// The CI artifact name for an in-place install — the release asset without its
-    /// `.zip` suffix (upload-artifact stores the same tree under that bare name).
-    fn artifact(&self) -> Option<&str> {
-        self.asset().and_then(|a| a.strip_suffix(".zip"))
-    }
 }
 
 pub struct Updater {
     state: Arc<Mutex<UpdateState>>,
     kind: Kind,
-    /// Which builds to check (stable releases or CI artifacts).
+    /// Which builds to check: stable releases, pre-releases, or the nightly.
     channel: Channel,
     /// Run a throttled background check at startup (see [`Self::auto_check`]).
     auto_check: bool,
-    /// GitHub token for the CI channel (resolved from env/config once at startup).
-    /// Held here, never in [`UpdateState`], so it stays out of the UI snapshot.
-    token: Option<String>,
 }
 
 impl Updater {
@@ -129,11 +118,10 @@ impl Updater {
             kind: resolve_kind(),
             channel: cfg.channel,
             auto_check: cfg.auto_check,
-            token: cfg.resolve_token(),
         }
     }
 
-    /// Adopt edited `[update]` settings live (channel / auto-check / token); a
+    /// Adopt edited `[update]` settings live (channel / auto-check); a
     /// channel switch resets state to Idle so no stale offer from the old channel.
     pub fn set_config(&mut self, cfg: &UpdateConfig) {
         if self.channel != cfg.channel {
@@ -141,7 +129,6 @@ impl Updater {
         }
         self.channel = cfg.channel;
         self.auto_check = cfg.auto_check;
-        self.token = cfg.resolve_token();
     }
 
     /// Snapshot the current state for the UI (lock, clone the small enum, release).
@@ -166,23 +153,12 @@ impl Updater {
         let state = self.state.clone();
         let sender = sender.clone();
         let channel = self.channel;
-        let token = self.token.clone();
         let asset = self.kind.asset().map(str::to_string);
-        let artifact = self.kind.artifact().map(str::to_string);
         std::thread::spawn(move || {
             let result = match channel {
                 Channel::Release => github::latest_release(asset.as_deref()),
                 Channel::Beta => github::latest_beta(asset.as_deref()),
-                Channel::Ci => match (artifact, token) {
-                    (Some(artifact), Some(token)) => github::latest_ci(&artifact, &token),
-                    (None, _) => {
-                        Err("CI updates aren't available for this install type".to_string())
-                    }
-                    (_, None) => Err(
-                        "Set RETSURF_GITHUB_TOKEN (or [update] token) for the CI channel"
-                            .to_string(),
-                    ),
-                },
+                Channel::Nightly => github::latest_nightly(asset.as_deref()),
             };
             publish(&state, result.unwrap_or_else(UpdateState::Error), &sender);
         });
@@ -219,25 +195,11 @@ impl Updater {
                 _ => return,
             }
         };
-        // CI artifact downloads hit the GitHub API and need the token; release asset
-        // URLs are public (and must NOT carry it). ureq drops the Authorization header
-        // when it follows the 302 to blob storage (redirect_auth_headers = Never).
-        let auth = (self.channel == Channel::Ci)
-            .then(|| self.token.clone())
-            .flatten();
         let kind = self.kind.clone();
         let state = self.state.clone();
         let sender = sender.clone();
         std::thread::spawn(move || {
-            install::run(
-                &kind,
-                &version,
-                &url,
-                sha256.as_deref(),
-                auth.as_deref(),
-                &state,
-                &sender,
-            );
+            install::run(&kind, &version, &url, sha256.as_deref(), &state, &sender);
         });
     }
 }

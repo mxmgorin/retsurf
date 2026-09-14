@@ -16,7 +16,9 @@
 /// Generate a string-keyed config enum from a `Variant => "token", "Label"` table.
 ///
 /// `default <Variant>;` names the fallback returned by [`Default`] and by
-/// `from_value` for an unrecognized token. See the [module docs](self).
+/// `from_value` for an unrecognized token. A variant may list retired spellings as
+/// `"token" | "old"`, which parse but are never written back. See the
+/// [module docs](self).
 macro_rules! token_enum {
     (
         $(#[$emeta:meta])*
@@ -24,7 +26,7 @@ macro_rules! token_enum {
             default $default:ident;
             $(
                 $(#[$vmeta:meta])*
-                $variant:ident => $token:literal, $label:literal,
+                $variant:ident => $token:literal $(| $alias:literal)*, $label:literal,
             )+
         }
     ) => {
@@ -48,13 +50,15 @@ macro_rules! token_enum {
                 }
             }
 
-            /// Parse leniently: a case- and whitespace-insensitive token match,
-            /// falling back to the default so a typo in a hand-edited config can't
-            /// break the whole parse.
+            /// Parse leniently: a case- and whitespace-insensitive match on the token
+            /// or any of its aliases, falling back to the default so a typo in a
+            /// hand-edited config can't break the whole parse.
             pub fn from_value(s: &str) -> Self {
                 let s = s.trim();
                 $(
-                    if s.eq_ignore_ascii_case($token) {
+                    if s.eq_ignore_ascii_case($token)
+                        $( || s.eq_ignore_ascii_case($alias) )*
+                    {
                         return $name::$variant;
                     }
                 )+

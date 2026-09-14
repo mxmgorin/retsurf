@@ -309,6 +309,10 @@ mod tests {
             MemoryProfile::from_value(" Embedded"),
             MemoryProfile::Embedded
         );
-        assert_eq!(Channel::from_value(" CI "), Channel::Ci);
+        assert_eq!(Channel::from_value(" Nightly "), Channel::Nightly);
+        // `ci` is the retired spelling; configs written before the channel moved to
+        // the nightly release must not silently fall back to stable.
+        assert_eq!(Channel::from_value(" CI "), Channel::Nightly);
+        assert_eq!(Channel::Nightly.as_str(), "nightly");
     }
 }

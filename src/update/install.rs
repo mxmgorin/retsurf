@@ -29,11 +29,10 @@ pub(super) fn run(
     version: &str,
     url: &str,
     sha256: Option<&str>,
-    auth: Option<&str>,
     state: &Mutex<UpdateState>,
     sender: &UserEventSender,
 ) {
-    match install(kind, url, sha256, auth, state, sender) {
+    match install(kind, url, sha256, state, sender) {
         Ok(()) => publish(
             state,
             UpdateState::Installed {
@@ -52,7 +51,6 @@ fn install(
     kind: &Kind,
     url: &str,
     sha256: Option<&str>,
-    auth: Option<&str>,
     state: &Mutex<UpdateState>,
     sender: &UserEventSender,
 ) -> Result<(), String> {
@@ -66,7 +64,7 @@ fn install(
     // 1) Stream the zip to staging, hashing as we go (never held whole in memory —
     //    the binaries make this tens-to-hundreds of MB, even on a 1 GB device).
     let zip_path = staging.join("update.zip");
-    let digest = download(url, &zip_path, auth, state, sender).inspect_err(|_| {
+    let digest = download(url, &zip_path, state, sender).inspect_err(|_| {
         let _ = fs::remove_dir_all(&staging);
     })?;
 
@@ -124,18 +122,13 @@ fn swap_pairs(kind: &Kind, staging: &Path) -> Vec<(PathBuf, PathBuf)> {
 fn download(
     url: &str,
     dest: &Path,
-    auth: Option<&str>,
     state: &Mutex<UpdateState>,
     sender: &UserEventSender,
 ) -> Result<String, String> {
-    // The CI channel downloads from the GitHub API and needs the token; ureq drops
-    // the Authorization header on the 302 to blob storage (redirect_auth_headers =
-    // Never), so it never leaks to the CDN. Release URLs pass `None`.
-    let mut request = ureq::get(url).header("User-Agent", USER_AGENT);
-    if let Some(token) = auth {
-        request = request.header("Authorization", format!("Bearer {token}"));
-    }
-    let response = request.call().map_err(|e| e.to_string())?;
+    let response = ureq::get(url)
+        .header("User-Agent", USER_AGENT)
+        .call()
+        .map_err(|e| e.to_string())?;
     let total = crate::net::content_length(response.headers()).unwrap_or(0);
     publish(
         state,

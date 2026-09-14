@@ -180,13 +180,12 @@ extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 # > Updates). One of:
 #   release  tagged GitHub releases, stable only (the default)
 #   beta     tagged releases including pre-releases (highest semver wins)
-#   ci       per-commit main CI artifacts (dev/nightly) — needs a GitHub token
+#   nightly  the rolling "nightly" pre-release, rebuilt from main once a day. Its
+#            tag carries no version, so this channel compares the commit the build
+#            records instead. Unsigned builds straight off main — expect bugs.
+#            The old spelling "ci" still parses and means this.
 channel = "release"
 auto_check = true          # throttled background check at startup (once/day); false = About tab only
-# GitHub token (fine-grained PAT with actions:read) for the "ci" channel only —
-# GitHub requires auth to download Actions artifacts. Prefer the RETSURF_GITHUB_TOKEN
-# env var over writing a secret to disk; this field is a fallback. Unused by release/beta.
-token = ""
 
 [adblock]
 enabled = true             # master switch for ad & tracker blocking
