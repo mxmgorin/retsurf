@@ -255,13 +255,76 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 # menu is the only way in and out — its last row reads Enable or Disable — and it
 # also switches this profile (written back here), which is why it opens outside
 # the mode too, or summons the on-screen keyboard over the game.
-# The profile is how the pad reaches the game while the mode is on: "keys" maps
-# the D-pad and face buttons to the retro keyboard convention (arrows, z/x/c,
-# Space, Enter), "pad" passes the buttons through untouched for games that read
-# the Gamepad API themselves. Both keep the right stick as the cursor and R2 as
-# the click.
+# Which profile drives the pad and the keyboard while the mode is on: a built-in
+# ("keys" or "pad") or the stem of a profiles/<id>.toml of your own. See "Game
+# Mode profiles" below for the format.
 profile = "keys"
 ```
+
+## Game Mode profiles (`profiles/*.toml`)
+
+A profile is what each button, stick direction and key sends to the page while
+Game Mode is on. Two ship built in — `keys` (arrows + z/x/c + Space/Enter, the
+retro convention most of itch.io plays with) and `pad` (the buttons reach the
+page raw, for games that read the Gamepad API themselves). `[game_mode] profile`
+picks one by id, and the Game Mode menu's **Profile** row cycles them.
+
+The built-ins live in the binary and are always offered, so a later release can
+add one without touching your files. Put a `profiles/<id>.toml` in the data dir
+to add a profile of your own, or name it after a built-in to replace that one —
+deleting the file restores it. A file is read at startup; a typo costs its own
+binding and is logged, not the whole profile.
+
+```toml
+name = "Vampire Survivors"    # what the menu shows; the file name is the id
+
+[pad]                         # buttons and the D-pad, by the bindings.toml names
+up = "ArrowUp"
+a = "Space"
+b = "z"
+x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
+r2 = "click"                  # the left mouse button, at the cursor
+l2 = "passthrough"            # reaches the page as the gamepad button it is
+r1 = "none"                   # consumed: inert while this profile is active
+l1 = "layer:aim"              # holds a layer open; sends nothing itself
+
+[stick.left]                  # four directions, through [input] deadzone
+up = "ArrowUp"
+down = "ArrowDown"
+left = "ArrowLeft"
+right = "ArrowRight"
+
+[stick.right]
+analog = "cursor"             # or "scroll" — the whole stick, not a direction
+
+[keyboard]                    # physical keys; unlisted ones reach the game as-is
+w = "ArrowUp"
+
+[layer.aim.pad]               # while l1 is held
+a = "Shift"
+[layer.aim.keyboard]
+w = "ArrowDown"
+```
+
+**Targets** are a key name, or one of `click`, `cursor`, `scroll`, `passthrough`,
+`none`, `layer:<name>`. A key is written as one character (`z`), `Space`, or a
+standard name (`ArrowUp`, `Enter`, `Escape`, `Shift`); the `code` games branch on
+is derived from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
+speed = 1.5 }` says it out loud where they differ. `speed` scales `cursor` and
+`scroll`.
+
+**A bound source is withheld from the page's raw input**, so a button mapped to a
+key is not also delivered as a gamepad button — only `passthrough` is. A stick
+read as directions keeps its whole axis, since half an axis cannot be withheld.
+
+**Select is reserved** in every profile and every layer: holding it opens the Game
+Mode menu. A binding on it is refused with a line in the log.
+
+**Layers** are held, not toggled: the activator sends nothing of its own, and a
+button the layer leaves alone still means what `[pad]` says. What a source sends
+is decided when it goes down, so releasing the activator never strands a key that
+is still held. Layers carry buttons and keys, not sticks, and cannot open other
+layers.
 
 ## Bindings (`bindings.toml`)
 
