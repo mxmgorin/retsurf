@@ -252,9 +252,9 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 # the keys and buttons the browser would otherwise take. The `game_mode` binding
 # (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
 # mode; inside, a held Select does the same, reserved and never the game's. That
-# menu is the only way in and out — its last row reads Enable or Disable — and it
-# also switches this profile (written back here), which is why it opens outside
-# the mode too, or summons the on-screen keyboard over the game.
+# menu is the only way in and out — it leads with Enable or Disable — and it also
+# switches this profile (written back here), which is why it opens outside the
+# mode too, edits the profile, or summons the on-screen keyboard over the game.
 # Which profile drives the pad and the keyboard while the mode is on: a built-in
 # ("keys" or "pad") or the stem of a profiles/<id>.toml of your own. See "Game
 # Mode profiles" below for the format.
