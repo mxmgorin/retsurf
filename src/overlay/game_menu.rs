@@ -9,7 +9,8 @@ pub enum GameRow {
     /// Enter or leave Game Mode — the only row whose action depends on state,
     /// and what the screen is mostly opened for, so it leads.
     Toggle,
-    /// Close the menu: back to the game, or to the browser.
+    /// Close the menu: back to the game, or to the browser — either way, back
+    /// to what the opener was doing.
     Resume,
     /// The active pad mapping, cycled in place (A / Left / Right). Settable from
     /// outside the mode too, which is the point of opening the menu there.
@@ -30,13 +31,11 @@ impl GameRow {
         GameRow::TypeText,
     ];
 
-    /// The row's label, which two rows word by state: outside the mode there is
-    /// no game to resume, and the last row is the way in rather than out. The
-    /// panel is titled GAME MODE, so that row needs no noun of its own.
+    /// The row's label. Only the toggle words itself by state; the panel is
+    /// titled GAME MODE, so it needs no noun of its own.
     pub fn label(self, in_game_mode: bool) -> &'static str {
         match (self, in_game_mode) {
-            (GameRow::Resume, true) => "Resume",
-            (GameRow::Resume, false) => "Close",
+            (GameRow::Resume, _) => "Resume",
             (GameRow::Profile, _) => "Profile",
             (GameRow::Edit, _) => "Edit profile...",
             (GameRow::TypeText, _) => "Keyboard...",
@@ -124,16 +123,13 @@ mod tests {
         assert_ne!(menu.row(), GameRow::Toggle);
     }
 
-    /// Only the two state-worded rows change, and every row is always labelled.
+    /// One row words itself by state, and it is the one whose action does.
     #[test]
     fn the_labels_follow_the_mode() {
         for row in GameRow::ALL {
             assert!(!row.label(true).is_empty() && !row.label(false).is_empty());
             let same = row.label(true) == row.label(false);
-            assert_eq!(
-                same,
-                matches!(row, GameRow::Profile | GameRow::Edit | GameRow::TypeText)
-            );
+            assert_eq!(same, row != GameRow::Toggle, "{row:?}");
         }
     }
 }
