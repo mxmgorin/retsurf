@@ -277,12 +277,12 @@ binding and is logged, not the whole profile.
 
 **The Game Mode menu's "Edit profile..." row** edits the buttons without a
 keyboard or a text editor, which is the only way to do it on a handheld: a row
-per button, **A** picks what it sends from the on-screen keyboard, Left/Right
-steps it through `passthrough` / `click` / `none` / unbound, and **B** saves.
-Editing a built-in writes the `profiles/<id>.toml` that replaces it, so deleting
-that file is still how you get the original back. The sticks, the `[keyboard]`
-table and the layers below are the file's: they need names the screen has no
-room to pick.
+per button, **A** opens what that button can send — a key, a mouse click, the
+gamepad button itself, or nothing — and **B** saves. Choosing *Key...* hands over
+to the on-screen keyboard, so any key is reachable by pressing it. Editing a
+built-in writes the `profiles/<id>.toml` that replaces it, so deleting that file
+is still how you get the original back. The sticks, the `[keyboard]` table and
+the layers below are the file's: they need names the screen has no room to pick.
 
 ```toml
 name = "Vampire Survivors"    # what the menu shows; the file name is the id
