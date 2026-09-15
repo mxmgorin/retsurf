@@ -9,7 +9,7 @@
 //! [pad]                  # buttons and the D-pad, by inputbind's names
 //! a = "Space"
 //! b = "z"
-//! r2 = "click"
+//! r2 = "mouse.left"
 //! l2 = "passthrough"     # reaches the page as the gamepad button it is
 //!
 //! [stick.left]           # four directions, through the dead zone
@@ -73,7 +73,8 @@ pub struct KeyTarget {
 pub enum Target {
     Key(KeyTarget),
     /// The left mouse button at the cursor — the one the router's Confirm
-    /// intent carries, and the path measured on hardware.
+    /// intent carries, and the path measured on hardware. Spelled `mouse.left`,
+    /// so the other buttons have a name to arrive under.
     Click,
     /// The whole stick moves the cursor (analog sources only).
     Cursor {
@@ -269,7 +270,13 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         "none" => return Some(Target::None),
         "cursor" => return Some(Target::Cursor { speed }),
         "scroll" => return Some(Target::Scroll { speed }),
-        "click" => return Some(Target::Click),
+        "mouse.left" => return Some(Target::Click),
+        // The namespace is open, but only the left button has a route: the
+        // router's Confirm intent carries no button of its own.
+        "mouse.right" | "mouse.middle" => {
+            log::warn!("game profile: `{whose}` — only `mouse.left` has a route");
+            return None;
+        }
         _ => {}
     }
     let key = parse_key(text, whose)?;
@@ -613,14 +620,33 @@ mod tests {
     }
 
     /// The built-ins ship in the binary, so a typo in one is a startup panic —
-    /// it has to fail here instead.
+    /// it has to fail here instead. Both must also keep the pointer path: it is
+    /// the one way of playing this milestone has measured on hardware, and a
+    /// profile that drops it ships a regression against that.
     #[test]
-    fn every_built_in_resolves() {
+    fn every_built_in_resolves_and_keeps_the_pointer() {
         let keys = KeyNames::new();
         for (id, text) in BUILT_IN {
             let profile = Profile::resolve(id, parse_built_in(id, text), &keys);
             assert!(!profile.name.is_empty(), "`{id}` has no name");
+            assert_eq!(profile.pad(None, Pad::R2), Some(&Target::Click), "`{id}`");
+            assert!(profile.stick(true).is_analog(), "`{id}` has no cursor");
         }
+    }
+
+    /// The namespace is open but the route is not, so the other buttons have to
+    /// be refused out loud rather than resolving to the left one.
+    #[test]
+    fn only_the_left_mouse_button_resolves() {
+        let profile = resolve(
+            r#"
+            [pad]
+            a = "mouse.left"
+            b = "mouse.right"
+            "#,
+        );
+        assert_eq!(profile.pad(None, Pad::A), Some(&Target::Click));
+        assert_eq!(profile.pad(None, Pad::B), None);
     }
 
     /// `code` is what a game branches on, so the common spellings must derive it

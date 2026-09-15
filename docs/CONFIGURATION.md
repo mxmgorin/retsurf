@@ -277,8 +277,8 @@ binding and is logged, not the whole profile.
 
 **The Game Mode menu's "Edit profile..." row** edits the buttons without a
 keyboard or a text editor, which is the only way to do it on a handheld: a row
-per button, **A** opens what that button can send — a key, a left click,
-Passthrough, or nothing — and **B** saves. Choosing *Key...* hands over
+per button, **A** opens what that button can send — a key, the left mouse
+button, Passthrough, or nothing — and **B** saves. Choosing *Key...* hands over
 to the on-screen keyboard, so any key is reachable by pressing it. Editing a
 built-in writes the `profiles/<id>.toml` that replaces it, so deleting that file
 is still how you get the original back. The sticks, the `[keyboard]` table and
@@ -292,7 +292,7 @@ up = "ArrowUp"
 a = "Space"
 b = "z"
 x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
-r2 = "click"                  # the left mouse button, at the cursor
+r2 = "mouse.left"             # the left mouse button, at the cursor
 l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this profile is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
@@ -315,8 +315,9 @@ a = "Shift"
 w = "ArrowDown"
 ```
 
-**Targets** are a key name, or one of `click`, `cursor`, `scroll`, `passthrough`,
-`none`, `layer:<name>`. A key is written as one character (`z`), `Space`, or a
+**Targets** are a key name, or one of `mouse.left`, `cursor`, `scroll`,
+`passthrough`, `none`, `layer:<name>`. Only the left mouse button has a route
+today; the other two are refused with a line in the log. A key is written as one character (`z`), `Space`, or a
 standard name (`ArrowUp`, `Enter`, `Escape`, `Shift`); the `code` games branch on
 is derived from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
 speed = 1.5 }` says it out loud where they differ. `speed` scales `cursor` and

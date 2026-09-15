@@ -30,7 +30,7 @@ impl Kind {
     pub fn label(self) -> &'static str {
         match self {
             Kind::Key => "Key...",
-            Kind::Click => "Left click",
+            Kind::Click => "Left mouse button",
             Kind::Passthrough => "Passthrough",
             Kind::Ignore => "Ignore",
         }
@@ -40,7 +40,7 @@ impl Kind {
     pub fn text(self) -> Option<&'static str> {
         match self {
             Kind::Key => None,
-            Kind::Click => Some("click"),
+            Kind::Click => Some("mouse.left"),
             Kind::Passthrough => Some("passthrough"),
             Kind::Ignore => Some("none"),
         }
