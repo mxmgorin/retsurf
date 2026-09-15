@@ -31,7 +31,7 @@ impl Kind {
         match self {
             Kind::Key => "Key...",
             Kind::Click => "Mouse click",
-            Kind::Passthrough => "Gamepad button",
+            Kind::Passthrough => "passthrough",
             Kind::Ignore => "Ignore",
         }
     }
