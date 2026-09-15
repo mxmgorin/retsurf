@@ -6,6 +6,9 @@
 /// The rows, top to bottom.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameRow {
+    /// Enter or leave Game Mode — the only row whose action depends on state,
+    /// and what the screen is mostly opened for, so it leads.
+    Toggle,
     /// Close the menu: back to the game, or to the browser.
     Resume,
     /// The active pad mapping, cycled in place (A / Left / Right). Settable from
@@ -15,18 +18,16 @@ pub enum GameRow {
     Edit,
     /// Summon the on-screen keyboard; it types into the page.
     TypeText,
-    /// Enter or leave Game Mode — the only row whose action depends on state.
-    Toggle,
 }
 
 impl GameRow {
     /// Top-to-bottom order, which is also the selection index.
     pub const ALL: [GameRow; 5] = [
+        GameRow::Toggle,
         GameRow::Resume,
         GameRow::Profile,
         GameRow::Edit,
         GameRow::TypeText,
-        GameRow::Toggle,
     ];
 
     /// The row's label, which two rows word by state: outside the mode there is
@@ -38,7 +39,7 @@ impl GameRow {
             (GameRow::Resume, false) => "Close",
             (GameRow::Profile, _) => "Profile",
             (GameRow::Edit, _) => "Edit profile...",
-            (GameRow::TypeText, _) => "Type text...",
+            (GameRow::TypeText, _) => "Keyboard...",
             (GameRow::Toggle, true) => "Disable",
             (GameRow::Toggle, false) => "Enable",
         }
@@ -60,13 +61,18 @@ impl GameMenu {
 
     /// Show it, highlighting what the opener most likely wants: inside the mode
     /// Resume, so an accidental open over a running game is one A-press from
-    /// gone; outside it the row that enters, which is what it was opened for.
+    /// back, not from ending it; outside it the row that enters, which is what
+    /// the screen was opened for.
     pub fn open(&mut self, in_game_mode: bool) {
         self.visible = true;
-        self.selected = match in_game_mode {
-            true => 0,
-            false => GameRow::ALL.len() - 1,
+        let wanted = match in_game_mode {
+            true => GameRow::Resume,
+            false => GameRow::Toggle,
         };
+        self.selected = GameRow::ALL
+            .iter()
+            .position(|row| *row == wanted)
+            .expect("ALL lists every row");
     }
 
     pub fn close(&mut self) {
@@ -104,14 +110,18 @@ mod tests {
         let mut menu = GameMenu::new();
         menu.open(true);
         assert_eq!(menu.row(), GameRow::Resume);
-        menu.move_sel(-1);
-        assert_eq!(menu.row(), GameRow::Resume);
         menu.move_sel(99);
+        assert_eq!(menu.row(), GameRow::TypeText);
+        menu.move_sel(-99);
         assert_eq!(menu.row(), GameRow::Toggle);
-        // Opened from outside the mode, entering is one A-press away.
+        // Opened from outside the mode, entering is one A-press away — and an
+        // accidental open inside it must not put leaving there instead.
         menu.close();
         menu.open(false);
         assert_eq!(menu.row(), GameRow::Toggle);
+        menu.close();
+        menu.open(true);
+        assert_ne!(menu.row(), GameRow::Toggle);
     }
 
     /// Only the two state-worded rows change, and every row is always labelled.
