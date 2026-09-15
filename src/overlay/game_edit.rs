@@ -30,8 +30,8 @@ impl Kind {
     pub fn label(self) -> &'static str {
         match self {
             Kind::Key => "Key...",
-            Kind::Click => "Mouse click",
-            Kind::Passthrough => "passthrough",
+            Kind::Click => "Left click",
+            Kind::Passthrough => "Passthrough",
             Kind::Ignore => "Ignore",
         }
     }

@@ -277,8 +277,8 @@ binding and is logged, not the whole profile.
 
 **The Game Mode menu's "Edit profile..." row** edits the buttons without a
 keyboard or a text editor, which is the only way to do it on a handheld: a row
-per button, **A** opens what that button can send — a key, a mouse click,
-`passthrough`, or nothing — and **B** saves. Choosing *Key...* hands over
+per button, **A** opens what that button can send — a key, a left click,
+Passthrough, or nothing — and **B** saves. Choosing *Key...* hands over
 to the on-screen keyboard, so any key is reachable by pressing it. Editing a
 built-in writes the `profiles/<id>.toml` that replaces it, so deleting that file
 is still how you get the original back. The sticks, the `[keyboard]` table and
