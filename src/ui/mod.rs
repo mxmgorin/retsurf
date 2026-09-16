@@ -458,11 +458,7 @@ impl AppUi {
     /// page's own rects come back in, and what [`AppBrowser`] is fed.
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
-        let ppp = self.egui_ctx.pixels_per_point();
-        (
-            x / ppp - self.webview_rect.left(),
-            y / ppp - self.webview_rect.top(),
-        )
+        browser_rel(self.to_points(x, y), self.webview_rect)
     }
 
     /// A window-pixel distance in points, for the deltas SDL reports in pixels.
@@ -470,6 +466,13 @@ impl AppUi {
     pub fn to_points(&self, dx: f32, dy: f32) -> (f32, f32) {
         let ppp = self.egui_ctx.pixels_per_point();
         (dx / ppp, dy / ppp)
+    }
+
+    /// The gamepad cursor as the page's own coordinate. It is kept in points
+    /// already, so nothing is converted here — see [`browser_rel`].
+    #[inline]
+    pub fn cursor_browser_rel(&self) -> (f32, f32) {
+        browser_rel(self.cursor, self.webview_rect)
     }
 
     /// Resize the browser to the web-view area on SDL window-resize events:
@@ -962,6 +965,13 @@ pub fn game_mode_toast_text(pad: bool, keys: &[String]) -> String {
     text
 }
 
+/// A point in screen points as the page's own coordinate — only the web view's
+/// origin comes off. Both devices end here: the cursor is kept in points and
+/// SDL reports pixels, so one conversion too many aims one of them elsewhere.
+fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
+    (x - webview.left(), y - webview.top())
+}
+
 /// The Game Mode entry toast: the chrome just hid, so name the way back.
 fn add_game_mode_toast(ctx: &egui::Context, text: &str) {
     egui::Area::new(egui::Id::new("game_mode_toast"))
@@ -977,7 +987,24 @@ fn add_game_mode_toast(ctx: &egui::Context, text: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{game_mode_toast_text, ChromeHidden};
+    use super::{browser_rel, egui, game_mode_toast_text, ChromeHidden};
+
+    /// The gamepad cursor and the mouse must land on the same page pixel. The
+    /// cursor is kept in points and SDL reports pixels; converting the cursor a
+    /// second time put a press at the corner into the middle of the page.
+    #[test]
+    fn the_pad_cursor_and_the_mouse_land_on_the_same_page_pixel() {
+        let webview = egui::Rect::from_min_size(egui::pos2(0.0, 33.0), egui::vec2(640.0, 447.0));
+        let ppp = 2.0;
+        // A point near the bottom-right corner, where the two diverged most.
+        let cursor = (636.0, 476.0);
+        let mouse_px = (cursor.0 * ppp, cursor.1 * ppp);
+        // What the mouse path does before it gets here, and the cursor must not.
+        let to_points = |(x, y): (f32, f32)| (x / ppp, y / ppp);
+        let from_mouse = browser_rel(to_points(mouse_px), webview);
+        assert_eq!(browser_rel(cursor, webview), from_mouse);
+        assert_eq!(from_mouse, (636.0, 443.0));
+    }
 
     /// The toast is the only thing on screen once the chrome hides, so it has to
     /// name the gestures this install really has — not the defaults.

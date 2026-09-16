@@ -79,13 +79,6 @@ impl AppUi {
             .and_then(|t| self.cursor_linger.checked_sub(t.elapsed()))
     }
 
-    /// The gamepad cursor in browser-relative coordinates (below the toolbar),
-    /// ready to feed to Servo as a mouse position.
-    #[inline]
-    pub fn cursor_browser_rel(&self) -> (f32, f32) {
-        self.to_browser_rel_pos(self.cursor.0, self.cursor.1)
-    }
-
     /// Set how long the gamepad cursor lingers after a move (the app calls this
     /// when the interface config changes live via the settings overlay).
     #[inline]
