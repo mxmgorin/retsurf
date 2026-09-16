@@ -1,6 +1,6 @@
 //! Game Mode's profiles, as two screens reached from its menu: the list of
 //! what this run offers, and what one profile can be told to do — use it, edit
-//! its buttons, rename it, copy it, or throw the file away. The device this is
+//! its mapping, rename it, copy it, or throw the file away. The device this is
 //! for has no file manager, so a profile it cannot add here is one it cannot
 //! add at all.
 //!
@@ -27,7 +27,7 @@ pub struct ProfileRow {
 pub enum ProfileAction {
     /// Hand this profile to the mode, and make it the one it starts with.
     Use,
-    /// Open the button editor ([`super::game_edit`]) on it.
+    /// Open the editor ([`super::game_edit`]) on it.
     Buttons,
     Rename,
     /// Copy it under a new name — the only way to add a profile, since an
@@ -46,7 +46,7 @@ impl ProfileAction {
     pub fn label(self) -> &'static str {
         match self {
             ProfileAction::Use => "Use this profile",
-            ProfileAction::Buttons => "Buttons",
+            ProfileAction::Buttons => "Buttons and sticks",
             ProfileAction::Rename => "Rename...",
             ProfileAction::Duplicate => "Duplicate...",
             ProfileAction::Delete => "Delete",

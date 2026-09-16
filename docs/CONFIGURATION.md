@@ -282,7 +282,7 @@ profiles, marked with the one in use; **A** on one opens its own screen:
 | row | what it does |
 | --- | --- |
 | Use this profile | hands it to Game Mode and writes `[game_mode] profile` |
-| Buttons | the editor below |
+| Buttons and sticks | the editor below |
 | Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
 | Duplicate... | a copy under a name you type — the way to add a profile |
 | Delete | throws the file away, after a confirmation |
@@ -292,13 +292,21 @@ There is no *New* row: a copy is how a profile is added, because an empty one
 would reach the page with no cursor and no click. A built-in the binary carries
 and no file shadows has nothing to remove, so it offers neither of the last two.
 
-**The button editor** is a row per button; **A** opens what that button can send
-— a key, the left mouse button, Passthrough, or nothing — and **B** saves.
-Choosing *Key...* hands over to the on-screen keyboard, so any key is reachable
-by pressing it. Editing a built-in writes the `profiles/<id>.toml` that replaces
-it, so deleting that file is still how you get the original back. The sticks, the
-`[keyboard]` table and the layers below are the file's: they need names the
-screen has no room to pick.
+**The editor** is a row per source — every button, then `stick.left` and
+`stick.right`. **A** opens what that source can send, **B** saves. For a button
+that is a key, the left mouse button, Passthrough or nothing; choosing *Key...*
+hands over to the on-screen keyboard, so any key is reachable by pressing it.
+
+**A stick opens rows of its own.** Its `sends` row is the whole stick — *Cursor*,
+*Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
+and gives the stick a row per direction to edit like a button. The file is one
+form or the other, so picking either takes the other away. A direction is offered
+no Passthrough: a stick read as directions withholds the whole axis, so the page
+would see nothing either way.
+
+Editing a built-in writes the `profiles/<id>.toml` that replaces it, so deleting
+that file is still how you get the original back. The `[keyboard]` table and the
+layers below are the file's: they need names the screen has no room to pick.
 
 ```toml
 name = "Vampire Survivors"    # what the menu shows; the file name is the id
@@ -341,7 +349,9 @@ speed = 1.5 }` says it out loud where they differ. `speed` scales `cursor` and
 
 **A bound source is withheld from the page's raw input**, so a button mapped to a
 key is not also delivered as a gamepad button — only `passthrough` is. A stick
-read as directions keeps its whole axis, since half an axis cannot be withheld.
+read as directions keeps its whole axis, since half an axis cannot be withheld —
+which also makes `passthrough` on one direction meaningless. `analog = "none"`
+keeps the axis and sends nothing, which is how a stick is made inert.
 
 **Select is reserved** in every profile and every layer: holding it opens the Game
 Mode menu. A binding on it is refused with a line in the log.

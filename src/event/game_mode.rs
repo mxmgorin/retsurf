@@ -7,7 +7,7 @@
 use crate::app::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
 use crate::config::InputConfig;
-use crate::event::game_profile::{Dir, KeyTarget, Profile, StickRole, Target};
+use crate::event::game_profile::{Dir, KeyTarget, Profile, Side, StickRole, Target};
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::axis_value;
 use inputbind::{Pad, Trigger};
@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 const STICK_RELEASE_RATIO: f32 = 0.8;
 
 /// Left, then right — the order [`Profile::stick`] and the state arrays use.
-const STICKS: [bool; 2] = [false, true];
+const STICKS: [Side; 2] = Side::ALL;
 
 /// Arrow directions down for a digital (-1/0/1) x/y pair, in [`Dir::ALL`] order.
 fn dirs(x: i32, y: i32) -> [bool; 4] {
@@ -205,6 +205,11 @@ impl GameInput {
         };
         // Read the role before touching the state: both borrow `self`.
         let role = self.profile.stick(STICKS[index]);
+        // A stick told to send nothing keeps its axis anyway, or `none` and
+        // `passthrough` would be the same thing written twice.
+        if *role == StickRole::Analog(Target::None) {
+            return true;
+        }
         let (analog, digital_role) = (role.is_analog(), role.is_digital());
         // The whole stick is one vector; `tick` reads it each frame.
         if analog {
@@ -405,8 +410,8 @@ impl GameInput {
     fn analog(&self) -> ((f32, f32), f32) {
         let mut aim = (0.0, 0.0);
         let mut scroll = 0.0;
-        for (index, right) in STICKS.into_iter().enumerate() {
-            let (speed, to_cursor) = match self.profile.stick(right) {
+        for (index, side) in STICKS.into_iter().enumerate() {
+            let (speed, to_cursor) = match self.profile.stick(side) {
                 StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
                 StickRole::Analog(Target::Scroll { speed }) => (*speed, false),
                 _ => continue,

@@ -13,7 +13,7 @@ use crate::{
     ui::{AppUi, Focus},
 };
 use inputbind::sdl::{is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap};
-use inputbind::{Action as _, Bindings, Capture, Captured, Pad, Store, Tick};
+use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
@@ -136,25 +136,16 @@ impl AppEventHandler {
         &self.game_profiles
     }
 
-    /// What each pad sends under `id`, by pad index — the editor's rows. An
-    /// unbound pad reads as the dash its row shows.
-    pub fn game_pad_texts(&self, id: &str) -> Vec<String> {
-        let profile = game_profile::pick(&self.game_profiles, id);
-        Pad::ALL
-            .into_iter()
-            .map(|pad| match profile.raw_pad(pad) {
-                Some(raw) => raw.text().to_string(),
-                None => "-".to_string(),
-            })
-            .collect()
+    /// The profile `id` names, for the rows that show what it sends.
+    pub fn game_profile(&self, id: &str) -> &Profile {
+        game_profile::pick(&self.game_profiles, id)
     }
 
-    /// Rewrite one pad in a profile (the editor). Held in memory until
-    /// [`Self::save_game_profile`] writes it.
-    pub fn set_game_pad(&mut self, id: &str, pad: Pad, text: Option<String>) {
-        if let Some(profile) = self.game_profiles.iter_mut().find(|p| p.id == id) {
-            profile.set_raw_pad(pad, text.map(game_profile::RawTarget::Short));
-        }
+    /// The same, to write one row of it (the editor). Held in memory until
+    /// [`Self::save_game_profile`] writes it; the live profile is re-adopted
+    /// there, so an edit to the running one takes effect on save and not before.
+    pub fn game_profile_mut(&mut self, id: &str) -> Option<&mut Profile> {
+        self.game_profiles.iter_mut().find(|p| p.id == id)
     }
 
     /// Write an edited profile to its file. Returns its name.

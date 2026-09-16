@@ -85,7 +85,7 @@ impl AppUi {
             // The settings overlay's focused text row: typing lands in the draft
             // (the OSK only opens over a text row — see `App::settings_confirm`).
             OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
-        } else if self.game_edit.picking() {
+        } else if self.game_edit.picking().is_some() {
             // The profile editor turned the keyboard into a key picker.
             OskTarget::Capture(self.game_edit.picked_mut())
         } else if self.game_profiles.naming().is_some() {

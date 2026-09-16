@@ -1,35 +1,25 @@
 //! Rendering of the Game Mode profile editor (state in
-//! [`crate::overlay::game_edit`]): one row per pad over the shared panel chrome,
-//! so a long list scrolls the way the menu's and settings' do.
+//! [`crate::overlay::game_edit`]): one row per source, one stick's own rows, and
+//! the list of what the focused row can send — each over the shared panel
+//! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{ACCENT, DIM, ROW_FONT};
 use crate::app::{AppCommand, GameEditAction};
-use crate::overlay::game_edit::{sources, GameEdit, Kind};
+use crate::overlay::game_edit::{sources, GameEdit, Kind, Source, StickRow};
 use egui_sdl2::egui;
 
 /// Row height, matching the settings overlay's field rows.
 const ROW_H: f32 = 30.0;
 
-pub(super) fn add_game_edit(
-    ctx: &egui::Context,
-    edit: &GameEdit,
-    targets: &[String],
-    commands: &mut Vec<AppCommand>,
-) {
+/// What an unbound source reads as.
+const UNBOUND: &str = "-";
+
+pub(super) fn add_game_edit(ctx: &egui::Context, edit: &GameEdit, commands: &mut Vec<AppCommand>) {
     let screen = ctx.content_rect();
     let width = screen.width() - SIDES;
     let closed = panel::panel(ctx, "game_edit", screen, |ui| {
-        let pad = edit.source();
-        let (title, hint) = match edit.kind_open() {
-            Some(_) => (format!("{} SENDS", pad.name().to_uppercase()), "A takes it"),
-            // The row that opens this leads, so the profile it belongs to
-            // trails: "KEYBOARD KEYS BUTTONS" is not a phrase.
-            None => (
-                format!("BUTTONS - {}", edit.profile_name().to_uppercase()),
-                "A opens a button, B saves",
-            ),
-        };
+        let (title, hint) = header(edit);
         ui.label(
             egui::RichText::new(title)
                 .color(ACCENT)
@@ -39,64 +29,84 @@ pub(super) fn add_game_edit(
         ui.label(egui::RichText::new(hint).color(DIM).size(ROW_FONT));
         ui.add_space(ROW_GAP * 2.0);
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        match edit.kind_open() {
-            Some(at) => add_kinds(ui, screen, width, at, commands),
-            None => add_rows(ui, screen, width, edit, targets, commands),
-        }
+        let rows = rows(edit);
+        section_scroll(ui, screen).show(ui, |ui| {
+            for (index, (label, value)) in rows.into_iter().enumerate() {
+                let selected = index == edit.selected();
+                let resp = add_row(ui, width, selected, &label, &value);
+                if selected {
+                    center_selected(&resp);
+                }
+                if resp.clicked() {
+                    commands.push(AppCommand::GameEdit(GameEditAction::Click(index)));
+                }
+            }
+        });
     });
     if closed {
         commands.push(AppCommand::GameEdit(GameEditAction::Close));
     }
 }
 
-/// The rows: one per pad, with what it sends.
-fn add_rows(
-    ui: &mut egui::Ui,
-    screen: egui::Rect,
-    width: f32,
-    edit: &GameEdit,
-    targets: &[String],
-    commands: &mut Vec<AppCommand>,
-) {
-    section_scroll(ui, screen).show(ui, |ui| {
-        for (index, pad) in sources().into_iter().enumerate() {
-            let selected = index == edit.selected();
-            let value = targets.get(pad as usize).map_or("", String::as_str);
-            let resp = add_row(ui, width, selected, pad.name(), value);
-            if selected {
-                center_selected(&resp);
-            }
-            if resp.clicked() {
-                commands.push(AppCommand::GameEdit(GameEditAction::Click(index)));
-            }
-        }
-    });
+/// The panel's title and the line under it, worded for the list that is up.
+fn header(edit: &GameEdit) -> (String, &'static str) {
+    if edit.kind_open() {
+        let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
+        return (format!("{} SENDS", slot.to_uppercase()), "A takes it");
+    }
+    match edit.stick_open() {
+        Some(side) => (
+            format!("STICK.{} - {}", side.name(), edit.profile_name()).to_uppercase(),
+            "A opens a row, B goes back",
+        ),
+        None => (
+            format!(
+                "BUTTONS AND STICKS - {}",
+                edit.profile_name().to_uppercase()
+            ),
+            "A opens a source, B saves",
+        ),
+    }
 }
 
-/// What the focused row can be, all of it on screen — the list is the whole
-/// vocabulary, so nothing here needs a verb the screen cannot show.
-fn add_kinds(
-    ui: &mut egui::Ui,
-    screen: egui::Rect,
-    width: f32,
-    at: usize,
-    commands: &mut Vec<AppCommand>,
-) {
-    section_scroll(ui, screen).show(ui, |ui| {
-        for (index, kind) in Kind::ALL.into_iter().enumerate() {
-            let resp = add_row(ui, width, index == at, kind.label(), "");
-            if index == at {
-                center_selected(&resp);
-            }
-            if resp.clicked() {
-                commands.push(AppCommand::GameEdit(GameEditAction::Activate));
-            }
-        }
-    });
+/// The rows of whichever list is up, as label and trailing value.
+fn rows(edit: &GameEdit) -> Vec<(String, String)> {
+    if edit.kind_open() {
+        let kinds = edit.slot().map(Kind::all).unwrap_or_default();
+        return kinds
+            .iter()
+            .map(|kind| (kind.label().to_string(), String::new()))
+            .collect();
+    }
+    let targets = edit.targets();
+    let Some(side) = edit.stick_open() else {
+        return sources()
+            .into_iter()
+            .map(|source| {
+                let value = match source {
+                    Source::Button(pad) => targets
+                        .pads
+                        .get(pad as usize)
+                        .cloned()
+                        .unwrap_or_else(|| UNBOUND.to_string()),
+                    Source::Stick(side) => targets.sticks[side as usize].role.clone(),
+                };
+                (source.name(), value)
+            })
+            .collect();
+    };
+    let stick = &targets.sticks[side as usize];
+    edit.stick_rows()
+        .into_iter()
+        .map(|row| match row {
+            StickRow::Sends => ("sends".to_string(), stick.role.clone()),
+            StickRow::Direction(dir) => (dir.name().to_string(), stick.dirs[dir as usize].clone()),
+        })
+        .collect()
 }
 
-/// One row: the pad on the left, what it sends on the right — the same shape as
-/// the settings rows, so the highlight reads identically.
+/// One row: the source on the left, what it sends on the right — the same shape
+/// as the settings rows, so the highlight reads identically.
 fn add_row(
     ui: &mut egui::Ui,
     width: f32,

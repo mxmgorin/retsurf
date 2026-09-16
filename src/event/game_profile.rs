@@ -35,6 +35,31 @@ use std::str::FromStr;
 /// Where the per-profile files live, under the user data dir.
 const PROFILE_DIR: &str = "profiles";
 
+/// The key a stick's whole-vector target is written under.
+const ANALOG: &str = "analog";
+
+/// Which stick, as the file spells it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+impl Side {
+    pub const ALL: [Side; 2] = [Side::Left, Side::Right];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Side::Left => "left",
+            Side::Right => "right",
+        }
+    }
+
+    fn parse(name: &str) -> Option<Side> {
+        Side::ALL.into_iter().find(|side| side.name() == name)
+    }
+}
+
 /// The four stick directions, in the order [`Dir::ALL`] and the runtime's arrays
 /// use.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -48,14 +73,28 @@ pub enum Dir {
 impl Dir {
     pub const ALL: [Dir; 4] = [Dir::Up, Dir::Down, Dir::Left, Dir::Right];
 
+    pub fn name(self) -> &'static str {
+        match self {
+            Dir::Up => "up",
+            Dir::Down => "down",
+            Dir::Left => "left",
+            Dir::Right => "right",
+        }
+    }
+
+    /// The arrow key this direction stands for, which is what a stick asked to
+    /// be four directions is seeded with.
+    pub fn arrow(self) -> &'static str {
+        match self {
+            Dir::Up => "ArrowUp",
+            Dir::Down => "ArrowDown",
+            Dir::Left => "ArrowLeft",
+            Dir::Right => "ArrowRight",
+        }
+    }
+
     fn parse(name: &str) -> Option<Dir> {
-        Some(match name {
-            "up" => Dir::Up,
-            "down" => Dir::Down,
-            "left" => Dir::Left,
-            "right" => Dir::Right,
-            _ => return None,
-        })
+        Dir::ALL.into_iter().find(|dir| dir.name() == name)
     }
 }
 
@@ -165,8 +204,8 @@ impl Profile {
         from_layer.or_else(|| self.pad.get(pad as usize).and_then(Option::as_ref))
     }
 
-    pub fn stick(&self, right: bool) -> &StickRole {
-        &self.sticks[usize::from(right)]
+    pub fn stick(&self, side: Side) -> &StickRole {
+        &self.sticks[side as usize]
     }
 
     /// The same fall-through for a physical key.
@@ -368,15 +407,11 @@ impl Profile {
 
         let mut sticks = [StickRole::Unbound, StickRole::Unbound];
         for (name, table) in &raw.stick {
-            let index = match name.as_str() {
-                "left" => 0,
-                "right" => 1,
-                _ => {
-                    log::warn!("game profile: `{id}.stick.{name}` is not a stick; ignored");
-                    continue;
-                }
+            let Some(side) = Side::parse(name) else {
+                log::warn!("game profile: `{id}.stick.{name}` is not a stick; ignored");
+                continue;
             };
-            sticks[index] = resolve_stick(id, name, table, &names);
+            sticks[side as usize] = resolve_stick(id, name, table, &names);
         }
 
         let resolved_keys = resolve_keys(id, "keyboard", &raw.keyboard, keys, &names);
@@ -439,6 +474,59 @@ impl Profile {
             Some(target) => self.raw.pad.insert(pad.name().to_string(), target),
             None => self.raw.pad.remove(pad.name()),
         };
+    }
+
+    /// What the file says the whole stick does, if it says.
+    pub fn raw_stick(&self, side: Side) -> Option<&RawTarget> {
+        self.raw.stick.get(side.name())?.get(ANALOG)
+    }
+
+    /// What it says one of its directions does.
+    pub fn raw_stick_dir(&self, side: Side, dir: Dir) -> Option<&RawTarget> {
+        self.raw.stick.get(side.name())?.get(dir.name())
+    }
+
+    /// Whether the *file* reads this stick as four directions. The resolved
+    /// role is a save behind while the editor is open, so the rows ask here.
+    pub fn raw_stick_is_digital(&self, side: Side) -> bool {
+        Dir::ALL
+            .into_iter()
+            .any(|dir| self.raw_stick_dir(side, dir).is_some())
+    }
+
+    /// Give the whole stick one target, dropping whatever directions it had:
+    /// the file is one or the other, and one holding both resolves as the
+    /// directions.
+    pub fn set_raw_stick(&mut self, side: Side, target: Option<RawTarget>) {
+        self.raw.stick.remove(side.name());
+        if let Some(target) = target {
+            let table = self.raw.stick.entry(side.name().to_string()).or_default();
+            table.insert(ANALOG.to_string(), target);
+        }
+    }
+
+    /// Set one direction, dropping the whole-stick entry for the same reason.
+    pub fn set_raw_stick_dir(&mut self, side: Side, dir: Dir, target: Option<RawTarget>) {
+        let table = self.raw.stick.entry(side.name().to_string()).or_default();
+        table.remove(ANALOG);
+        match target {
+            Some(target) => table.insert(dir.name().to_string(), target),
+            None => table.remove(dir.name()),
+        };
+        // An empty table would write a `[stick.left]` header with nothing under it.
+        if table.is_empty() {
+            self.raw.stick.remove(side.name());
+        }
+    }
+
+    /// Put the arrows on all four directions — what a stick asked to *be* four
+    /// directions starts as, since every built-in spells it that way and an
+    /// empty one would reach the page instead.
+    pub fn set_raw_stick_arrows(&mut self, side: Side) {
+        for dir in Dir::ALL {
+            let arrow = RawTarget::Short(dir.arrow().to_string());
+            self.set_raw_stick_dir(side, dir, Some(arrow));
+        }
     }
 
     /// Rename what the menu shows. The id stays: it is the file's stem, and
@@ -590,7 +678,7 @@ fn resolve_stick(
         let Some(target) = parse_target(raw, &whose, layers) else {
             continue;
         };
-        if key == "analog" {
+        if key == ANALOG {
             if !target.is_analog() && target != Target::Passthrough && target != Target::None {
                 log::warn!("game profile: `{whose}` takes cursor, scroll or passthrough");
                 continue;
@@ -739,7 +827,10 @@ mod tests {
             let profile = Profile::resolve(id, parse_built_in(id, text), &keys);
             assert!(!profile.name.is_empty(), "`{id}` has no name");
             assert_eq!(profile.pad(None, Pad::R2), Some(&Target::Click), "`{id}`");
-            assert!(profile.stick(true).is_analog(), "`{id}` has no cursor");
+            assert!(
+                profile.stick(Side::Right).is_analog(),
+                "`{id}` has no cursor"
+            );
         }
     }
 
@@ -821,12 +912,12 @@ mod tests {
             analog = "cursor"
             "#,
         );
-        let StickRole::Digital(dirs) = profile.stick(false) else {
+        let StickRole::Digital(dirs) = profile.stick(Side::Left) else {
             panic!("the left stick is not digital");
         };
         assert!(dirs[Dir::Up as usize].is_some() && dirs[Dir::Down as usize].is_none());
         assert_eq!(
-            profile.stick(true),
+            profile.stick(Side::Right),
             &StickRole::Analog(Target::Cursor { speed: 1.0 })
         );
     }
@@ -872,6 +963,56 @@ mod tests {
         assert_eq!(named(Some(0), Pad::B), named(None, Pad::B));
     }
 
+    /// The file is one form or the other, so writing either has to take the
+    /// other away: one holding both resolves as the directions, which would
+    /// make the row just set a lie.
+    #[test]
+    fn a_stick_is_written_as_one_form_or_the_other() {
+        let mut profile = resolve(
+            r#"
+            [stick.left]
+            analog = "cursor"
+            "#,
+        );
+        assert!(!profile.raw_stick_is_digital(Side::Left));
+        profile.set_raw_stick_arrows(Side::Left);
+        assert!(profile.raw_stick(Side::Left).is_none());
+        assert!(profile.raw_stick_is_digital(Side::Left));
+        assert_eq!(
+            profile
+                .raw_stick_dir(Side::Left, Dir::Up)
+                .map(RawTarget::text),
+            Some("ArrowUp")
+        );
+        // And back: the directions go when the whole stick is given a target.
+        let scroll = RawTarget::Short("scroll".to_string());
+        profile.set_raw_stick(Side::Left, Some(scroll));
+        assert!(profile.raw_stick_dir(Side::Left, Dir::Up).is_none());
+        assert_eq!(
+            profile.raw_stick(Side::Left).map(RawTarget::text),
+            Some("scroll")
+        );
+    }
+
+    /// `none` on a whole stick is not `passthrough`: the editor offers both, so
+    /// they have to resolve to different things.
+    #[test]
+    fn a_stick_told_to_send_nothing_is_not_the_same_as_one_left_alone() {
+        let profile = resolve(
+            r#"
+            [stick.left]
+            analog = "none"
+            [stick.right]
+            analog = "passthrough"
+            "#,
+        );
+        assert_eq!(profile.stick(Side::Left), &StickRole::Analog(Target::None));
+        assert_eq!(
+            profile.stick(Side::Right),
+            &StickRole::Analog(Target::Passthrough)
+        );
+    }
+
     /// A copy is the only way to add a profile, so it has to carry the whole
     /// mapping over — including what the editor cannot reach.
     #[test]
@@ -889,7 +1030,7 @@ mod tests {
         assert_eq!(copy.id, "my-game");
         assert_eq!(copy.name, "My game");
         assert_eq!(copy.pad(None, Pad::A), profile.pad(None, Pad::A));
-        assert!(copy.stick(true).is_analog());
+        assert!(copy.stick(Side::Right).is_analog());
         // The copy is the user's, whatever it was copied from.
         assert!(!copy.builtin);
     }

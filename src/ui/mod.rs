@@ -201,9 +201,6 @@ pub struct AppUi {
     /// The live profile's name, mirrored for the menu's row; the profiles
     /// themselves live in the event handler, which resolved them.
     game_profile_name: String,
-    /// What each pad sends under it, by pad index — refreshed whenever the
-    /// editor changes something (see [`AppUi::set_game_edit_targets`]).
-    game_edit_targets: Vec<String>,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -304,7 +301,6 @@ impl AppUi {
             game_profiles: GameProfiles::new(),
             game_edit: GameEdit::new(),
             game_profile_name,
-            game_edit_targets: Vec::new(),
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -779,12 +775,7 @@ impl AppUi {
                 // to pick a key for a row.
                 if self.game_edit.visible() {
                     drop_egui_focus(ctx);
-                    game_edit::add_game_edit(
-                        ctx,
-                        &self.game_edit,
-                        &self.game_edit_targets,
-                        commands,
-                    );
+                    game_edit::add_game_edit(ctx, &self.game_edit, commands);
                 }
 
                 // The profile screens, for the same reason: the keyboard opens
@@ -947,13 +938,6 @@ impl AppUi {
     #[inline]
     pub fn set_game_profile_name(&mut self, name: String) {
         self.game_profile_name = name;
-    }
-
-    /// What each pad row shows in the editor, by [`inputbind::Pad`] index — a
-    /// snapshot, since the profile itself lives in the event handler.
-    #[inline]
-    pub fn set_game_edit_targets(&mut self, targets: Vec<String>) {
-        self.game_edit_targets = targets;
     }
 
     /// Time left on the entry toast, or `None` once it has faded.

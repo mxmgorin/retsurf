@@ -11,12 +11,21 @@ use super::{
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
 use crate::event::bindings::Action;
+use crate::event::game_profile::{Dir, RawTarget, Side};
 use crate::overlay::dial_edit::EditItem;
+use crate::overlay::game_edit::{EditPress, Slot, StickTargets, Take, Targets};
 use crate::overlay::game_menu::GameRow;
 use crate::overlay::game_profiles::{Press, ProfileAction, ProfileRow};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
+use inputbind::Pad;
+
+/// What an unbound source reads as in the editor's rows.
+const UNBOUND: &str = "-";
+
+/// What a stick reads as once it is four directions rather than one vector.
+const DIRECTIONS: &str = "directions";
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
@@ -297,12 +306,11 @@ impl App {
     /// Apply an action on the button editor (see [`crate::overlay::game_edit`]).
     fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
         match action {
-            // B backs out of the kind list first, then out of the editor —
-            // saving on the way, and only if something changed, so an untouched
-            // visit never rewrites a file the user hand-edited.
+            // B backs out of the lists first, then out of the editor — saving
+            // on the way, and only if something changed, so an untouched visit
+            // never rewrites a file the user hand-edited.
             GameEditAction::Close => {
-                if self.ui.game_edit.kind_open().is_some() {
-                    self.ui.game_edit.close_kinds();
+                if self.ui.game_edit.back() {
                     return;
                 }
                 let id = self.ui.game_edit.profile_id().to_string();
@@ -321,55 +329,102 @@ impl App {
         }
     }
 
-    /// A in the editor: open the focused row's list of kinds, or take the one
-    /// it is on — a key defers to the on-screen keyboard, the rest are written
-    /// straight away.
+    /// A in the editor: open a stick's rows, open the focused row's list of
+    /// kinds, or take the one it is on — a key defers to the on-screen
+    /// keyboard, the rest are written straight away.
     fn game_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
-        let Some(kind) = self.ui.game_edit.kind() else {
-            self.ui.game_edit.open_kinds();
-            return;
-        };
-        self.ui.game_edit.close_kinds();
-        match kind.text() {
-            Some(text) => {
-                let pad = self.ui.game_edit.source();
-                self.set_game_pad(pad, Some(text.to_string()));
+        match self.ui.game_edit.press() {
+            Some(EditPress::OpenStick(side)) => self.ui.game_edit.open_stick(side),
+            Some(EditPress::OpenKinds) => self.ui.game_edit.open_kinds(),
+            Some(EditPress::Take(kind, slot)) => {
+                self.ui.game_edit.close_kinds();
+                match kind.take() {
+                    Take::Text(text) => self.set_game_target(slot, Some(text.to_string())),
+                    Take::Arrows => self.set_game_arrows(slot),
+                    // The keyboard becomes a key picker; the pick lands in the
+                    // editor's slot, which the loop drains (see
+                    // [`App::drain_game_pick`]).
+                    Take::Key => {
+                        self.ui.game_edit.set_picking(Some(slot));
+                        self.ui.osk(OskCommand::Show, &self.browser, out);
+                    }
+                }
             }
-            // The keyboard becomes a key picker; the pick lands in the editor's
-            // slot, which the loop drains (see [`App::drain_game_pick`]).
-            None => {
-                self.ui.game_edit.set_picking(true);
-                self.ui.osk(OskCommand::Show, &self.browser, out);
-            }
+            None => {}
         }
     }
 
-    /// A key the picker took: it becomes the focused row's target, and the
-    /// keyboard's work is done.
+    /// A key the picker took: it becomes the row's target, and the keyboard's
+    /// work is done.
     pub(super) fn drain_game_pick(&mut self, out: &mut Vec<AppCommand>) {
-        let Some(text) = self.ui.game_edit.take_picked() else {
+        let (Some(text), Some(slot)) =
+            (self.ui.game_edit.take_picked(), self.ui.game_edit.picking())
+        else {
             return;
         };
-        self.ui.game_edit.set_picking(false);
+        self.ui.game_edit.set_picking(None);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
-        let pad = self.ui.game_edit.source();
-        self.set_game_pad(pad, Some(text));
+        self.set_game_target(slot, Some(text));
     }
 
     /// Write one row into the edited profile and refresh what it shows.
-    fn set_game_pad(&mut self, pad: inputbind::Pad, text: Option<String>) {
+    fn set_game_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.game_edit.profile_id().to_string();
-        self.event_handler.set_game_pad(&id, pad, text);
+        let raw = text.map(RawTarget::Short);
+        if let Some(profile) = self.event_handler.game_profile_mut(&id) {
+            match slot {
+                Slot::Button(pad) => profile.set_raw_pad(pad, raw),
+                Slot::Stick(side) => profile.set_raw_stick(side, raw),
+                Slot::Direction(side, dir) => profile.set_raw_stick_dir(side, dir, raw),
+            }
+        }
+        self.edited_game_profile();
+    }
+
+    /// Hand a stick its four directions, which is what asking for them means.
+    fn set_game_arrows(&mut self, slot: Slot) {
+        let Slot::Stick(side) = slot else {
+            return;
+        };
+        let id = self.ui.game_edit.profile_id().to_string();
+        if let Some(profile) = self.event_handler.game_profile_mut(&id) {
+            profile.set_raw_stick_arrows(side);
+        }
+        self.edited_game_profile();
+    }
+
+    fn edited_game_profile(&mut self) {
         self.ui.game_edit.mark_dirty();
         self.refresh_game_edit();
     }
 
     /// Re-snapshot the editor's rows from the profile it has open.
     fn refresh_game_edit(&mut self) {
-        let targets = self
+        let profile = self
             .event_handler
-            .game_pad_texts(self.ui.game_edit.profile_id());
-        self.ui.set_game_edit_targets(targets);
+            .game_profile(self.ui.game_edit.profile_id());
+        let text = |raw: Option<&RawTarget>| match raw {
+            Some(raw) => raw.text().to_string(),
+            None => UNBOUND.to_string(),
+        };
+        let pads = Pad::ALL
+            .into_iter()
+            .map(|pad| text(profile.raw_pad(pad)))
+            .collect();
+        let sticks = Side::ALL.map(|side| {
+            let digital = profile.raw_stick_is_digital(side);
+            StickTargets {
+                digital,
+                // A stick read as directions has no whole-stick entry to show,
+                // so the row says what it has become instead.
+                role: match digital {
+                    true => DIRECTIONS.to_string(),
+                    false => text(profile.raw_stick(side)),
+                },
+                dirs: Dir::ALL.map(|dir| text(profile.raw_stick_dir(side, dir))),
+            }
+        });
+        self.ui.game_edit.set_targets(Targets { pads, sticks });
     }
 
     /// Adopt the profile the config names, for a settings restore. The config
