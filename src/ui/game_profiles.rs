@@ -4,7 +4,7 @@
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, DIM, ROW_FONT};
+use super::theme::{ACCENT, ROW_FONT};
 use crate::app::{AppCommand, GameProfilesAction};
 use crate::overlay::game_profiles::{GameProfiles, ProfileAction};
 use egui_sdl2::egui;
@@ -20,15 +20,13 @@ pub(super) fn add_game_profiles(
     let screen = ctx.content_rect();
     let width = screen.width() - SIDES;
     let closed = panel::panel(ctx, "game_profiles", screen, |ui| {
-        let (title, hint) = header(screens);
         ui.label(
-            egui::RichText::new(title)
+            egui::RichText::new(title(screens))
                 .color(ACCENT)
                 .size(ROW_FONT)
                 .strong(),
         );
-        ui.label(egui::RichText::new(hint).color(DIM).size(ROW_FONT));
-        ui.add_space(ROW_GAP * 2.0);
+        ui.add_space(ROW_GAP * 3.0);
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         let rows = rows(screens);
         section_scroll(ui, screen).show(ui, |ui| {
@@ -49,25 +47,20 @@ pub(super) fn add_game_profiles(
     }
 }
 
-/// The panel's title and the line under it, both worded for the screen that is
-/// up: the list, one profile, or the question over it.
-fn header(screens: &GameProfiles) -> (String, &'static str) {
+/// The panel's title, worded for the screen that is up: the list, one profile,
+/// or the question over it. Nothing under it — every verb here is a row, so a
+/// hint could only name them a second time.
+fn title(screens: &GameProfiles) -> String {
     let Some(row) = screens.open_row() else {
         // Plural of the menu row that opens it: this is the list of them.
-        return (
-            "INPUT PROFILES".to_string(),
-            "A opens a profile, B goes back",
-        );
+        return "INPUT PROFILES".to_string();
     };
     let name = row.name.to_uppercase();
     match screens.confirming() {
         // The question names the removal it is asking about, since the answer
         // differs: a built-in comes back, anything else is gone.
-        true => (
-            format!("{} {name}?", remove_label(screens).to_uppercase()),
-            "A takes it",
-        ),
-        false => (name, "A takes the row, B goes back"),
+        true => format!("{} {name}?", remove_label(screens).to_uppercase()),
+        false => name,
     }
 }
 

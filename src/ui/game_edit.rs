@@ -4,7 +4,7 @@
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, DIM, ROW_FONT};
+use super::theme::{ACCENT, ROW_FONT};
 use crate::app::{AppCommand, GameEditAction};
 use crate::overlay::game_edit::{sources, GameEdit, Kind, Source, StickRow};
 use egui_sdl2::egui;
@@ -19,15 +19,13 @@ pub(super) fn add_game_edit(ctx: &egui::Context, edit: &GameEdit, commands: &mut
     let screen = ctx.content_rect();
     let width = screen.width() - SIDES;
     let closed = panel::panel(ctx, "game_edit", screen, |ui| {
-        let (title, hint) = header(edit);
         ui.label(
-            egui::RichText::new(title)
+            egui::RichText::new(title(edit))
                 .color(ACCENT)
                 .size(ROW_FONT)
                 .strong(),
         );
-        ui.label(egui::RichText::new(hint).color(DIM).size(ROW_FONT));
-        ui.add_space(ROW_GAP * 2.0);
+        ui.add_space(ROW_GAP * 3.0);
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         let rows = rows(edit);
         section_scroll(ui, screen).show(ui, |ui| {
@@ -48,23 +46,18 @@ pub(super) fn add_game_edit(ctx: &egui::Context, edit: &GameEdit, commands: &mut
     }
 }
 
-/// The panel's title and the line under it, worded for the list that is up.
-fn header(edit: &GameEdit) -> (String, &'static str) {
+/// The panel's title, worded for the list that is up. Nothing under it — every
+/// verb here is a row, so a hint could only name them a second time.
+fn title(edit: &GameEdit) -> String {
     if edit.kind_open() {
         let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
-        return (format!("{} SENDS", slot.to_uppercase()), "A takes it");
+        return format!("{} SENDS", slot.to_uppercase());
     }
     match edit.stick_open() {
-        Some(side) => (
-            format!("STICK.{} - {}", side.name(), edit.profile_name()).to_uppercase(),
-            "A opens a row, B goes back",
-        ),
-        None => (
-            format!(
-                "BUTTONS AND STICKS - {}",
-                edit.profile_name().to_uppercase()
-            ),
-            "A opens a source, B saves",
+        Some(side) => format!("STICK.{} - {}", side.name(), edit.profile_name()).to_uppercase(),
+        None => format!(
+            "BUTTONS AND STICKS - {}",
+            edit.profile_name().to_uppercase()
         ),
     }
 }
