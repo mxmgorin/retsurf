@@ -264,10 +264,18 @@ profile = "keys"
 ## Game Mode profiles (`profiles/*.toml`)
 
 A profile is what each button, stick direction and key sends to the page while
-Game Mode is on. Two ship built in — `keys` (arrows + z/x/c + Space/Enter, the
-retro convention most of itch.io plays with) and `pad` (the buttons reach the
-page raw, for games that read the Gamepad API themselves). `[game_mode] profile`
-picks one by id.
+Game Mode is on. Four ship built in, named for what the game sees rather than
+for what the pad becomes; `[game_mode] profile` picks one by id.
+
+| id | name | what the game gets |
+| --- | --- | --- |
+| `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
+| `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
+| `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
+| `pad` | Gamepad passthrough | the buttons reach the page raw, for games that read the Gamepad API themselves |
+
+There is no first-person template: Servo has no Pointer Lock, so a stick cannot
+turn a camera, and only the left mouse button has a route.
 
 The built-ins live in the binary and are always offered, so a later release can
 add one without touching your files. Put a `profiles/<id>.toml` in the data dir
@@ -328,7 +336,7 @@ left = "ArrowLeft"
 right = "ArrowRight"
 
 [stick.right]
-analog = "cursor"             # or "scroll" — the whole stick, not a direction
+analog = "mouse.cursor"       # or mouse.scroll — the whole stick, not a direction
 
 [keyboard]                    # physical keys; unlisted ones reach the game as-is
 w = "ArrowUp"
@@ -339,13 +347,13 @@ a = "Shift"
 w = "ArrowDown"
 ```
 
-**Targets** are a key name, or one of `mouse.left`, `cursor`, `scroll`,
-`passthrough`, `none`, `layer:<name>`. Only the left mouse button has a route
+**Targets** are a key name, or one of `mouse.left`, `mouse.cursor`,
+`mouse.scroll`, `passthrough`, `none`, `layer:<name>`. Only the left mouse button has a route
 today; the other two are refused with a line in the log. A key is written as one character (`z`), `Space`, or a
 standard name (`ArrowUp`, `Enter`, `Escape`, `Shift`); the `code` games branch on
 is derived from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
-speed = 1.5 }` says it out loud where they differ. `speed` scales `cursor` and
-`scroll`.
+speed = 1.5 }` says it out loud where they differ. `speed` scales `mouse.cursor`
+and `mouse.scroll`.
 
 **A bound source is withheld from the page's raw input**, so a button mapped to a
 key is not also delivered as a gamepad button — only `passthrough` is. A stick

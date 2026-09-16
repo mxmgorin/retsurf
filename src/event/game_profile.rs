@@ -4,7 +4,7 @@
 //! replaces it, and deleting that file is what "reset to default" means.
 //!
 //! ```toml
-//! name = "Keyboard keys"
+//! name = "My game"
 //!
 //! [pad]                  # buttons and the D-pad, by inputbind's names
 //! a = "Space"
@@ -15,7 +15,7 @@
 //! [stick.left]           # four directions, through the dead zone
 //! up = "ArrowUp"
 //! [stick.right]
-//! analog = "cursor"      # or "scroll" — the whole stick, not a direction
+//! analog = "mouse.cursor"   # or mouse.scroll — the whole stick, not a direction
 //!
 //! [keyboard]             # physical keys, resolved after the pad keymap
 //! w = "ArrowUp"
@@ -82,8 +82,7 @@ impl Dir {
         }
     }
 
-    /// The arrow key this direction stands for, which is what a stick asked to
-    /// be four directions is seeded with.
+    /// The arrow key this direction stands for.
     pub fn arrow(self) -> &'static str {
         match self {
             Dir::Up => "ArrowUp",
@@ -313,13 +312,17 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
     match text {
         "passthrough" => return Some(Target::Passthrough),
         "none" => return Some(Target::None),
-        "cursor" => return Some(Target::Cursor { speed }),
-        "scroll" => return Some(Target::Scroll { speed }),
+        "mouse.cursor" => return Some(Target::Cursor { speed }),
+        "mouse.scroll" => return Some(Target::Scroll { speed }),
         "mouse.left" => return Some(Target::Click),
         // The namespace is open, but only the left button has a route: the
         // router's Confirm intent carries no button of its own.
         "mouse.right" | "mouse.middle" => {
             log::warn!("game profile: `{whose}` — only `mouse.left` has a route");
+            return None;
+        }
+        "cursor" | "scroll" => {
+            log::warn!("game profile: `{whose}` — `{text}` is spelled `mouse.{text}` now");
             return None;
         }
         _ => {}
@@ -476,7 +479,7 @@ impl Profile {
         };
     }
 
-    /// What the file says the whole stick does, if it says.
+    /// What the file says the whole stick does.
     pub fn raw_stick(&self, side: Side) -> Option<&RawTarget> {
         self.raw.stick.get(side.name())?.get(ANALOG)
     }
@@ -519,9 +522,8 @@ impl Profile {
         }
     }
 
-    /// Put the arrows on all four directions — what a stick asked to *be* four
-    /// directions starts as, since every built-in spells it that way and an
-    /// empty one would reach the page instead.
+    /// Put the arrows on all four directions: a stick with none set resolves to
+    /// unbound, which reaches the page instead.
     pub fn set_raw_stick_arrows(&mut self, side: Side) {
         for dir in Dir::ALL {
             let arrow = RawTarget::Short(dir.arrow().to_string());
@@ -680,7 +682,9 @@ fn resolve_stick(
         };
         if key == ANALOG {
             if !target.is_analog() && target != Target::Passthrough && target != Target::None {
-                log::warn!("game profile: `{whose}` takes cursor, scroll or passthrough");
+                log::warn!(
+                    "game profile: `{whose}` takes mouse.cursor, mouse.scroll or passthrough"
+                );
                 continue;
             }
             analog = Some(target);
@@ -710,14 +714,25 @@ fn resolve_stick(
 
 // --- built-ins ---
 
-/// The stock profiles, in the order the menu cycles them. They live in code, so
+/// The stock profiles, in the order the list shows them. They live in code, so
 /// a release that adds one offers it to everyone; a file under the same id
 /// replaces it, and deleting that file restores this.
-const BUILT_IN: [(&str, &str); 2] = [("keys", KEYS_PROFILE), ("pad", PAD_PROFILE)];
+const BUILT_IN: [(&str, &str); 4] = [
+    ("keys", KEYS_PROFILE),
+    ("wasd", WASD_PROFILE),
+    ("mouse", MOUSE_PROFILE),
+    ("pad", PAD_PROFILE),
+];
 
 /// The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
 /// js13k entries share, so most of itch.io plays with no profile edit at all.
 const KEYS_PROFILE: &str = include_str!("../../resources/profiles/keys.toml");
+
+/// The other keyboard convention: WASD and the keys an action game puts round it.
+const WASD_PROFILE: &str = include_str!("../../resources/profiles/wasd.toml");
+
+/// Point and click, for the games the pointer is the whole interface of.
+const MOUSE_PROFILE: &str = include_str!("../../resources/profiles/mouse.toml");
 
 /// The pad reaches the page raw, for games that read the Gamepad API themselves.
 const PAD_PROFILE: &str = include_str!("../../resources/profiles/pad.toml");
@@ -817,7 +832,7 @@ mod tests {
     }
 
     /// The built-ins ship in the binary, so a typo in one is a startup panic —
-    /// it has to fail here instead. Both must also keep the pointer path: it is
+    /// it has to fail here instead. Each must also keep the pointer path: it is
     /// the one way of playing this milestone has measured on hardware, and a
     /// profile that drops it ships a regression against that.
     #[test]
@@ -826,12 +841,67 @@ mod tests {
         for (id, text) in BUILT_IN {
             let profile = Profile::resolve(id, parse_built_in(id, text), &keys);
             assert!(!profile.name.is_empty(), "`{id}` has no name");
-            assert_eq!(profile.pad(None, Pad::R2), Some(&Target::Click), "`{id}`");
-            assert!(
-                profile.stick(Side::Right).is_analog(),
-                "`{id}` has no cursor"
-            );
+            // Which source clicks and which stick points is the profile's own
+            // business; that it can click and point at all is not.
+            let clicks = Pad::ALL
+                .into_iter()
+                .any(|pad| profile.pad(None, pad) == Some(&Target::Click));
+            let points = Side::ALL.into_iter().any(|side| {
+                matches!(
+                    profile.stick(side),
+                    StickRole::Analog(Target::Cursor { .. })
+                )
+            });
+            assert!(clicks, "`{id}` cannot click");
+            assert!(points, "`{id}` has no cursor");
         }
+    }
+
+    /// A game branching on `e.code` gets nothing from `Unidentified`, and the
+    /// name that derives a code is not every key's — Shift and Control need
+    /// theirs said out loud, which is the trap a stock profile must not ship.
+    #[test]
+    fn no_built_in_sends_a_key_the_page_cannot_identify() {
+        let names = KeyNames::new();
+        for (id, text) in BUILT_IN {
+            let profile = Profile::resolve(id, parse_built_in(id, text), &names);
+            let check = |target: Option<&Target>, whose: String| {
+                if let Some(Target::Key(key)) = target {
+                    assert_ne!(key.code, Code::Unidentified, "{whose}");
+                }
+            };
+            for pad in Pad::ALL {
+                check(profile.pad(None, pad), format!("{id}.pad.{}", pad.name()));
+            }
+            for side in Side::ALL {
+                let StickRole::Digital(dirs) = profile.stick(side) else {
+                    continue;
+                };
+                for dir in Dir::ALL {
+                    let whose = format!("{id}.stick.{}.{}", side.name(), dir.name());
+                    check(dirs[dir as usize].as_ref(), whose);
+                }
+            }
+        }
+    }
+
+    /// The spellings that moved into the mouse namespace are refused where they
+    /// stood, rather than resolving to nothing and leaving a stick dead.
+    #[test]
+    fn the_old_analog_spellings_are_refused() {
+        let profile = resolve(
+            r#"
+            [stick.left]
+            analog = "cursor"
+            [stick.right]
+            analog = "mouse.scroll"
+            "#,
+        );
+        assert_eq!(profile.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(
+            profile.stick(Side::Right),
+            &StickRole::Analog(Target::Scroll { speed: 1.0 })
+        );
     }
 
     /// The namespace is open but the route is not, so the other buttons have to
@@ -909,7 +979,7 @@ mod tests {
             [stick.left]
             up = "ArrowUp"
             [stick.right]
-            analog = "cursor"
+            analog = "mouse.cursor"
             "#,
         );
         let StickRole::Digital(dirs) = profile.stick(Side::Left) else {
@@ -971,7 +1041,7 @@ mod tests {
         let mut profile = resolve(
             r#"
             [stick.left]
-            analog = "cursor"
+            analog = "mouse.cursor"
             "#,
         );
         assert!(!profile.raw_stick_is_digital(Side::Left));
@@ -1023,7 +1093,7 @@ mod tests {
             [pad]
             a = "Space"
             [stick.right]
-            analog = "cursor"
+            analog = "mouse.cursor"
             "#,
         );
         let copy = profile.copy("my-game", "My game".to_string(), &KeyNames::new());

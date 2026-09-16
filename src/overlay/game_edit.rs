@@ -115,8 +115,8 @@ impl Kind {
             Kind::Click => Take::Text("mouse.left"),
             Kind::Passthrough => Take::Text("passthrough"),
             Kind::Ignore => Take::Text("none"),
-            Kind::Cursor => Take::Text("cursor"),
-            Kind::Scroll => Take::Text("scroll"),
+            Kind::Cursor => Take::Text("mouse.cursor"),
+            Kind::Scroll => Take::Text("mouse.scroll"),
         }
     }
 }

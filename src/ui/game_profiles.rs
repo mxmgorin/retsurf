@@ -64,8 +64,7 @@ fn title(screens: &GameProfiles) -> String {
     }
 }
 
-/// What this profile's removal row says — the question and the row itself have
-/// to agree.
+/// What this profile's removal row says; the question over it must agree.
 fn remove_label(screens: &GameProfiles) -> &'static str {
     screens
         .open_row()
@@ -73,7 +72,7 @@ fn remove_label(screens: &GameProfiles) -> &'static str {
         .map_or("Remove", ProfileAction::label)
 }
 
-/// The rows of whichever screen is up, as label and trailing value.
+/// The rows of whichever screen is up.
 fn rows(screens: &GameProfiles) -> Vec<(String, String)> {
     if screens.confirming() {
         return vec![
@@ -112,8 +111,7 @@ fn rows(screens: &GameProfiles) -> Vec<(String, String)> {
         .collect()
 }
 
-/// One row: the label on the left, its value on the right — the same shape as
-/// the settings rows, so the highlight reads identically.
+/// The shape the settings rows use, so the highlight reads identically.
 fn add_row(
     ui: &mut egui::Ui,
     width: f32,

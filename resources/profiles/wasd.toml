@@ -1,0 +1,34 @@
+# The other keyboard convention: WASD to walk, with the keys an action game
+# puts around it. Copy this into <data dir>/profiles/wasd.toml to change it;
+# deleting that copy restores this one.
+name = "Keyboard (WASD)"
+
+[pad]
+a = "Space"
+b = "e"
+x = "r"
+y = "f"
+l1 = "q"
+# Shift and Control are held, and the standard spells their key and their code
+# differently — a game reading `e.code` gets nothing from the bare name.
+r1 = { to = "Shift", code = "ShiftLeft" }
+l2 = { to = "Control", code = "ControlLeft" }
+start = "Enter"
+# The D-pad keeps the arrows, which most of these games take as well.
+up = "ArrowUp"
+down = "ArrowDown"
+left = "ArrowLeft"
+right = "ArrowRight"
+# Fire, and the pointer path every built-in keeps.
+r2 = "mouse.left"
+l3 = "passthrough"
+r3 = "passthrough"
+
+[stick.left]
+up = "w"
+down = "s"
+left = "a"
+right = "d"
+
+[stick.right]
+analog = "mouse.cursor"

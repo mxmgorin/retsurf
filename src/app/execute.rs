@@ -24,7 +24,7 @@ use inputbind::Pad;
 /// What an unbound source reads as in the editor's rows.
 const UNBOUND: &str = "-";
 
-/// What a stick reads as once it is four directions rather than one vector.
+/// What a stick's row reads as once it is four directions.
 const DIRECTIONS: &str = "directions";
 
 impl App {
@@ -193,8 +193,7 @@ impl App {
             return;
         };
         match action {
-            // Which profile runs is the list's business, so it goes back there —
-            // with the row it just changed marked.
+            // Which profile runs is the list's business, so it goes back there.
             ProfileAction::Use => {
                 self.use_game_profile(&id, out);
                 self.ui.game_profiles.back();
@@ -211,8 +210,8 @@ impl App {
         }
     }
 
-    /// Hand the keyboard a name to edit: a rename starts from what the profile
-    /// is called, a copy from a name that is free the moment it is accepted.
+    /// Hand the keyboard a name to edit: a rename starts from the current one,
+    /// a copy from `<name> copy`.
     fn ask_game_profile_name(&mut self, copy: bool, out: &mut Vec<AppCommand>) {
         let Some(row) = self.ui.game_profiles.open_row() else {
             return;
@@ -225,9 +224,8 @@ impl App {
         self.ui.osk(OskCommand::Show, &self.browser, out);
     }
 
-    /// The keyboard submitted a name: rename the open profile, or write the
-    /// copy and open it — a copy is made to be set up, so its screen is where
-    /// the next press belongs.
+    /// The keyboard submitted a name. A copy opens its own screen: it was made
+    /// to be set up.
     fn name_game_profile(&mut self, text: String, out: &mut Vec<AppCommand>) {
         let (Some(naming), Some(id)) = (
             self.ui.game_profiles.take_naming(),
@@ -249,9 +247,8 @@ impl App {
         }
     }
 
-    /// The confirmation said yes. A built-in comes back as the binary carries
-    /// it, so its screen stays up; anything else is gone, and the list is what
-    /// is left to show.
+    /// The confirmation said yes. A built-in comes back from the binary, so its
+    /// screen stays; anything else is gone.
     fn remove_game_profile(&mut self, out: &mut Vec<AppCommand>) {
         let Some(id) = self.ui.game_profiles.open_id_str().map(str::to_string) else {
             return;
@@ -303,7 +300,7 @@ impl App {
         self.ui.game_profiles.set_rows(rows);
     }
 
-    /// Apply an action on the button editor (see [`crate::overlay::game_edit`]).
+    /// Apply an action on the profile editor (see [`crate::overlay::game_edit`]).
     fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
         match action {
             // B backs out of the lists first, then out of the editor — saving
@@ -354,8 +351,7 @@ impl App {
         }
     }
 
-    /// A key the picker took: it becomes the row's target, and the keyboard's
-    /// work is done.
+    /// A key the picker took becomes the row's target.
     pub(super) fn drain_game_pick(&mut self, out: &mut Vec<AppCommand>) {
         let (Some(text), Some(slot)) =
             (self.ui.game_edit.take_picked(), self.ui.game_edit.picking())
@@ -367,7 +363,7 @@ impl App {
         self.set_game_target(slot, Some(text));
     }
 
-    /// Write one row into the edited profile and refresh what it shows.
+    /// Write one row into the edited profile.
     fn set_game_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.game_edit.profile_id().to_string();
         let raw = text.map(RawTarget::Short);
@@ -381,7 +377,7 @@ impl App {
         self.edited_game_profile();
     }
 
-    /// Hand a stick its four directions, which is what asking for them means.
+    /// Hand a stick its four directions (see [`Take::Arrows`]).
     fn set_game_arrows(&mut self, slot: Slot) {
         let Slot::Stick(side) = slot else {
             return;

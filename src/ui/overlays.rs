@@ -30,7 +30,7 @@ pub enum Focus {
     GameMenu,
     /// Its profile list and one profile's rows, opened from that menu.
     GameProfiles,
-    /// Its button editor, opened from a profile.
+    /// Its profile editor, opened from a profile.
     GameEdit,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).

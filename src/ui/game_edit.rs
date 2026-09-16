@@ -62,7 +62,7 @@ fn title(edit: &GameEdit) -> String {
     }
 }
 
-/// The rows of whichever list is up, as label and trailing value.
+/// The rows of whichever list is up.
 fn rows(edit: &GameEdit) -> Vec<(String, String)> {
     if edit.kind_open() {
         let kinds = edit.slot().map(Kind::all).unwrap_or_default();
@@ -98,8 +98,7 @@ fn rows(edit: &GameEdit) -> Vec<(String, String)> {
         .collect()
 }
 
-/// One row: the source on the left, what it sends on the right — the same shape
-/// as the settings rows, so the highlight reads identically.
+/// The shape the settings rows use, so the highlight reads identically.
 fn add_row(
     ui: &mut egui::Ui,
     width: f32,

@@ -29,7 +29,7 @@ pub enum AppCommand {
     GameMenu(GameMenuAction),
     /// An action on its profile screens (see [`crate::overlay::game_profiles`]).
     GameProfiles(GameProfilesAction),
-    /// An action on its button editor (see [`crate::overlay::game_edit`]).
+    /// An action on its profile editor (see [`crate::overlay::game_edit`]).
     GameEdit(GameEditAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
@@ -61,8 +61,7 @@ impl AppCommand {
 /// the router; the mouse pushes `Click` with the row it hit.
 #[derive(Clone)]
 pub enum GameMenuAction {
-    /// Act on the focused row (A / Enter): resume, open the profiles or the
-    /// keyboard, or enter and leave Game Mode.
+    /// Act on the focused row (A / Enter).
     Activate,
     /// Focus row `index` and activate it (clicking it).
     Click(usize),
@@ -82,14 +81,15 @@ pub enum GameProfilesAction {
     Name(String),
 }
 
-/// Actions on the Game Mode button editor. The pad pushes the relative ones
+/// Actions on the Game Mode profile editor. The pad pushes the relative ones
 /// through the router; the mouse pushes `Click` with the row it hit.
 #[derive(Clone)]
 pub enum GameEditAction {
-    /// Save what changed and go back to the menu (B / ✖).
+    /// Back out one list; past them all it saves and goes back to the profile
+    /// it edited (B / ✖).
     Close,
-    /// Act on what is focused (A): open the focused row's list of kinds, or
-    /// take the kind the list is on.
+    /// Act on what is focused (A): open a stick's rows, open a row's list of
+    /// kinds, or take the kind the list is on.
     Activate,
     /// Focus row `index` and open its list (clicking it).
     Click(usize),

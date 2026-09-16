@@ -196,7 +196,7 @@ pub struct AppUi {
     /// Its profile list and one profile's rows, opened from that menu. Public
     /// for the same reason.
     pub game_profiles: GameProfiles,
-    /// Its button editor, opened from a profile. Public for the same reason.
+    /// Its profile editor, opened from a profile. Public for the same reason.
     pub game_edit: GameEdit,
     /// The live profile's name, mirrored for the menu's row; the profiles
     /// themselves live in the event handler, which resolved them.
@@ -468,8 +468,8 @@ impl AppUi {
         (dx / ppp, dy / ppp)
     }
 
-    /// The gamepad cursor as the page's own coordinate. It is kept in points
-    /// already, so nothing is converted here — see [`browser_rel`].
+    /// The gamepad cursor as the page's own coordinate: it is kept in points,
+    /// so nothing converts here.
     #[inline]
     pub fn cursor_browser_rel(&self) -> (f32, f32) {
         browser_rel(self.cursor, self.webview_rect)
