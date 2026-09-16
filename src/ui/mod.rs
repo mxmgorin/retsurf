@@ -7,6 +7,7 @@ mod cursor;
 mod dial_edit;
 mod game_edit;
 mod game_menu;
+mod game_profiles;
 mod hints;
 mod home;
 mod memory;
@@ -32,6 +33,7 @@ use crate::{
     overlay::dial_edit::DialEdit,
     overlay::game_edit::GameEdit,
     overlay::game_menu::GameMenu,
+    overlay::game_profiles::GameProfiles,
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::Menu,
@@ -191,7 +193,10 @@ pub struct AppUi {
     /// Game Mode's own menu (the reserved Select hold). Public — driven
     /// directly, like the other overlays.
     pub game_menu: GameMenu,
-    /// Its profile editor, opened from that menu. Public for the same reason.
+    /// Its profile list and one profile's rows, opened from that menu. Public
+    /// for the same reason.
+    pub game_profiles: GameProfiles,
+    /// Its button editor, opened from a profile. Public for the same reason.
     pub game_edit: GameEdit,
     /// The live profile's name, mirrored for the menu's row; the profiles
     /// themselves live in the event handler, which resolved them.
@@ -296,6 +301,7 @@ impl AppUi {
             game_mode_toast: None,
             game_mode_toast_text: String::new(),
             game_menu: GameMenu::new(),
+            game_profiles: GameProfiles::new(),
             game_edit: GameEdit::new(),
             game_profile_name,
             game_edit_targets: Vec::new(),
@@ -776,10 +782,16 @@ impl AppUi {
                     game_edit::add_game_edit(
                         ctx,
                         &self.game_edit,
-                        &self.game_profile_name,
                         &self.game_edit_targets,
                         commands,
                     );
+                }
+
+                // The profile screens, for the same reason: the keyboard opens
+                // over them to type a name.
+                if self.game_profiles.visible() {
+                    drop_egui_focus(ctx);
+                    game_profiles::add_game_profiles(ctx, &self.game_profiles, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its
@@ -906,6 +918,13 @@ impl AppUi {
     #[inline]
     pub fn game_mode(&self) -> bool {
         self.game_mode
+    }
+
+    /// Whether one of Game Mode's own screens owns the input. The browser's
+    /// vocabulary shrinks under any of them, in or out of the mode.
+    #[inline]
+    pub fn game_screen(&self) -> bool {
+        self.game_menu.visible || self.game_profiles.visible() || self.game_edit.visible()
     }
 
     /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).

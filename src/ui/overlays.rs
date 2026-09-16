@@ -28,7 +28,9 @@ pub enum Focus {
     Menu,
     /// Game Mode's own menu, over the still-running game.
     GameMenu,
-    /// Its profile editor, opened from that menu.
+    /// Its profile list and one profile's rows, opened from that menu.
+    GameProfiles,
+    /// Its button editor, opened from a profile.
     GameEdit,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).
@@ -55,6 +57,8 @@ impl AppUi {
             Focus::Menu
         } else if self.game_menu.visible {
             Focus::GameMenu
+        } else if self.game_profiles.visible() {
+            Focus::GameProfiles
         } else if self.game_edit.visible() {
             Focus::GameEdit
         } else if self.settings.visible() {
@@ -84,6 +88,9 @@ impl AppUi {
         } else if self.game_edit.picking() {
             // The profile editor turned the keyboard into a key picker.
             OskTarget::Capture(self.game_edit.picked_mut())
+        } else if self.game_profiles.naming().is_some() {
+            // A profile being renamed or copied: the keyboard types its name.
+            OskTarget::GameName(self.game_profiles.naming_text_mut().expect("naming"))
         } else if self.dial_edit.visible() {
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             OskTarget::DialEdit(self.dial_edit.input_mut())
@@ -102,6 +109,11 @@ impl AppUi {
         // the keyboard's height is known (see `update`).
         if to_page && matches!(cmd, OskCommand::Show) {
             self.osk_lift_pending = true;
+        }
+        // A profile's name is committed by Enter, which writes a file; putting
+        // the keyboard away is how that is called off.
+        if matches!(cmd, OskCommand::Hide) {
+            self.game_profiles.take_naming();
         }
     }
 

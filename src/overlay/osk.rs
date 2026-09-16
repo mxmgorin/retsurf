@@ -9,7 +9,7 @@
 //! through them in that order. Each layout defines only the four character
 //! rows — the frame (Tab, Caps, Enter, Shift, Space, arrows) is fixed.
 
-use crate::app::{AppCommand, MenuAction, PromptAction};
+use crate::app::{AppCommand, GameProfilesAction, MenuAction, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
@@ -36,6 +36,9 @@ pub enum OskTarget<'a> {
     /// key *picker* here, so a press is recorded as the profile spells it and
     /// nothing reaches the page (see [`crate::overlay::game_edit`]).
     Capture(&'a mut Option<String>),
+    /// A Game Mode profile's name, for a rename or a copy (see
+    /// [`crate::overlay::game_profiles`]); Enter is what commits it to a file.
+    GameName(&'a mut String),
     Page,
 }
 
@@ -413,7 +416,8 @@ impl Osk {
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
-            | OskTarget::Settings(buf) => buf.clear(),
+            | OskTarget::Settings(buf)
+            | OskTarget::GameName(buf) => buf.clear(),
             // Picking has no buffer to clear; the row keeps what it had.
             OskTarget::Capture(_) => {}
             OskTarget::Page => browser.clear_focused_field(),
@@ -436,7 +440,8 @@ impl Osk {
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
-            | OskTarget::Settings(buf) => self.caret = remove_before(buf, self.caret),
+            | OskTarget::Settings(buf)
+            | OskTarget::GameName(buf) => self.caret = remove_before(buf, self.caret),
             OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
@@ -452,7 +457,8 @@ impl Osk {
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
-            | OskTarget::Settings(buf) => self.caret = insert_at(buf, self.caret, c),
+            | OskTarget::Settings(buf)
+            | OskTarget::GameName(buf) => self.caret = insert_at(buf, self.caret, c),
             OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
                 browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
@@ -489,6 +495,16 @@ impl Osk {
             // A settings text field already holds the typed value in the draft;
             // Enter just dismisses the keyboard, back to the settings list.
             OskTarget::Settings(_) => {}
+            // A profile's name is written to a file, so Enter is what commits
+            // it — dismissing the keyboard any other way leaves it alone.
+            OskTarget::GameName(buf) => {
+                let text = buf.trim();
+                if !text.is_empty() {
+                    commands.push(AppCommand::GameProfiles(GameProfilesAction::Name(
+                        text.to_string(),
+                    )));
+                }
+            }
             // The one key the grid cannot otherwise name for a row.
             OskTarget::Capture(slot) => *slot = Some("Enter".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
@@ -513,7 +529,8 @@ fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
         OskTarget::Prompt(buf)
         | OskTarget::Home(buf)
         | OskTarget::DialEdit(buf)
-        | OskTarget::Settings(buf) => buf.chars().count(),
+        | OskTarget::Settings(buf)
+        | OskTarget::GameName(buf) => buf.chars().count(),
         OskTarget::Capture(_) | OskTarget::Page => 0,
     }
 }

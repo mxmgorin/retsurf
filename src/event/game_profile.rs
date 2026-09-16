@@ -136,6 +136,12 @@ pub struct Profile {
     pub id: String,
     /// What the menu shows.
     pub name: String,
+    /// Whether the binary carries this id, so deleting its file restores the
+    /// original rather than removing the profile.
+    pub builtin: bool,
+    /// Whether `profiles/<id>.toml` is there — what deleting removes, and the
+    /// only thing a built-in has to delete.
+    pub file: bool,
     pad: Vec<Option<Target>>,
     /// Left, then right.
     sticks: [StickRole; 2],
@@ -412,6 +418,8 @@ impl Profile {
         Profile {
             id: id.to_string(),
             name: raw.name.clone().unwrap_or_else(|| id.to_string()),
+            builtin: is_built_in(id),
+            file: false,
             pad,
             sticks,
             keys: resolved_keys,
@@ -433,23 +441,107 @@ impl Profile {
         };
     }
 
+    /// Rename what the menu shows. The id stays: it is the file's stem, and
+    /// `[game_mode] profile` names it.
+    pub fn set_name(&mut self, name: String) {
+        self.raw.name = Some(name.clone());
+        self.name = name;
+    }
+
+    /// The same bindings under a new id and name — every profile a user adds
+    /// starts from one that works, since an empty one would leave the page
+    /// with no cursor and no click.
+    pub fn copy(&self, id: &str, name: String, keys: &KeyNames) -> Profile {
+        let mut raw = self.raw.clone();
+        raw.name = Some(name);
+        Profile::resolve(id, raw, keys)
+    }
+
     /// Write the profile to `profiles/<id>.toml`, which is also how a built-in
     /// is replaced. Returns the re-resolved profile, so the edit takes effect
     /// without a restart.
     pub fn save(&self, keys: &KeyNames) -> Profile {
-        let dir = format!("{}{PROFILE_DIR}", config::data_dir());
-        let path = format!("{dir}/{}.toml", self.id);
-        match toml::to_string_pretty(&self.raw) {
-            Ok(text) => {
-                let _ = std::fs::create_dir_all(&dir);
-                match std::fs::write(&path, text) {
-                    Ok(()) => log::info!("game profile: wrote `{path}`"),
-                    Err(e) => log::warn!("game profile: could not write `{path}`: {e}"),
-                }
+        let mut saved = Profile::resolve(&self.id, self.raw.clone(), keys);
+        saved.file = write_file(&self.id, &self.raw);
+        saved
+    }
+
+    /// Remove `profiles/<id>.toml`. For a built-in that is reset to default —
+    /// the binary's own text comes back; for any other profile it is deletion.
+    pub fn delete(&self) -> bool {
+        let path = profile_path(&self.id);
+        match std::fs::remove_file(&path) {
+            Ok(()) => {
+                log::info!("game profile: removed `{path}`");
+                true
             }
-            Err(e) => log::warn!("game profile: could not serialize `{}`: {e}", self.id),
+            Err(e) => {
+                log::warn!("game profile: could not remove `{path}`: {e}");
+                false
+            }
         }
-        Profile::resolve(&self.id, self.raw.clone(), keys)
+    }
+}
+
+/// Where a profile of this id is read from and written to.
+fn profile_path(id: &str) -> String {
+    format!("{}{PROFILE_DIR}/{id}.toml", config::data_dir())
+}
+
+/// Write one profile's file, reporting whether it is now on disk.
+fn write_file(id: &str, raw: &RawProfile) -> bool {
+    let text = match toml::to_string_pretty(raw) {
+        Ok(text) => text,
+        Err(e) => {
+            log::warn!("game profile: could not serialize `{id}`: {e}");
+            return false;
+        }
+    };
+    let path = profile_path(id);
+    let _ = std::fs::create_dir_all(format!("{}{PROFILE_DIR}", config::data_dir()));
+    match std::fs::write(&path, text) {
+        Ok(()) => {
+            log::info!("game profile: wrote `{path}`");
+            true
+        }
+        Err(e) => {
+            log::warn!("game profile: could not write `{path}`: {e}");
+            false
+        }
+    }
+}
+
+/// A file stem for a typed name: lowercased, one dash per run of anything
+/// else, and never one of `taken` — an id collision would shadow a profile
+/// instead of adding one.
+pub fn new_id(name: &str, taken: &[String]) -> String {
+    let slug: String = name
+        .chars()
+        .map(|c| match c.is_alphanumeric() {
+            true => c.to_lowercase().next().unwrap_or(c),
+            false => '-',
+        })
+        .collect();
+    let base: String = slug
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    // A name of nothing but punctuation still needs a stem to live under.
+    let base = match base.is_empty() {
+        true => "profile".to_string(),
+        false => base,
+    };
+    if !taken.contains(&base) {
+        return base;
+    }
+    let mut n = 2;
+    loop {
+        let candidate = format!("{base}-{n}");
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
     }
 }
 
@@ -549,21 +641,38 @@ pub fn load_all(keys: &KeyNames) -> Vec<Profile> {
     let mut profiles: Vec<Profile> = BUILT_IN
         .iter()
         .map(|(id, text)| {
-            let raw = files
-                .remove(*id)
-                .unwrap_or_else(|| parse_built_in(id, text));
-            Profile::resolve(id, raw, keys)
+            let (raw, file) = match files.remove(*id) {
+                Some(raw) => (raw, true),
+                None => (parse_built_in(id, text), false),
+            };
+            let mut profile = Profile::resolve(id, raw, keys);
+            profile.file = file;
+            profile
         })
         .collect();
     // Whatever else the user put there, in a stable order.
     let mut extra: Vec<(String, RawProfile)> = files.into_iter().collect();
     extra.sort_by(|(a, _), (b, _)| a.cmp(b));
-    profiles.extend(
-        extra
-            .into_iter()
-            .map(|(id, raw)| Profile::resolve(&id, raw, keys)),
-    );
+    profiles.extend(extra.into_iter().map(|(id, raw)| {
+        let mut profile = Profile::resolve(&id, raw, keys);
+        profile.file = true;
+        profile
+    }));
     profiles
+}
+
+/// Whether the binary carries a profile of this id.
+fn is_built_in(id: &str) -> bool {
+    BUILT_IN.iter().any(|(built_in, _)| *built_in == id)
+}
+
+/// The built-in `id` as the binary carries it — what deleting its file gives
+/// back.
+pub fn built_in(id: &str, keys: &KeyNames) -> Option<Profile> {
+    BUILT_IN
+        .iter()
+        .find(|(built_in, _)| *built_in == id)
+        .map(|(id, text)| Profile::resolve(id, parse_built_in(id, text), keys))
 }
 
 /// The profile `id` names, or the first — the built-in `keys` unless a file
@@ -761,6 +870,38 @@ mod tests {
         assert_eq!(named(Some(0), Pad::A), Key::Named(NamedKey::Shift));
         // B is the base's in both, which is what makes a layer worth holding.
         assert_eq!(named(Some(0), Pad::B), named(None, Pad::B));
+    }
+
+    /// A copy is the only way to add a profile, so it has to carry the whole
+    /// mapping over — including what the editor cannot reach.
+    #[test]
+    fn a_copy_takes_the_bindings_and_the_new_name() {
+        let profile = resolve(
+            r#"
+            name = "Original"
+            [pad]
+            a = "Space"
+            [stick.right]
+            analog = "cursor"
+            "#,
+        );
+        let copy = profile.copy("my-game", "My game".to_string(), &KeyNames::new());
+        assert_eq!(copy.id, "my-game");
+        assert_eq!(copy.name, "My game");
+        assert_eq!(copy.pad(None, Pad::A), profile.pad(None, Pad::A));
+        assert!(copy.stick(true).is_analog());
+        // The copy is the user's, whatever it was copied from.
+        assert!(!copy.builtin);
+    }
+
+    /// An id collision would shadow a profile instead of adding one, so a name
+    /// already spoken for has to land on a stem of its own.
+    #[test]
+    fn a_typed_name_becomes_a_free_file_stem() {
+        let taken = ["vampire-survivors".to_string(), "keys".to_string()];
+        assert_eq!(new_id("My Game!", &taken), "my-game");
+        assert_eq!(new_id("Vampire Survivors", &taken), "vampire-survivors-2");
+        assert_eq!(new_id("  ...  ", &taken), "profile");
     }
 
     /// A layer that opens a layer is a knot to debug, and a name that is not

@@ -131,10 +131,15 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
-    /// What each pad sends under the live profile, by pad index — the editor's
-    /// rows. An unbound pad reads as the dash its row shows.
-    pub fn game_pad_texts(&self) -> Vec<String> {
-        let profile = self.game_input.profile();
+    /// Every profile this run offers, for the list the mode's menu opens.
+    pub fn game_profiles(&self) -> &[Profile] {
+        &self.game_profiles
+    }
+
+    /// What each pad sends under `id`, by pad index — the editor's rows. An
+    /// unbound pad reads as the dash its row shows.
+    pub fn game_pad_texts(&self, id: &str) -> Vec<String> {
+        let profile = game_profile::pick(&self.game_profiles, id);
         Pad::ALL
             .into_iter()
             .map(|pad| match profile.raw_pad(pad) {
@@ -144,32 +149,79 @@ impl AppEventHandler {
             .collect()
     }
 
-    /// Rewrite one pad in the live profile (the editor). Held in memory until
+    /// Rewrite one pad in a profile (the editor). Held in memory until
     /// [`Self::save_game_profile`] writes it.
-    pub fn set_game_pad(&mut self, pad: Pad, text: Option<String>) {
-        self.game_input
-            .profile_mut()
-            .set_raw_pad(pad, text.map(game_profile::RawTarget::Short));
+    pub fn set_game_pad(&mut self, id: &str, pad: Pad, text: Option<String>) {
+        if let Some(profile) = self.game_profiles.iter_mut().find(|p| p.id == id) {
+            profile.set_raw_pad(pad, text.map(game_profile::RawTarget::Short));
+        }
     }
 
-    /// Write the edited profile to its file and adopt what comes back, so the
-    /// change takes effect without a restart. Returns its name.
+    /// Write an edited profile to its file. Returns its name.
     pub fn save_game_profile(
         &mut self,
+        id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> String {
-        let saved = self.game_input.profile().save(&self.key_names);
-        let name = saved.name.clone();
-        // The list holds the old copy; replace it so cycling away and back does
-        // not resurrect what was just edited.
-        if let Some(slot) = self.game_profiles.iter_mut().find(|p| p.id == saved.id) {
-            *slot = saved.clone();
-        } else {
-            self.game_profiles.push(saved.clone());
-        }
-        self.game_input.set_profile(saved, browser, commands);
+        let Some(at) = self.game_profiles.iter().position(|p| p.id == id) else {
+            return self.game_profile_name().to_string();
+        };
+        self.game_profiles[at] = self.game_profiles[at].save(&self.key_names);
+        let name = self.game_profiles[at].name.clone();
+        self.readopt_game_profile(at, browser, commands);
         name
+    }
+
+    /// Rename what the menu shows and write it. The id stays what it was: it is
+    /// the file's stem, and `[game_mode] profile` names it.
+    pub fn rename_game_profile(
+        &mut self,
+        id: &str,
+        name: String,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        if let Some(profile) = self.game_profiles.iter_mut().find(|p| p.id == id) {
+            profile.set_name(name);
+        }
+        self.save_game_profile(id, browser, commands);
+    }
+
+    /// Copy a profile under a new name, as a file of its own. Returns the id it
+    /// landed under — the name decides it, so a collision cannot shadow one.
+    pub fn duplicate_game_profile(&mut self, id: &str, name: String) -> String {
+        let taken: Vec<String> = self.game_profiles.iter().map(|p| p.id.clone()).collect();
+        let new_id = game_profile::new_id(&name, &taken);
+        let copy = game_profile::pick(&self.game_profiles, id).copy(&new_id, name, &self.key_names);
+        self.game_profiles.push(copy.save(&self.key_names));
+        new_id
+    }
+
+    /// Delete a profile's file: a built-in comes back as the binary carries it,
+    /// anything else is gone. The mode cannot run what is no longer there, so
+    /// it takes the first profile instead; returns what it runs now.
+    pub fn delete_game_profile(
+        &mut self,
+        id: &str,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> (String, String) {
+        let Some(at) = self.game_profiles.iter().position(|p| p.id == id) else {
+            return self.live_game_profile();
+        };
+        self.game_profiles[at].delete();
+        match game_profile::built_in(id, &self.key_names) {
+            Some(original) => self.game_profiles[at] = original,
+            None => {
+                self.game_profiles.remove(at);
+            }
+        }
+        if self.game_input.profile_id() == id {
+            let profile = game_profile::pick(&self.game_profiles, id).clone();
+            self.game_input.set_profile(profile, browser, commands);
+        }
+        self.live_game_profile()
     }
 
     /// The profile driving the mode right now, as the menu shows it.
@@ -177,27 +229,42 @@ impl AppEventHandler {
         &game_profile::pick(&self.game_profiles, self.game_input.profile_id()).name
     }
 
-    /// Switch Game Mode's profile live — by id (an edited config), or `delta`
-    /// steps along the list (the menu's Profile row). Returns the new id and
-    /// name; what the page holds is released before the new one starts.
-    pub fn set_game_profile(
+    pub fn game_profile_id(&self) -> &str {
+        self.game_input.profile_id()
+    }
+
+    /// Hand Game Mode the profile `id` names, live: what the page holds under
+    /// the old one is released first. An id nothing answers to falls back to
+    /// the first, so an edited config is never a dead mode.
+    pub fn use_game_profile(
         &mut self,
         id: &str,
-        delta: i32,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        let at = self
-            .game_profiles
-            .iter()
-            .position(|p| p.id == id)
-            .unwrap_or(0);
-        let count = self.game_profiles.len() as i32;
-        let next = (at as i32 + delta).rem_euclid(count.max(1)) as usize;
-        let profile = self.game_profiles[next].clone();
+        let profile = game_profile::pick(&self.game_profiles, id).clone();
         let named = (profile.id.clone(), profile.name.clone());
         self.game_input.set_profile(profile, browser, commands);
         named
+    }
+
+    fn live_game_profile(&self) -> (String, String) {
+        let profile = game_profile::pick(&self.game_profiles, self.game_input.profile_id());
+        (profile.id.clone(), profile.name.clone())
+    }
+
+    /// Re-adopt an entry if it is the one the mode is running, so an edit to it
+    /// takes effect without a restart.
+    fn readopt_game_profile(
+        &mut self,
+        at: usize,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        if self.game_profiles[at].id == self.game_input.profile_id() {
+            let profile = self.game_profiles[at].clone();
+            self.game_input.set_profile(profile, browser, commands);
+        }
     }
 
     /// Rebuild both devices' tables from an edited store. The pad forgets what it

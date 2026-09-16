@@ -8,6 +8,7 @@
 pub mod dial_edit;
 pub mod game_edit;
 pub mod game_menu;
+pub mod game_profiles;
 pub mod hints;
 pub mod home;
 pub mod menu;

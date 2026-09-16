@@ -14,7 +14,6 @@ const ROW_H: f32 = 30.0;
 pub(super) fn add_game_edit(
     ctx: &egui::Context,
     edit: &GameEdit,
-    profile_name: &str,
     targets: &[String],
     commands: &mut Vec<AppCommand>,
 ) {
@@ -24,8 +23,10 @@ pub(super) fn add_game_edit(
         let pad = edit.source();
         let (title, hint) = match edit.kind_open() {
             Some(_) => (format!("{} SENDS", pad.name().to_uppercase()), "A takes it"),
+            // The row that opens this leads, so the profile it belongs to
+            // trails: "KEYBOARD KEYS BUTTONS" is not a phrase.
             None => (
-                format!("GAME MODE PROFILE - {profile_name}"),
+                format!("BUTTONS - {}", edit.profile_name().to_uppercase()),
                 "A opens a button, B saves",
             ),
         };

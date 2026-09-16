@@ -252,12 +252,12 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 # the keys and buttons the browser would otherwise take. The `game_mode` binding
 # (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
 # mode; inside, a held Select does the same, reserved and never the game's. That
-# menu is the only way in and out — it leads with Enable or Disable — and it also
-# switches this profile (written back here), which is why it opens outside the
-# mode too, edits the profile, or summons the on-screen keyboard over the game.
-# Which profile drives the pad and the keyboard while the mode is on: a built-in
-# ("keys" or "pad") or the stem of a profiles/<id>.toml of your own. See "Game
-# Mode profiles" below for the format.
+# menu is the only way in and out — it leads with Enable or Disable — and its
+# Input profile row is where this one is picked (written back here), which is
+# why it opens outside the mode too; it also summons the on-screen keyboard over
+# the game. Which profile drives the pad and the keyboard while the mode is on: a
+# built-in ("keys" or "pad") or the stem of a profiles/<id>.toml of your own.
+# See "Game Mode profiles" below for the format.
 profile = "keys"
 ```
 
@@ -267,7 +267,7 @@ A profile is what each button, stick direction and key sends to the page while
 Game Mode is on. Two ship built in — `keys` (arrows + z/x/c + Space/Enter, the
 retro convention most of itch.io plays with) and `pad` (the buttons reach the
 page raw, for games that read the Gamepad API themselves). `[game_mode] profile`
-picks one by id, and the Game Mode menu's **Profile** row cycles them.
+picks one by id.
 
 The built-ins live in the binary and are always offered, so a later release can
 add one without touching your files. Put a `profiles/<id>.toml` in the data dir
@@ -275,14 +275,30 @@ to add a profile of your own, or name it after a built-in to replace that one �
 deleting the file restores it. A file is read at startup; a typo costs its own
 binding and is logged, not the whole profile.
 
-**The Game Mode menu's "Edit profile..." row** edits the buttons without a
-keyboard or a text editor, which is the only way to do it on a handheld: a row
-per button, **A** opens what that button can send — a key, the left mouse
-button, Passthrough, or nothing — and **B** saves. Choosing *Key...* hands over
-to the on-screen keyboard, so any key is reachable by pressing it. Editing a
-built-in writes the `profiles/<id>.toml` that replaces it, so deleting that file
-is still how you get the original back. The sticks, the `[keyboard]` table and
-the layers below are the file's: they need names the screen has no room to pick.
+**The Game Mode menu's "Input profile" row** is all of this without a keyboard or a
+file manager, which is the only way to do it on a handheld. It opens the list of
+profiles, marked with the one in use; **A** on one opens its own screen:
+
+| row | what it does |
+| --- | --- |
+| Use this profile | hands it to Game Mode and writes `[game_mode] profile` |
+| Buttons | the editor below |
+| Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
+| Duplicate... | a copy under a name you type — the way to add a profile |
+| Delete | throws the file away, after a confirmation |
+| Reset to default | the same, on a built-in: the binary's own version comes back |
+
+There is no *New* row: a copy is how a profile is added, because an empty one
+would reach the page with no cursor and no click. A built-in the binary carries
+and no file shadows has nothing to remove, so it offers neither of the last two.
+
+**The button editor** is a row per button; **A** opens what that button can send
+— a key, the left mouse button, Passthrough, or nothing — and **B** saves.
+Choosing *Key...* hands over to the on-screen keyboard, so any key is reachable
+by pressing it. Editing a built-in writes the `profiles/<id>.toml` that replaces
+it, so deleting that file is still how you get the original back. The sticks, the
+`[keyboard]` table and the layers below are the file's: they need names the
+screen has no room to pick.
 
 ```toml
 name = "Vampire Survivors"    # what the menu shows; the file name is the id

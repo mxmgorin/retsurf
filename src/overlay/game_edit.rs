@@ -4,7 +4,8 @@
 //! at all; the file stays the fuller interface ([`crate::event::game_profile`]).
 //!
 //! Sticks, physical keys and layers are the file's — they need names this screen
-//! has no room to pick.
+//! has no room to pick. Hence the screen says BUTTONS, which is all it edits,
+//! while the module is named for the editor it is meant to become.
 
 use inputbind::Pad;
 
@@ -58,6 +59,11 @@ pub fn sources() -> Vec<Pad> {
 
 pub struct GameEdit {
     visible: bool,
+    /// The profile being edited — not necessarily the one Game Mode runs, so a
+    /// mapping can be set up without disturbing a game already under way.
+    profile: String,
+    /// Its name, for the panel's title.
+    name: String,
     selected: usize,
     /// The row's kind list, open over it; `None` while the rows are.
     kind: Option<usize>,
@@ -73,6 +79,8 @@ impl GameEdit {
     pub fn new() -> Self {
         Self {
             visible: false,
+            profile: String::new(),
+            name: String::new(),
             selected: 0,
             kind: None,
             picking: false,
@@ -85,8 +93,19 @@ impl GameEdit {
         self.visible
     }
 
-    pub fn open(&mut self) {
+    /// The profile whose buttons these rows are.
+    pub fn profile_id(&self) -> &str {
+        &self.profile
+    }
+
+    pub fn profile_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn open(&mut self, profile: String, name: String) {
         self.visible = true;
+        self.profile = profile;
+        self.name = name;
         self.selected = 0;
         self.kind = None;
         self.picking = false;
@@ -199,7 +218,7 @@ mod tests {
     #[test]
     fn the_highlight_stops_at_the_ends_of_whichever_list_is_up() {
         let mut edit = GameEdit::new();
-        edit.open();
+        edit.open("keys".to_string(), "Keyboard keys".to_string());
         edit.move_sel(-1);
         assert_eq!(edit.selected(), 0);
         edit.move_sel(99);

@@ -12,33 +12,36 @@ pub enum GameRow {
     /// Close the menu: back to the game, or to the browser — either way, back
     /// to what the opener was doing.
     Resume,
-    /// The active pad mapping, cycled in place (A / Left / Right). Settable from
+    /// Open the profile screens (see [`super::game_profiles`]): which mapping
+    /// both devices run, and everything that can be done to one. Reachable from
     /// outside the mode too, which is the point of opening the menu there.
     Profile,
-    /// Open the profile editor (see [`super::game_edit`]).
-    Edit,
     /// Summon the on-screen keyboard; it types into the page.
-    TypeText,
+    Osk,
 }
 
 impl GameRow {
     /// Top-to-bottom order, which is also the selection index.
-    pub const ALL: [GameRow; 5] = [
+    pub const ALL: [GameRow; 4] = [
         GameRow::Toggle,
         GameRow::Resume,
         GameRow::Profile,
-        GameRow::Edit,
-        GameRow::TypeText,
+        GameRow::Osk,
     ];
 
     /// The row's label. Only the toggle words itself by state; the panel is
-    /// titled GAME MODE, so it needs no noun of its own.
+    /// titled GAME MODE, so it needs no noun of its own. No trailing ellipsis:
+    /// it is reserved for a row that asks for something before it acts (see
+    /// [`super::game_profiles::ProfileAction::label`]).
     pub fn label(self, in_game_mode: bool) -> &'static str {
         match (self, in_game_mode) {
             (GameRow::Resume, _) => "Resume",
-            (GameRow::Profile, _) => "Profile",
-            (GameRow::Edit, _) => "Edit profile...",
-            (GameRow::TypeText, _) => "Keyboard...",
+            // Singular: the value beside it is the profile in use, and one
+            // profile maps both devices — hence input, not controller.
+            (GameRow::Profile, _) => "Input profile",
+            // Not "Keyboard": a profile has a `[keyboard]` table of physical
+            // keys, and this is the one on screen.
+            (GameRow::Osk, _) => "On-screen keyboard",
             (GameRow::Toggle, true) => "Disable",
             (GameRow::Toggle, false) => "Enable",
         }
@@ -110,7 +113,7 @@ mod tests {
         menu.open(true);
         assert_eq!(menu.row(), GameRow::Resume);
         menu.move_sel(99);
-        assert_eq!(menu.row(), GameRow::TypeText);
+        assert_eq!(menu.row(), GameRow::Osk);
         menu.move_sel(-99);
         assert_eq!(menu.row(), GameRow::Toggle);
         // Opened from outside the mode, entering is one A-press away — and an
@@ -123,11 +126,13 @@ mod tests {
         assert_ne!(menu.row(), GameRow::Toggle);
     }
 
-    /// One row words itself by state, and it is the one whose action does.
+    /// One row words itself by state, and it is the one whose action does. No
+    /// row here asks for anything, so none may trail off.
     #[test]
     fn the_labels_follow_the_mode() {
         for row in GameRow::ALL {
             assert!(!row.label(true).is_empty() && !row.label(false).is_empty());
+            assert!(!row.label(true).ends_with("..."), "{row:?}");
             let same = row.label(true) == row.label(false);
             assert_eq!(same, row != GameRow::Toggle, "{row:?}");
         }

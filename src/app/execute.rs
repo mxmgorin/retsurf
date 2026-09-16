@@ -5,14 +5,15 @@
 //! mapped earlier, in [`super::router`].
 
 use super::{
-    App, AppCommand, GameEditAction, GameMenuAction, InputCommand, MenuAction, PromptAction,
-    SettingsAction,
+    App, AppCommand, GameEditAction, GameMenuAction, GameProfilesAction, InputCommand, MenuAction,
+    PromptAction, SettingsAction,
 };
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
 use crate::event::bindings::Action;
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::game_menu::GameRow;
+use crate::overlay::game_profiles::{Press, ProfileAction, ProfileRow};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
@@ -23,7 +24,7 @@ impl App {
         // needs, so a shortcut resolved under one of its overlays cannot act on
         // the browser behind it (see [`AppCommand::in_game_mode`]). Its menu
         // counts either way: it owns the input wherever it was opened.
-        if (self.ui.game_mode() || self.ui.game_menu.visible) && !command.in_game_mode() {
+        if (self.ui.game_mode() || self.ui.game_screen()) && !command.in_game_mode() {
             return;
         }
         match command {
@@ -42,6 +43,7 @@ impl App {
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
+            AppCommand::GameProfiles(action) => self.game_profiles_action(action, out),
             AppCommand::GameEdit(action) => self.game_edit_action(action, out),
             AppCommand::Prompt(action) => match action {
                 PromptAction::Activate => self.ui.prompt.activate(),
@@ -112,11 +114,6 @@ impl App {
     fn game_menu_action(&mut self, action: &GameMenuAction, out: &mut Vec<AppCommand>) {
         match action {
             GameMenuAction::Activate => self.game_menu_activate(out),
-            GameMenuAction::CycleProfile(delta) => {
-                if self.ui.game_menu.row() == GameRow::Profile {
-                    self.cycle_game_profile(*delta, out);
-                }
-            }
             GameMenuAction::Click(index) => {
                 self.ui.game_menu.select(*index);
                 self.game_menu_activate(out);
@@ -128,16 +125,15 @@ impl App {
     fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.game_menu.row() {
             GameRow::Resume => self.ui.game_menu.close(),
-            GameRow::Profile => self.cycle_game_profile(1, out),
-            // The editor is its own screen; the menu is what B returns to.
-            GameRow::Edit => {
+            // The profiles are their own screens; the menu is what B returns to.
+            GameRow::Profile => {
                 self.ui.game_menu.close();
-                self.ui.game_edit.open();
-                self.refresh_game_edit();
+                self.refresh_game_profiles();
+                self.ui.game_profiles.open();
             }
             // The keyboard types into the page and outranks this menu, so close
             // it first — the two would fight over the pad otherwise.
-            GameRow::TypeText => {
+            GameRow::Osk => {
                 self.ui.game_menu.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
@@ -152,7 +148,153 @@ impl App {
         }
     }
 
-    /// Apply an action on the profile editor (see [`crate::overlay::game_edit`]).
+    /// Apply an action on Game Mode's profile screens (see
+    /// [`crate::overlay::game_profiles`]).
+    fn game_profiles_action(&mut self, action: &GameProfilesAction, out: &mut Vec<AppCommand>) {
+        match action {
+            // B pops one screen; past the list there is the menu that opened it.
+            GameProfilesAction::Close => {
+                if !self.ui.game_profiles.back() {
+                    self.ui.game_menu.open(self.ui.game_mode());
+                }
+            }
+            GameProfilesAction::Activate => self.game_profiles_activate(out),
+            GameProfilesAction::Click(index) => {
+                self.ui.game_profiles.select(*index);
+                self.game_profiles_activate(out);
+            }
+            GameProfilesAction::Name(text) => self.name_game_profile(text.clone(), out),
+        }
+    }
+
+    /// A on whichever of the three lists is up.
+    fn game_profiles_activate(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.game_profiles.press() {
+            Some(Press::Open) => self.ui.game_profiles.open_selected(),
+            Some(Press::Take(action)) => self.take_game_profile_action(action, out),
+            Some(Press::Confirm(true)) => self.remove_game_profile(out),
+            Some(Press::Confirm(false)) => self.ui.game_profiles.close_confirm(),
+            None => {}
+        }
+    }
+
+    /// One row of a profile's own screen.
+    fn take_game_profile_action(&mut self, action: ProfileAction, out: &mut Vec<AppCommand>) {
+        let Some(id) = self.ui.game_profiles.open_id_str().map(str::to_string) else {
+            return;
+        };
+        match action {
+            // Which profile runs is the list's business, so it goes back there —
+            // with the row it just changed marked.
+            ProfileAction::Use => {
+                self.use_game_profile(&id, out);
+                self.ui.game_profiles.back();
+            }
+            ProfileAction::Buttons => {
+                let name = self.ui.game_profiles.open_row().map(|row| row.name.clone());
+                self.ui.game_profiles.close();
+                self.ui.game_edit.open(id, name.unwrap_or_default());
+                self.refresh_game_edit();
+            }
+            ProfileAction::Rename => self.ask_game_profile_name(false, out),
+            ProfileAction::Duplicate => self.ask_game_profile_name(true, out),
+            ProfileAction::Delete | ProfileAction::Reset => self.ui.game_profiles.ask_confirm(),
+        }
+    }
+
+    /// Hand the keyboard a name to edit: a rename starts from what the profile
+    /// is called, a copy from a name that is free the moment it is accepted.
+    fn ask_game_profile_name(&mut self, copy: bool, out: &mut Vec<AppCommand>) {
+        let Some(row) = self.ui.game_profiles.open_row() else {
+            return;
+        };
+        let text = match copy {
+            true => format!("{} copy", row.name),
+            false => row.name.clone(),
+        };
+        self.ui.game_profiles.start_naming(copy, text);
+        self.ui.osk(OskCommand::Show, &self.browser, out);
+    }
+
+    /// The keyboard submitted a name: rename the open profile, or write the
+    /// copy and open it — a copy is made to be set up, so its screen is where
+    /// the next press belongs.
+    fn name_game_profile(&mut self, text: String, out: &mut Vec<AppCommand>) {
+        let (Some(naming), Some(id)) = (
+            self.ui.game_profiles.take_naming(),
+            self.ui.game_profiles.open_id_str().map(str::to_string),
+        ) else {
+            return;
+        };
+        match naming.copy {
+            true => {
+                let new_id = self.event_handler.duplicate_game_profile(&id, text);
+                self.refresh_game_profiles();
+                self.ui.game_profiles.open_id(&new_id);
+            }
+            false => {
+                self.event_handler
+                    .rename_game_profile(&id, text, &self.browser, out);
+                self.refresh_game_profiles();
+            }
+        }
+    }
+
+    /// The confirmation said yes. A built-in comes back as the binary carries
+    /// it, so its screen stays up; anything else is gone, and the list is what
+    /// is left to show.
+    fn remove_game_profile(&mut self, out: &mut Vec<AppCommand>) {
+        let Some(id) = self.ui.game_profiles.open_id_str().map(str::to_string) else {
+            return;
+        };
+        let (live, _) = self
+            .event_handler
+            .delete_game_profile(&id, &self.browser, out);
+        if self.config.game_mode.profile != live {
+            self.config.game_mode.profile = live;
+            self.config.save();
+        }
+        self.refresh_game_profiles();
+        self.ui.game_profiles.close_confirm();
+        self.ui.game_profiles.open_id(&id);
+    }
+
+    /// Make a profile the one Game Mode runs, and the one it starts with.
+    fn use_game_profile(&mut self, id: &str, out: &mut Vec<AppCommand>) {
+        let (id, _) = self.event_handler.use_game_profile(id, &self.browser, out);
+        self.config.game_mode.profile = id;
+        self.config.save();
+        self.refresh_game_profiles();
+        log::info!("game mode profile: {}", self.config.game_mode.profile);
+    }
+
+    /// Re-snapshot the profile list, and the live name the menu shows with it —
+    /// every change to a profile goes through here.
+    fn refresh_game_profiles(&mut self) {
+        let name = self.event_handler.game_profile_name().to_string();
+        self.ui.set_game_profile_name(name);
+        let live = self.event_handler.game_profile_id().to_string();
+        let rows = self
+            .event_handler
+            .game_profiles()
+            .iter()
+            .map(|profile| ProfileRow {
+                id: profile.id.clone(),
+                name: profile.name.clone(),
+                in_use: profile.id == live,
+                // The row takes a file away, so there is none to offer where
+                // the binary is all there is.
+                remove: match (profile.builtin, profile.file) {
+                    (_, false) => None,
+                    (true, true) => Some(ProfileAction::Reset),
+                    (false, true) => Some(ProfileAction::Delete),
+                },
+            })
+            .collect();
+        self.ui.game_profiles.set_rows(rows);
+    }
+
+    /// Apply an action on the button editor (see [`crate::overlay::game_edit`]).
     fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
         match action {
             // B backs out of the kind list first, then out of the editor —
@@ -163,11 +305,13 @@ impl App {
                     self.ui.game_edit.close_kinds();
                     return;
                 }
+                let id = self.ui.game_edit.profile_id().to_string();
                 if self.ui.game_edit.close() {
-                    let name = self.event_handler.save_game_profile(&self.browser, out);
-                    self.ui.set_game_profile_name(name);
+                    self.event_handler
+                        .save_game_profile(&id, &self.browser, out);
                 }
-                self.ui.game_menu.open(self.ui.game_mode());
+                self.refresh_game_profiles();
+                self.ui.game_profiles.open_id(&id);
             }
             GameEditAction::Activate => self.game_edit_activate(out),
             GameEditAction::Click(index) => {
@@ -212,16 +356,19 @@ impl App {
         self.set_game_pad(pad, Some(text));
     }
 
-    /// Write one row into the live profile and refresh what the editor shows.
+    /// Write one row into the edited profile and refresh what it shows.
     fn set_game_pad(&mut self, pad: inputbind::Pad, text: Option<String>) {
-        self.event_handler.set_game_pad(pad, text);
+        let id = self.ui.game_edit.profile_id().to_string();
+        self.event_handler.set_game_pad(&id, pad, text);
         self.ui.game_edit.mark_dirty();
         self.refresh_game_edit();
     }
 
-    /// Re-snapshot the editor's rows from the live profile.
+    /// Re-snapshot the editor's rows from the profile it has open.
     fn refresh_game_edit(&mut self) {
-        let targets = self.event_handler.game_pad_texts();
+        let targets = self
+            .event_handler
+            .game_pad_texts(self.ui.game_edit.profile_id());
         self.ui.set_game_edit_targets(targets);
     }
 
@@ -229,22 +376,8 @@ impl App {
     /// is the source of truth here, so nothing is written back.
     fn adopt_game_profile(&mut self, out: &mut Vec<AppCommand>) {
         let id = self.config.game_mode.profile.clone();
-        let (_, name) = self
-            .event_handler
-            .set_game_profile(&id, 0, &self.browser, out);
-        self.ui.set_game_profile_name(name);
-    }
-
-    /// The menu's Profile row: step to the next profile and make it the default.
-    fn cycle_game_profile(&mut self, delta: i32, out: &mut Vec<AppCommand>) {
-        let id = self.config.game_mode.profile.clone();
-        let (id, name) = self
-            .event_handler
-            .set_game_profile(&id, delta, &self.browser, out);
-        self.ui.set_game_profile_name(name);
-        self.config.game_mode.profile = id;
-        self.config.save();
-        log::info!("game mode profile: {}", self.config.game_mode.profile);
+        self.event_handler.use_game_profile(&id, &self.browser, out);
+        self.refresh_game_profiles();
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).

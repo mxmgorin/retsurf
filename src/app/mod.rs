@@ -8,8 +8,8 @@ mod execute;
 mod router;
 
 pub use command::{
-    AppCommand, GameEditAction, GameMenuAction, InputCommand, MenuAction, PromptAction,
-    SettingsAction,
+    AppCommand, GameEditAction, GameMenuAction, GameProfilesAction, InputCommand, MenuAction,
+    PromptAction, SettingsAction,
 };
 
 use crate::browser::AppBrowser;

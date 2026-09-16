@@ -27,7 +27,9 @@ pub enum AppCommand {
     GameMode,
     /// An action on Game Mode's own menu (see [`crate::overlay::game_menu`]).
     GameMenu(GameMenuAction),
-    /// An action on its profile editor (see [`crate::overlay::game_edit`]).
+    /// An action on its profile screens (see [`crate::overlay::game_profiles`]).
+    GameProfiles(GameProfilesAction),
+    /// An action on its button editor (see [`crate::overlay::game_edit`]).
     GameEdit(GameEditAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
@@ -48,6 +50,7 @@ impl AppCommand {
                 | AppCommand::Input(_)
                 | AppCommand::Prompt(_)
                 | AppCommand::GameMenu(_)
+                | AppCommand::GameProfiles(_)
                 | AppCommand::GameEdit(_)
                 | AppCommand::GameMode
         )
@@ -58,16 +61,28 @@ impl AppCommand {
 /// the router; the mouse pushes `Click` with the row it hit.
 #[derive(Clone)]
 pub enum GameMenuAction {
-    /// Act on the focused row (A / Enter): resume, cycle the profile, open the
-    /// keyboard, or leave Game Mode.
+    /// Act on the focused row (A / Enter): resume, open the profiles or the
+    /// keyboard, or enter and leave Game Mode.
     Activate,
-    /// Step the pad profile by a direction (Left / Right on the Profile row).
-    CycleProfile(i32),
     /// Focus row `index` and activate it (clicking it).
     Click(usize),
 }
 
-/// Actions on the Game Mode profile editor. The pad pushes the relative ones
+/// Actions on Game Mode's profile screens (the list, one profile's rows, the
+/// confirmation over a removal).
+#[derive(Clone)]
+pub enum GameProfilesAction {
+    /// Back out one screen (B / ✖); the list hands the menu back.
+    Close,
+    /// Take what is focused (A): open a profile, or its highlighted row.
+    Activate,
+    /// Focus row `index` and take it (clicking it).
+    Click(usize),
+    /// A name the on-screen keyboard submitted, for a rename or a copy.
+    Name(String),
+}
+
+/// Actions on the Game Mode button editor. The pad pushes the relative ones
 /// through the router; the mouse pushes `Click` with the row it hit.
 #[derive(Clone)]
 pub enum GameEditAction {
