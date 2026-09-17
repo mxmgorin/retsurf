@@ -1,13 +1,13 @@
 //! Game Mode's translator: the pad and the keyboard drive the game, not the
-//! chrome. What each source sends is the active [`Profile`]; a source with a
+//! chrome. What each source sends is the active [`InputMap`]; a source with a
 //! target is withheld from the page's raw input (the `bool` returns here), so
-//! one press is never seen twice. Select is reserved in every profile — held
+//! one press is never seen twice. Select is reserved in every map — held
 //! past the hold it opens the Game Mode menu.
 
+use super::input_map::{Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::app::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
 use crate::config::InputConfig;
-use crate::event::game_profile::{Dir, KeyTarget, Profile, Side, StickRole, Target};
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::axis_value;
 use inputbind::{Pad, Trigger};
@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 /// fraction of it, so a stick resting at the edge cannot spam edges.
 const STICK_RELEASE_RATIO: f32 = 0.8;
 
-/// Left, then right — the order [`Profile::stick`] and the state arrays use.
+/// Left, then right — the order [`InputMap::stick`] and the state arrays use.
 const STICKS: [Side; 2] = Side::ALL;
 
 /// Arrow directions down for a digital (-1/0/1) x/y pair, in [`Dir::ALL`] order.
@@ -63,7 +63,7 @@ fn trigger_pad(axis: Axis) -> Option<Pad> {
 }
 
 pub struct GameInput {
-    profile: Profile,
+    map: InputMap,
     /// Key targets the page holds, and how many sources hold each: a D-pad and
     /// a stick can name one key, and the first release must not end it.
     held: Vec<(KeyTarget, u32)>,
@@ -91,9 +91,9 @@ pub struct GameInput {
 }
 
 impl GameInput {
-    pub fn new(profile: Profile, cfg: &InputConfig) -> Self {
+    pub fn new(map: InputMap, cfg: &InputConfig) -> Self {
         Self {
-            profile,
+            map,
             held: Vec::new(),
             pads: vec![None; Pad::COUNT],
             keys: Vec::new(),
@@ -121,20 +121,15 @@ impl GameInput {
         self.hold = Duration::from_millis(cfg.hold_ms);
     }
 
-    /// Switch profile without leaving Game Mode (the menu's Profile row): what
+    /// Switch map without leaving Game Mode (the menu's InputMap row): what
     /// the page holds under the old one is released before the new one starts.
-    pub fn set_profile(
-        &mut self,
-        profile: Profile,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
+    pub fn set_map(&mut self, map: InputMap, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         self.release(browser, commands);
-        self.profile = profile;
+        self.map = map;
     }
 
-    pub fn profile_id(&self) -> &str {
-        &self.profile.id
+    pub fn map_id(&self) -> &str {
+        &self.map.id
     }
 
     /// The layer held right now, if any: the most recent activator wins, and a
@@ -152,7 +147,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        // Select is reserved in every profile: the hold that opens the menu.
+        // Select is reserved in every map: the hold that opens the menu.
         if pad == Pad::Select {
             self.select_at = match pressed {
                 true => self.select_at.or_else(|| Some(Instant::now())),
@@ -165,7 +160,7 @@ impl GameInput {
             // An autorepeat from a key-wired pad: the press already resolved.
             (true, Some(target)) => bound(&target),
             (true, None) => {
-                let Some(target) = self.profile.pad(self.layer(), pad).cloned() else {
+                let Some(target) = self.map.pad(self.layer(), pad).cloned() else {
                     return false;
                 };
                 self.pads[slot] = Some(target.clone());
@@ -176,7 +171,7 @@ impl GameInput {
                 self.fire(&target, false, browser, commands)
             }
             // A release of a press that was never seen; nothing to unwind.
-            (false, None) => self.profile.pad(self.layer(), pad).is_some_and(bound),
+            (false, None) => self.map.pad(self.layer(), pad).is_some_and(bound),
         }
     }
 
@@ -198,13 +193,13 @@ impl GameInput {
                     self.on_pad(pad, down, browser, commands);
                 }
             }
-            return self.profile.pad(self.layer(), pad).is_some_and(bound);
+            return self.map.pad(self.layer(), pad).is_some_and(bound);
         }
         let Some((index, is_y)) = stick_axis(axis) else {
             return false;
         };
         // Read the role before touching the state: both borrow `self`.
-        let role = self.profile.stick(STICKS[index]);
+        let role = self.map.stick(STICKS[index]);
         // A stick told to send nothing keeps its axis anyway, or `none` and
         // `passthrough` would be the same thing written twice.
         if *role == StickRole::Analog(Target::None) {
@@ -252,7 +247,7 @@ impl GameInput {
         match (pressed, held) {
             (true, Some(i)) => bound(&self.keys[i].1),
             (true, None) => {
-                let Some(target) = self.profile.key(self.layer(), code).cloned() else {
+                let Some(target) = self.map.key(self.layer(), code).cloned() else {
                     return false;
                 };
                 self.keys.push((code, target.clone()));
@@ -262,7 +257,7 @@ impl GameInput {
                 let (_, target) = self.keys.swap_remove(i);
                 self.fire(&target, false, browser, commands)
             }
-            (false, None) => self.profile.key(self.layer(), code).is_some_and(bound),
+            (false, None) => self.map.key(self.layer(), code).is_some_and(bound),
         }
     }
 
@@ -331,7 +326,7 @@ impl GameInput {
     }
 
     /// Re-derive one stick's four directions and send the edges that changed.
-    /// Only a direction that actually flipped is cloned out of the profile —
+    /// Only a direction that actually flipped is cloned out of the map —
     /// axis samples arrive in floods, edges do not.
     fn refresh_stick(
         &mut self,
@@ -343,7 +338,7 @@ impl GameInput {
         let want = dirs(x, y);
         let mut edges: [Option<Target>; 4] = [None, None, None, None];
         {
-            let StickRole::Digital(targets) = self.profile.stick(STICKS[index]) else {
+            let StickRole::Digital(targets) = self.map.stick(STICKS[index]) else {
                 return;
             };
             for dir in Dir::ALL {
@@ -406,12 +401,12 @@ impl GameInput {
     }
 
     /// The cursor vector and the scroll amount the sticks ask for this frame,
-    /// summed so a profile may put both on either stick.
+    /// summed so a map may put both on either stick.
     fn analog(&self) -> ((f32, f32), f32) {
         let mut aim = (0.0, 0.0);
         let mut scroll = 0.0;
         for (index, side) in STICKS.into_iter().enumerate() {
-            let (speed, to_cursor) = match self.profile.stick(side) {
+            let (speed, to_cursor) = match self.map.stick(side) {
                 StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
                 StickRole::Analog(Target::Scroll { speed }) => (*speed, false),
                 _ => continue,

@@ -1,11 +1,11 @@
 //! Rendering of the Game Mode menu (state lives in
-//! [`crate::overlay::game_menu`]): a centered panel over the running game.
+//! [`crate::overlay::game::menu`]): a centered panel over the running game.
 //! Up/Down move, A / Left/Right act on the focused row, B resumes.
 
-use super::panel::{ROW_GAP, ROW_RADIUS};
-use super::theme::{ACCENT, PANEL_FILL, ROW_FONT};
 use crate::app::{AppCommand, GameMenuAction};
-use crate::overlay::game_menu::{GameMenu, GameRow};
+use crate::overlay::game::menu::{GameMenu, GameRow};
+use crate::ui::panel::{ROW_GAP, ROW_RADIUS};
+use crate::ui::theme::{ACCENT, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
 
 /// Row height, matching the settings overlay's field rows.
@@ -18,10 +18,10 @@ const PANEL_W: f32 = 340.0;
 /// Margin left either side of the panel on a screen too narrow for [`PANEL_W`].
 const SIDE_MARGIN: f32 = 48.0;
 
-pub(super) fn add_game_menu(
+pub(in crate::ui) fn add_game_menu(
     ctx: &egui::Context,
     menu: &GameMenu,
-    profile_name: &str,
+    map_name: &str,
     in_game_mode: bool,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -49,7 +49,7 @@ pub(super) fn add_game_menu(
                     ui.spacing_mut().item_spacing.y = ROW_GAP;
                     for (index, row) in GameRow::ALL.into_iter().enumerate() {
                         let value = match row {
-                            GameRow::Profile => profile_name,
+                            GameRow::InputMap => map_name,
                             _ => "",
                         };
                         let label = row.label(in_game_mode);

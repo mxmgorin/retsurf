@@ -5,17 +5,17 @@
 //! mapped earlier, in [`super::router`].
 
 use super::{
-    App, AppCommand, GameEditAction, GameMenuAction, GameProfilesAction, InputCommand, MenuAction,
-    PromptAction, SettingsAction,
+    App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand,
+    MenuAction, PromptAction, SettingsAction,
 };
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
 use crate::event::bindings::Action;
-use crate::event::game_profile::{Dir, RawTarget, Side};
+use crate::event::game::input_map::{Dir, RawTarget, Side};
 use crate::overlay::dial_edit::EditItem;
-use crate::overlay::game_edit::{EditPress, Slot, StickTargets, Take, Targets};
-use crate::overlay::game_menu::GameRow;
-use crate::overlay::game_profiles::{Press, ProfileAction, ProfileRow};
+use crate::overlay::game::input_maps::{MapAction, MapRow, Press};
+use crate::overlay::game::map_edit::{EditPress, Slot, StickTargets, Take, Targets};
+use crate::overlay::game::menu::GameRow;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
@@ -52,8 +52,8 @@ impl App {
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
-            AppCommand::GameProfiles(action) => self.game_profiles_action(action, out),
-            AppCommand::GameEdit(action) => self.game_edit_action(action, out),
+            AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),
+            AppCommand::GameMapEdit(action) => self.map_edit_action(action, out),
             AppCommand::Prompt(action) => match action {
                 PromptAction::Activate => self.ui.prompt.activate(),
                 PromptAction::Cancel => self.ui.prompt.cancel(),
@@ -81,7 +81,7 @@ impl App {
     }
 
     /// The Game Mode gesture: the menu, always. One gesture means one screen in
-    /// either state, entering and leaving are its one row, and the profile can
+    /// either state, entering and leaving are its one row, and the map can
     /// be set before a game rather than only under a running one.
     pub(super) fn game_mode_gesture(&mut self) {
         match self.ui.game_menu.visible {
@@ -117,7 +117,7 @@ impl App {
         log::info!("game mode: false");
     }
 
-    /// Apply an action on Game Mode's menu (see [`crate::overlay::game_menu`]).
+    /// Apply an action on Game Mode's menu (see [`crate::overlay::game::menu`]).
     /// It is the only screen reachable while the mode is on, so every row either
     /// returns to the game or leaves the mode.
     fn game_menu_action(&mut self, action: &GameMenuAction, out: &mut Vec<AppCommand>) {
@@ -134,11 +134,11 @@ impl App {
     fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.game_menu.row() {
             GameRow::Resume => self.ui.game_menu.close(),
-            // The profiles are their own screens; the menu is what B returns to.
-            GameRow::Profile => {
+            // The maps are their own screens; the menu is what B returns to.
+            GameRow::InputMap => {
                 self.ui.game_menu.close();
-                self.refresh_game_profiles();
-                self.ui.game_profiles.open();
+                self.refresh_input_maps();
+                self.ui.input_maps.open();
             }
             // The keyboard types into the page and outranks this menu, so close
             // it first — the two would fight over the pad otherwise.
@@ -157,171 +157,168 @@ impl App {
         }
     }
 
-    /// Apply an action on Game Mode's profile screens (see
-    /// [`crate::overlay::game_profiles`]).
-    fn game_profiles_action(&mut self, action: &GameProfilesAction, out: &mut Vec<AppCommand>) {
+    /// Apply an action on Game Mode's map screens (see
+    /// [`crate::overlay::game::input_maps`]).
+    fn input_maps_action(&mut self, action: &GameInputMapsAction, out: &mut Vec<AppCommand>) {
         match action {
             // B pops one screen; past the list there is the menu that opened it.
-            GameProfilesAction::Close => {
-                if !self.ui.game_profiles.back() {
+            GameInputMapsAction::Close => {
+                if !self.ui.input_maps.back() {
                     self.ui.game_menu.open(self.ui.game_mode());
                 }
             }
-            GameProfilesAction::Activate => self.game_profiles_activate(out),
-            GameProfilesAction::Click(index) => {
-                self.ui.game_profiles.select(*index);
-                self.game_profiles_activate(out);
+            GameInputMapsAction::Activate => self.input_maps_activate(out),
+            GameInputMapsAction::Click(index) => {
+                self.ui.input_maps.select(*index);
+                self.input_maps_activate(out);
             }
-            GameProfilesAction::Name(text) => self.name_game_profile(text.clone(), out),
+            GameInputMapsAction::Name(text) => self.name_input_map(text.clone(), out),
         }
     }
 
     /// A on whichever of the three lists is up.
-    fn game_profiles_activate(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.game_profiles.press() {
-            Some(Press::Open) => self.ui.game_profiles.open_selected(),
-            Some(Press::Take(action)) => self.take_game_profile_action(action, out),
-            Some(Press::Confirm(true)) => self.remove_game_profile(out),
-            Some(Press::Confirm(false)) => self.ui.game_profiles.close_confirm(),
+    fn input_maps_activate(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.input_maps.press() {
+            Some(Press::Open) => self.ui.input_maps.open_selected(),
+            Some(Press::Take(action)) => self.take_map_action(action, out),
+            Some(Press::Confirm(true)) => self.remove_input_map(out),
+            Some(Press::Confirm(false)) => self.ui.input_maps.close_confirm(),
             None => {}
         }
     }
 
-    /// One row of a profile's own screen.
-    fn take_game_profile_action(&mut self, action: ProfileAction, out: &mut Vec<AppCommand>) {
-        let Some(id) = self.ui.game_profiles.open_id_str().map(str::to_string) else {
+    /// One row of a map's own screen.
+    fn take_map_action(&mut self, action: MapAction, out: &mut Vec<AppCommand>) {
+        let Some(id) = self.ui.input_maps.open_id_str().map(str::to_string) else {
             return;
         };
         match action {
-            // Which profile runs is the list's business, so it goes back there.
-            ProfileAction::Use => {
-                self.use_game_profile(&id, out);
-                self.ui.game_profiles.back();
+            // Which map runs is the list's business, so it goes back there.
+            MapAction::Use => {
+                self.use_input_map(&id, out);
+                self.ui.input_maps.back();
             }
-            ProfileAction::Buttons => {
-                let name = self.ui.game_profiles.open_row().map(|row| row.name.clone());
-                self.ui.game_profiles.close();
-                self.ui.game_edit.open(id, name.unwrap_or_default());
-                self.refresh_game_edit();
+            MapAction::Buttons => {
+                let name = self.ui.input_maps.open_row().map(|row| row.name.clone());
+                self.ui.input_maps.close();
+                self.ui.map_edit.open(id, name.unwrap_or_default());
+                self.refresh_map_edit();
             }
-            ProfileAction::Rename => self.ask_game_profile_name(false, out),
-            ProfileAction::Duplicate => self.ask_game_profile_name(true, out),
-            ProfileAction::Delete | ProfileAction::Reset => self.ui.game_profiles.ask_confirm(),
+            MapAction::Rename => self.ask_map_name(false, out),
+            MapAction::Duplicate => self.ask_map_name(true, out),
+            MapAction::Delete | MapAction::Reset => self.ui.input_maps.ask_confirm(),
         }
     }
 
     /// Hand the keyboard a name to edit: a rename starts from the current one,
     /// a copy from `<name> copy`.
-    fn ask_game_profile_name(&mut self, copy: bool, out: &mut Vec<AppCommand>) {
-        let Some(row) = self.ui.game_profiles.open_row() else {
+    fn ask_map_name(&mut self, copy: bool, out: &mut Vec<AppCommand>) {
+        let Some(row) = self.ui.input_maps.open_row() else {
             return;
         };
         let text = match copy {
             true => format!("{} copy", row.name),
             false => row.name.clone(),
         };
-        self.ui.game_profiles.start_naming(copy, text);
+        self.ui.input_maps.start_naming(copy, text);
         self.ui.osk(OskCommand::Show, &self.browser, out);
     }
 
     /// The keyboard submitted a name. A copy opens its own screen: it was made
     /// to be set up.
-    fn name_game_profile(&mut self, text: String, out: &mut Vec<AppCommand>) {
+    fn name_input_map(&mut self, text: String, out: &mut Vec<AppCommand>) {
         let (Some(naming), Some(id)) = (
-            self.ui.game_profiles.take_naming(),
-            self.ui.game_profiles.open_id_str().map(str::to_string),
+            self.ui.input_maps.take_naming(),
+            self.ui.input_maps.open_id_str().map(str::to_string),
         ) else {
             return;
         };
         match naming.copy {
             true => {
-                let new_id = self.event_handler.duplicate_game_profile(&id, text);
-                self.refresh_game_profiles();
-                self.ui.game_profiles.open_id(&new_id);
+                let new_id = self.event_handler.duplicate_input_map(&id, text);
+                self.refresh_input_maps();
+                self.ui.input_maps.open_id(&new_id);
             }
             false => {
                 self.event_handler
-                    .rename_game_profile(&id, text, &self.browser, out);
-                self.refresh_game_profiles();
+                    .rename_input_map(&id, text, &self.browser, out);
+                self.refresh_input_maps();
             }
         }
     }
 
     /// The confirmation said yes. A built-in comes back from the binary, so its
     /// screen stays; anything else is gone.
-    fn remove_game_profile(&mut self, out: &mut Vec<AppCommand>) {
-        let Some(id) = self.ui.game_profiles.open_id_str().map(str::to_string) else {
+    fn remove_input_map(&mut self, out: &mut Vec<AppCommand>) {
+        let Some(id) = self.ui.input_maps.open_id_str().map(str::to_string) else {
             return;
         };
-        let (live, _) = self
-            .event_handler
-            .delete_game_profile(&id, &self.browser, out);
-        if self.config.game_mode.profile != live {
-            self.config.game_mode.profile = live;
+        let (live, _) = self.event_handler.delete_input_map(&id, &self.browser, out);
+        if self.config.game_mode.input_map != live {
+            self.config.game_mode.input_map = live;
             self.config.save();
         }
-        self.refresh_game_profiles();
-        self.ui.game_profiles.close_confirm();
-        self.ui.game_profiles.open_id(&id);
+        self.refresh_input_maps();
+        self.ui.input_maps.close_confirm();
+        self.ui.input_maps.open_id(&id);
     }
 
-    /// Make a profile the one Game Mode runs, and the one it starts with.
-    fn use_game_profile(&mut self, id: &str, out: &mut Vec<AppCommand>) {
-        let (id, _) = self.event_handler.use_game_profile(id, &self.browser, out);
-        self.config.game_mode.profile = id;
+    /// Make a map the one Game Mode runs, and the one it starts with.
+    fn use_input_map(&mut self, id: &str, out: &mut Vec<AppCommand>) {
+        let (id, _) = self.event_handler.use_input_map(id, &self.browser, out);
+        self.config.game_mode.input_map = id;
         self.config.save();
-        self.refresh_game_profiles();
-        log::info!("game mode profile: {}", self.config.game_mode.profile);
+        self.refresh_input_maps();
+        log::info!("input map: {}", self.config.game_mode.input_map);
     }
 
-    /// Re-snapshot the profile list, and the live name the menu shows with it —
-    /// every change to a profile goes through here.
-    fn refresh_game_profiles(&mut self) {
-        let name = self.event_handler.game_profile_name().to_string();
-        self.ui.set_game_profile_name(name);
-        let live = self.event_handler.game_profile_id().to_string();
+    /// Re-snapshot the map list, and the live name the menu shows with it —
+    /// every change to a map goes through here.
+    fn refresh_input_maps(&mut self) {
+        let name = self.event_handler.input_map_name().to_string();
+        self.ui.set_input_map_name(name);
+        let live = self.event_handler.input_map_id().to_string();
         let rows = self
             .event_handler
-            .game_profiles()
+            .input_maps()
             .iter()
-            .map(|profile| ProfileRow {
-                id: profile.id.clone(),
-                name: profile.name.clone(),
-                in_use: profile.id == live,
+            .map(|map| MapRow {
+                id: map.id.clone(),
+                name: map.name.clone(),
+                in_use: map.id == live,
                 // The row takes a file away, so there is none to offer where
                 // the binary is all there is.
-                remove: match (profile.builtin, profile.file) {
+                remove: match (map.builtin, map.file) {
                     (_, false) => None,
-                    (true, true) => Some(ProfileAction::Reset),
-                    (false, true) => Some(ProfileAction::Delete),
+                    (true, true) => Some(MapAction::Reset),
+                    (false, true) => Some(MapAction::Delete),
                 },
             })
             .collect();
-        self.ui.game_profiles.set_rows(rows);
+        self.ui.input_maps.set_rows(rows);
     }
 
-    /// Apply an action on the profile editor (see [`crate::overlay::game_edit`]).
-    fn game_edit_action(&mut self, action: &GameEditAction, out: &mut Vec<AppCommand>) {
+    /// Apply an action on the map editor (see [`crate::overlay::game::map_edit`]).
+    fn map_edit_action(&mut self, action: &GameMapEditAction, out: &mut Vec<AppCommand>) {
         match action {
             // B backs out of the lists first, then out of the editor — saving
             // on the way, and only if something changed, so an untouched visit
             // never rewrites a file the user hand-edited.
-            GameEditAction::Close => {
-                if self.ui.game_edit.back() {
+            GameMapEditAction::Close => {
+                if self.ui.map_edit.back() {
                     return;
                 }
-                let id = self.ui.game_edit.profile_id().to_string();
-                if self.ui.game_edit.close() {
-                    self.event_handler
-                        .save_game_profile(&id, &self.browser, out);
+                let id = self.ui.map_edit.map_id().to_string();
+                if self.ui.map_edit.close() {
+                    self.event_handler.save_input_map(&id, &self.browser, out);
                 }
-                self.refresh_game_profiles();
-                self.ui.game_profiles.open_id(&id);
+                self.refresh_input_maps();
+                self.ui.input_maps.open_id(&id);
             }
-            GameEditAction::Activate => self.game_edit_activate(out),
-            GameEditAction::Click(index) => {
-                self.ui.game_edit.select(*index);
-                self.game_edit_activate(out);
+            GameMapEditAction::Activate => self.map_edit_activate(out),
+            GameMapEditAction::Click(index) => {
+                self.ui.map_edit.select(*index);
+                self.map_edit_activate(out);
             }
         }
     }
@@ -329,20 +326,20 @@ impl App {
     /// A in the editor: open a stick's rows, open the focused row's list of
     /// kinds, or take the one it is on — a key defers to the on-screen
     /// keyboard, the rest are written straight away.
-    fn game_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.game_edit.press() {
-            Some(EditPress::OpenStick(side)) => self.ui.game_edit.open_stick(side),
-            Some(EditPress::OpenKinds) => self.ui.game_edit.open_kinds(),
+    fn map_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.map_edit.press() {
+            Some(EditPress::OpenStick(side)) => self.ui.map_edit.open_stick(side),
+            Some(EditPress::OpenKinds) => self.ui.map_edit.open_kinds(),
             Some(EditPress::Take(kind, slot)) => {
-                self.ui.game_edit.close_kinds();
+                self.ui.map_edit.close_kinds();
                 match kind.take() {
-                    Take::Text(text) => self.set_game_target(slot, Some(text.to_string())),
-                    Take::Arrows => self.set_game_arrows(slot),
+                    Take::Text(text) => self.set_map_target(slot, Some(text.to_string())),
+                    Take::Arrows => self.set_map_arrows(slot),
                     // The keyboard becomes a key picker; the pick lands in the
                     // editor's slot, which the loop drains (see
-                    // [`App::drain_game_pick`]).
+                    // [`App::drain_map_pick`]).
                     Take::Key => {
-                        self.ui.game_edit.set_picking(Some(slot));
+                        self.ui.map_edit.set_picking(Some(slot));
                         self.ui.osk(OskCommand::Show, &self.browser, out);
                     }
                 }
@@ -352,83 +349,80 @@ impl App {
     }
 
     /// A key the picker took becomes the row's target.
-    pub(super) fn drain_game_pick(&mut self, out: &mut Vec<AppCommand>) {
-        let (Some(text), Some(slot)) =
-            (self.ui.game_edit.take_picked(), self.ui.game_edit.picking())
+    pub(super) fn drain_map_pick(&mut self, out: &mut Vec<AppCommand>) {
+        let (Some(text), Some(slot)) = (self.ui.map_edit.take_picked(), self.ui.map_edit.picking())
         else {
             return;
         };
-        self.ui.game_edit.set_picking(None);
+        self.ui.map_edit.set_picking(None);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
-        self.set_game_target(slot, Some(text));
+        self.set_map_target(slot, Some(text));
     }
 
-    /// Write one row into the edited profile.
-    fn set_game_target(&mut self, slot: Slot, text: Option<String>) {
-        let id = self.ui.game_edit.profile_id().to_string();
+    /// Write one row into the edited map.
+    fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
+        let id = self.ui.map_edit.map_id().to_string();
         let raw = text.map(RawTarget::Short);
-        if let Some(profile) = self.event_handler.game_profile_mut(&id) {
+        if let Some(map) = self.event_handler.input_map_mut(&id) {
             match slot {
-                Slot::Button(pad) => profile.set_raw_pad(pad, raw),
-                Slot::Stick(side) => profile.set_raw_stick(side, raw),
-                Slot::Direction(side, dir) => profile.set_raw_stick_dir(side, dir, raw),
+                Slot::Button(pad) => map.set_raw_pad(pad, raw),
+                Slot::Stick(side) => map.set_raw_stick(side, raw),
+                Slot::Direction(side, dir) => map.set_raw_stick_dir(side, dir, raw),
             }
         }
-        self.edited_game_profile();
+        self.edited_input_map();
     }
 
     /// Hand a stick its four directions (see [`Take::Arrows`]).
-    fn set_game_arrows(&mut self, slot: Slot) {
+    fn set_map_arrows(&mut self, slot: Slot) {
         let Slot::Stick(side) = slot else {
             return;
         };
-        let id = self.ui.game_edit.profile_id().to_string();
-        if let Some(profile) = self.event_handler.game_profile_mut(&id) {
-            profile.set_raw_stick_arrows(side);
+        let id = self.ui.map_edit.map_id().to_string();
+        if let Some(map) = self.event_handler.input_map_mut(&id) {
+            map.set_raw_stick_arrows(side);
         }
-        self.edited_game_profile();
+        self.edited_input_map();
     }
 
-    fn edited_game_profile(&mut self) {
-        self.ui.game_edit.mark_dirty();
-        self.refresh_game_edit();
+    fn edited_input_map(&mut self) {
+        self.ui.map_edit.mark_dirty();
+        self.refresh_map_edit();
     }
 
-    /// Re-snapshot the editor's rows from the profile it has open.
-    fn refresh_game_edit(&mut self) {
-        let profile = self
-            .event_handler
-            .game_profile(self.ui.game_edit.profile_id());
+    /// Re-snapshot the editor's rows from the map it has open.
+    fn refresh_map_edit(&mut self) {
+        let map = self.event_handler.input_map(self.ui.map_edit.map_id());
         let text = |raw: Option<&RawTarget>| match raw {
             Some(raw) => raw.text().to_string(),
             None => UNBOUND.to_string(),
         };
         let pads = Pad::ALL
             .into_iter()
-            .map(|pad| text(profile.raw_pad(pad)))
+            .map(|pad| text(map.raw_pad(pad)))
             .collect();
         let sticks = Side::ALL.map(|side| {
-            let digital = profile.raw_stick_is_digital(side);
+            let digital = map.raw_stick_is_digital(side);
             StickTargets {
                 digital,
                 // A stick read as directions has no whole-stick entry to show,
                 // so the row says what it has become instead.
                 role: match digital {
                     true => DIRECTIONS.to_string(),
-                    false => text(profile.raw_stick(side)),
+                    false => text(map.raw_stick(side)),
                 },
-                dirs: Dir::ALL.map(|dir| text(profile.raw_stick_dir(side, dir))),
+                dirs: Dir::ALL.map(|dir| text(map.raw_stick_dir(side, dir))),
             }
         });
-        self.ui.game_edit.set_targets(Targets { pads, sticks });
+        self.ui.map_edit.set_targets(Targets { pads, sticks });
     }
 
-    /// Adopt the profile the config names, for a settings restore. The config
+    /// Adopt the map the config names, for a settings restore. The config
     /// is the source of truth here, so nothing is written back.
-    fn adopt_game_profile(&mut self, out: &mut Vec<AppCommand>) {
-        let id = self.config.game_mode.profile.clone();
-        self.event_handler.use_game_profile(&id, &self.browser, out);
-        self.refresh_game_profiles();
+    fn adopt_input_map(&mut self, out: &mut Vec<AppCommand>) {
+        let id = self.config.game_mode.input_map.clone();
+        self.event_handler.use_input_map(&id, &self.browser, out);
+        self.refresh_input_maps();
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
@@ -681,9 +675,9 @@ impl App {
     fn apply_config(&mut self, config: AppConfig, out: &mut Vec<AppCommand>) {
         self.config = config;
         self.config.save();
-        // Restoring the defaults can move the pad profile under a live Game
+        // Restoring the defaults can move the pad map under a live Game
         // Mode, so push it the same way the menu does.
-        self.adopt_game_profile(out);
+        self.adopt_input_map(out);
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler

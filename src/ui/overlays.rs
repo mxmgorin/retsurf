@@ -28,10 +28,10 @@ pub enum Focus {
     Menu,
     /// Game Mode's own menu, over the still-running game.
     GameMenu,
-    /// Its profile list and one profile's rows, opened from that menu.
-    GameProfiles,
-    /// Its profile editor, opened from a profile.
-    GameEdit,
+    /// Its map list and one map's rows, opened from that menu.
+    GameInputMaps,
+    /// Its map editor, opened from a map.
+    GameMapEdit,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).
     Settings,
@@ -57,10 +57,10 @@ impl AppUi {
             Focus::Menu
         } else if self.game_menu.visible {
             Focus::GameMenu
-        } else if self.game_profiles.visible() {
-            Focus::GameProfiles
-        } else if self.game_edit.visible() {
-            Focus::GameEdit
+        } else if self.input_maps.visible() {
+            Focus::GameInputMaps
+        } else if self.map_edit.visible() {
+            Focus::GameMapEdit
         } else if self.settings.visible() {
             Focus::Settings
         } else if self.hints.visible {
@@ -85,12 +85,12 @@ impl AppUi {
             // The settings overlay's focused text row: typing lands in the draft
             // (the OSK only opens over a text row — see `App::settings_confirm`).
             OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
-        } else if self.game_edit.picking().is_some() {
-            // The profile editor turned the keyboard into a key picker.
-            OskTarget::Capture(self.game_edit.picked_mut())
-        } else if self.game_profiles.naming().is_some() {
-            // A profile being renamed or copied: the keyboard types its name.
-            OskTarget::GameName(self.game_profiles.naming_text_mut().expect("naming"))
+        } else if self.map_edit.picking().is_some() {
+            // The map editor turned the keyboard into a key picker.
+            OskTarget::Capture(self.map_edit.picked_mut())
+        } else if self.input_maps.naming().is_some() {
+            // A map being renamed or copied: the keyboard types its name.
+            OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
         } else if self.dial_edit.visible() {
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             OskTarget::DialEdit(self.dial_edit.input_mut())
@@ -110,10 +110,10 @@ impl AppUi {
         if to_page && matches!(cmd, OskCommand::Show) {
             self.osk_lift_pending = true;
         }
-        // A profile's name is committed by Enter, which writes a file; putting
+        // A map's name is committed by Enter, which writes a file; putting
         // the keyboard away is how that is called off.
         if matches!(cmd, OskCommand::Hide) {
-            self.game_profiles.take_naming();
+            self.input_maps.take_naming();
         }
     }
 

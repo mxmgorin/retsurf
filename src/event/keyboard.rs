@@ -78,7 +78,7 @@ pub fn on_key(
     // list cannot also reach the game still running underneath. Keyed on the
     // focus, not visibility: the keyboard opens over the editor to pick a key,
     // and while it is up the keys are its own.
-    if matches!(ui.focus(), Focus::GameMenu | Focus::GameEdit) {
+    if matches!(ui.focus(), Focus::GameMenu | Focus::GameMapEdit) {
         if key.pressed {
             on_game_menu_key(key, bindings, commands);
         }

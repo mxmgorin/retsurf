@@ -257,50 +257,50 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 # (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
 # mode; inside, a held Select does the same, reserved and never the game's. That
 # menu is the only way in and out — it leads with Enable or Disable — and its
-# Input profile row is where this one is picked (written back here), which is
+# Input map row is where this one is picked (written back here), which is
 # why it opens outside the mode too; it also summons the on-screen keyboard over
-# the game. Which profile drives the pad and the keyboard while the mode is on: a
-# built-in ("keys" or "pad") or the stem of a profiles/<id>.toml of your own.
-# See "Game Mode profiles" below for the format.
-profile = "keys"
+# the game. Which input map drives the pad and the keyboard while the mode is on: a
+# built-in ("keys" or "pad") or the stem of an input_maps/<id>.toml of your own.
+# See "Game Mode input maps" below for the format.
+input_map = "keys"
 ```
 
-## Game Mode profiles (`profiles/*.toml`)
+## Game Mode input maps (`input_maps/*.toml`)
 
-A profile is what each button, stick direction and key sends to the page while
+An input map is what each button, stick direction and key sends to the page while
 Game Mode is on. Four ship built in, named for what the game sees rather than
-for what the pad becomes; `[game_mode] profile` picks one by id.
+for what the pad becomes; `[game_mode] input_map` picks one by id.
 
 | id | name | what the game gets |
 | --- | --- | --- |
 | `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
 | `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
 | `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
-| `pad` | Gamepad passthrough | the buttons reach the page raw, for games that read the Gamepad API themselves |
+| `pad` | Gamepad passthrough | the whole pad reaches the page raw — sticks included, no cursor and no click — for games that read the Gamepad API themselves |
 
 There is no first-person template: Servo has no Pointer Lock, so a stick cannot
 turn a camera, and only the left mouse button has a route.
 
 The built-ins live in the binary and are always offered, so a later release can
-add one without touching your files. Put a `profiles/<id>.toml` in the data dir
-to add a profile of your own, or name it after a built-in to replace that one —
+add one without touching your files. Put an `input_maps/<id>.toml` in the data dir
+to add a map of your own, or name it after a built-in to replace that one —
 deleting the file restores it. A file is read at startup; a typo costs its own
-binding and is logged, not the whole profile.
+binding and is logged, not the whole map.
 
-**The Game Mode menu's "Input profile" row** is all of this without a keyboard or a
+**The Game Mode menu's "Input map" row** is all of this without a keyboard or a
 file manager, which is the only way to do it on a handheld. It opens the list of
-profiles, marked with the one in use; **A** on one opens its own screen:
+maps, marked with the one in use; **A** on one opens its own screen:
 
 | row | what it does |
 | --- | --- |
-| Use this profile | hands it to Game Mode and writes `[game_mode] profile` |
+| Use this map | hands it to Game Mode and writes `[game_mode] input_map` |
 | Buttons and sticks | the editor below |
 | Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
-| Duplicate... | a copy under a name you type — the way to add a profile |
+| Duplicate... | a copy under a name you type — the way to add a map |
 | Delete | throws the file away, after a confirmation |
 | Reset to default | the same, on a built-in: the binary's own version comes back |
 
-There is no *New* row: a copy is how a profile is added, because an empty one
+There is no *New* row: a copy is how a map is added, because an empty one
 would reach the page with no cursor and no click. A built-in the binary carries
 and no file shadows has nothing to remove, so it offers neither of the last two.
 
@@ -316,7 +316,7 @@ form or the other, so picking either takes the other away. A direction is offere
 no Passthrough: a stick read as directions withholds the whole axis, so the page
 would see nothing either way.
 
-Editing a built-in writes the `profiles/<id>.toml` that replaces it, so deleting
+Editing a built-in writes the `input_maps/<id>.toml` that replaces it, so deleting
 that file is still how you get the original back. The `[keyboard]` table and the
 layers below are the file's: they need names the screen has no room to pick.
 
@@ -330,7 +330,7 @@ b = "z"
 x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
 r2 = "mouse.left"             # the left mouse button, at the cursor
 l2 = "passthrough"            # reaches the page as the gamepad button it is
-r1 = "none"                   # consumed: inert while this profile is active
+r1 = "none"                   # consumed: inert while this map is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
 
 [stick.left]                  # four directions, through [input] deadzone
@@ -365,7 +365,7 @@ read as directions keeps its whole axis, since half an axis cannot be withheld �
 which also makes `passthrough` on one direction meaningless. `analog = "none"`
 keeps the axis and sends nothing, which is how a stick is made inert.
 
-**Select is reserved** in every profile and every layer: holding it opens the Game
+**Select is reserved** in every map and every layer: holding it opens the Game
 Mode menu. A binding on it is refused with a line in the log.
 
 **Layers** are held, not toggled: the activator sends nothing of its own, and a

@@ -1,5 +1,5 @@
 # The other keyboard convention: WASD to walk, with the keys an action game
-# puts around it. Copy this into <data dir>/profiles/wasd.toml to change it;
+# puts around it. Copy this into <data dir>/input_maps/wasd.toml to change it;
 # deleting that copy restores this one.
 name = "Keyboard (WASD)"
 

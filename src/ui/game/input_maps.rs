@@ -1,25 +1,25 @@
-//! Rendering of Game Mode's profile screens (state in
-//! [`crate::overlay::game_profiles`]): the list of profiles, one profile's own
+//! Rendering of Game Mode's map screens (state in
+//! [`crate::overlay::game::input_maps`]): the list of maps, one map's own
 //! rows, and the confirmation over a removal — each over the shared panel
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
-use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, ROW_FONT};
-use crate::app::{AppCommand, GameProfilesAction};
-use crate::overlay::game_profiles::{GameProfiles, ProfileAction};
+use crate::app::{AppCommand, GameInputMapsAction};
+use crate::overlay::game::input_maps::{InputMaps, MapAction};
+use crate::ui::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use crate::ui::theme::{ACCENT, ROW_FONT};
 use egui_sdl2::egui;
 
 /// Row height, matching the settings overlay's field rows.
 const ROW_H: f32 = 30.0;
 
-pub(super) fn add_game_profiles(
+pub(in crate::ui) fn add_input_maps(
     ctx: &egui::Context,
-    screens: &GameProfiles,
+    screens: &InputMaps,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
     let width = screen.width() - SIDES;
-    let closed = panel::panel(ctx, "game_profiles", screen, |ui| {
+    let closed = panel::panel(ctx, "input_maps", screen, |ui| {
         ui.label(
             egui::RichText::new(title(screens))
                 .color(ACCENT)
@@ -37,23 +37,23 @@ pub(super) fn add_game_profiles(
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::GameProfiles(GameProfilesAction::Click(index)));
+                    commands.push(AppCommand::GameInputMaps(GameInputMapsAction::Click(index)));
                 }
             }
         });
     });
     if closed {
-        commands.push(AppCommand::GameProfiles(GameProfilesAction::Close));
+        commands.push(AppCommand::GameInputMaps(GameInputMapsAction::Close));
     }
 }
 
-/// The panel's title, worded for the screen that is up: the list, one profile,
+/// The panel's title, worded for the screen that is up: the list, one map,
 /// or the question over it. Nothing under it — every verb here is a row, so a
 /// hint could only name them a second time.
-fn title(screens: &GameProfiles) -> String {
+fn title(screens: &InputMaps) -> String {
     let Some(row) = screens.open_row() else {
         // Plural of the menu row that opens it: this is the list of them.
-        return "INPUT PROFILES".to_string();
+        return "INPUT MAPS".to_string();
     };
     let name = row.name.to_uppercase();
     match screens.confirming() {
@@ -64,16 +64,16 @@ fn title(screens: &GameProfiles) -> String {
     }
 }
 
-/// What this profile's removal row says; the question over it must agree.
-fn remove_label(screens: &GameProfiles) -> &'static str {
+/// What this map's removal row says; the question over it must agree.
+fn remove_label(screens: &InputMaps) -> &'static str {
     screens
         .open_row()
         .and_then(|row| row.remove)
-        .map_or("Remove", ProfileAction::label)
+        .map_or("Remove", MapAction::label)
 }
 
 /// The rows of whichever screen is up.
-fn rows(screens: &GameProfiles) -> Vec<(String, String)> {
+fn rows(screens: &InputMaps) -> Vec<(String, String)> {
     if screens.confirming() {
         return vec![
             (remove_label(screens).to_string(), String::new()),
@@ -101,8 +101,8 @@ fn rows(screens: &GameProfiles) -> Vec<(String, String)> {
         .into_iter()
         .map(|action| {
             let typed = naming.filter(|naming| match action {
-                ProfileAction::Rename => !naming.copy,
-                ProfileAction::Duplicate => naming.copy,
+                MapAction::Rename => !naming.copy,
+                MapAction::Duplicate => naming.copy,
                 _ => false,
             });
             let value = typed.map(|naming| naming.text.clone()).unwrap_or_default();

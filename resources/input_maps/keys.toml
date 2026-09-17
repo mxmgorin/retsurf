@@ -1,5 +1,5 @@
 # The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
-# js13k entries share. Copy this into <data dir>/profiles/keys.toml to change it;
+# js13k entries share. Copy this into <data dir>/input_maps/keys.toml to change it;
 # deleting that copy restores this one.
 name = "Keyboard (arrows and Z/X)"
 

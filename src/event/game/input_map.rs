@@ -1,6 +1,6 @@
-//! Game Mode's profiles: what each pad, stick direction and key sends to the
+//! Game Mode's input maps: what each pad, stick direction and key sends to the
 //! page while the mode is on. The built-ins live here in code and are always
-//! offered; a `profiles/<id>.toml` in the data dir under a built-in's id
+//! offered; an `input_maps/<id>.toml` in the data dir under a built-in's id
 //! replaces it, and deleting that file is what "reset to default" means.
 //!
 //! ```toml
@@ -32,8 +32,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-/// Where the per-profile files live, under the user data dir.
-const PROFILE_DIR: &str = "profiles";
+/// Where the per-map files live, under the user data dir.
+const MAP_DIR: &str = "input_maps";
 
 /// The key a stick's whole-vector target is written under.
 const ANALOG: &str = "analog";
@@ -125,7 +125,7 @@ pub enum Target {
     /// Reaches the page as the raw event it is — the Gamepad API for a pad, the
     /// key itself for a key. The only target the page sees twice, by design.
     Passthrough,
-    /// Consumed and dropped: the source is inert while the profile is active.
+    /// Consumed and dropped: the source is inert while the map is active.
     None,
     /// Holds a layer open while the source is held, and sends nothing itself —
     /// which is why an activator needs no buffering and can never leak.
@@ -169,15 +169,15 @@ struct Layer {
 }
 
 #[derive(Clone)]
-pub struct Profile {
-    /// The file stem, or the built-in's id; `[game_mode] profile` names this.
+pub struct InputMap {
+    /// The file stem, or the built-in's id; `[game_mode] input_map` names this.
     pub id: String,
     /// What the menu shows.
     pub name: String,
     /// Whether the binary carries this id, so deleting its file restores the
-    /// original rather than removing the profile.
+    /// original rather than removing the map.
     pub builtin: bool,
-    /// Whether `profiles/<id>.toml` is there — what deleting removes, and the
+    /// Whether `input_maps/<id>.toml` is there — what deleting removes, and the
     /// only thing a built-in has to delete.
     pub file: bool,
     pad: Vec<Option<Target>>,
@@ -189,10 +189,10 @@ pub struct Profile {
     layers: Vec<Layer>,
     /// The file as written, kept so an edit can be saved without rebuilding
     /// what the editor does not touch (sticks, keys, layers, comments aside).
-    raw: RawProfile,
+    raw: RawInputMap,
 }
 
-impl Profile {
+impl InputMap {
     /// What a pad sends, under the held layer if one names it — a button the
     /// layer leaves alone falls through to the base rather than going inert.
     pub fn pad(&self, layer: Option<usize>, pad: Pad) -> Option<&Target> {
@@ -264,7 +264,7 @@ struct RawLayer {
 
 #[derive(Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
-struct RawProfile {
+struct RawInputMap {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -304,7 +304,7 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         return match layers.iter().position(|l| l == name) {
             Some(index) => Some(Target::Layer(index)),
             None => {
-                log::warn!("game profile: `{whose}` holds no layer `{name}`; ignored");
+                log::warn!("input map: `{whose}` holds no layer `{name}`; ignored");
                 None
             }
         };
@@ -318,11 +318,11 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         // The namespace is open, but only the left button has a route: the
         // router's Confirm intent carries no button of its own.
         "mouse.right" | "mouse.middle" => {
-            log::warn!("game profile: `{whose}` — only `mouse.left` has a route");
+            log::warn!("input map: `{whose}` — only `mouse.left` has a route");
             return None;
         }
         "cursor" | "scroll" => {
-            log::warn!("game profile: `{whose}` — `{text}` is spelled `mouse.{text}` now");
+            log::warn!("input map: `{whose}` — `{text}` is spelled `mouse.{text}` now");
             return None;
         }
         _ => {}
@@ -332,7 +332,7 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
     // in both, and a game reading `e.code` gets nothing from Unidentified.
     let code = match code {
         Some(text) => Code::from_str(text).unwrap_or_else(|_| {
-            log::warn!("game profile: `{whose}` names no known code `{text}`");
+            log::warn!("input map: `{whose}` names no known code `{text}`");
             Code::Unidentified
         }),
         None => derive_code(text, &key, whose),
@@ -357,7 +357,7 @@ fn parse_key(text: &str, whose: &str) -> Option<Key> {
     match NamedKey::from_str(text) {
         Ok(named) => Some(Key::Named(named)),
         Err(_) => {
-            log::warn!("game profile: `{whose}` names no key `{text}`; ignored");
+            log::warn!("input map: `{whose}` names no key `{text}`; ignored");
             None
         }
     }
@@ -375,33 +375,33 @@ fn derive_code(text: &str, key: &Key, whose: &str) -> Code {
         return Code::from_str(name).unwrap_or(Code::Unidentified);
     }
     Code::from_str(text).unwrap_or_else(|_| {
-        log::warn!("game profile: `{whose}` needs an explicit `code`; games read it");
+        log::warn!("input map: `{whose}` needs an explicit `code`; games read it");
         Code::Unidentified
     })
 }
 
-impl Profile {
-    /// Resolve a written profile. Refusals are logged and dropped rather than
-    /// failing the file: a typo should cost one binding, not the profile.
-    fn resolve(id: &str, raw: RawProfile, keys: &KeyNames) -> Profile {
+impl InputMap {
+    /// Resolve a written map. Refusals are logged and dropped rather than
+    /// failing the file: a typo should cost one binding, not the map.
+    fn resolve(id: &str, raw: RawInputMap, keys: &KeyNames) -> InputMap {
         // Names first: an activator in any table resolves to an index here.
         let names: Vec<String> = raw.layer.keys().cloned().collect();
         let mut pad = vec![None; Pad::COUNT];
         for (name, raw) in &raw.pad {
             let whose = format!("{id}.pad.{name}");
             let Some(slot) = Pad::parse(name) else {
-                log::warn!("game profile: `{whose}` is not a pad; ignored");
+                log::warn!("input map: `{whose}` is not a pad; ignored");
                 continue;
             };
-            // Select carries the menu in every profile, so it is never the
+            // Select carries the menu in every map, so it is never the
             // game's — refused out loud rather than dropped silently.
             if slot == Pad::Select {
-                log::warn!("game profile: `{whose}` is reserved for the Game Mode menu");
+                log::warn!("input map: `{whose}` is reserved for the Game Mode menu");
                 continue;
             }
             if let Some(target) = parse_target(raw, &whose, &names) {
                 if target.is_analog() {
-                    log::warn!("game profile: `{whose}` is a button, not a stick");
+                    log::warn!("input map: `{whose}` is a button, not a stick");
                     continue;
                 }
                 pad[slot as usize] = Some(target);
@@ -411,7 +411,7 @@ impl Profile {
         let mut sticks = [StickRole::Unbound, StickRole::Unbound];
         for (name, table) in &raw.stick {
             let Some(side) = Side::parse(name) else {
-                log::warn!("game profile: `{id}.stick.{name}` is not a stick; ignored");
+                log::warn!("input map: `{id}.stick.{name}` is not a stick; ignored");
                 continue;
             };
             sticks[side as usize] = resolve_stick(id, name, table, &names);
@@ -430,16 +430,16 @@ impl Profile {
                 for (source, raw) in &raw_layer.pad {
                     let whose = format!("{id}.layer.{name}.pad.{source}");
                     let Some(slot) = Pad::parse(source) else {
-                        log::warn!("game profile: `{whose}` is not a pad; ignored");
+                        log::warn!("input map: `{whose}` is not a pad; ignored");
                         continue;
                     };
                     if slot == Pad::Select {
-                        log::warn!("game profile: `{whose}` is reserved for the Game Mode menu");
+                        log::warn!("input map: `{whose}` is reserved for the Game Mode menu");
                         continue;
                     }
                     match parse_target(raw, &whose, &[]) {
                         Some(target) if target.is_analog() => {
-                            log::warn!("game profile: `{whose}` is a button, not a stick");
+                            log::warn!("input map: `{whose}` is a button, not a stick");
                         }
                         Some(target) => pad[slot as usize] = Some(target),
                         None => {}
@@ -453,7 +453,7 @@ impl Profile {
             })
             .collect();
 
-        Profile {
+        InputMap {
             id: id.to_string(),
             name: raw.name.clone().unwrap_or_else(|| id.to_string()),
             builtin: is_built_in(id),
@@ -532,77 +532,77 @@ impl Profile {
     }
 
     /// Rename what the menu shows. The id stays: it is the file's stem, and
-    /// `[game_mode] profile` names it.
+    /// `[game_mode] input_map` names it.
     pub fn set_name(&mut self, name: String) {
         self.raw.name = Some(name.clone());
         self.name = name;
     }
 
-    /// The same bindings under a new id and name — every profile a user adds
+    /// The same bindings under a new id and name — every map a user adds
     /// starts from one that works, since an empty one would leave the page
     /// with no cursor and no click.
-    pub fn copy(&self, id: &str, name: String, keys: &KeyNames) -> Profile {
+    pub fn copy(&self, id: &str, name: String, keys: &KeyNames) -> InputMap {
         let mut raw = self.raw.clone();
         raw.name = Some(name);
-        Profile::resolve(id, raw, keys)
+        InputMap::resolve(id, raw, keys)
     }
 
-    /// Write the profile to `profiles/<id>.toml`, which is also how a built-in
-    /// is replaced. Returns the re-resolved profile, so the edit takes effect
+    /// Write the map to `input_maps/<id>.toml`, which is also how a built-in
+    /// is replaced. Returns the re-resolved map, so the edit takes effect
     /// without a restart.
-    pub fn save(&self, keys: &KeyNames) -> Profile {
-        let mut saved = Profile::resolve(&self.id, self.raw.clone(), keys);
+    pub fn save(&self, keys: &KeyNames) -> InputMap {
+        let mut saved = InputMap::resolve(&self.id, self.raw.clone(), keys);
         saved.file = write_file(&self.id, &self.raw);
         saved
     }
 
-    /// Remove `profiles/<id>.toml`. For a built-in that is reset to default —
-    /// the binary's own text comes back; for any other profile it is deletion.
+    /// Remove `input_maps/<id>.toml`. For a built-in that is reset to default —
+    /// the binary's own text comes back; for any other map it is deletion.
     pub fn delete(&self) -> bool {
-        let path = profile_path(&self.id);
+        let path = map_path(&self.id);
         match std::fs::remove_file(&path) {
             Ok(()) => {
-                log::info!("game profile: removed `{path}`");
+                log::info!("input map: removed `{path}`");
                 true
             }
             Err(e) => {
-                log::warn!("game profile: could not remove `{path}`: {e}");
+                log::warn!("input map: could not remove `{path}`: {e}");
                 false
             }
         }
     }
 }
 
-/// Where a profile of this id is read from and written to.
-fn profile_path(id: &str) -> String {
-    format!("{}{PROFILE_DIR}/{id}.toml", config::data_dir())
+/// Where a map of this id is read from and written to.
+fn map_path(id: &str) -> String {
+    format!("{}{MAP_DIR}/{id}.toml", config::data_dir())
 }
 
-/// Write one profile's file, reporting whether it is now on disk.
-fn write_file(id: &str, raw: &RawProfile) -> bool {
+/// Write one map's file, reporting whether it is now on disk.
+fn write_file(id: &str, raw: &RawInputMap) -> bool {
     let text = match toml::to_string_pretty(raw) {
         Ok(text) => text,
         Err(e) => {
-            log::warn!("game profile: could not serialize `{id}`: {e}");
+            log::warn!("input map: could not serialize `{id}`: {e}");
             return false;
         }
     };
-    let path = profile_path(id);
-    let _ = std::fs::create_dir_all(format!("{}{PROFILE_DIR}", config::data_dir()));
+    let path = map_path(id);
+    let _ = std::fs::create_dir_all(format!("{}{MAP_DIR}", config::data_dir()));
     match std::fs::write(&path, text) {
         Ok(()) => {
-            log::info!("game profile: wrote `{path}`");
+            log::info!("input map: wrote `{path}`");
             true
         }
         Err(e) => {
-            log::warn!("game profile: could not write `{path}`: {e}");
+            log::warn!("input map: could not write `{path}`: {e}");
             false
         }
     }
 }
 
 /// A file stem for a typed name: lowercased, one dash per run of anything
-/// else, and never one of `taken` — an id collision would shadow a profile
+/// else, and never one of `taken` — an id collision would shadow a map
 /// instead of adding one.
 pub fn new_id(name: &str, taken: &[String]) -> String {
     let slug: String = name
@@ -619,7 +619,7 @@ pub fn new_id(name: &str, taken: &[String]) -> String {
         .join("-");
     // A name of nothing but punctuation still needs a stem to live under.
     let base = match base.is_empty() {
-        true => "profile".to_string(),
+        true => "map".to_string(),
         false => base,
     };
     if !taken.contains(&base) {
@@ -649,12 +649,12 @@ fn resolve_keys(
         .filter_map(|(name, raw)| {
             let whose = format!("{id}.{scope}.{name}");
             let Some(code) = keys.code(name) else {
-                log::warn!("game profile: SDL has no key `{name}` (`{whose}`); ignored");
+                log::warn!("input map: SDL has no key `{name}` (`{whose}`); ignored");
                 return None;
             };
             let target = parse_target(raw, &whose, layers)?;
             if target.is_analog() {
-                log::warn!("game profile: `{whose}` is a key, not a stick");
+                log::warn!("input map: `{whose}` is a key, not a stick");
                 return None;
             }
             Some((code, target))
@@ -682,20 +682,18 @@ fn resolve_stick(
         };
         if key == ANALOG {
             if !target.is_analog() && target != Target::Passthrough && target != Target::None {
-                log::warn!(
-                    "game profile: `{whose}` takes mouse.cursor, mouse.scroll or passthrough"
-                );
+                log::warn!("input map: `{whose}` takes mouse.cursor, mouse.scroll or passthrough");
                 continue;
             }
             analog = Some(target);
             continue;
         }
         let Some(dir) = Dir::parse(key) else {
-            log::warn!("game profile: `{whose}` is not a direction; ignored");
+            log::warn!("input map: `{whose}` is not a direction; ignored");
             continue;
         };
         if target.is_analog() {
-            log::warn!("game profile: `{whose}` is one direction, not the stick");
+            log::warn!("input map: `{whose}` is one direction, not the stick");
             continue;
         }
         dirs[dir as usize] = Some(target);
@@ -703,7 +701,7 @@ fn resolve_stick(
     let has_dirs = dirs.iter().any(Option::is_some);
     match (has_dirs, analog) {
         (true, Some(_)) => {
-            log::warn!("game profile: `{id}.stick.{name}` is both directions and analog");
+            log::warn!("input map: `{id}.stick.{name}` is both directions and analog");
             StickRole::Digital(Box::new(dirs))
         }
         (true, None) => StickRole::Digital(Box::new(dirs)),
@@ -714,88 +712,88 @@ fn resolve_stick(
 
 // --- built-ins ---
 
-/// The stock profiles, in the order the list shows them. They live in code, so
+/// The stock maps, in the order the list shows them. They live in code, so
 /// a release that adds one offers it to everyone; a file under the same id
 /// replaces it, and deleting that file restores this.
 const BUILT_IN: [(&str, &str); 4] = [
-    ("keys", KEYS_PROFILE),
-    ("wasd", WASD_PROFILE),
-    ("mouse", MOUSE_PROFILE),
-    ("pad", PAD_PROFILE),
+    ("keys", KEYS_MAP),
+    ("wasd", WASD_MAP),
+    ("mouse", MOUSE_MAP),
+    ("pad", PAD_MAP),
 ];
 
 /// The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
-/// js13k entries share, so most of itch.io plays with no profile edit at all.
-const KEYS_PROFILE: &str = include_str!("../../resources/profiles/keys.toml");
+/// js13k entries share, so most of itch.io plays with no map edit at all.
+const KEYS_MAP: &str = include_str!("../../../resources/input_maps/keys.toml");
 
 /// The other keyboard convention: WASD and the keys an action game puts round it.
-const WASD_PROFILE: &str = include_str!("../../resources/profiles/wasd.toml");
+const WASD_MAP: &str = include_str!("../../../resources/input_maps/wasd.toml");
 
 /// Point and click, for the games the pointer is the whole interface of.
-const MOUSE_PROFILE: &str = include_str!("../../resources/profiles/mouse.toml");
+const MOUSE_MAP: &str = include_str!("../../../resources/input_maps/mouse.toml");
 
-/// The pad reaches the page raw, for games that read the Gamepad API themselves.
-const PAD_PROFILE: &str = include_str!("../../resources/profiles/pad.toml");
+/// The whole pad reaches the page raw — no pointer — for games that read the
+/// Gamepad API themselves.
+const PAD_MAP: &str = include_str!("../../../resources/input_maps/pad.toml");
 
-/// Every profile this run offers: the built-ins, each replaced by a
-/// `profiles/<id>.toml` that shadows it, plus whatever other files are there.
-pub fn load_all(keys: &KeyNames) -> Vec<Profile> {
+/// Every map this run offers: the built-ins, each replaced by an
+/// `input_maps/<id>.toml` that shadows it, plus whatever other files are there.
+pub fn load_all(keys: &KeyNames) -> Vec<InputMap> {
     let mut files = read_dir();
-    let mut profiles: Vec<Profile> = BUILT_IN
+    let mut maps: Vec<InputMap> = BUILT_IN
         .iter()
         .map(|(id, text)| {
             let (raw, file) = match files.remove(*id) {
                 Some(raw) => (raw, true),
                 None => (parse_built_in(id, text), false),
             };
-            let mut profile = Profile::resolve(id, raw, keys);
-            profile.file = file;
-            profile
+            let mut map = InputMap::resolve(id, raw, keys);
+            map.file = file;
+            map
         })
         .collect();
     // Whatever else the user put there, in a stable order.
-    let mut extra: Vec<(String, RawProfile)> = files.into_iter().collect();
+    let mut extra: Vec<(String, RawInputMap)> = files.into_iter().collect();
     extra.sort_by(|(a, _), (b, _)| a.cmp(b));
-    profiles.extend(extra.into_iter().map(|(id, raw)| {
-        let mut profile = Profile::resolve(&id, raw, keys);
-        profile.file = true;
-        profile
+    maps.extend(extra.into_iter().map(|(id, raw)| {
+        let mut map = InputMap::resolve(&id, raw, keys);
+        map.file = true;
+        map
     }));
-    profiles
+    maps
 }
 
-/// Whether the binary carries a profile of this id.
+/// Whether the binary carries a map of this id.
 fn is_built_in(id: &str) -> bool {
     BUILT_IN.iter().any(|(built_in, _)| *built_in == id)
 }
 
 /// The built-in `id` as the binary carries it — what deleting its file gives
 /// back.
-pub fn built_in(id: &str, keys: &KeyNames) -> Option<Profile> {
+pub fn built_in(id: &str, keys: &KeyNames) -> Option<InputMap> {
     BUILT_IN
         .iter()
         .find(|(built_in, _)| *built_in == id)
-        .map(|(id, text)| Profile::resolve(id, parse_built_in(id, text), keys))
+        .map(|(id, text)| InputMap::resolve(id, parse_built_in(id, text), keys))
 }
 
-/// The profile `id` names, or the first — the built-in `keys` unless a file
+/// The map `id` names, or the first — the built-in `keys` unless a file
 /// shadows it, so an unknown id in the config is never a dead mode.
-pub fn pick<'a>(profiles: &'a [Profile], id: &str) -> &'a Profile {
-    profiles
-        .iter()
+pub fn pick<'a>(maps: &'a [InputMap], id: &str) -> &'a InputMap {
+    maps.iter()
         .find(|p| p.id == id)
-        .unwrap_or_else(|| profiles.first().expect("the built-ins are always offered"))
+        .unwrap_or_else(|| maps.first().expect("the built-ins are always offered"))
 }
 
 /// A built-in's own text, which a test parses for every one of them.
-fn parse_built_in(id: &str, text: &str) -> RawProfile {
-    toml::from_str(text).unwrap_or_else(|e| panic!("built-in profile `{id}` is invalid: {e}"))
+fn parse_built_in(id: &str, text: &str) -> RawInputMap {
+    toml::from_str(text).unwrap_or_else(|e| panic!("built-in map `{id}` is invalid: {e}"))
 }
 
-/// Read every `profiles/*.toml`, keyed by file stem. A malformed file is logged
+/// Read every `input_maps/*.toml`, keyed by file stem. A malformed file is logged
 /// and skipped, like a malformed `bindings.toml`.
-fn read_dir() -> BTreeMap<String, RawProfile> {
-    let dir = format!("{}{PROFILE_DIR}", config::data_dir());
+fn read_dir() -> BTreeMap<String, RawInputMap> {
+    let dir = format!("{}{MAP_DIR}", config::data_dir());
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return BTreeMap::new();
     };
@@ -811,12 +809,12 @@ fn read_dir() -> BTreeMap<String, RawProfile> {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
-        match toml::from_str::<RawProfile>(&text) {
+        match toml::from_str::<RawInputMap>(&text) {
             Ok(raw) => {
-                log::info!("game profile: loaded `{id}` from `{}`", path.display());
+                log::info!("input map: loaded `{id}` from `{}`", path.display());
                 out.insert(id.to_string(), raw);
             }
-            Err(e) => log::error!("game profile `{}` is invalid: {e}; ignored", path.display()),
+            Err(e) => log::error!("input map `{}` is invalid: {e}; ignored", path.display()),
         }
     }
     out
@@ -826,55 +824,66 @@ fn read_dir() -> BTreeMap<String, RawProfile> {
 mod tests {
     use super::*;
 
-    fn resolve(text: &str) -> Profile {
-        let raw: RawProfile = toml::from_str(text).expect("valid profile");
-        Profile::resolve("test", raw, &KeyNames::new())
+    fn resolve(text: &str) -> InputMap {
+        let raw: RawInputMap = toml::from_str(text).expect("valid map");
+        InputMap::resolve("test", raw, &KeyNames::new())
     }
 
     /// The built-ins ship in the binary, so a typo in one is a startup panic —
-    /// it has to fail here instead. Each must also keep the pointer path: it is
-    /// the one way of playing this milestone has measured on hardware, and a
-    /// profile that drops it ships a regression against that.
+    /// it has to fail here instead. Each keeps the pointer path or binds
+    /// nothing at all: `pad` is raw so a game reads the sticks itself.
     #[test]
-    fn every_built_in_resolves_and_keeps_the_pointer() {
+    fn every_built_in_keeps_the_pointer_or_is_fully_raw() {
         let keys = KeyNames::new();
         for (id, text) in BUILT_IN {
-            let profile = Profile::resolve(id, parse_built_in(id, text), &keys);
-            assert!(!profile.name.is_empty(), "`{id}` has no name");
-            // Which source clicks and which stick points is the profile's own
+            let map = InputMap::resolve(id, parse_built_in(id, text), &keys);
+            assert!(!map.name.is_empty(), "`{id}` has no name");
+            // Which source clicks and which stick points is the map's own
             // business; that it can click and point at all is not.
             let clicks = Pad::ALL
                 .into_iter()
-                .any(|pad| profile.pad(None, pad) == Some(&Target::Click));
-            let points = Side::ALL.into_iter().any(|side| {
-                matches!(
-                    profile.stick(side),
-                    StickRole::Analog(Target::Cursor { .. })
-                )
-            });
-            assert!(clicks, "`{id}` cannot click");
-            assert!(points, "`{id}` has no cursor");
+                .any(|pad| map.pad(None, pad) == Some(&Target::Click));
+            let points = Side::ALL
+                .into_iter()
+                .any(|side| matches!(map.stick(side), StickRole::Analog(Target::Cursor { .. })));
+            // Raw = nothing is withheld from the page: the Gamepad API sees
+            // the whole pad, sticks included.
+            let raw = Pad::ALL
+                .into_iter()
+                .all(|pad| matches!(map.pad(None, pad), None | Some(Target::Passthrough)))
+                && Side::ALL.into_iter().all(|side| {
+                    matches!(
+                        map.stick(side),
+                        StickRole::Unbound | StickRole::Analog(Target::Passthrough)
+                    )
+                })
+                && map.keys.is_empty()
+                && map.layers.is_empty();
+            assert!(
+                raw || (clicks && points),
+                "`{id}` binds sources but cannot point and click"
+            );
         }
     }
 
     /// A game branching on `e.code` gets nothing from `Unidentified`, and the
     /// name that derives a code is not every key's — Shift and Control need
-    /// theirs said out loud, which is the trap a stock profile must not ship.
+    /// theirs said out loud, which is the trap a stock map must not ship.
     #[test]
     fn no_built_in_sends_a_key_the_page_cannot_identify() {
         let names = KeyNames::new();
         for (id, text) in BUILT_IN {
-            let profile = Profile::resolve(id, parse_built_in(id, text), &names);
+            let map = InputMap::resolve(id, parse_built_in(id, text), &names);
             let check = |target: Option<&Target>, whose: String| {
                 if let Some(Target::Key(key)) = target {
                     assert_ne!(key.code, Code::Unidentified, "{whose}");
                 }
             };
             for pad in Pad::ALL {
-                check(profile.pad(None, pad), format!("{id}.pad.{}", pad.name()));
+                check(map.pad(None, pad), format!("{id}.pad.{}", pad.name()));
             }
             for side in Side::ALL {
-                let StickRole::Digital(dirs) = profile.stick(side) else {
+                let StickRole::Digital(dirs) = map.stick(side) else {
                     continue;
                 };
                 for dir in Dir::ALL {
@@ -889,7 +898,7 @@ mod tests {
     /// stood, rather than resolving to nothing and leaving a stick dead.
     #[test]
     fn the_old_analog_spellings_are_refused() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [stick.left]
             analog = "cursor"
@@ -897,9 +906,9 @@ mod tests {
             analog = "mouse.scroll"
             "#,
         );
-        assert_eq!(profile.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
         assert_eq!(
-            profile.stick(Side::Right),
+            map.stick(Side::Right),
             &StickRole::Analog(Target::Scroll { speed: 1.0 })
         );
     }
@@ -908,22 +917,22 @@ mod tests {
     /// be refused out loud rather than resolving to the left one.
     #[test]
     fn only_the_left_mouse_button_resolves() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             a = "mouse.left"
             b = "mouse.right"
             "#,
         );
-        assert_eq!(profile.pad(None, Pad::A), Some(&Target::Click));
-        assert_eq!(profile.pad(None, Pad::B), None);
+        assert_eq!(map.pad(None, Pad::A), Some(&Target::Click));
+        assert_eq!(map.pad(None, Pad::B), None);
     }
 
     /// `code` is what a game branches on, so the common spellings must derive it
     /// without the file having to say so.
     #[test]
     fn a_bare_string_derives_the_code_a_game_reads() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             a = "Space"
@@ -931,7 +940,7 @@ mod tests {
             start = "Enter"
             "#,
         );
-        let key = |pad| match profile.pad(None, pad) {
+        let key = |pad| match map.pad(None, pad) {
             Some(Target::Key(k)) => k.clone(),
             other => panic!("{pad:?} resolved to {other:?}"),
         };
@@ -944,37 +953,37 @@ mod tests {
     /// The long form is for what the short one cannot say.
     #[test]
     fn the_table_form_carries_the_code_and_the_modifiers() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             x = { to = "x", code = "KeyY", shift = true }
             "#,
         );
-        let Some(Target::Key(key)) = profile.pad(None, Pad::X) else {
+        let Some(Target::Key(key)) = map.pad(None, Pad::X) else {
             panic!("x is not a key");
         };
         assert_eq!(key.code, Code::KeyY);
         assert!(key.modifiers.contains(Modifiers::SHIFT));
     }
 
-    /// Select carries the menu in every profile — the one refusal that has to be
+    /// Select carries the menu in every map — the one refusal that has to be
     /// loud, since a silent drop looks like a typo.
     #[test]
     fn select_is_refused_and_everything_else_survives_it() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             select = "Escape"
             a = "Space"
             "#,
         );
-        assert_eq!(profile.pad(None, Pad::Select), None);
-        assert!(profile.pad(None, Pad::A).is_some());
+        assert_eq!(map.pad(None, Pad::Select), None);
+        assert!(map.pad(None, Pad::A).is_some());
     }
 
     #[test]
     fn a_stick_is_four_directions_or_one_vector() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [stick.left]
             up = "ArrowUp"
@@ -982,20 +991,20 @@ mod tests {
             analog = "mouse.cursor"
             "#,
         );
-        let StickRole::Digital(dirs) = profile.stick(Side::Left) else {
+        let StickRole::Digital(dirs) = map.stick(Side::Left) else {
             panic!("the left stick is not digital");
         };
         assert!(dirs[Dir::Up as usize].is_some() && dirs[Dir::Down as usize].is_none());
         assert_eq!(
-            profile.stick(Side::Right),
+            map.stick(Side::Right),
             &StickRole::Analog(Target::Cursor { speed: 1.0 })
         );
     }
 
     /// A typo costs its own binding and nothing else.
     #[test]
-    fn an_unknown_name_is_dropped_without_taking_the_profile_with_it() {
-        let profile = resolve(
+    fn an_unknown_name_is_dropped_without_taking_the_map_with_it() {
+        let map = resolve(
             r#"
             [pad]
             elbow = "Space"
@@ -1003,15 +1012,15 @@ mod tests {
             b = "z"
             "#,
         );
-        assert_eq!(profile.pad(None, Pad::A), None);
-        assert!(profile.pad(None, Pad::B).is_some());
+        assert_eq!(map.pad(None, Pad::A), None);
+        assert!(map.pad(None, Pad::B).is_some());
     }
 
     /// The point of a layer: the same button means two things, and the one the
     /// layer leaves alone still means what the base says.
     #[test]
     fn a_layer_overrides_what_it_names_and_falls_through_for_the_rest() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             l2 = "layer:aim"
@@ -1022,8 +1031,8 @@ mod tests {
             a = "Shift"
             "#,
         );
-        assert_eq!(profile.pad(None, Pad::L2), Some(&Target::Layer(0)));
-        let named = |layer, pad| match profile.pad(layer, pad) {
+        assert_eq!(map.pad(None, Pad::L2), Some(&Target::Layer(0)));
+        let named = |layer, pad| match map.pad(layer, pad) {
             Some(Target::Key(key)) => key.key.clone(),
             other => panic!("{pad:?} resolved to {other:?}"),
         };
@@ -1038,28 +1047,26 @@ mod tests {
     /// make the row just set a lie.
     #[test]
     fn a_stick_is_written_as_one_form_or_the_other() {
-        let mut profile = resolve(
+        let mut map = resolve(
             r#"
             [stick.left]
             analog = "mouse.cursor"
             "#,
         );
-        assert!(!profile.raw_stick_is_digital(Side::Left));
-        profile.set_raw_stick_arrows(Side::Left);
-        assert!(profile.raw_stick(Side::Left).is_none());
-        assert!(profile.raw_stick_is_digital(Side::Left));
+        assert!(!map.raw_stick_is_digital(Side::Left));
+        map.set_raw_stick_arrows(Side::Left);
+        assert!(map.raw_stick(Side::Left).is_none());
+        assert!(map.raw_stick_is_digital(Side::Left));
         assert_eq!(
-            profile
-                .raw_stick_dir(Side::Left, Dir::Up)
-                .map(RawTarget::text),
+            map.raw_stick_dir(Side::Left, Dir::Up).map(RawTarget::text),
             Some("ArrowUp")
         );
         // And back: the directions go when the whole stick is given a target.
         let scroll = RawTarget::Short("scroll".to_string());
-        profile.set_raw_stick(Side::Left, Some(scroll));
-        assert!(profile.raw_stick_dir(Side::Left, Dir::Up).is_none());
+        map.set_raw_stick(Side::Left, Some(scroll));
+        assert!(map.raw_stick_dir(Side::Left, Dir::Up).is_none());
         assert_eq!(
-            profile.raw_stick(Side::Left).map(RawTarget::text),
+            map.raw_stick(Side::Left).map(RawTarget::text),
             Some("scroll")
         );
     }
@@ -1068,7 +1075,7 @@ mod tests {
     /// they have to resolve to different things.
     #[test]
     fn a_stick_told_to_send_nothing_is_not_the_same_as_one_left_alone() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [stick.left]
             analog = "none"
@@ -1076,18 +1083,18 @@ mod tests {
             analog = "passthrough"
             "#,
         );
-        assert_eq!(profile.stick(Side::Left), &StickRole::Analog(Target::None));
+        assert_eq!(map.stick(Side::Left), &StickRole::Analog(Target::None));
         assert_eq!(
-            profile.stick(Side::Right),
+            map.stick(Side::Right),
             &StickRole::Analog(Target::Passthrough)
         );
     }
 
-    /// A copy is the only way to add a profile, so it has to carry the whole
+    /// A copy is the only way to add a map, so it has to carry the whole
     /// mapping over — including what the editor cannot reach.
     #[test]
     fn a_copy_takes_the_bindings_and_the_new_name() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             name = "Original"
             [pad]
@@ -1096,30 +1103,30 @@ mod tests {
             analog = "mouse.cursor"
             "#,
         );
-        let copy = profile.copy("my-game", "My game".to_string(), &KeyNames::new());
+        let copy = map.copy("my-game", "My game".to_string(), &KeyNames::new());
         assert_eq!(copy.id, "my-game");
         assert_eq!(copy.name, "My game");
-        assert_eq!(copy.pad(None, Pad::A), profile.pad(None, Pad::A));
+        assert_eq!(copy.pad(None, Pad::A), map.pad(None, Pad::A));
         assert!(copy.stick(Side::Right).is_analog());
         // The copy is the user's, whatever it was copied from.
         assert!(!copy.builtin);
     }
 
-    /// An id collision would shadow a profile instead of adding one, so a name
+    /// An id collision would shadow a map instead of adding one, so a name
     /// already spoken for has to land on a stem of its own.
     #[test]
     fn a_typed_name_becomes_a_free_file_stem() {
         let taken = ["vampire-survivors".to_string(), "keys".to_string()];
         assert_eq!(new_id("My Game!", &taken), "my-game");
         assert_eq!(new_id("Vampire Survivors", &taken), "vampire-survivors-2");
-        assert_eq!(new_id("  ...  ", &taken), "profile");
+        assert_eq!(new_id("  ...  ", &taken), "map");
     }
 
     /// A layer that opens a layer is a knot to debug, and a name that is not
     /// there is a typo — both refused rather than half-applied.
     #[test]
     fn an_activator_needs_a_layer_that_exists_and_layers_hold_none() {
-        let profile = resolve(
+        let map = resolve(
             r#"
             [pad]
             l1 = "layer:nosuch"
@@ -1129,8 +1136,8 @@ mod tests {
             x = "layer:aim"
             "#,
         );
-        assert_eq!(profile.pad(None, Pad::L1), None);
-        assert_eq!(profile.pad(None, Pad::L2), Some(&Target::Layer(0)));
-        assert_eq!(profile.pad(Some(0), Pad::X), None);
+        assert_eq!(map.pad(None, Pad::L1), None);
+        assert_eq!(map.pad(None, Pad::L2), Some(&Target::Layer(0)));
+        assert_eq!(map.pad(Some(0), Pad::X), None);
     }
 }

@@ -9,7 +9,7 @@
 //! through them in that order. Each layout defines only the four character
 //! rows — the frame (Tab, Caps, Enter, Shift, Space, arrows) is fixed.
 
-use crate::app::{AppCommand, GameProfilesAction, MenuAction, PromptAction};
+use crate::app::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, named_keyboard_event};
@@ -32,12 +32,12 @@ pub enum OskTarget<'a> {
     /// A settings-overlay text field (see [`crate::overlay::settings`]); Enter
     /// just hides the keyboard (the value already lives in the draft).
     Settings(&'a mut String),
-    /// The Game Mode profile editor picking a key for a row: the keyboard is a
-    /// key *picker* here, so a press is recorded as the profile spells it and
-    /// nothing reaches the page (see [`crate::overlay::game_edit`]).
+    /// The Game Mode map editor picking a key for a row: the keyboard is a
+    /// key *picker* here, so a press is recorded as the map spells it and
+    /// nothing reaches the page (see [`crate::overlay::game::map_edit`]).
     Capture(&'a mut Option<String>),
-    /// A Game Mode profile's name, for a rename or a copy (see
-    /// [`crate::overlay::game_profiles`]); Enter is what commits it to a file.
+    /// A Game Mode input map name, for a rename or a copy (see
+    /// [`crate::overlay::game::input_maps`]); Enter is what commits it to a file.
     GameName(&'a mut String),
     Page,
 }
@@ -495,12 +495,12 @@ impl Osk {
             // A settings text field already holds the typed value in the draft;
             // Enter just dismisses the keyboard, back to the settings list.
             OskTarget::Settings(_) => {}
-            // A profile's name is written to a file, so Enter is what commits
+            // A map name is written to a file, so Enter is what commits
             // it — dismissing the keyboard any other way leaves it alone.
             OskTarget::GameName(buf) => {
                 let text = buf.trim();
                 if !text.is_empty() {
-                    commands.push(AppCommand::GameProfiles(GameProfilesAction::Name(
+                    commands.push(AppCommand::GameInputMaps(GameInputMapsAction::Name(
                         text.to_string(),
                     )));
                 }

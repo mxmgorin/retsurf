@@ -5,20 +5,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GameModeConfig {
-    /// Which profile drives the pad and the keyboard while the mode is on: a
-    /// built-in's id, or the stem of a `profiles/<id>.toml` in the data dir
-    /// (see [`crate::event::game_profile`]). Applies at startup; the mode's
+    /// Which input map drives the pad and the keyboard while the mode is on: a
+    /// built-in's id, or the stem of an `input_maps/<id>.toml` in the data dir
+    /// (see [`crate::event::game::input_map`]). Applies at startup; the mode's
     /// menu writes a choice back here.
-    pub profile: String,
+    pub input_map: String,
 }
 
 /// The built-in the menu leads with, and what an unknown id falls back to.
-pub const DEFAULT_PROFILE: &str = "keys";
+pub const DEFAULT_INPUT_MAP: &str = "keys";
 
 impl Default for GameModeConfig {
     fn default() -> Self {
         Self {
-            profile: DEFAULT_PROFILE.to_string(),
+            input_map: DEFAULT_INPUT_MAP.to_string(),
         }
     }
 }

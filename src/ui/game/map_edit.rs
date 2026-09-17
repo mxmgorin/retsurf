@@ -1,12 +1,12 @@
-//! Rendering of the Game Mode profile editor (state in
-//! [`crate::overlay::game_edit`]): one row per source, one stick's own rows, and
+//! Rendering of the Game Mode map editor (state in
+//! [`crate::overlay::game::map_edit`]): one row per source, one stick's own rows, and
 //! the list of what the focused row can send — each over the shared panel
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
-use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{ACCENT, ROW_FONT};
-use crate::app::{AppCommand, GameEditAction};
-use crate::overlay::game_edit::{sources, GameEdit, Kind, Source, StickRow};
+use crate::app::{AppCommand, GameMapEditAction};
+use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow};
+use crate::ui::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use crate::ui::theme::{ACCENT, ROW_FONT};
 use egui_sdl2::egui;
 
 /// Row height, matching the settings overlay's field rows.
@@ -15,10 +15,14 @@ const ROW_H: f32 = 30.0;
 /// What an unbound source reads as.
 const UNBOUND: &str = "-";
 
-pub(super) fn add_game_edit(ctx: &egui::Context, edit: &GameEdit, commands: &mut Vec<AppCommand>) {
+pub(in crate::ui) fn add_map_edit(
+    ctx: &egui::Context,
+    edit: &MapEdit,
+    commands: &mut Vec<AppCommand>,
+) {
     let screen = ctx.content_rect();
     let width = screen.width() - SIDES;
-    let closed = panel::panel(ctx, "game_edit", screen, |ui| {
+    let closed = panel::panel(ctx, "map_edit", screen, |ui| {
         ui.label(
             egui::RichText::new(title(edit))
                 .color(ACCENT)
@@ -36,34 +40,31 @@ pub(super) fn add_game_edit(ctx: &egui::Context, edit: &GameEdit, commands: &mut
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::GameEdit(GameEditAction::Click(index)));
+                    commands.push(AppCommand::GameMapEdit(GameMapEditAction::Click(index)));
                 }
             }
         });
     });
     if closed {
-        commands.push(AppCommand::GameEdit(GameEditAction::Close));
+        commands.push(AppCommand::GameMapEdit(GameMapEditAction::Close));
     }
 }
 
 /// The panel's title, worded for the list that is up. Nothing under it — every
 /// verb here is a row, so a hint could only name them a second time.
-fn title(edit: &GameEdit) -> String {
+fn title(edit: &MapEdit) -> String {
     if edit.kind_open() {
         let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
         return format!("{} SENDS", slot.to_uppercase());
     }
     match edit.stick_open() {
-        Some(side) => format!("STICK.{} - {}", side.name(), edit.profile_name()).to_uppercase(),
-        None => format!(
-            "BUTTONS AND STICKS - {}",
-            edit.profile_name().to_uppercase()
-        ),
+        Some(side) => format!("STICK.{} - {}", side.name(), edit.map_name()).to_uppercase(),
+        None => format!("BUTTONS AND STICKS - {}", edit.map_name().to_uppercase()),
     }
 }
 
 /// The rows of whichever list is up.
-fn rows(edit: &GameEdit) -> Vec<(String, String)> {
+fn rows(edit: &MapEdit) -> Vec<(String, String)> {
     if edit.kind_open() {
         let kinds = edit.slot().map(Kind::all).unwrap_or_default();
         return kinds

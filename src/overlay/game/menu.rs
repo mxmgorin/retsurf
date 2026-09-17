@@ -12,10 +12,10 @@ pub enum GameRow {
     /// Close the menu: back to the game, or to the browser — either way, back
     /// to what the opener was doing.
     Resume,
-    /// Open the profile screens (see [`super::game_profiles`]): which mapping
-    /// both devices run, and everything that can be done to one. Reachable from
+    /// Open the input-map screens (see [`super::input_maps`]): which map both
+    /// devices run, and everything that can be done to one. Reachable from
     /// outside the mode too, which is the point of opening the menu there.
-    Profile,
+    InputMap,
     /// Summon the on-screen keyboard; it types into the page.
     Osk,
 }
@@ -25,21 +25,21 @@ impl GameRow {
     pub const ALL: [GameRow; 4] = [
         GameRow::Toggle,
         GameRow::Resume,
-        GameRow::Profile,
+        GameRow::InputMap,
         GameRow::Osk,
     ];
 
     /// The row's label. Only the toggle words itself by state; the panel is
     /// titled GAME MODE, so it needs no noun of its own. No trailing ellipsis:
     /// it is reserved for a row that asks for something before it acts (see
-    /// [`super::game_profiles::ProfileAction::label`]).
+    /// [`super::input_maps::MapAction::label`]).
     pub fn label(self, in_game_mode: bool) -> &'static str {
         match (self, in_game_mode) {
             (GameRow::Resume, _) => "Resume",
-            // Singular: the value beside it is the profile in use, and one
-            // profile maps both devices — hence input, not controller.
-            (GameRow::Profile, _) => "Input profile",
-            // Not "Keyboard": a profile has a `[keyboard]` table of physical
+            // Singular: the value beside it is the map in use, and one map
+            // covers both devices — hence input, not controller.
+            (GameRow::InputMap, _) => "Input map",
+            // Not "Keyboard": a map has a `[keyboard]` table of physical
             // keys, and this is the one on screen.
             (GameRow::Osk, _) => "On-screen keyboard",
             (GameRow::Toggle, true) => "Disable",

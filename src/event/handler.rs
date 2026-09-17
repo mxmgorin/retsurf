@@ -1,5 +1,5 @@
-use super::game_mode::GameInput;
-use super::game_profile::{self, Profile};
+use super::game::input_map::{self, InputMap};
+use super::game::mode::GameInput;
 use super::gamepad::Gamepad;
 use super::gamepad_api;
 use super::keyboard::KeyEvent;
@@ -58,8 +58,8 @@ pub struct AppEventHandler {
     capture: Capture,
     /// Game Mode's translator: the pad and the keyboard drive the game.
     game_input: GameInput,
-    /// Every profile this run offers, in the order the mode's menu cycles them.
-    game_profiles: Vec<Profile>,
+    /// Every map this run offers, in the order the mode's menu cycles them.
+    input_maps: Vec<InputMap>,
     /// Whether the pad routed to the game last pass, to release on a transition.
     game_active: bool,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
@@ -93,16 +93,16 @@ impl AppEventHandler {
 
         let key_names = KeyNames::new();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
-        let game_profiles = game_profile::load_all(&key_names);
-        let profile = game_profile::pick(&game_profiles, &game_mode.profile);
-        if profile.id != game_mode.profile {
+        let input_maps = input_map::load_all(&key_names);
+        let map = input_map::pick(&input_maps, &game_mode.input_map);
+        if map.id != game_mode.input_map {
             log::warn!(
-                "game profile: no `{}`; using `{}`",
-                game_mode.profile,
-                profile.id
+                "input map: no `{}`; using `{}`",
+                game_mode.input_map,
+                map.id
             );
         }
-        let game_input = GameInput::new(profile.clone(), &gamepad_cfg);
+        let game_input = GameInput::new(map.clone(), &gamepad_cfg);
         let store = bindings::load_store();
         Ok(Self {
             event_pump: sdl.event_pump()?,
@@ -116,7 +116,7 @@ impl AppEventHandler {
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             game_input,
-            game_profiles,
+            input_maps,
             game_active: false,
             touch: super::touch::TouchState::new(),
         })
@@ -131,130 +131,130 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
-    /// Every profile this run offers, for the list the mode's menu opens.
-    pub fn game_profiles(&self) -> &[Profile] {
-        &self.game_profiles
+    /// Every map this run offers, for the list the mode's menu opens.
+    pub fn input_maps(&self) -> &[InputMap] {
+        &self.input_maps
     }
 
-    /// The profile `id` names, for the rows that show what it sends.
-    pub fn game_profile(&self, id: &str) -> &Profile {
-        game_profile::pick(&self.game_profiles, id)
+    /// The map `id` names, for the rows that show what it sends.
+    pub fn input_map(&self, id: &str) -> &InputMap {
+        input_map::pick(&self.input_maps, id)
     }
 
     /// The same, to write one row of it (the editor). Held in memory until
-    /// [`Self::save_game_profile`] writes it; the live profile is re-adopted
+    /// [`Self::save_input_map`] writes it; the live map is re-adopted
     /// there, so an edit to the running one takes effect on save and not before.
-    pub fn game_profile_mut(&mut self, id: &str) -> Option<&mut Profile> {
-        self.game_profiles.iter_mut().find(|p| p.id == id)
+    pub fn input_map_mut(&mut self, id: &str) -> Option<&mut InputMap> {
+        self.input_maps.iter_mut().find(|p| p.id == id)
     }
 
-    /// Write an edited profile to its file. Returns its name.
-    pub fn save_game_profile(
+    /// Write an edited map to its file. Returns its name.
+    pub fn save_input_map(
         &mut self,
         id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> String {
-        let Some(at) = self.game_profiles.iter().position(|p| p.id == id) else {
-            return self.game_profile_name().to_string();
+        let Some(at) = self.input_maps.iter().position(|p| p.id == id) else {
+            return self.input_map_name().to_string();
         };
-        self.game_profiles[at] = self.game_profiles[at].save(&self.key_names);
-        let name = self.game_profiles[at].name.clone();
-        self.readopt_game_profile(at, browser, commands);
+        self.input_maps[at] = self.input_maps[at].save(&self.key_names);
+        let name = self.input_maps[at].name.clone();
+        self.readopt_input_map(at, browser, commands);
         name
     }
 
     /// Rename what the menu shows and write it. The id stays what it was: it is
-    /// the file's stem, and `[game_mode] profile` names it.
-    pub fn rename_game_profile(
+    /// the file's stem, and `[game_mode] input_map` names it.
+    pub fn rename_input_map(
         &mut self,
         id: &str,
         name: String,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if let Some(profile) = self.game_profiles.iter_mut().find(|p| p.id == id) {
-            profile.set_name(name);
+        if let Some(map) = self.input_maps.iter_mut().find(|p| p.id == id) {
+            map.set_name(name);
         }
-        self.save_game_profile(id, browser, commands);
+        self.save_input_map(id, browser, commands);
     }
 
-    /// Copy a profile under a new name, as a file of its own. Returns the id it
+    /// Copy a map under a new name, as a file of its own. Returns the id it
     /// landed under — the name decides it, so a collision cannot shadow one.
-    pub fn duplicate_game_profile(&mut self, id: &str, name: String) -> String {
-        let taken: Vec<String> = self.game_profiles.iter().map(|p| p.id.clone()).collect();
-        let new_id = game_profile::new_id(&name, &taken);
-        let copy = game_profile::pick(&self.game_profiles, id).copy(&new_id, name, &self.key_names);
-        self.game_profiles.push(copy.save(&self.key_names));
+    pub fn duplicate_input_map(&mut self, id: &str, name: String) -> String {
+        let taken: Vec<String> = self.input_maps.iter().map(|p| p.id.clone()).collect();
+        let new_id = input_map::new_id(&name, &taken);
+        let copy = input_map::pick(&self.input_maps, id).copy(&new_id, name, &self.key_names);
+        self.input_maps.push(copy.save(&self.key_names));
         new_id
     }
 
-    /// Delete a profile's file: a built-in comes back as the binary carries it,
+    /// Delete a map's file: a built-in comes back as the binary carries it,
     /// anything else is gone. The mode cannot run what is no longer there, so
-    /// it takes the first profile instead; returns what it runs now.
-    pub fn delete_game_profile(
+    /// it takes the first map instead; returns what it runs now.
+    pub fn delete_input_map(
         &mut self,
         id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        let Some(at) = self.game_profiles.iter().position(|p| p.id == id) else {
-            return self.live_game_profile();
+        let Some(at) = self.input_maps.iter().position(|p| p.id == id) else {
+            return self.live_input_map();
         };
-        self.game_profiles[at].delete();
-        match game_profile::built_in(id, &self.key_names) {
-            Some(original) => self.game_profiles[at] = original,
+        self.input_maps[at].delete();
+        match input_map::built_in(id, &self.key_names) {
+            Some(original) => self.input_maps[at] = original,
             None => {
-                self.game_profiles.remove(at);
+                self.input_maps.remove(at);
             }
         }
-        if self.game_input.profile_id() == id {
-            let profile = game_profile::pick(&self.game_profiles, id).clone();
-            self.game_input.set_profile(profile, browser, commands);
+        if self.game_input.map_id() == id {
+            let map = input_map::pick(&self.input_maps, id).clone();
+            self.game_input.set_map(map, browser, commands);
         }
-        self.live_game_profile()
+        self.live_input_map()
     }
 
-    /// The profile driving the mode right now, as the menu shows it.
-    pub fn game_profile_name(&self) -> &str {
-        &game_profile::pick(&self.game_profiles, self.game_input.profile_id()).name
+    /// The map driving the mode right now, as the menu shows it.
+    pub fn input_map_name(&self) -> &str {
+        &input_map::pick(&self.input_maps, self.game_input.map_id()).name
     }
 
-    pub fn game_profile_id(&self) -> &str {
-        self.game_input.profile_id()
+    pub fn input_map_id(&self) -> &str {
+        self.game_input.map_id()
     }
 
-    /// Hand Game Mode the profile `id` names, live: what the page holds under
+    /// Hand Game Mode the map `id` names, live: what the page holds under
     /// the old one is released first. An id nothing answers to falls back to
     /// the first, so an edited config is never a dead mode.
-    pub fn use_game_profile(
+    pub fn use_input_map(
         &mut self,
         id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        let profile = game_profile::pick(&self.game_profiles, id).clone();
-        let named = (profile.id.clone(), profile.name.clone());
-        self.game_input.set_profile(profile, browser, commands);
+        let map = input_map::pick(&self.input_maps, id).clone();
+        let named = (map.id.clone(), map.name.clone());
+        self.game_input.set_map(map, browser, commands);
         named
     }
 
-    fn live_game_profile(&self) -> (String, String) {
-        let profile = game_profile::pick(&self.game_profiles, self.game_input.profile_id());
-        (profile.id.clone(), profile.name.clone())
+    fn live_input_map(&self) -> (String, String) {
+        let map = input_map::pick(&self.input_maps, self.game_input.map_id());
+        (map.id.clone(), map.name.clone())
     }
 
     /// Re-adopt an entry if it is the one the mode is running, so an edit to it
     /// takes effect without a restart.
-    fn readopt_game_profile(
+    fn readopt_input_map(
         &mut self,
         at: usize,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if self.game_profiles[at].id == self.game_input.profile_id() {
-            let profile = self.game_profiles[at].clone();
-            self.game_input.set_profile(profile, browser, commands);
+        if self.input_maps[at].id == self.game_input.map_id() {
+            let map = self.input_maps[at].clone();
+            self.game_input.set_map(map, browser, commands);
         }
     }
 
@@ -534,7 +534,7 @@ impl AppEventHandler {
     }
 
     /// A key while Game Mode has the page: the mode's own gesture first, then
-    /// the profile's own table, then the game — which is where the rest go.
+    /// the map's own table, then the game — which is where the rest go.
     fn game_key(&mut self, key: &KeyEvent, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let code = key_code(key.kc);
         if self.bindings.key(code, mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {

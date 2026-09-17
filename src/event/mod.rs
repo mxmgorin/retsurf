@@ -1,6 +1,5 @@
 pub mod bindings;
-pub mod game_mode;
-pub mod game_profile;
+pub mod game;
 pub mod gamepad;
 pub mod gamepad_api;
 pub mod handler;

@@ -1,12 +1,12 @@
-//! The Game Mode profile editor: one row per source, showing what it sends and
+//! The Game Mode map editor: one row per source, showing what it sends and
 //! letting the pad itself change it. The device this is for has no keyboard and
-//! no file manager, so a profile it cannot edit here is a profile it cannot edit
-//! at all; the file stays the fuller interface ([`crate::event::game_profile`]).
+//! no file manager, so a map it cannot edit here is a map it cannot edit
+//! at all; the file stays the fuller interface ([`crate::event::game::input_map`]).
 //!
 //! Physical keys and layers are the file's — they need names this screen has no
 //! room to pick, which is also why it is titled for the two kinds it does list.
 
-use crate::event::game_profile::{Dir, Side};
+use crate::event::game::input_map::{Dir, Side};
 use inputbind::Pad;
 
 /// A row of the top list: every button, then the two sticks.
@@ -94,7 +94,7 @@ impl Kind {
     }
 
     /// The ellipsis is the promise of a further question, which only the key
-    /// picker makes (see [`super::game_profiles::ProfileAction::label`]).
+    /// picker makes (see [`super::input_maps::MapAction::label`]).
     pub fn label(self) -> &'static str {
         match self {
             Kind::Key => "Key...",
@@ -107,7 +107,7 @@ impl Kind {
         }
     }
 
-    /// What taking it does to the profile.
+    /// What taking it does to the map.
     pub fn take(self) -> Take {
         match self {
             Kind::Key => Take::Key,
@@ -134,7 +134,7 @@ pub enum Take {
 }
 
 /// What **A** does, given which of the three lists is up. Qualified because
-/// the profile screens have one of these too.
+/// the map screens have one of these too.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EditPress {
     /// Open the focused stick's own rows.
@@ -145,7 +145,7 @@ pub enum EditPress {
     Take(Kind, Slot),
 }
 
-/// What the profile says, as the rows show it — a snapshot, since the profile
+/// What the map says, as the rows show it — a snapshot, since the map
 /// lives in the event handler that resolved it.
 #[derive(Default)]
 pub struct Targets {
@@ -167,7 +167,7 @@ pub struct StickTargets {
 }
 
 /// Every source the editor lists: Select carries the Game Mode menu in every
-/// profile, so it is not one of them.
+/// map, so it is not one of them.
 pub fn sources() -> Vec<Source> {
     Pad::ALL
         .into_iter()
@@ -177,11 +177,11 @@ pub fn sources() -> Vec<Source> {
         .collect()
 }
 
-pub struct GameEdit {
+pub struct MapEdit {
     visible: bool,
-    /// The profile being edited — not necessarily the one Game Mode runs, so a
+    /// The map being edited — not necessarily the one Game Mode runs, so a
     /// mapping can be set up without disturbing a game already under way.
-    profile: String,
+    map: String,
     /// Its name, for the panel's title.
     name: String,
     /// The top list's highlight.
@@ -199,11 +199,11 @@ pub struct GameEdit {
     targets: Targets,
 }
 
-impl GameEdit {
+impl MapEdit {
     pub fn new() -> Self {
         Self {
             visible: false,
-            profile: String::new(),
+            map: String::new(),
             name: String::new(),
             selected: 0,
             stick: None,
@@ -219,18 +219,18 @@ impl GameEdit {
         self.visible
     }
 
-    /// The profile whose sources these rows are.
-    pub fn profile_id(&self) -> &str {
-        &self.profile
+    /// The map whose sources these rows are.
+    pub fn map_id(&self) -> &str {
+        &self.map
     }
 
-    pub fn profile_name(&self) -> &str {
+    pub fn map_name(&self) -> &str {
         &self.name
     }
 
-    pub fn open(&mut self, profile: String, name: String) {
+    pub fn open(&mut self, map: String, name: String) {
         self.visible = true;
-        self.profile = profile;
+        self.map = map;
         self.name = name;
         self.selected = 0;
         self.stick = None;
@@ -240,7 +240,7 @@ impl GameEdit {
         self.dirty = false;
     }
 
-    /// Close it, reporting whether the profile needs writing.
+    /// Close it, reporting whether the map needs writing.
     pub fn close(&mut self) -> bool {
         self.visible = false;
         self.stick = None;
@@ -258,7 +258,7 @@ impl GameEdit {
         self.stick.take().is_some()
     }
 
-    /// Adopt a fresh snapshot of the profile (after anything changed it).
+    /// Adopt a fresh snapshot of the map (after anything changed it).
     pub fn set_targets(&mut self, targets: Targets) {
         self.targets = targets;
         let last = self.rows().saturating_sub(1);
@@ -401,8 +401,8 @@ impl GameEdit {
 mod tests {
     use super::*;
 
-    fn opened() -> GameEdit {
-        let mut edit = GameEdit::new();
+    fn opened() -> MapEdit {
+        let mut edit = MapEdit::new();
         edit.open("keys".to_string(), "Keyboard keys".to_string());
         let mut targets = Targets {
             pads: vec!["-".to_string(); Pad::COUNT],
@@ -413,7 +413,7 @@ mod tests {
         edit
     }
 
-    /// Select is the one pad no profile may name, so the editor must not offer
+    /// Select is the one pad no map may name, so the editor must not offer
     /// a row that would be refused on save. The sticks follow the buttons.
     #[test]
     fn the_reserved_pad_is_not_a_row_and_the_sticks_are() {

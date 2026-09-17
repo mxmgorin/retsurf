@@ -8,7 +8,7 @@ mod execute;
 mod router;
 
 pub use command::{
-    AppCommand, GameEditAction, GameMenuAction, GameProfilesAction, InputCommand, MenuAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand, MenuAction,
     PromptAction, SettingsAction,
 };
 
@@ -119,7 +119,7 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
-            event_handler.game_profile_name().to_string(),
+            event_handler.input_map_name().to_string(),
             crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");
@@ -251,9 +251,9 @@ impl App {
                 &mut commands,
             );
 
-            // A key the profile editor's picker took, before the UI is built:
+            // A key the map editor's picker took, before the UI is built:
             // the row has to show it on this frame, not the next.
-            self.drain_game_pick(&mut commands);
+            self.drain_map_pick(&mut commands);
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.

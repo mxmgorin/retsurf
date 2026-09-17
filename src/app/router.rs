@@ -4,7 +4,8 @@
 //! state-agnostic and only emits intents.
 
 use super::{
-    App, AppCommand, GameEditAction, GameMenuAction, GameProfilesAction, InputCommand, PromptAction,
+    App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand,
+    PromptAction,
 };
 use crate::browser::BrowserCommand;
 use crate::overlay::hints::{HintInput, Sym};
@@ -45,16 +46,16 @@ impl App {
                         out.push(AppCommand::GameMenu(GameMenuAction::Activate));
                     }
                 }
-                // A opens a profile, or takes the row it is on.
-                Focus::GameProfiles => {
+                // A opens a map, or takes the row it is on.
+                Focus::GameInputMaps => {
                     if *pressed {
-                        out.push(AppCommand::GameProfiles(GameProfilesAction::Activate));
+                        out.push(AppCommand::GameInputMaps(GameInputMapsAction::Activate));
                     }
                 }
                 // A opens the focused row's list, then takes what it lands on.
-                Focus::GameEdit => {
+                Focus::GameMapEdit => {
                     if *pressed {
-                        out.push(AppCommand::GameEdit(GameEditAction::Activate));
+                        out.push(AppCommand::GameMapEdit(GameMapEditAction::Activate));
                     }
                 }
                 // The settings overlay: A toggles / cycles / steps the focused
@@ -110,11 +111,11 @@ impl App {
                 // B resumes the game; leaving Game Mode is a row of its own.
                 Focus::GameMenu => self.ui.game_menu.close(),
                 // B backs out one screen; the list hands the menu back.
-                Focus::GameProfiles => {
-                    out.push(AppCommand::GameProfiles(GameProfilesAction::Close))
+                Focus::GameInputMaps => {
+                    out.push(AppCommand::GameInputMaps(GameInputMapsAction::Close))
                 }
-                // B saves what changed and goes back to the profile it edited.
-                Focus::GameEdit => out.push(AppCommand::GameEdit(GameEditAction::Close)),
+                // B saves what changed and goes back to the map it edited.
+                Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Close)),
                 // B saves the draft and closes (same as the close button).
                 Focus::Settings => self.settings_close(out),
                 // B drops a half-typed combo first, then exits hint mode.
@@ -149,7 +150,7 @@ impl App {
                     // X is unused in settings (rows edit with A and Left/Right).
                 } else if matches!(
                     focus,
-                    Focus::GameMenu | Focus::GameProfiles | Focus::GameEdit
+                    Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit
                 ) {
                     // X is unused here too: the keyboard has a row of its own.
                 } else if focus == Focus::Hints && self.config.input.hint_badges {
@@ -194,8 +195,8 @@ impl App {
                     }
                 }
                 Focus::GameMenu => self.ui.game_menu.move_sel(*dy),
-                Focus::GameProfiles => self.ui.game_profiles.move_sel(*dy),
-                Focus::GameEdit => self.ui.game_edit.move_sel(*dy),
+                Focus::GameInputMaps => self.ui.input_maps.move_sel(*dy),
+                Focus::GameMapEdit => self.ui.map_edit.move_sel(*dy),
                 // Up/Down moves between rows, Left/Right adjusts the focused value.
                 Focus::Settings => {
                     if *dy != 0 {
@@ -238,7 +239,7 @@ impl App {
                 Focus::Menu => self.menu_y_action(),
                 Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
-                Focus::GameMenu | Focus::GameProfiles | Focus::GameEdit => {}
+                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
@@ -254,7 +255,7 @@ impl App {
                 Focus::Settings => self.ui.settings.switch_section(*delta),
                 // No sections to switch here — and page navigation under one of
                 // Game Mode's screens would leave the game.
-                Focus::GameMenu | Focus::GameProfiles | Focus::GameEdit => {}
+                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In the dial editor they reorder the focused pin (Left/Right
                 // moves the selection there).
                 Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
@@ -534,7 +535,7 @@ impl App {
 fn takes_over(focus: Focus) -> bool {
     matches!(
         focus,
-        Focus::Settings | Focus::GameMenu | Focus::GameProfiles | Focus::GameEdit
+        Focus::Settings | Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit
     )
 }
 

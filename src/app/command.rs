@@ -25,12 +25,12 @@ pub enum AppCommand {
     /// reserved hold. What it does depends on the mode's state (see
     /// [`crate::app::App::game_mode_gesture`]).
     GameMode,
-    /// An action on Game Mode's own menu (see [`crate::overlay::game_menu`]).
+    /// An action on Game Mode's own menu (see [`crate::overlay::game::menu`]).
     GameMenu(GameMenuAction),
-    /// An action on its profile screens (see [`crate::overlay::game_profiles`]).
-    GameProfiles(GameProfilesAction),
-    /// An action on its profile editor (see [`crate::overlay::game_edit`]).
-    GameEdit(GameEditAction),
+    /// An action on its input-map screens (see [`crate::overlay::game::input_maps`]).
+    GameInputMaps(GameInputMapsAction),
+    /// An action on its map editor (see [`crate::overlay::game::map_edit`]).
+    GameMapEdit(GameMapEditAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
@@ -50,8 +50,8 @@ impl AppCommand {
                 | AppCommand::Input(_)
                 | AppCommand::Prompt(_)
                 | AppCommand::GameMenu(_)
-                | AppCommand::GameProfiles(_)
-                | AppCommand::GameEdit(_)
+                | AppCommand::GameInputMaps(_)
+                | AppCommand::GameMapEdit(_)
                 | AppCommand::GameMode
         )
     }
@@ -67,13 +67,13 @@ pub enum GameMenuAction {
     Click(usize),
 }
 
-/// Actions on Game Mode's profile screens (the list, one profile's rows, the
+/// Actions on Game Mode's input-map screens (the list, one map's rows, the
 /// confirmation over a removal).
 #[derive(Clone)]
-pub enum GameProfilesAction {
+pub enum GameInputMapsAction {
     /// Back out one screen (B / ✖); the list hands the menu back.
     Close,
-    /// Take what is focused (A): open a profile, or its highlighted row.
+    /// Take what is focused (A): open a map, or its highlighted row.
     Activate,
     /// Focus row `index` and take it (clicking it).
     Click(usize),
@@ -81,11 +81,11 @@ pub enum GameProfilesAction {
     Name(String),
 }
 
-/// Actions on the Game Mode profile editor. The pad pushes the relative ones
+/// Actions on the Game Mode map editor. The pad pushes the relative ones
 /// through the router; the mouse pushes `Click` with the row it hit.
 #[derive(Clone)]
-pub enum GameEditAction {
-    /// Back out one list; past them all it saves and goes back to the profile
+pub enum GameMapEditAction {
+    /// Back out one list; past them all it saves and goes back to the map
     /// it edited (B / ✖).
     Close,
     /// Act on what is focused (A): open a stick's rows, open a row's list of

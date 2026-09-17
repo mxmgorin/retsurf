@@ -5,9 +5,7 @@
 
 mod cursor;
 mod dial_edit;
-mod game_edit;
-mod game_menu;
-mod game_profiles;
+mod game;
 mod hints;
 mod home;
 mod memory;
@@ -31,9 +29,9 @@ use crate::{
         ToolbarPosition, UpdateConfig,
     },
     overlay::dial_edit::DialEdit,
-    overlay::game_edit::GameEdit,
-    overlay::game_menu::GameMenu,
-    overlay::game_profiles::GameProfiles,
+    overlay::game::input_maps::InputMaps,
+    overlay::game::map_edit::MapEdit,
+    overlay::game::menu::GameMenu,
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::Menu,
@@ -193,14 +191,14 @@ pub struct AppUi {
     /// Game Mode's own menu (the reserved Select hold). Public — driven
     /// directly, like the other overlays.
     pub game_menu: GameMenu,
-    /// Its profile list and one profile's rows, opened from that menu. Public
+    /// Its map list and one map's rows, opened from that menu. Public
     /// for the same reason.
-    pub game_profiles: GameProfiles,
-    /// Its profile editor, opened from a profile. Public for the same reason.
-    pub game_edit: GameEdit,
-    /// The live profile's name, mirrored for the menu's row; the profiles
+    pub input_maps: InputMaps,
+    /// Its map editor, opened from a map. Public for the same reason.
+    pub map_edit: MapEdit,
+    /// The live map's name, mirrored for the menu's row; the maps
     /// themselves live in the event handler, which resolved them.
-    game_profile_name: String,
+    input_map_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -279,7 +277,7 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
-        game_profile_name: String,
+        input_map_name: String,
         user_agent: String,
     ) -> Self {
         Self {
@@ -298,9 +296,9 @@ impl AppUi {
             game_mode_toast: None,
             game_mode_toast_text: String::new(),
             game_menu: GameMenu::new(),
-            game_profiles: GameProfiles::new(),
-            game_edit: GameEdit::new(),
-            game_profile_name,
+            input_maps: InputMaps::new(),
+            map_edit: MapEdit::new(),
+            input_map_name,
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -773,19 +771,19 @@ impl AppUi {
                     settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
-                // The Game Mode profile editor: like settings, its own block
+                // The Game Mode map editor: like settings, its own block
                 // rather than the chain below, so the keyboard can open over it
                 // to pick a key for a row.
-                if self.game_edit.visible() {
+                if self.map_edit.visible() {
                     drop_egui_focus(ctx);
-                    game_edit::add_game_edit(ctx, &self.game_edit, commands);
+                    game::map_edit::add_map_edit(ctx, &self.map_edit, commands);
                 }
 
-                // The profile screens, for the same reason: the keyboard opens
+                // The map screens, for the same reason: the keyboard opens
                 // over them to type a name.
-                if self.game_profiles.visible() {
+                if self.input_maps.visible() {
                     drop_egui_focus(ctx);
-                    game_profiles::add_game_profiles(ctx, &self.game_profiles, commands);
+                    game::input_maps::add_input_maps(ctx, &self.input_maps, commands);
                 }
 
                 // The modal prompt draws on top of whatever else is up (its
@@ -813,10 +811,10 @@ impl AppUi {
                     // Same reason as the menu's: a focused row would take Enter
                     // a second time and activate twice.
                     drop_egui_focus(ctx);
-                    game_menu::add_game_menu(
+                    game::menu::add_game_menu(
                         ctx,
                         &self.game_menu,
-                        &self.game_profile_name,
+                        &self.input_map_name,
                         self.game_mode,
                         commands,
                     );
@@ -918,7 +916,7 @@ impl AppUi {
     /// vocabulary shrinks under any of them, in or out of the mode.
     #[inline]
     pub fn game_screen(&self) -> bool {
-        self.game_menu.visible || self.game_profiles.visible() || self.game_edit.visible()
+        self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()
     }
 
     /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
@@ -936,11 +934,11 @@ impl AppUi {
         self.game_mode_toast = None;
     }
 
-    /// Adopt the name of a profile chosen in the menu, or set by an edited
+    /// Adopt the name of a map chosen in the menu, or set by an edited
     /// config.
     #[inline]
-    pub fn set_game_profile_name(&mut self, name: String) {
-        self.game_profile_name = name;
+    pub fn set_input_map_name(&mut self, name: String) {
+        self.input_map_name = name;
     }
 
     /// Time left on the entry toast, or `None` once it has faded.
