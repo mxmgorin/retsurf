@@ -68,7 +68,7 @@ fn into_device_point(x: f32, y: f32) -> servo::WebViewPoint {
 }
 
 /// One synthesized key edge, spelled out: `code` is what games branch on and
-/// `modifiers` what a profile target may carry.
+/// `modifiers` what a map target may carry.
 pub fn key_event(
     key: keyboard_types::Key,
     code: keyboard_types::Code,
@@ -84,11 +84,23 @@ pub fn key_event(
         state,
         key,
         code,
-        location: keyboard_types::Location::Standard,
+        location: location_for(code),
         modifiers,
         repeat: false,
         is_composing: false,
     })
+}
+
+/// Where the `code` says the key sits. A modifier names a side there, and an
+/// event claiming one while reporting `Standard` tells a game two things.
+fn location_for(code: keyboard_types::Code) -> keyboard_types::Location {
+    use keyboard_types::{Code, Location};
+    match code {
+        Code::ShiftLeft | Code::ControlLeft | Code::AltLeft | Code::MetaLeft => Location::Left,
+        Code::ShiftRight | Code::ControlRight | Code::AltRight | Code::MetaRight => Location::Right,
+        // Numpad codes take one too, but only a hand-written map can name one.
+        _ => Location::Standard,
+    }
 }
 
 /// A keyboard event for a printable character, for on-screen-keyboard and
@@ -153,6 +165,21 @@ pub(super) fn code_for_char(c: char) -> keyboard_types::Code {
     }
 }
 
+/// The `code` for a named key. Most spell theirs the same, but a modifier's key
+/// is `Control` where its code names a side — and a keyboard that has one of
+/// each has to pick, so it picks the left.
+pub fn code_for_named(name: &str) -> keyboard_types::Code {
+    use keyboard_types::Code;
+    use std::str::FromStr;
+    match name {
+        "Control" => Code::ControlLeft,
+        "Shift" => Code::ShiftLeft,
+        "Alt" => Code::AltLeft,
+        "Meta" => Code::MetaLeft,
+        _ => Code::from_str(name).unwrap_or(Code::Unidentified),
+    }
+}
+
 /// A keyboard event for a named key (Enter, Backspace, …).
 pub fn named_keyboard_event(
     key: keyboard_types::NamedKey,
@@ -169,8 +196,32 @@ pub fn named_keyboard_event(
 
 #[cfg(test)]
 mod tests {
-    use super::code_for_char;
-    use keyboard_types::Code;
+    use super::{code_for_char, code_for_named, location_for};
+    use keyboard_types::{Code, Location};
+
+    /// A modifier is the one named key whose `code` is not its own spelling:
+    /// the key is `Control`, the code names a side. A map that wrote the name
+    /// through would leave a game reading `e.code` with nothing.
+    #[test]
+    fn a_modifier_takes_a_side_and_every_other_named_key_its_own_spelling() {
+        assert_eq!(code_for_named("Control"), Code::ControlLeft);
+        assert_eq!(code_for_named("Shift"), Code::ShiftLeft);
+        assert_eq!(code_for_named("Alt"), Code::AltLeft);
+        assert_eq!(code_for_named("Meta"), Code::MetaLeft);
+        assert_eq!(code_for_named("F5"), Code::F5);
+        assert_eq!(code_for_named("PageDown"), Code::PageDown);
+        assert_eq!(code_for_named("Nonsense"), Code::Unidentified);
+    }
+
+    /// The side is in the code, so the location has to agree with it — a real
+    /// keyboard never reports `ShiftLeft` from the standard location.
+    #[test]
+    fn a_side_named_in_the_code_is_named_in_the_location_too() {
+        assert_eq!(location_for(Code::ShiftLeft), Location::Left);
+        assert_eq!(location_for(Code::ControlRight), Location::Right);
+        assert_eq!(location_for(Code::KeyW), Location::Standard);
+        assert_eq!(location_for(Code::F5), Location::Standard);
+    }
 
     #[test]
     fn a_character_carries_its_code_where_the_standard_has_one() {

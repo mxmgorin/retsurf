@@ -112,6 +112,8 @@ toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats ov
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
 # them in this order. Available: "en" (QWERTY), "ru" (ЙЦУКЕН). Unknown names are
 # logged and skipped; an empty list falls back to ["en"].
+# The Fn key is not a layout: it swaps any of them for Escape, F1-F12 and the
+# navigation keys, which a character grid cannot carry.
 layouts = ["en", "ru"]
 
 [performance]
@@ -310,7 +312,10 @@ remove, so it offers neither of the last two.
 **The editor** is a row per source — every button, then `stick.left` and
 `stick.right`. **A** opens what that source can send, **B** saves. For a button
 that is a key, the left mouse button, Passthrough or nothing; choosing *Key...*
-hands over to the on-screen keyboard, so any key is reachable by pressing it.
+hands over to the on-screen keyboard, dimmed behind so it reads as a question
+rather than a keyboard. Its **Fn** key swaps to the keys no character grid
+carries — Escape, F1-F12, the navigation cluster, and Shift / Control / Alt /
+Meta on their own, which is what a game wanting a run or crouch key binds.
 
 **A stick opens rows of its own.** Its `sends` row is the whole stick — *Cursor*,
 *Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
@@ -331,6 +336,7 @@ up = "ArrowUp"
 a = "Space"
 b = "z"
 x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
+y = "Shift"                   # a bare modifier: takes the left-hand `code`
 r2 = "mouse.left"             # the left mouse button, at the cursor
 l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this map is active

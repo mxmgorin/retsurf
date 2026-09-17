@@ -17,6 +17,9 @@ pub const PANEL_FILL: egui::Color32 = egui::Color32::from_rgb(0x18, 0x18, 0x1c);
 /// Secondary / label text: hints, dates, statuses, mouse-only actions.
 pub const DIM: egui::Color32 = egui::Color32::from_gray(0x99);
 
+/// Backdrop under something that blocks: what it covers reads as inactive.
+pub const SCRIM: egui::Color32 = egui::Color32::from_black_alpha(140);
+
 /// A refused action: the success teal cannot read as "this did not happen".
 pub const WARN: egui::Color32 = egui::Color32::from_rgb(0xe8, 0x73, 0x5a);
 

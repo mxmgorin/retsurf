@@ -79,6 +79,7 @@ impl AppUi {
     /// bar when it holds focus, otherwise the focused page element.
     pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let to_address_bar = self.address_bar_focused();
+        self.osk.set_picking(self.map_edit.picking().is_some());
         let target = if self.prompt.visible() && self.prompt.has_text_field() {
             OskTarget::Prompt(self.prompt.input_mut())
         } else if self.settings.visible() && self.settings.selected_is_text() {

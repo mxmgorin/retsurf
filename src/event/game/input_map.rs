@@ -374,10 +374,11 @@ fn derive_code(text: &str, key: &Key, whose: &str) -> Code {
         };
         return Code::from_str(name).unwrap_or(Code::Unidentified);
     }
-    Code::from_str(text).unwrap_or_else(|_| {
+    let code = crate::event::sdl2_servo::code_for_named(text);
+    if code == Code::Unidentified {
         log::warn!("input map: `{whose}` needs an explicit `code`; games read it");
-        Code::Unidentified
-    })
+    }
+    code
 }
 
 impl InputMap {
