@@ -8,8 +8,10 @@ on:
 
 # A release or a nightly run must never lose its artifacts to a newer commit, so
 # only a manual re-run supersedes anything.
+# Named by hand: `github.workflow` is the *caller's* name in a called workflow,
+# so six callees would share one group and cancel each other out of it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-windows-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:

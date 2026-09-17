@@ -18,9 +18,10 @@ on:
     types: [published]
 
 # A release or a nightly run must never lose its artifacts to a newer commit, so
-# only a manual re-run supersedes anything.
+# only a manual re-run supersedes anything. The group is named by hand because
+# `github.workflow` is the *caller's* name here: six callees would share one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-linux-armhf-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:

@@ -8,8 +8,10 @@ on:
   release:
     types: [published]
 
+# Named by hand: `github.workflow` is the *caller's* name in a called workflow,
+# so six callees would share one group and cancel each other out of it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-linux-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:
