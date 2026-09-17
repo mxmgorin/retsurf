@@ -9,9 +9,9 @@
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is a web browser powered by [Servo](https://servo.org/) for web rendering and SDL2 for windowing and input. It doesn't require **X11, Wayland, or a GPU**, and provides **gamepad-first navigation**. The goal is to bring a fully featured web experience to devices that traditional browsers weren't designed to run on.
+retsurf (**ret**ro + **surf**ing) is a web browser built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience on small screens and unusual devices, while staying lightweight and portable. It is **gamepad-first**, with flexible pad and keyboard controls designed to make web browsing and gaming comfortable there.
 
-It runs on [PortMaster-compatible](https://portmaster.games/supported-devices.html) handhelds, Miyoo Mini Flip and Plus running [OnionOS](https://onionui.github.io/) and [Allium](https://github.com/goweiwen/Allium), as well as regular desktops and Android. It renders on the device's OpenGL ES driver, or on the CPU through the `software` build where there is no GPU, as on the Miyoo Mini.
+**[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -41,8 +41,11 @@ Handheld Linux devices lack good browser options. Lightweight browsers struggle 
 - **Gamepad-first navigation**<br>
   Virtual cursor with stick/D-pad control, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
 
-- **Customizable controls**<br>
-  Every action is rebindable in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml): with support for taps, holds and button chords.
+- **Customizable browser controls**<br>
+  Every browser action can be rebound in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with support for taps, holds, and button chords.
+
+- **Game Mode**<br>
+  Hides the browser chrome and hands keyboard and gamepad input to the page. Built-in [input maps](docs/CONFIGURATION.md#game-mode-input-maps-input_mapstoml) cover arrows, WASD, mouse, and raw gamepad, and all are editable, so different games can have different control schemes.
 
 - **Tabs, bookmarks, history, and downloads**<br>
   Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation, with a toolbar chip for active downloads.
@@ -57,7 +60,7 @@ Handheld Linux devices lack good browser options. Lightweight browsers struggle 
   Uses sites' own dark themes through `prefers-color-scheme`, or forces a dark appearance by inverting pages that don't provide one.
 
 - **Ad & tracker blocking**<br>
-  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are compiled and cached locally for instant warm starts and offline blocking.
+  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are cached locally, so blocking works offline.
 
 - **Native start page**<br>
   A search/URL field over a speed-dial grid of pins (`retsurf:home`), fully controller-navigable like every other overlay.
@@ -65,31 +68,28 @@ Handheld Linux devices lack good browser options. Lightweight browsers struggle 
 - **In-app updates**<br>
   Checks GitHub for updates, displays release notes, and installs updates in place on PortMaster handhelds and Linux desktops. Supports stable, beta, and nightly channels.
 
-- **Web Audio**<br>
-  Custom servo-media backend over SDL2: oscillators, gain, filters, panners, buffers, and `decodeAudioData` for MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A, with resampling to the context rate.
+- **Audio and video**<br>
+  A custom servo-media backend over SDL2 covers Web Audio and the `<audio>` and `<video>` elements: MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A stream as they download, and `<video>` decodes H.264-in-MP4 in software. No MSE, so this supports direct files and embeds rather than streaming sites.
 
-- **Audio & video elements**<br>
-  `<audio>` streams MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A as they download, with HTTP Range seeking. `<video>` decodes H.264-in-MP4 in software through OpenH264 and syncs to the audio track. No MSE, so this supports direct files and embeds rather than streaming sites.
+- **No display server required**<br>
+  SDL2 draws through whatever video backend the firmware ships, including handhelds that run none at all. X11 and Wayland are optional, not required.
 
-- **Hardware-accelerated rendering**<br>
-  Servo's WebRender uses OpenGL ES 3.x with a single GL context and zero CPU readback, drawing directly into the on-screen framebuffer.
-
-- **Software rendering**<br>
-  The `software` build replaces both renderers with CPU-based ones: SWGL rasterizes web pages, while SDL's 2D renderer draws the browser UI.
+- **Hardware or software rendering**<br>
+  A custom Servo rendering context over SDL2 draws pages on the device's OpenGL ES 3.x driver. Where there is no GPU, the `software` build renders on the CPU instead.
 
 ## Install
 
 Download from [Releases](https://github.com/mxmgorin/retsurf/releases), then:
 
-| Device                | Package                                                 | Where it goes                     |
-| --------------------- | ------------------------------------------------------- | --------------------------------- |
-| PortMaster handhelds  | `retsurf-portmaster.zip`                                | ports folder, e.g. `/roms/ports/` |
-| Miyoo Mini on OnionOS | `retsurf-onionos.zip`                                   | `App/Retsurf/` on the SD card     |
-| Miyoo Mini on Allium  | `retsurf-allium.zip`                                    | `Apps/Retsurf.pak/` on the SD card |
-| Android               | `retsurf-android-arm64.apk`                             | sideload it                       |
-| Linux                 | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` | unpack and run                    |
-| Windows               | `retsurf-windows-x86_64.zip`                            | unpack and run                    |
-| macOS                 | `retsurf-macos-aarch64.dmg`                             | open it and run `Retsurf.app`     |
+| Device                                                                                                                  | Package                                                 | Where it goes                      |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------- |
+| [PortMaster handhelds](https://portmaster.games/supported-devices.html) (ArkOS, dArkOS, EmuELEC, Knulli, muOS, ROCKNIX) | `retsurf-portmaster.zip`                                | ports folder, e.g. `/roms/ports/`  |
+| Miyoo Mini Flip and Plus on [OnionOS](https://onionui.github.io/)                                                       | `retsurf-onionos.zip`                                   | `App/Retsurf/` on the SD card      |
+| Miyoo Mini Flip and Plus on [Allium](https://github.com/goweiwen/Allium)                                                | `retsurf-allium.zip`                                    | `Apps/Retsurf.pak/` on the SD card |
+| Android                                                                                                                 | `retsurf-android-arm64.apk`                             | sideload it                        |
+| Linux                                                                                                                   | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` | unpack and run                     |
+| Windows                                                                                                                 | `retsurf-windows-x86_64.zip`                            | unpack and run                     |
+| macOS                                                                                                                   | `retsurf-macos-aarch64.dmg`                             | open it and run `Retsurf.app`      |
 
 On both Miyoo firmwares the app shows up in the Apps menu, and **MENU quits** it.
 
@@ -106,7 +106,7 @@ user data dir (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Lin
 Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for every option and the
 full bindings reference.
 
-## Support
+## How to help
 
 If you find the project useful, here is how you can help:
 
