@@ -4,7 +4,7 @@
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use crate::app::{AppCommand, GameInputMapsAction};
-use crate::overlay::game::input_maps::{InputMaps, MapAction};
+use crate::overlay::game::input_maps::{InputMaps, MapAction, NameFor, NEW_MAP_LABEL};
 use crate::ui::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use crate::ui::theme::{ACCENT, ROW_FONT};
 use egui_sdl2::egui;
@@ -80,29 +80,32 @@ fn rows(screens: &InputMaps) -> Vec<(String, String)> {
             ("Cancel".to_string(), String::new()),
         ];
     }
+    // While the keyboard is up, the row it was opened from carries what is
+    // being typed — there is nowhere else on screen the name would show.
+    let naming = screens.naming();
     if screens.open_row().is_none() {
-        return screens
-            .rows()
-            .iter()
-            .map(|row| {
+        let typed = naming.filter(|naming| naming.what == NameFor::New);
+        let new = (
+            NEW_MAP_LABEL.to_string(),
+            typed.map(|naming| naming.text.clone()).unwrap_or_default(),
+        );
+        return std::iter::once(new)
+            .chain(screens.rows().iter().map(|row| {
                 let value = match row.in_use {
                     true => "in use",
                     false => "",
                 };
                 (row.name.clone(), value.to_string())
-            })
+            }))
             .collect();
     }
-    // While the keyboard is up, the row it was opened from carries what is
-    // being typed — there is nowhere else on screen the name would show.
-    let naming = screens.naming();
     screens
         .actions()
         .into_iter()
         .map(|action| {
             let typed = naming.filter(|naming| match action {
-                MapAction::Rename => !naming.copy,
-                MapAction::Duplicate => naming.copy,
+                MapAction::Rename => naming.what == NameFor::Rename,
+                MapAction::Duplicate => naming.what == NameFor::Duplicate,
                 _ => false,
             });
             let value = typed.map(|naming| naming.text.clone()).unwrap_or_default();

@@ -289,20 +289,23 @@ binding and is logged, not the whole map.
 
 **The Game Mode menu's "Input map" row** is all of this without a keyboard or a
 file manager, which is the only way to do it on a handheld. It opens the list of
-maps, marked with the one in use; **A** on one opens its own screen:
+maps, marked with the one in use and led by **New map...**; **A** on any map
+opens its own screen:
 
 | row | what it does |
 | --- | --- |
 | Use this map | hands it to Game Mode and writes `[game_mode] input_map` |
-| Buttons and sticks | the editor below |
+| Edit | the editor below |
 | Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
-| Duplicate... | a copy under a name you type — the way to add a map |
+| Duplicate... | a copy under a name you type, bindings and all |
 | Delete | throws the file away, after a confirmation |
 | Reset to default | the same, on a built-in: the binary's own version comes back |
 
-There is no *New* row: a copy is how a map is added, because an empty one
-would reach the page with no cursor and no click. A built-in the binary carries
-and no file shadows has nothing to remove, so it offers neither of the last two.
+**New map...** types a name and adds a map that binds nothing, which is
+passthrough: the whole pad reaches the page raw, with no cursor and no click
+until the editor gives it one. It opens on the new map, since that is what it
+was made for. A built-in the binary carries and no file shadows has nothing to
+remove, so it offers neither of the last two.
 
 **The editor** is a row per source — every button, then `stick.left` and
 `stick.right`. **A** opens what that source can send, **B** saves. For a button

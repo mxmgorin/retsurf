@@ -547,6 +547,16 @@ impl InputMap {
         InputMap::resolve(id, raw, keys)
     }
 
+    /// A map that binds nothing, which is the whole pad passing through to the
+    /// page — what an unbound source already means.
+    pub fn passthrough(id: &str, name: String, keys: &KeyNames) -> InputMap {
+        let raw = RawInputMap {
+            name: Some(name),
+            ..RawInputMap::default()
+        };
+        InputMap::resolve(id, raw, keys)
+    }
+
     /// Write the map to `input_maps/<id>.toml`, which is also how a built-in
     /// is replaced. Returns the re-resolved map, so the edit takes effect
     /// without a restart.

@@ -189,6 +189,16 @@ impl AppEventHandler {
         new_id
     }
 
+    /// Add a map that passes the whole pad through, for the editor to bind from
+    /// there. Returns the id it landed under, like a duplicate.
+    pub fn new_input_map(&mut self, name: String) -> String {
+        let taken: Vec<String> = self.input_maps.iter().map(|p| p.id.clone()).collect();
+        let new_id = input_map::new_id(&name, &taken);
+        let map = input_map::InputMap::passthrough(&new_id, name, &self.key_names);
+        self.input_maps.push(map.save(&self.key_names));
+        new_id
+    }
+
     /// Delete a map's file: a built-in comes back as the binary carries it,
     /// anything else is gone. The mode cannot run what is no longer there, so
     /// it takes the first map instead; returns what it runs now.

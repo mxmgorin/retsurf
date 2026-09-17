@@ -24,10 +24,10 @@ pub enum MapAction {
     /// Hand this map to the mode, and make it the one it starts with.
     Use,
     /// Open the editor ([`super::map_edit`]) on it.
-    Buttons,
+    Edit,
     Rename,
-    /// Copy it under a new name — the only way to add a map, since an
-    /// empty one would reach the page with no cursor and no click.
+    /// Copy it under a new name, bindings and all — the list's New row starts
+    /// from nothing instead.
     Duplicate,
     /// Delete the file: the map goes with it.
     Delete,
@@ -42,7 +42,7 @@ impl MapAction {
     pub fn label(self) -> &'static str {
         match self {
             MapAction::Use => "Use this map",
-            MapAction::Buttons => "Buttons and sticks",
+            MapAction::Edit => "Edit",
             MapAction::Rename => "Rename...",
             MapAction::Duplicate => "Duplicate...",
             MapAction::Delete => "Delete",
@@ -51,16 +51,35 @@ impl MapAction {
     }
 }
 
+/// What a name being typed is for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NameFor {
+    /// Rename the map whose screen is open.
+    Rename,
+    /// Copy that map under the typed name.
+    Duplicate,
+    /// Make a map, from the list rather than from any open one.
+    New,
+}
+
 /// A name being typed, and what it is for.
 pub struct Naming {
-    /// Whether the name makes a copy rather than renaming what is open.
-    pub copy: bool,
+    pub what: NameFor,
     pub text: String,
 }
+
+/// The list's first row, which makes a map. The ellipsis promises the keyboard,
+/// like the two [`MapAction`] rows that ask for a name.
+pub const NEW_MAP_LABEL: &str = "New map...";
+
+/// What that keyboard starts from, so a press through it still names something.
+pub const NEW_MAP_NAME: &str = "New map";
 
 /// What **A** does, given which of the three lists the highlight is in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Press {
+    /// Make a map: the list's first row.
+    New,
     /// Open the highlighted map's own screen.
     Open,
     /// Take the highlighted action on the map that is open.
@@ -74,9 +93,14 @@ pub enum Press {
 const CONFIRM_ROWS: usize = 2;
 const CANCEL_ROW: usize = 1;
 
+/// The list shows [`NEW_MAP_LABEL`] first, so the maps start one row below
+/// their index in `rows`.
+const MAPS_START: usize = 1;
+
 pub struct InputMaps {
     visible: bool,
     rows: Vec<MapRow>,
+    /// Where the highlight is in the list as drawn, the New row included.
     selected: usize,
     /// The map whose own screen is open, as an index into `rows`.
     open: Option<usize>,
@@ -111,7 +135,17 @@ impl InputMaps {
         self.open = None;
         self.confirm = None;
         self.naming = None;
-        self.selected = self.selected.min(self.rows.len().saturating_sub(1));
+        self.selected = self.selected.min(self.last_row());
+    }
+
+    /// The last index the list offers — the New row when there are no maps.
+    fn last_row(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Which map the list's highlight is on, or `None` on the New row.
+    fn selected_map(&self) -> Option<usize> {
+        self.selected.checked_sub(MAPS_START)
     }
 
     /// Show one map's own screen, if it is still there — after a deletion
@@ -122,7 +156,7 @@ impl InputMaps {
             return false;
         };
         self.visible = true;
-        self.selected = index;
+        self.selected = index + MAPS_START;
         self.open = Some(index);
         self.at = 0;
         self.confirm = None;
@@ -154,8 +188,7 @@ impl InputMaps {
     /// Adopt a fresh snapshot of the maps (after anything changed one).
     pub fn set_rows(&mut self, rows: Vec<MapRow>) {
         self.rows = rows;
-        let last = self.rows.len().saturating_sub(1);
-        self.selected = self.selected.min(last);
+        self.selected = self.selected.min(self.last_row());
         self.open = self.open.filter(|at| *at < self.rows.len());
         self.at = self.at.min(self.actions().len().saturating_sub(1));
     }
@@ -183,7 +216,7 @@ impl InputMaps {
         if !row.in_use {
             actions.push(MapAction::Use);
         }
-        actions.extend([MapAction::Buttons, MapAction::Rename, MapAction::Duplicate]);
+        actions.extend([MapAction::Edit, MapAction::Rename, MapAction::Duplicate]);
         actions.extend(row.remove);
         actions
     }
@@ -219,11 +252,12 @@ impl InputMaps {
         match (self.confirm, self.open) {
             (Some(_), _) => CONFIRM_ROWS,
             (None, Some(_)) => self.actions().len(),
-            (None, None) => self.rows.len(),
+            (None, None) => self.last_row() + 1,
         }
     }
 
-    /// What **A** takes, or `None` on a list with nothing in it.
+    /// What **A** takes. The list always has the New row, so only a map's own
+    /// screen can come up empty.
     pub fn press(&self) -> Option<Press> {
         if let Some(at) = self.confirm {
             return Some(Press::Confirm(at != CANCEL_ROW));
@@ -231,13 +265,16 @@ impl InputMaps {
         if self.open.is_some() {
             return self.actions().get(self.at).copied().map(Press::Take);
         }
-        self.rows.get(self.selected).map(|_| Press::Open)
+        let Some(at) = self.selected_map() else {
+            return Some(Press::New);
+        };
+        self.rows.get(at).map(|_| Press::Open)
     }
 
     /// Open the highlighted map's own screen.
     pub fn open_selected(&mut self) {
-        if self.selected < self.rows.len() {
-            self.open = Some(self.selected);
+        if let Some(at) = self.selected_map().filter(|at| *at < self.rows.len()) {
+            self.open = Some(at);
             self.at = 0;
         }
     }
@@ -257,9 +294,9 @@ impl InputMaps {
         self.confirm.is_some()
     }
 
-    /// Hand the keyboard a name to edit (a rename, or a copy's).
-    pub fn start_naming(&mut self, copy: bool, text: String) {
-        self.naming = Some(Naming { copy, text });
+    /// Hand the keyboard a name to edit (a rename, a copy's, or a new map's).
+    pub fn start_naming(&mut self, what: NameFor, text: String) {
+        self.naming = Some(Naming { what, text });
     }
 
     pub fn naming(&self) -> Option<&Naming> {
@@ -318,13 +355,13 @@ mod tests {
     fn a_map_offers_what_it_can_actually_do() {
         assert_eq!(
             opened("keys").actions(),
-            [MapAction::Buttons, MapAction::Rename, MapAction::Duplicate]
+            [MapAction::Edit, MapAction::Rename, MapAction::Duplicate]
         );
         assert_eq!(
             opened("pad").actions(),
             [
                 MapAction::Use,
-                MapAction::Buttons,
+                MapAction::Edit,
                 MapAction::Rename,
                 MapAction::Duplicate,
                 MapAction::Reset
@@ -342,7 +379,7 @@ mod tests {
     fn only_a_row_that_asks_for_a_name_trails_off() {
         let all = [
             MapAction::Use,
-            MapAction::Buttons,
+            MapAction::Edit,
             MapAction::Rename,
             MapAction::Duplicate,
             MapAction::Delete,
@@ -352,6 +389,30 @@ mod tests {
             let asks = matches!(action, MapAction::Rename | MapAction::Duplicate);
             assert_eq!(action.label().ends_with("..."), asks, "{action:?}");
         }
+        // The list's own row makes the same promise, and keeps it.
+        assert!(NEW_MAP_LABEL.ends_with("..."));
+    }
+
+    /// The list leads with the row that makes a map, so it is what a press
+    /// takes before the highlight has moved — and with no maps at all, the
+    /// only thing there is to press.
+    #[test]
+    fn the_list_leads_with_the_row_that_makes_a_map() {
+        let mut screens = InputMaps::new();
+        screens.set_rows(rows());
+        screens.open();
+        assert_eq!(screens.press(), Some(Press::New));
+        // It is a row of its own: pressing it opens no map's screen.
+        screens.open_selected();
+        assert!(screens.open_row().is_none());
+        screens.move_sel(1);
+        assert_eq!(screens.press(), Some(Press::Open));
+        screens.open_selected();
+        assert_eq!(screens.open_row().map(|row| row.id.as_str()), Some("keys"));
+
+        screens.back();
+        screens.set_rows(Vec::new());
+        assert_eq!(screens.press(), Some(Press::New));
     }
 
     /// B walks back out one screen at a time, and says when there is nothing
@@ -391,7 +452,8 @@ mod tests {
         screens.move_sel(-1);
         assert_eq!(screens.selected(), 0);
         screens.move_sel(99);
-        assert_eq!(screens.selected(), rows().len() - 1);
+        // The New row sits above the maps, so the last index is their count.
+        assert_eq!(screens.selected(), rows().len());
         screens.open_selected();
         screens.move_sel(99);
         assert_eq!(screens.press(), Some(Press::Take(MapAction::Delete)));

@@ -13,7 +13,7 @@ use crate::config::AppConfig;
 use crate::event::bindings::Action;
 use crate::event::game::input_map::{Dir, RawTarget, Side};
 use crate::overlay::dial_edit::EditItem;
-use crate::overlay::game::input_maps::{MapAction, MapRow, Press};
+use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{EditPress, Slot, StickTargets, Take, Targets};
 use crate::overlay::game::menu::GameRow;
 use crate::overlay::menu::Section;
@@ -179,6 +179,7 @@ impl App {
     /// A on whichever of the three lists is up.
     fn input_maps_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.input_maps.press() {
+            Some(Press::New) => self.ask_new_map_name(out),
             Some(Press::Open) => self.ui.input_maps.open_selected(),
             Some(Press::Take(action)) => self.take_map_action(action, out),
             Some(Press::Confirm(true)) => self.remove_input_map(out),
@@ -198,52 +199,65 @@ impl App {
                 self.use_input_map(&id, out);
                 self.ui.input_maps.back();
             }
-            MapAction::Buttons => {
+            MapAction::Edit => {
                 let name = self.ui.input_maps.open_row().map(|row| row.name.clone());
                 self.ui.input_maps.close();
                 self.ui.map_edit.open(id, name.unwrap_or_default());
                 self.refresh_map_edit();
             }
-            MapAction::Rename => self.ask_map_name(false, out),
-            MapAction::Duplicate => self.ask_map_name(true, out),
+            MapAction::Rename => self.ask_map_name(NameFor::Rename, out),
+            MapAction::Duplicate => self.ask_map_name(NameFor::Duplicate, out),
             MapAction::Delete | MapAction::Reset => self.ui.input_maps.ask_confirm(),
         }
     }
 
     /// Hand the keyboard a name to edit: a rename starts from the current one,
     /// a copy from `<name> copy`.
-    fn ask_map_name(&mut self, copy: bool, out: &mut Vec<AppCommand>) {
+    fn ask_map_name(&mut self, what: NameFor, out: &mut Vec<AppCommand>) {
         let Some(row) = self.ui.input_maps.open_row() else {
             return;
         };
-        let text = match copy {
-            true => format!("{} copy", row.name),
-            false => row.name.clone(),
+        let text = match what {
+            NameFor::Duplicate => format!("{} copy", row.name),
+            _ => row.name.clone(),
         };
-        self.ui.input_maps.start_naming(copy, text);
+        self.ui.input_maps.start_naming(what, text);
         self.ui.osk(OskCommand::Show, &self.browser, out);
     }
 
-    /// The keyboard submitted a name. A copy opens its own screen: it was made
-    /// to be set up.
+    /// The list's New row: a name first, since the map is a file under it.
+    fn ask_new_map_name(&mut self, out: &mut Vec<AppCommand>) {
+        self.ui
+            .input_maps
+            .start_naming(NameFor::New, NEW_MAP_NAME.to_string());
+        self.ui.osk(OskCommand::Show, &self.browser, out);
+    }
+
+    /// The keyboard submitted a name. A new map and a copy both open their own
+    /// screen: they were made to be set up.
     fn name_input_map(&mut self, text: String, out: &mut Vec<AppCommand>) {
-        let (Some(naming), Some(id)) = (
-            self.ui.input_maps.take_naming(),
-            self.ui.input_maps.open_id_str().map(str::to_string),
-        ) else {
+        let Some(naming) = self.ui.input_maps.take_naming() else {
             return;
         };
-        match naming.copy {
-            true => {
+        let open = self.ui.input_maps.open_id_str().map(str::to_string);
+        match (naming.what, open) {
+            (NameFor::New, _) => {
+                let new_id = self.event_handler.new_input_map(text);
+                self.refresh_input_maps();
+                self.ui.input_maps.open_id(&new_id);
+            }
+            (NameFor::Duplicate, Some(id)) => {
                 let new_id = self.event_handler.duplicate_input_map(&id, text);
                 self.refresh_input_maps();
                 self.ui.input_maps.open_id(&new_id);
             }
-            false => {
+            (NameFor::Rename, Some(id)) => {
                 self.event_handler
                     .rename_input_map(&id, text, &self.browser, out);
                 self.refresh_input_maps();
             }
+            // The map went away while the keyboard was up.
+            (_, None) => {}
         }
     }
 
