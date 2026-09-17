@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>indexeddb</title>
+<!--
+    Does IndexedDB work end to end, not just exist? Opens a database, writes a
+    record, reads it back, and beacons each step. A reload reports what survived,
+    which is the half that tells persistent storage from a stub.
+
+    Large type because the answer has to be readable on a 640x480 panel, and a
+    beacon per step because a headless run has no screen to read.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #e8e8f0; }
+  body { font: 700 22px/1.4 monospace; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: 10px; }
+  #last { font-size: 30px; color: #3fb8a0; }
+  #steps { font-size: 16px; color: #ff8a6b; white-space: pre; text-align: center; }
+</style>
+
+<div id="last">opening...</div>
+<div id="steps"></div>
+
+<script>
+  var log = [];
+  function report(msg) {
+    log.push(msg);
+    document.getElementById('steps').textContent = log.join('\n');
+    document.getElementById('last').textContent = msg;
+    fetch('/report?page=indexeddb&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  if (!window.indexedDB) {
+    report('step=missing');
+  } else {
+    var open = indexedDB.open('retsurf-probe', 1);
+    open.onupgradeneeded = function () {
+      open.result.createObjectStore('kv');
+      report('step=upgrade');
+    };
+    open.onerror = function () {
+      report('step=open-failed err=' + (open.error && open.error.name));
+    };
+    open.onsuccess = function () {
+      var db = open.result;
+      report('step=open');
+      // What a previous run left, if the store is on disk at all.
+      var read = db.transaction('kv', 'readonly').objectStore('kv').get('mark');
+      read.onsuccess = function () {
+        report('step=read was=' + (read.result === undefined ? 'none' : read.result));
+        var stamp = 'run-' + log.length;
+        var write = db.transaction('kv', 'readwrite').objectStore('kv').put(stamp, 'mark');
+        write.onsuccess = function () { report('step=wrote value=' + stamp); };
+        write.onerror = function () { report('step=write-failed'); };
+      };
+      read.onerror = function () { report('step=read-failed'); };
+    };
+  }
+</script>

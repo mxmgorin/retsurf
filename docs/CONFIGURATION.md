@@ -21,7 +21,9 @@ to delete.
 **Settings > Advanced > Clear browsing data** wipes history, cookies, localStorage, the
 HTTP cache, the saved tab session and the finished downloads, and closes the open tabs
 back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
-speed-dial pins, settings and bindings are left alone.
+speed-dial pins, settings and bindings are left alone. **IndexedDB is not cleared**: the
+engine has no category for it yet, so a site's databases under `servo/clientstorage/`
+survive until that directory is deleted by hand.
 
 **Settings > Advanced > Restore all defaults** is the other half: every settings row, the
 speed-dial pins and the control bindings go back to how they ship, and nothing you saved
@@ -85,6 +87,8 @@ container_queries = true      # CSS container queries (@container)   — essenti
 fontface = true               # web fonts (@font-face / FontFace)    — essential
 intersection_observer = true  # IntersectionObserver (lazy-load)     — essential
 resize_observer = true        # ResizeObserver                       — essential
+indexeddb = true              # IndexedDB (apps and games store here) — essential
+storage_manager = true        # navigator.storage: quota, persistence       — essential
 webgl2 = true                 # WebGL 2.0 (GLES 3.0-class 3D)        — balanced+
 offscreen_canvas = true       # OffscreenCanvas (canvas off-thread)  — balanced+
 webgpu = false                # WebGPU (next-gen GPU API)            — full only

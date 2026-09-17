@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Servo experimental web-platform features (`[experimental]`). retsurf turns
 /// these on after startup — Servo ships them off but the modern web needs them.
-/// The 12 bools are the source of truth; the settings "Web features" preset
+/// The 14 bools are the source of truth; the settings "Web features" preset
 /// ([`ExperimentalPreset`]) is derived from them. Default is `Balanced`
 /// (essentials + WebGL2/OffscreenCanvas). Future per-site overrides hang off here.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,6 +26,14 @@ pub struct ExperimentalConfig {
     pub intersection_observer: bool,
     /// ResizeObserver (`dom_resize_observer_enabled`).
     pub resize_observer: bool,
+    /// IndexedDB (`dom_indexeddb_enabled`) — the store web apps and games keep
+    /// their assets and saves in. Off in Servo, and absent rather than failing,
+    /// so a page that needs it dies at startup.
+    pub indexeddb: bool,
+    /// `navigator.storage` (`dom_storage_manager_api_enabled`) — quota and
+    /// persistence. Libraries probe `estimate()` to tell private mode from
+    /// normal, so its absence sends them down the wrong branch.
+    pub storage_manager: bool,
     /// Web Notifications (`dom_notification_enabled`).
     pub notification: bool,
     /// Async Clipboard API (`dom_async_clipboard_enabled`).
@@ -48,7 +56,8 @@ pub enum ExperimentalPreset {
     /// All features off — most stable, but breaks most modern sites.
     Off,
     /// Layout + compatibility essentials only (Grid, columns, container queries,
-    /// web fonts, Intersection/ResizeObserver); graphics and niche DOM APIs off.
+    /// web fonts, Intersection/ResizeObserver, IndexedDB, navigator.storage);
+    /// graphics and niche DOM APIs off.
     Minimal,
     /// Handheld default: the essentials plus WebGL2 + OffscreenCanvas.
     Balanced,
@@ -108,6 +117,8 @@ impl ExperimentalPreset {
             fontface: true,
             intersection_observer: true,
             resize_observer: true,
+            indexeddb: true,
+            storage_manager: true,
             notification: true,
             async_clipboard: true,
             permissions: true,
@@ -122,6 +133,8 @@ impl ExperimentalPreset {
             fontface: false,
             intersection_observer: false,
             resize_observer: false,
+            indexeddb: false,
+            storage_manager: false,
             notification: false,
             async_clipboard: false,
             permissions: false,
@@ -137,6 +150,8 @@ impl ExperimentalPreset {
                 fontface: true,
                 intersection_observer: true,
                 resize_observer: true,
+                indexeddb: true,
+                storage_manager: true,
                 ..none
             },
             // Handheld default: essentials + the graphics the hardware supports.
@@ -168,6 +183,7 @@ mod tests {
     fn default_is_balanced() {
         let c = ExperimentalConfig::default();
         assert!(c.grid && c.fontface && c.intersection_observer);
+        assert!(c.indexeddb && c.storage_manager);
         assert!(c.webgl2 && c.offscreen_canvas);
         assert!(!c.webgpu && !c.notification && !c.permissions && !c.async_clipboard);
         assert_eq!(ExperimentalPreset::detect(&c), ExperimentalPreset::Balanced);
