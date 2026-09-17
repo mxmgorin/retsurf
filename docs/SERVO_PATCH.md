@@ -19,7 +19,7 @@ installed under the internals pref. It takes `js::DefineTestingFunctions` by its
 Itanium-mangled symbol name, which MSVC does not produce — it fails to link on
 Windows, so it stays off the line every platform builds.
 
-The three below have a design worth writing down. The rest are short fixes whose
+The four below have a design worth writing down. The rest are short fixes whose
 commit messages carry the reasoning, with the diffs in `patches/`:
 
 - **`components/config`: let the malloc heap's GC thresholds be set by pref.**
@@ -55,9 +55,9 @@ The patch makes both optional: when the connection/adapter is unavailable, it
 skips inserting into `painter_surfman_details_map` instead of panicking. WebGL/
 WebGPU is then disabled for that painter; everything else renders normally.
 
-The matching half is in retsurf: `surfman::Connection::new()` *panics* (rather
-than returning `Err`) when EGL symbols are missing, so `render.rs` wraps it in
-`catch_unwind` and returns `None` on failure.
+The matching half is in retsurf: the connection is built from SDL's own
+`EGLDisplay`, and where SDL is not on EGL there is none to build, so
+`connection()` returns `None`.
 
 ### Why
 
@@ -109,11 +109,77 @@ longer asserts.
 
 ### Why
 
-This is that patch's missing half, and it is **not** software-only: the aarch64
-handheld builds are `--no-default-features`, so `webgl` is off, `connection()`
-returns `None`, nothing is inserted, and the same panic is waiting there. It
-went unnoticed because `panic = "abort"` turns it into an exit code at the very
-end of a run, after the window is already gone.
+This is that patch's missing half, and it is **not** software-only: any target
+where `connection()` returns `None` — SDL not on EGL, or a blob the composite
+path cannot use — inserts nothing and has the same panic waiting. It went
+unnoticed because `panic = "abort"` turns it into an exit code at the very end
+of a run, after the window is already gone.
+
+## `components/paint`: hand the front buffer back when it cannot be sampled
+
+A page that opened a WebGL context killed the process one frame later:
+
+```
+thread 'main' panicked at surfman-0.13.0/src/renderbuffers.rs:30:
+Should have destroyed the FBO renderbuffers with `destroy()`!
+Segmentation fault (core dumped)
+```
+
+`WebGLExternalImages::lock_swap_chain` takes the front buffer out of the swap
+chain and passes it **by value** to `RenderingContext::create_texture`, whose
+default returns `None` — so the `Surface` died inside that default body, and
+surfman panics on any surface not destroyed through its device.
+
+`create_texture` now returns `Result<_, Surface>` (default `Err(surface)`), and
+the caller recycles the surface into the swap chain. A `SurfaceTexture` for the
+compositor to sample needs a GL texture name created in *our* context, which is
+the surfman fork this does not attempt; until then the canvas stays empty.
+
+### Why
+
+- **`Option` cannot express the failure.** The surface is consumed before the
+  embedder can refuse, so the only safe refusal is one that gives it back.
+  surfman's own `create_surface_texture` returns `Result<_, (Error, Surface)>`.
+- **The API already documents the absence.** `create_texture` is a defaulted
+  trait method whose contract is "may not be implemented"; an embedder taking
+  that path should get an empty canvas, not a dead process.
+- **It ships broken.** Every build with the `webgl` feature reaches this, which
+  since the per-core builds gained it is every build we ship: desktop
+  Linux/Windows/macOS, the Android APK and all four arm64 variants. Only an
+  armhf/software build, which compiles WebGL out, is safe.
+
+## `components/layout`: an in-flow box that becomes absolutely positioned
+
+A flex or grid container, a `display: flow-root`, or a block-level replaced
+element such as `canvas { display: block }` lost its box when script or a
+stylesheet gave it `position: absolute` or `fixed` after it had been laid out:
+`getBoundingClientRect()` returned `0x0` and nothing painted, while the computed
+`position` and `clientWidth/Height` still read as though the box were there. An
+element created out of flow was fine, so it was the incremental path, not the box.
+
+### Why
+
+`position` carries `rebuild_box` damage, so layout takes
+`BoxDamageAction::TryRebuild` and calls
+`rebuild_box_tree_from_independent_formatting_context` (`components/layout/dom.rs`).
+Every arm there guards against the box kind changing under it — floats check
+`is_floating()`, the out-of-flow arms and `FlexLevelBox::FlexItem` check
+`is_absolutely_positioned()` — except `BlockLevelBox::Independent`, which checked
+only the display and `BlockLevelCreator::new_for_inflow_block_level_element`.
+Neither looks at `position`, so a just-absolutely-positioned element was rebuilt
+in place as an in-flow formatting context and the function returned `true`: no
+ancestor rebuilt, and the box never joined its containing block's out-of-flow
+list. The patch adds the missing guard, which falls back to the ancestor rebuild
+that plain blocks (`SameFormattingContextBlock`) already take.
+
+Floats need no guard: a float stays in its parent's box list, so rebuilding it
+there loses nothing — measured.
+
+This is what blanked a page that entered fullscreen, since Servo's UA rule
+`*|*:not(:root):fullscreen` sets `position: fixed` on the element a page
+fullscreens, and games and modals usually fullscreen a flex wrapper or a canvas.
+`tests/pages/fixed-overlay.html` is the reduction; the analysis, including what
+remains unexplained, is in the workshop notes (`UPSTREAM_SERVO_IFC_OUT_OF_FLOW.md`).
 
 ## Cost
 

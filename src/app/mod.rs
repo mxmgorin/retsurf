@@ -7,7 +7,10 @@ mod command;
 mod execute;
 mod router;
 
-pub use command::{AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
+pub use command::{
+    AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand, MenuAction,
+    PromptAction, SettingsAction,
+};
 
 use crate::browser::AppBrowser;
 use crate::data::session::Session;
@@ -62,8 +65,10 @@ pub struct App {
     thread_cpu: crate::platform::threads::ThreadCpu,
     /// Holds `performance` while a page loads (`[performance] cpu_boost_on_load`).
     cpu_boost: crate::platform::cpufreq::LoadBoost,
-    /// When the last frame was presented, for [`App::pace_frame`].
-    last_frame: Instant,
+    /// When the last frame reached the panel: a present must not outrun it.
+    last_present: Instant,
+    /// When the last pass ended: a pass that presented nothing must not free-run.
+    last_pass: Instant,
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
     /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
     _audio: Option<sdl2::AudioSubsystem>,
@@ -87,10 +92,8 @@ const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
 /// long enough that the document being replaced has finished going away.
 const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 
-/// How long a pass that presented nothing waits, where the backend has no frame
-/// cap of its own. Only the present blocks on a vsynced backend, so skipping it
-/// leaves nothing to pace the loop; 60 Hz costs at most one frame of latency on
-/// the input that does need a redraw.
+/// How long a pass that neither presented nor waited on the queue sleeps, where
+/// the backend has no frame cap of its own — nothing else is left to pace it.
 const SKIPPED_PASS_INTERVAL: Duration = Duration::from_millis(16);
 
 impl App {
@@ -106,7 +109,7 @@ impl App {
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.
         crate::platform::threads::prioritize_main();
-        let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
+        let event_handler = AppEventHandler::new(sdl, config.input.clone(), &config.game_mode)?;
         let ui = AppUi::new(
             &window,
             &config.display,
@@ -116,6 +119,7 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
+            event_handler.input_map_name().to_string(),
             crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");
@@ -145,12 +149,26 @@ impl App {
             frame_timer,
             thread_cpu,
             cpu_boost,
-            last_frame: Instant::now(),
+            last_present: Instant::now(),
+            last_pass: Instant::now(),
             _audio: audio,
         })
     }
 
+    /// Hand the page the panel it is on. Only a resize or a move can change it,
+    /// so it is pushed at those rather than measured every frame.
+    pub(super) fn sync_screen_geometry(&self) {
+        let (screen, window) = self.window.screen_geometry();
+        self.browser.set_screen_geometry(screen, window);
+    }
+
     pub fn run(mut self) {
+        self.sync_screen_geometry();
+        // Both before the first tab: a page reads `devicePixelRatio` and
+        // `screen` while it parses, and only some read them again on resize.
+        self.ui.seed_scale(&self.window, &self.browser);
+        // A pad plugged in before we started sends no connect event of its own.
+        self.event_handler.announce_pads(&self.browser);
         self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
@@ -226,12 +244,16 @@ impl App {
             // frame (set before input is handled in `wait`).
             let home_changed = self.ui.set_home_active(self.browser.on_home_page());
 
-            self.event_handler.wait(
+            let waited = self.event_handler.wait(
                 &mut self.window,
                 &mut self.ui,
                 &mut self.browser,
                 &mut commands,
             );
+
+            // A key the map editor's picker took, before the UI is built:
+            // the row has to show it on this frame, not the next.
+            self.drain_map_pick(&mut commands);
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
@@ -239,6 +261,12 @@ impl App {
             for request in self.browser.take_download_requests() {
                 self.ui.menu.downloads.start(request, &self.event_sender);
             }
+            // Rumble a page asked for, played here because the main loop owns
+            // the SDL controllers.
+            for request in self.browser.take_haptic_requests() {
+                self.event_handler.haptic(&self.browser, request);
+            }
+
             // Files a page built in JS and handed us whole: ask the signalling
             // pages for them, then save whatever earlier reads returned.
             self.browser.poll_blob_downloads();
@@ -306,7 +334,7 @@ impl App {
             let drew = self.draw(page_painted);
             self.frame_timer.tick();
             self.thread_cpu.tick();
-            self.pace_frame(drew);
+            self.pace_frame(drew, waited);
         }
 
         self.thread_cpu.report_run();
@@ -393,25 +421,28 @@ impl App {
         true
     }
 
-    /// Hold the loop to a frame interval when presenting doesn't pace it. Two
-    /// cases: the software renderer has no vsync to block on at all, and a pass
-    /// that skipped the present never reached the vsync the GL path leans on —
-    /// and `wait` deliberately does not block while a gamepad is connected, for
-    /// exactly that reason. Measured free-running at 300-500 passes a second on
-    /// an A55 handheld and 1600 on a desktop. Outside the frame timer on purpose,
-    /// so the figures it logs stay the cost of the work.
-    fn pace_frame(&mut self, drew: bool) {
-        let interval = match self.window.frame_interval() {
-            Some(interval) => Some(interval),
-            None => (!drew).then_some(SKIPPED_PASS_INTERVAL),
+    /// Hold the loop to a frame interval when nothing else paces it: the software
+    /// renderer has no vsync to block on, and a pass that neither presented nor
+    /// waited on the queue reached neither. Free-running measures 300-500 passes/s.
+    fn pace_frame(&mut self, drew: bool, waited: bool) {
+        let (interval, since) = if drew {
+            (self.window.frame_interval(), self.last_present.elapsed())
+        } else {
+            (
+                (!waited).then_some(SKIPPED_PASS_INTERVAL),
+                self.last_pass.elapsed(),
+            )
         };
         if let Some(interval) = interval {
-            let since = self.last_frame.elapsed();
             if since < interval {
                 std::thread::sleep(interval - since);
             }
         }
-        self.last_frame = Instant::now();
+        let now = Instant::now();
+        if drew {
+            self.last_present = now;
+        }
+        self.last_pass = now;
     }
 }
 

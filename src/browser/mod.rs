@@ -25,9 +25,12 @@ pub use engine::effective_user_agent;
 pub use home::HOME_URL;
 pub use url::try_into_url;
 
+mod pads;
+pub use pads::PadSlots;
+
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
+    config::{AppConfig, ExperimentalConfig, PageTheme},
     event::user::{UserEvent, UserEventSender},
 };
 use servo::profile_traits::mem::MemoryReportResult;
@@ -53,6 +56,9 @@ pub struct BrowserState {
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
+    /// Whether the page holds the Fullscreen API. Per tab, so switching tabs and
+    /// closing one need no reset of their own.
+    fullscreen: bool,
 }
 
 impl BrowserState {
@@ -80,6 +86,7 @@ impl Default for BrowserState {
             location: "".into(),
             page_url: "".into(),
             loading: false,
+            fullscreen: false,
         }
     }
 }
@@ -189,6 +196,19 @@ struct AppBrowserInner {
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
     forced_dark: Rc<servo::user_contents::UserStyleSheet>,
+    /// Pads the page has been told about, by the slot it sees them under. Held
+    /// here rather than in the event handler because every fresh document has to
+    /// be told again: a `Connected` only reaches the document that is loaded.
+    pads: RefCell<PadSlots>,
+    /// `[input] haptics`: whether a page may rumble the pad. Gates the requests
+    /// and what a `Connected` advertises.
+    haptics: Cell<bool>,
+    /// Rumble requests from pages, queued by the delegate for the main loop to
+    /// play on the SDL controllers it does not own. Drained every pass.
+    haptic_requests: RefCell<Vec<servo::GamepadHapticEffectRequest>>,
+    /// The panel and the window on it, for the page's `screen` and `outerWidth`.
+    /// Servo answers those with zeroes unless the delegate supplies them.
+    screen: Cell<servo::ScreenGeometry>,
     /// Latest memory report from Servo (see [`AppBrowser::request_memory_report`]).
     /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
     /// main loop. Drained by [`AppBrowser::take_memory_report`].
@@ -200,11 +220,13 @@ impl AppBrowserInner {
         servo: servo::Servo,
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
-        download_exts: Vec<String>,
         adblock: Adblock,
-        content_filter: ContentFilter,
-        browser: &BrowserConfig,
+        config: &AppConfig,
     ) -> Self {
+        let browser = &config.browser;
+        let download_exts = config.downloads.extensions.clone();
+        let content_filter = ContentFilter::from_config(&config.data_saving);
+        let haptics = config.input.haptics;
         // Sanitize the configured zoom: Servo clamps it to [0.1, 10.0] anyway,
         // and a zero/negative/NaN default would make every tab unusable.
         let zoom = browser.page_zoom;
@@ -252,6 +274,10 @@ impl AppBrowserInner {
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             forced_dark,
+            pads: RefCell::new(PadSlots::default()),
+            haptics: Cell::new(haptics),
+            haptic_requests: RefCell::new(vec![]),
+            screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
         }
     }
@@ -309,10 +335,8 @@ impl AppBrowser {
             servo,
             rendering_ctx,
             event_sender.clone(),
-            config.downloads.extensions.clone(),
             Adblock::new(&config.adblock),
-            ContentFilter::from_config(&config.data_saving),
-            &config.browser,
+            config,
         );
 
         Ok(Self {
@@ -326,6 +350,14 @@ impl AppBrowser {
             .active_webview()
             .map(|tab| tab.animating())
             .unwrap_or(false)
+    }
+
+    /// Whether the active tab's page holds fullscreen, which hides the chrome.
+    #[inline]
+    pub fn is_fullscreen(&self) -> bool {
+        let tabs = self.inner.tabs.borrow();
+        tabs.get(self.inner.active.get())
+            .is_some_and(|t| t.state.fullscreen)
     }
 
     /// Whether the active tab is showing the built-in start page (see [`home`]).
@@ -525,6 +557,65 @@ impl AppBrowser {
         }
 
         false
+    }
+
+    /// A pad the page should see. Sent now for the document that is loaded, and
+    /// again from [`Self::announce_pads`] for every document that follows.
+    pub fn pad_connected(&self, instance_id: u32, name: String) {
+        let slot = self
+            .inner
+            .pads
+            .borrow_mut()
+            .connect(instance_id, name.clone());
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::connected(slot, name, self.inner.haptics.get()),
+        ));
+    }
+
+    pub fn pad_disconnected(&self, instance_id: u32) {
+        let Some(slot) = self.inner.pads.borrow_mut().disconnect(instance_id) else {
+            return;
+        };
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::disconnected(slot),
+        ));
+    }
+
+    /// The slot a pad's input belongs to, or `None` for one never announced.
+    pub fn pad_slot(&self, instance_id: u32) -> Option<usize> {
+        self.inner.pads.borrow().slot_of(instance_id)
+    }
+
+    /// The SDL instance behind a slot, for playing a page's rumble on it.
+    pub fn pad_instance(&self, slot: usize) -> Option<u32> {
+        self.inner.pads.borrow().instance_of(slot)
+    }
+
+    /// Rumble requests queued since the last pass (see the delegate).
+    pub fn take_haptic_requests(&self) -> Vec<servo::GamepadHapticEffectRequest> {
+        std::mem::take(&mut self.inner.haptic_requests.borrow_mut())
+    }
+
+    /// `[input] haptics`, applied live. Documents already loaded keep the
+    /// capability they were told at `Connected`; the gate on requests is here.
+    pub fn set_haptics(&self, on: bool) {
+        self.inner.haptics.set(on);
+    }
+
+    /// Tell the page which panel it is on and where the window sits on it. In
+    /// device pixels; Servo divides by the webview's ratio for the CSS values.
+    pub fn set_screen_geometry(&self, screen: (u32, u32), window: (i32, i32, u32, u32)) {
+        let (width, height) = screen;
+        let (x, y, window_width, window_height) = window;
+        self.inner.screen.set(servo::ScreenGeometry {
+            size: euclid::Size2D::new(width as i32, height as i32),
+            // No docks or system bars on any target we ship to.
+            available_size: euclid::Size2D::new(width as i32, height as i32),
+            window_rect: euclid::Box2D::from_origin_and_size(
+                euclid::Point2D::new(x, y),
+                euclid::Size2D::new(window_width as i32, window_height as i32),
+            ),
+        });
     }
 
     /// Follow the chrome's zoom with the page's device pixel ratio. Every open

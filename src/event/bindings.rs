@@ -57,6 +57,10 @@ pub enum Action {
     /// Quit immediately. Unbound by default: the stock exit is a second
     /// Select+Start while settings is open (see [`default_store`]).
     Quit,
+    /// The Game Mode gesture, resolved against the mode's state: enter it, open
+    /// its menu inside, or close that menu. Leaving is the menu's Exit row, so
+    /// one gesture covers the whole mode (see [`crate::app`]).
+    GameMode,
     /// Switch to the next open tab (wraps around).
     TabNext,
     /// Switch to the previous open tab (wraps around).
@@ -80,7 +84,7 @@ pub enum Action {
 }
 
 /// Every action. [`GROUPS`] decides display order, so this only has to be complete.
-const ALL: [Action; 24] = [
+const ALL: [Action; 25] = [
     Action::Confirm,
     Action::Cancel,
     Action::Osk,
@@ -94,6 +98,7 @@ const ALL: [Action; 24] = [
     Action::Menu,
     Action::Settings,
     Action::Quit,
+    Action::GameMode,
     Action::TabNext,
     Action::TabPrev,
     Action::NewTab,
@@ -123,6 +128,7 @@ impl Bindable for Action {
             Action::Menu => "menu",
             Action::Settings => "settings",
             Action::Quit => "quit",
+            Action::GameMode => "game_mode",
             Action::TabNext => "tab_next",
             Action::TabPrev => "tab_prev",
             Action::NewTab => "new_tab",
@@ -161,6 +167,7 @@ impl Bindable for Action {
             Action::Menu => "Menu",
             Action::Settings => "Settings",
             Action::Quit => "Quit",
+            Action::GameMode => "Game Mode",
             Action::TabNext => "Next tab",
             Action::TabPrev => "Previous tab",
             Action::NewTab => "New tab",
@@ -228,6 +235,7 @@ impl Action {
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
+            Action::GameMode => AppCommand::GameMode,
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
@@ -255,6 +263,7 @@ pub const GROUPS: Groups<Action> = &[
             Action::Menu,
             Action::Settings,
             Action::Osk,
+            Action::GameMode,
             Action::Quit,
         ],
     ),
@@ -326,6 +335,9 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("hold:y", Action::Bookmark),
         ("select", Action::Menu),
         ("hold:select", Action::Settings),
+        // The pad's way in; the way out inside is hold:select, hardcoded there
+        // because Game Mode bypasses these tables (see `event::game_mode`).
+        ("select+y", Action::GameMode),
         // Pressed again while settings is open this quits — the only gamepad
         // exit on a handheld. Bind `quit` directly for a one-press exit.
         ("select+start", Action::Settings),
@@ -346,6 +358,9 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
         ("ctrl+,", Action::Settings),
+        // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
+        // is the only key the browser still answers.
+        ("ctrl+alt+g", Action::GameMode),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
         ("ctrl+t", Action::TabNext),
@@ -385,9 +400,34 @@ fn bindings_path() -> String {
     format!("{}bindings.toml", config::data_dir())
 }
 
-/// Load `bindings.toml`, writing the defaults as a template on first run.
+/// Load `bindings.toml`, writing the defaults as a template on first run and
+/// merging in the ones an older file predates (see [`merge_missing_defaults`]).
 pub fn load_store() -> Store {
-    Store::load(bindings_path(), default_store)
+    let mut store = Store::load(bindings_path(), default_store);
+    merge_missing_defaults(&mut store);
+    store
+}
+
+/// Give back the default gestures of an action with no binding at all in that
+/// device's table: the file is written only when absent, so an action added after
+/// a user's first run would otherwise ship unreachable.
+fn merge_missing_defaults(store: &mut Store) {
+    for (table, defaults) in [
+        (&mut store.gamepad, default_gamepad_bindings()),
+        (&mut store.keyboard, default_keyboard_bindings()),
+    ] {
+        // Snapshot first, so every gesture of an unbound action comes back
+        // together — the first insertion would otherwise hide the rest.
+        let bound: Vec<String> = table.values().cloned().collect();
+        let missing: Vec<(String, String)> = defaults
+            .into_iter()
+            .filter(|(gesture, action)| !table.contains_key(gesture) && !bound.contains(action))
+            .collect();
+        for (gesture, action) in missing {
+            log::info!("bindings: `{action}` had nothing bound; restoring `{gesture}`");
+            table.insert(gesture, action);
+        }
+    }
 }
 
 /// Write an edited store back (the settings overlay saving on close).
@@ -473,6 +513,78 @@ mod tests {
             let action = Action::parse(name).unwrap_or_else(|| panic!("`{name}` is not an action"));
             assert_eq!(bindings.key(code, gesture.mods), Some(action), "`{text}`");
         }
+    }
+
+    /// The one key that still fires inside Game Mode, where every other one goes
+    /// to the page — so a plain key would be one the game wanted.
+    #[test]
+    fn the_game_mode_key_carries_a_modifier() {
+        let store = default_store();
+        let mut found = 0;
+        for (text, name) in &store.keyboard {
+            if Action::parse(name) != Some(Action::GameMode) {
+                continue;
+            }
+            found += 1;
+            let gesture = inputbind::KeyGesture::parse(text)
+                .unwrap_or_else(|| panic!("`{text}` is not a key gesture"));
+            assert!(!gesture.mods.is_plain(), "`{text}` is a plain key");
+        }
+        assert_eq!(found, 1, "game_mode needs exactly one default key");
+    }
+
+    /// The case this exists for: a file written before `game_mode` existed. It
+    /// is unreachable on both devices until the defaults are merged back.
+    #[test]
+    fn an_action_the_file_predates_gets_its_defaults_back() {
+        let mut store = default_store();
+        store.gamepad.retain(|_, name| name != "game_mode");
+        store.keyboard.retain(|_, name| name != "game_mode");
+        merge_missing_defaults(&mut store);
+        assert_eq!(store, default_store());
+    }
+
+    /// A rebound action is not missing, so the user's choice survives — and the
+    /// *other* device still gets its default, which is how one file can be half
+    /// upgraded (measured on a real one, 2026-09-15).
+    #[test]
+    fn a_rebound_action_is_left_alone_device_by_device() {
+        let mut store = default_store();
+        store.keyboard.retain(|_, name| name != "game_mode");
+        store.keyboard.insert("ctrl+g".into(), "game_mode".into());
+        store.gamepad.retain(|_, name| name != "game_mode");
+        merge_missing_defaults(&mut store);
+        assert_eq!(
+            store.keyboard.get("ctrl+g").map(String::as_str),
+            Some("game_mode")
+        );
+        assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
+        assert_eq!(
+            store.gamepad.get("select+y").map(String::as_str),
+            Some("game_mode")
+        );
+    }
+
+    /// A gesture the file already spells is the user's, whatever it names — the
+    /// merge may never take one back.
+    #[test]
+    fn a_taken_gesture_is_never_reclaimed() {
+        let mut store = default_store();
+        store.gamepad.retain(|_, name| name != "game_mode");
+        store.gamepad.insert("select+y".into(), "reader".into());
+        merge_missing_defaults(&mut store);
+        assert_eq!(
+            store.gamepad.get("select+y").map(String::as_str),
+            Some("reader")
+        );
+    }
+
+    /// Merging the stock file changes nothing, so it cannot churn on launch.
+    #[test]
+    fn merging_the_defaults_is_a_no_op() {
+        let mut store = default_store();
+        merge_missing_defaults(&mut store);
+        assert_eq!(store, default_store());
     }
 
     /// `scroll` latches inside the pad, so a key bound to it would do nothing.

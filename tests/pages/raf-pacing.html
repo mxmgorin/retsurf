@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>raf pacing</title>
+<!-- Measures what the page gets, not what it costs: the draw is deliberately
+     trivial, so any rate below the panel's is the embedder's pacing rather than
+     render work. Beacons the rAF rate and the inter-frame interval spread once a
+     second — aliasing against a poll shows up as intervals clustered on its
+     multiples, not as a lower average. ?mode=webgl clears a GL context instead of
+     a 2D one, so the same page measures both composite paths. -->
+<style>
+  body { margin: 0; font: 14px monospace; background: #fff; color: #000 }
+  #log { padding: 4px; white-space: pre }
+  canvas { display: block; border: 2px solid #000 }
+</style>
+<pre id="log"></pre>
+<canvas id="c" width="320" height="200"></canvas>
+<script>
+  var mode = /mode=webgl/.test(location.search) ? 'webgl' : '2d';
+
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=raf-pacing&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  var c = document.getElementById('c');
+  var gl = null, ctx = null;
+  if (mode === 'webgl') {
+    try { gl = c.getContext('webgl2') || c.getContext('webgl'); } catch (e) {}
+    if (!gl) { mode = '2d'; }
+  }
+  if (mode === '2d') { ctx = c.getContext('2d'); }
+  log('start mode=' + mode);
+
+  var frames = 0, x = 0;
+  var last = performance.now();
+  var windowStart = last;
+  var gaps = [];
+
+  function tick(now) {
+    var gap = now - last;
+    last = now;
+    gaps.push(gap);
+    frames++;
+    x = (x + 4) % c.width;
+
+    if (gl) {
+      gl.clearColor(x / c.width, 0.2, 0.8, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+      ctx.fillStyle = '#202080';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = '#e0e040';
+      ctx.fillRect(x, 80, 40, 40);
+    }
+
+    var elapsed = now - windowStart;
+    if (elapsed >= 1000) {
+      gaps.sort(function (a, b) { return a - b; });
+      // The three quartiles, not a mean: a bimodal spread is the whole signal,
+      // and a mean hides it.
+      var q = function (p) { return gaps[Math.min(gaps.length - 1, Math.floor(gaps.length * p))]; };
+      log('rate mode=' + mode
+          + ' fps=' + (frames * 1000 / elapsed).toFixed(1)
+          + ' p25=' + q(0.25).toFixed(1)
+          + ' p50=' + q(0.50).toFixed(1)
+          + ' p75=' + q(0.75).toFixed(1)
+          + ' max=' + gaps[gaps.length - 1].toFixed(1));
+      frames = 0;
+      gaps = [];
+      windowStart = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>

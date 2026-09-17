@@ -1,0 +1,116 @@
+//! Which pads the page knows about, and under which index.
+//!
+//! Not SDL's instance id: that grows with every replug, while the Gamepad API
+//! indexes a list of connected pads and the engine looks a pad up by that index.
+//! The list lives here rather than in the event handler because a `Connected`
+//! only reaches the document that is loaded when it is sent — every fresh
+//! document has to be told again.
+
+struct Pad {
+    instance_id: u32,
+    /// What the page reports as `Gamepad.id`.
+    name: String,
+}
+
+#[derive(Default)]
+pub struct PadSlots {
+    /// `None` is a slot a disconnect freed for reuse.
+    slots: Vec<Option<Pad>>,
+}
+
+impl PadSlots {
+    /// The slot for a newly connected pad, reusing the lowest free one.
+    pub fn connect(&mut self, instance_id: u32, name: String) -> usize {
+        if let Some(slot) = self.slot_of(instance_id) {
+            return slot;
+        }
+        let pad = Pad { instance_id, name };
+        match self.slots.iter().position(Option::is_none) {
+            Some(slot) => {
+                self.slots[slot] = Some(pad);
+                slot
+            }
+            None => {
+                self.slots.push(Some(pad));
+                self.slots.len() - 1
+            }
+        }
+    }
+
+    pub fn slot_of(&self, instance_id: u32) -> Option<usize> {
+        self.slots
+            .iter()
+            .position(|pad| pad.as_ref().is_some_and(|p| p.instance_id == instance_id))
+    }
+
+    /// The SDL instance in a slot — the reverse of [`Self::slot_of`], for
+    /// playing a page's rumble on the device it named.
+    pub fn instance_of(&self, slot: usize) -> Option<u32> {
+        self.slots.get(slot)?.as_ref().map(|p| p.instance_id)
+    }
+
+    /// Free the slot, reporting which one it was.
+    pub fn disconnect(&mut self, instance_id: u32) -> Option<usize> {
+        let slot = self.slot_of(instance_id)?;
+        self.slots[slot] = None;
+        Some(slot)
+    }
+
+    /// Every live pad, for telling a freshly loaded document what is plugged in.
+    pub fn live(&self) -> impl Iterator<Item = (usize, String)> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, pad)| pad.as_ref().map(|p| (slot, p.name.clone())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pad(name: &str) -> String {
+        name.to_owned()
+    }
+
+    #[test]
+    fn a_slot_is_reused_after_its_pad_goes() {
+        let mut slots = PadSlots::default();
+        assert_eq!(slots.connect(7, pad("one")), 0);
+        assert_eq!(slots.connect(9, pad("two")), 1);
+        assert_eq!(slots.disconnect(7), Some(0));
+        // The replugged pad takes the free slot, not a third one: the page
+        // indexes a list of connected pads.
+        assert_eq!(slots.connect(11, pad("three")), 0);
+        assert_eq!(slots.slot_of(9), Some(1));
+    }
+
+    #[test]
+    fn connecting_the_same_pad_twice_keeps_its_slot() {
+        let mut slots = PadSlots::default();
+        assert_eq!(slots.connect(3, pad("one")), 0);
+        assert_eq!(slots.connect(3, pad("one")), 0);
+        assert_eq!(slots.disconnect(3), Some(0));
+        assert_eq!(slots.disconnect(3), None);
+    }
+
+    #[test]
+    fn a_slot_resolves_back_to_its_instance() {
+        let mut slots = PadSlots::default();
+        slots.connect(7, pad("one"));
+        assert_eq!(slots.instance_of(0), Some(7));
+        slots.disconnect(7);
+        assert_eq!(slots.instance_of(0), None);
+        assert_eq!(slots.instance_of(3), None);
+    }
+
+    #[test]
+    fn live_lists_what_a_new_document_has_to_be_told() {
+        let mut slots = PadSlots::default();
+        slots.connect(4, pad("left"));
+        slots.connect(5, pad("right"));
+        slots.disconnect(4);
+        let live: Vec<(usize, String)> = slots.live().collect();
+        assert_eq!(live, vec![(1, pad("right"))]);
+    }
+}

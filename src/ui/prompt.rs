@@ -3,7 +3,7 @@
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
-use super::theme::{ACCENT, DIM, PANEL_FILL};
+use super::theme::{ACCENT, DIM, PANEL_FILL, SCRIM};
 use crate::app::{AppCommand, PromptAction};
 use crate::overlay::prompt::Prompt;
 use egui_phosphor::bold;
@@ -28,7 +28,7 @@ pub(super) fn add_prompt(
         egui::Order::Foreground,
         egui::Id::new("prompt_dim"),
     ))
-    .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(140));
+    .rect_filled(screen, 0.0, SCRIM);
 
     // Dialog text is cloned out first so the prompt can hand out its edit
     // buffer mutably while rendering (the select arm only needs reads).

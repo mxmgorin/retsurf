@@ -21,7 +21,9 @@ to delete.
 **Settings > Advanced > Clear browsing data** wipes history, cookies, localStorage, the
 HTTP cache, the saved tab session and the finished downloads, and closes the open tabs
 back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
-speed-dial pins, settings and bindings are left alone.
+speed-dial pins, settings and bindings are left alone. **IndexedDB is not cleared**: the
+engine has no category for it yet, so a site's databases under `servo/clientstorage/`
+survive until that directory is deleted by hand.
 
 **Settings > Advanced > Restore all defaults** is the other half: every settings row, the
 speed-dial pins and the control bindings go back to how they ship, and nothing you saved
@@ -85,6 +87,8 @@ container_queries = true      # CSS container queries (@container)   — essenti
 fontface = true               # web fonts (@font-face / FontFace)    — essential
 intersection_observer = true  # IntersectionObserver (lazy-load)     — essential
 resize_observer = true        # ResizeObserver                       — essential
+indexeddb = true              # IndexedDB (apps and games store here) — essential
+storage_manager = true        # navigator.storage: quota, persistence       — essential
 webgl2 = true                 # WebGL 2.0 (GLES 3.0-class 3D)        — balanced+
 offscreen_canvas = true       # OffscreenCanvas (canvas off-thread)  — balanced+
 webgpu = false                # WebGPU (next-gen GPU API)            — full only
@@ -108,6 +112,8 @@ toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats ov
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
 # them in this order. Available: "en" (QWERTY), "ru" (ЙЦУКЕН). Unknown names are
 # logged and skipped; an empty list falls back to ["en"].
+# The Fn key is not a layout: it swaps any of them for Escape, F1-F12 and the
+# navigation keys, which a character grid cannot carry.
 layouts = ["en", "ru"]
 
 [performance]
@@ -245,7 +251,137 @@ osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held na
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
 cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
+haptics = true             # let a page rumble the pad (the Gamepad vibration API)
+
+[game_mode]
+# Game Mode hands the input to the page and hides the chrome, so a web game gets
+# the keys and buttons the browser would otherwise take. The `game_mode` binding
+# (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
+# mode; inside, a held Select does the same, reserved and never the game's. That
+# menu is the only way in and out — it leads with Enable or Disable — and its
+# Input map row is where this one is picked (written back here), which is
+# why it opens outside the mode too; it also summons the on-screen keyboard over
+# the game. Which input map drives the pad and the keyboard while the mode is on: a
+# built-in ("keys" or "pad") or the stem of an input_maps/<id>.toml of your own.
+# See "Game Mode input maps" below for the format.
+input_map = "keys"
 ```
+
+## Game Mode input maps (`input_maps/*.toml`)
+
+An input map is what each button, stick direction and key sends to the page while
+Game Mode is on. Four ship built in, named for what the game sees rather than
+for what the pad becomes; `[game_mode] input_map` picks one by id.
+
+| id | name | what the game gets |
+| --- | --- | --- |
+| `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
+| `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
+| `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
+| `pad` | Gamepad passthrough | the whole pad reaches the page raw — sticks included, no cursor and no click — for games that read the Gamepad API themselves |
+
+There is no first-person template: Servo has no Pointer Lock, so a stick cannot
+turn a camera, and only the left mouse button has a route.
+
+The built-ins live in the binary and are always offered, so a later release can
+add one without touching your files. Put an `input_maps/<id>.toml` in the data dir
+to add a map of your own, or name it after a built-in to replace that one —
+deleting the file restores it. A file is read at startup; a typo costs its own
+binding and is logged, not the whole map.
+
+**The Game Mode menu's "Input map" row** is all of this without a keyboard or a
+file manager, which is the only way to do it on a handheld. It opens the list of
+maps, marked with the one in use and led by **New map...**; **A** on any map
+opens its own screen:
+
+| row | what it does |
+| --- | --- |
+| Use this map | hands it to Game Mode and writes `[game_mode] input_map` |
+| Edit | the editor below |
+| Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
+| Duplicate... | a copy under a name you type, bindings and all |
+| Delete | throws the file away, after a confirmation |
+| Reset to default | the same, on a built-in: the binary's own version comes back |
+
+**New map...** types a name and adds a map that binds nothing, which is
+passthrough: the whole pad reaches the page raw, with no cursor and no click
+until the editor gives it one. It opens on the new map, since that is what it
+was made for. A built-in the binary carries and no file shadows has nothing to
+remove, so it offers neither of the last two.
+
+**The editor** is a row per source — every button, then `stick.left` and
+`stick.right`. **A** opens what that source can send, **B** saves. For a button
+that is a key, the left mouse button, Passthrough or nothing; choosing *Key...*
+hands over to the on-screen keyboard, dimmed behind so it reads as a question
+rather than a keyboard. Its **Fn** key swaps to the keys no character grid
+carries — Escape, F1-F12, the navigation cluster, and Shift / Control / Alt /
+Meta on their own, which is what a game wanting a run or crouch key binds.
+
+**A stick opens rows of its own.** Its `sends` row is the whole stick — *Cursor*,
+*Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
+and gives the stick a row per direction to edit like a button. The file is one
+form or the other, so picking either takes the other away. A direction is offered
+no Passthrough: a stick read as directions withholds the whole axis, so the page
+would see nothing either way.
+
+Editing a built-in writes the `input_maps/<id>.toml` that replaces it, so deleting
+that file is still how you get the original back. The `[keyboard]` table and the
+layers below are the file's: they need names the screen has no room to pick.
+
+```toml
+name = "Vampire Survivors"    # what the menu shows; the file name is the id
+
+[pad]                         # buttons and the D-pad, by the bindings.toml names
+up = "ArrowUp"
+a = "Space"
+b = "z"
+x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
+y = "Shift"                   # a bare modifier: takes the left-hand `code`
+r2 = "mouse.left"             # the left mouse button, at the cursor
+l2 = "passthrough"            # reaches the page as the gamepad button it is
+r1 = "none"                   # consumed: inert while this map is active
+l1 = "layer:aim"              # holds a layer open; sends nothing itself
+
+[stick.left]                  # four directions, through [input] deadzone
+up = "ArrowUp"
+down = "ArrowDown"
+left = "ArrowLeft"
+right = "ArrowRight"
+
+[stick.right]
+analog = "mouse.cursor"       # or mouse.scroll — the whole stick, not a direction
+
+[keyboard]                    # physical keys; unlisted ones reach the game as-is
+w = "ArrowUp"
+
+[layer.aim.pad]               # while l1 is held
+a = "Shift"
+[layer.aim.keyboard]
+w = "ArrowDown"
+```
+
+**Targets** are a key name, or one of `mouse.left`, `mouse.cursor`,
+`mouse.scroll`, `passthrough`, `none`, `layer:<name>`. Only the left mouse button has a route
+today; the other two are refused with a line in the log. A key is written as one character (`z`), `Space`, or a
+standard name (`ArrowUp`, `Enter`, `Escape`, `Shift`); the `code` games branch on
+is derived from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
+speed = 1.5 }` says it out loud where they differ. `speed` scales `mouse.cursor`
+and `mouse.scroll`.
+
+**A bound source is withheld from the page's raw input**, so a button mapped to a
+key is not also delivered as a gamepad button — only `passthrough` is. A stick
+read as directions keeps its whole axis, since half an axis cannot be withheld —
+which also makes `passthrough` on one direction meaningless. `analog = "none"`
+keeps the axis and sends nothing, which is how a stick is made inert.
+
+**Select is reserved** in every map and every layer: holding it opens the Game
+Mode menu. A binding on it is refused with a line in the log.
+
+**Layers** are held, not toggled: the activator sends nothing of its own, and a
+button the layer leaves alone still means what `[pad]` says. What a source sends
+is decided when it goes down, so releasing the activator never strands a key that
+is still held. Layers carry buttons and keys, not sticks, and cannot open other
+layers.
 
 ## Bindings (`bindings.toml`)
 
@@ -294,8 +430,19 @@ to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
 cursor and page scroll — the scroll fallback for devices without a right
 analog stick) · `none`.
 
+Also `game_mode` (hand the input to the page for a web game — see `[game_mode]`
+above — the gesture opens that mode's menu, which carries the way in and out).
+
 Invalid buttons, keys, actions, or gestures are logged and skipped at startup —
 check the log if a binding doesn't respond.
+
+**Upgrades.** The file is written only when it is missing, so an action added in a
+later release would be unreachable in a file written before it. At startup any
+action with *nothing* bound on a device gets its default gestures back there (one
+log line each); a gesture the file already spells is never taken back, and an
+action you rebound is not missing, so your layout stands. The one consequence:
+clearing an action's last gesture doesn't stick — to make an action inert, bind
+it to a gesture you never press rather than removing it.
 
 ## Environment variables
 
@@ -323,7 +470,7 @@ files.
 | `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
 | `RETSURF_LOG_FILE` | — | Write logs to this file |
 | `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
-| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`/`kmsdrm`); auto-set to `wayland` on a Wayland desktop |
+| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`, or whatever the firmware's SDL ships); auto-set to `wayland` on a Wayland desktop |
 
 retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
 and Servo's GL stacks agree) — you don't normally set it yourself.

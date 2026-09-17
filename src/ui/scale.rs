@@ -4,6 +4,7 @@
 
 use super::AppUi;
 use crate::browser::AppBrowser;
+use crate::platform::window::AppWindow;
 use egui_sdl2::egui;
 
 /// The panel the chrome was drawn for; every other one is that, scaled. A pair
@@ -40,6 +41,27 @@ impl AppUi {
         log::info!("ui scale {wanted:.2} for {}x{} points", native.x, native.y);
         ctx.set_zoom_factor(wanted);
         self.forced_passes = self.forced_passes.max(1);
+    }
+
+    /// Install the scale before the first page is opened. `sync_scale` cannot:
+    /// it measures egui's laid-out rect, which does not exist until a frame has
+    /// run, and by then the page has already read `devicePixelRatio` once.
+    pub fn seed_scale(&mut self, window: &AppWindow, browser: &AppBrowser) {
+        let (width, height) = window.drawable_size();
+        let native = egui::vec2(width as f32, height as f32);
+        if !(1.0..=MAX_PANEL).contains(&native.x) || !(1.0..=MAX_PANEL).contains(&native.y) {
+            return;
+        }
+        // Only the page's ratio: egui installs its own zoom on the first frame,
+        // and setting it here leaves it laying out against a rect it has not
+        // measured yet.
+        let wanted = wanted_scale(native, self.forced_scale, self.ui_scale);
+        browser.set_hidpi(wanted);
+        log::info!(
+            "page scale {wanted:.2} seeded for {}x{} px",
+            native.x,
+            native.y
+        );
     }
 
     /// Adopt an edited `[display] scale`; the next frame installs it.

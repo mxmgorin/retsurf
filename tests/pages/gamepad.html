@@ -1,0 +1,82 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>gamepad probe</title>
+<!-- What the Gamepad API hands a page: whether a pad is listed at all, the
+     connect event, and the standard-mapping indices its buttons and axes arrive
+     under. The API is polled, so the page reads state in rAF rather than waiting
+     for events; only connect/disconnect are events. Beacons every change, so a
+     rig can drive the pad and read what the page saw. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #eee; font: 13px monospace }
+  #log { padding: 6px; white-space: pre }
+  b { color: #6f6 }
+</style>
+<pre id="log"></pre>
+<script>
+  function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+    fetch('/report?page=gamepad&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  log('api'
+      + ' getGamepads=' + (navigator.getGamepads ? 'yes' : 'MISSING')
+      + ' listed=' + (navigator.getGamepads ? navigator.getGamepads().length : -1));
+
+  window.addEventListener('gamepadconnected', function (e) {
+    var p = e.gamepad;
+    log('connected'
+        + ' index=' + p.index
+        + ' buttons=' + p.buttons.length
+        + ' axes=' + p.axes.length
+        + ' mapping=' + (p.mapping || 'none')
+        + ' id=' + String(p.id).replace(/[ &=]/g, '_'));
+  });
+  window.addEventListener('gamepaddisconnected', function (e) {
+    log('disconnected index=' + e.gamepad.index);
+  });
+
+  // Report only what changed: a pad at rest would otherwise flood the log. The
+  // count is reported on every change too — a pad that connects before the
+  // listener exists shows up in the list and in no event.
+  var last = {};
+  var lastCount = -1;
+  function poll() {
+    var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    var live = 0;
+    for (var n = 0; n < pads.length; n++) { if (pads[n]) { live++; } }
+    if (live !== lastCount) {
+      lastCount = live;
+      var first = null;
+      for (var k = 0; k < pads.length; k++) { if (pads[k]) { first = pads[k]; break; } }
+      log('pads live=' + live + ' slots=' + pads.length
+          + ' first=' + (first ? first.index + ':' + first.buttons.length + 'b'
+                               + first.axes.length + 'a' : 'none'));
+    }
+    for (var i = 0; i < pads.length; i++) {
+      var p = pads[i];
+      if (!p) { continue; }
+      for (var b = 0; b < p.buttons.length; b++) {
+        var key = 'b' + i + '.' + b;
+        var v = Math.round(p.buttons[b].value * 100) / 100;
+        var seen = key in last;
+        if (last[key] !== v) {
+          last[key] = v;
+          // The first sight of a pad is its resting state, not a press.
+          if (seen) { log('button pad=' + i + ' index=' + b + ' value=' + v); }
+        }
+      }
+      for (var a = 0; a < p.axes.length; a++) {
+        var akey = 'a' + i + '.' + a;
+        // Rounded hard: a resting stick jitters in the last decimals.
+        var av = Math.round(p.axes[a] * 10) / 10;
+        var seenAxis = akey in last;
+        if (last[akey] !== av) {
+          last[akey] = av;
+          if (seenAxis) { log('axis pad=' + i + ' index=' + a + ' value=' + av); }
+        }
+      }
+    }
+    requestAnimationFrame(poll);
+  }
+  requestAnimationFrame(poll);
+</script>

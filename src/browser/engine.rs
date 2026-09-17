@@ -191,7 +191,7 @@ fn resolve_user_agent(value: &str) -> Option<String> {
 
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
-fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 12] {
+fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
     [
         ("dom_webgl2_enabled", exp.webgl2),
         ("dom_webgpu_enabled", exp.webgpu),
@@ -205,6 +205,8 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
             exp.intersection_observer,
         ),
         ("dom_resize_observer_enabled", exp.resize_observer),
+        ("dom_indexeddb_enabled", exp.indexeddb),
+        ("dom_storage_manager_api_enabled", exp.storage_manager),
         ("dom_notification_enabled", exp.notification),
         ("dom_async_clipboard_enabled", exp.async_clipboard),
         ("dom_permissions_enabled", exp.permissions),

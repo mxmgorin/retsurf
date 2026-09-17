@@ -26,6 +26,12 @@ pub enum Focus {
     Prompt,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
     Menu,
+    /// Game Mode's own menu, over the still-running game.
+    GameMenu,
+    /// Its map list and one map's rows, opened from that menu.
+    GameInputMaps,
+    /// Its map editor, opened from a map.
+    GameMapEdit,
     /// The full-screen settings overlay (the on-screen keyboard can open over it
     /// to type into a text field, hence it ranks below `Osk`).
     Settings,
@@ -49,6 +55,12 @@ impl AppUi {
             Focus::Prompt
         } else if self.menu.visible {
             Focus::Menu
+        } else if self.game_menu.visible {
+            Focus::GameMenu
+        } else if self.input_maps.visible() {
+            Focus::GameInputMaps
+        } else if self.map_edit.visible() {
+            Focus::GameMapEdit
         } else if self.settings.visible() {
             Focus::Settings
         } else if self.hints.visible {
@@ -67,12 +79,19 @@ impl AppUi {
     /// bar when it holds focus, otherwise the focused page element.
     pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let to_address_bar = self.address_bar_focused();
+        self.osk.set_picking(self.map_edit.picking().is_some());
         let target = if self.prompt.visible() && self.prompt.has_text_field() {
             OskTarget::Prompt(self.prompt.input_mut())
         } else if self.settings.visible() && self.settings.selected_is_text() {
             // The settings overlay's focused text row: typing lands in the draft
             // (the OSK only opens over a text row — see `App::settings_confirm`).
             OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
+        } else if self.map_edit.picking().is_some() {
+            // The map editor turned the keyboard into a key picker.
+            OskTarget::Capture(self.map_edit.picked_mut())
+        } else if self.input_maps.naming().is_some() {
+            // A map being renamed or copied: the keyboard types its name.
+            OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
         } else if self.dial_edit.visible() {
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             OskTarget::DialEdit(self.dial_edit.input_mut())
@@ -91,6 +110,11 @@ impl AppUi {
         // the keyboard's height is known (see `update`).
         if to_page && matches!(cmd, OskCommand::Show) {
             self.osk_lift_pending = true;
+        }
+        // A map's name is committed by Enter, which writes a file; putting
+        // the keyboard away is how that is called off.
+        if matches!(cmd, OskCommand::Hide) {
+            self.input_maps.take_naming();
         }
     }
 

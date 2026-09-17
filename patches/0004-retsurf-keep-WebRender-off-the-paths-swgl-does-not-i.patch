@@ -1,7 +1,7 @@
 From dd5d83eec711bd13c2c7dd5b366c03284fd2dc10 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Wed, 26 Aug 2026 12:20:11 +0300
-Subject: [PATCH 4/6] retsurf: keep WebRender off the paths swgl does not
+Subject: [PATCH 4/7] retsurf: keep WebRender off the paths swgl does not
  implement
 
 ---

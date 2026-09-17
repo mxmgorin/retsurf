@@ -80,14 +80,14 @@ matching one:
 
 | | cores | flags |
 |---|---|---|
-| `a35` | RK3326; runs on A53 too, same ISA | `--no-default-features`, `panic=abort` |
+| `a35` | RK3326; runs on A53 too, same ISA | `panic=abort` |
 | `a53` | H700, Allwinner A133 Plus (crypto off) | same |
 | `a55` | RK3566, Allwinner A523/T527 | same |
-| `universal` | any ARMv8.0+, non-PortMaster installs | default features (webgl on), `panic=unwind` |
+| `universal` | any ARMv8.0+, non-PortMaster installs | `panic=unwind` |
 
-`--no-default-features` drops webgl, which drops the surfman probe — our only
-`catch_unwind` — and unwind tables with it. The universal binary keeps both,
-which is why it cannot share the others' profile.
+All four build with default features, webgl included. `panic=abort` costs the
+per-core binaries their unwind tables, so a Servo worker's panic ends the
+process; the universal binary declines that trade, hence its own build.
 
 `RUSTFLAGS` differs per core, and that invalidates the whole dependency graph,
 not just our crate: expect a near-full Rust rebuild per binary. SpiderMonkey is

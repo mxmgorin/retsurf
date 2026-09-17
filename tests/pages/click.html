@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>click</title>
+<!--
+    Where a press actually lands. The gamepad cursor and a real mouse take
+    different paths into Servo, so the same point on screen has to arrive as the
+    same client coordinate - a mismatch means one of them converted units the
+    other did not, and the symptom is a game whose buttons cannot be pressed.
+
+    Large type because the answer has to be readable on a 640x480 panel, and a
+    beacon per press because a headless run has no screen to read at all.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #e8e8f0; }
+  body { font: 700 26px/1.3 monospace; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: 14px; }
+  #last { font-size: 34px; color: #3fb8a0; }
+  #hint { font-size: 15px; color: #8a8a99; }
+  #target { width: 180px; height: 70px; background: #244844; color: #e8e8f0;
+            border: 2px solid #3fb8a0; font: 700 22px monospace; }
+</style>
+
+<div id="last">no press yet</div>
+<button id="target">PLAY</button>
+<div id="hint">pointerdown anywhere</div>
+
+<script>
+  function report(msg) {
+    fetch('/report?page=click&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  var target = document.getElementById('target');
+
+  addEventListener('pointerdown', function (e) {
+    var r = target.getBoundingClientRect();
+    // Whether the press landed on the button is the outcome; the coordinate is
+    // how far off it was when it did not.
+    var hit = e.target === target;
+    var text = 'x=' + Math.round(e.clientX) + ' y=' + Math.round(e.clientY) +
+               ' hit=' + hit;
+    document.getElementById('last').textContent = text;
+    report(text + ' vw=' + innerWidth + ' vh=' + innerHeight +
+           ' bx=' + Math.round(r.x) + ' by=' + Math.round(r.y) +
+           ' bw=' + Math.round(r.width) + ' bh=' + Math.round(r.height));
+  });
+
+  target.addEventListener('click', function () {
+    report('clicked=1');
+  });
+</script>

@@ -235,6 +235,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "Web fonts",              flag!(experimental.fontface), false),
     f(S::Browser,  "Experimental", "IntersectionObserver",  flag!(experimental.intersection_observer), false),
     f(S::Browser,  "Experimental", "ResizeObserver",        flag!(experimental.resize_observer), false),
+    f(S::Browser,  "Experimental", "IndexedDB",             flag!(experimental.indexeddb), false),
+    f(S::Browser,  "Experimental", "StorageManager",        flag!(experimental.storage_manager), false),
     f(S::Browser,  "Experimental", "Notifications",         flag!(experimental.notification), false),
     f(S::Browser,  "Experimental", "Async clipboard",       flag!(experimental.async_clipboard), false),
     f(S::Browser,  "Experimental", "Permissions",           flag!(experimental.permissions), false),
@@ -258,6 +260,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
     f(S::Input,  "Input",     "Cursor mode",            choice!(input.cursor_mode: CursorMode), true),
     f(S::Input,  "Input",     "Hint badges",            flag!(input.hint_badges), false),
+    f(S::Input,  "Input",     "Gamepad rumble",         flag!(input.haptics), false),
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),

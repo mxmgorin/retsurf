@@ -105,12 +105,11 @@ jobs:
           mkdir -p target/ndk-libgcc-stub
           echo "INPUT(-lunwind)" > target/ndk-libgcc-stub/libgcc.a
           # CI performance build (see Cargo.toml [profile.release] note); kept out
-          # of Cargo.toml so local release builds stay fast. No panic=abort: webgl
-          # is on here, so the surfman catch_unwind probe is compiled.
+          # of Cargo.toml so local release builds stay fast.
           export CARGO_PROFILE_RELEASE_LTO="fat"
           export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
-          # WebGL ON for Android (surfman's hardware_buffer backend works on EGL 1.5);
-          # do NOT pass --no-default-features here.
+          # The `webgl` feature stays on, but the composite path is linux-only,
+          # so a page gets no WebGL context here until that is ported.
           # `-p`: the cdylib is its own crate (android/lib), so a plain build in
           # the workspace root would produce the desktop binary instead.
           cargo ndk -t "${ABI}" -P "${ANDROID_API}" \

@@ -8,7 +8,8 @@ Run retsurf on PortMaster-capable custom firmwares:
 
 - Knulli (Batocera-based), muOS, ROCKNIX, and ArkOS — the last one sets the glibc floor
   the binaries are built to (2.30), and is the only one of the four not yet run on a device
-- aarch64, with a bare kmsdrm display (no X11 or Wayland compositor by default)
+- aarch64, and no two of them reach the screen the same way: Knulli and muOS run no
+  display server at all, ROCKNIX runs Sway, and not one has kmsdrm in its SDL
 - Mali-G31 / G52 GPUs (RK3326 / RK3566), which expose OpenGL ES 3.2
 
 The approach was to get a software renderer working first (Path A), then move to GPU
@@ -26,10 +27,11 @@ Servo's `RenderingContext` auto-selects GLES 3.0 when surfman reports `GLApi::GL
 wayland backend honors `SURFMAN_FORCE_GLES=1`, the pure-EGL backend is GLES-native, and
 the x11 backend is always desktop GL.
 
-The real blocker on bare kmsdrm is that the `sdl2` crate (0.38) exposes no DRM/GBM
-raw-window-handle, only Wayland/Xlib/Win32 and friends. So surfman can't create its own
-context from SDL's window handle on kmsdrm. That means SDL2 has to own the GL context
-itself (it does this over EGL/GBM, like every other SDL2 port) and Servo renders into it.
+The real blocker is that the `sdl2` crate (0.38) exposes a raw-window-handle only for
+Wayland/Xlib/Win32 and friends — nothing for DRM/GBM, and nothing for a firmware's own
+video backend, which is what these devices actually run. So surfman can't create its own
+context from SDL's window handle. That means SDL2 has to own the GL context itself (it
+does this over EGL, like every other SDL2 port) and Servo renders into it.
 
 ## How it works
 
@@ -89,9 +91,9 @@ it needs llvmpipe on the device and does a CPU copy every frame.
 ### Pitfalls during Path A (the two-GL-context era)
 
 These showed up while Path A ran SDL's context and surfman's context together in one
-thread. Path B uses a single context, so #2 no longer applies and #1 and #3 are
-precautionary. #4 still applies, because `connection()` still calls
-`surfman::Connection::new()`.
+thread. Path B uses a single context, and the WebGL composite path now wraps that one
+rather than opening its own, so #4 is gone with `Connection::new()` and the rest are
+precautionary — #2 most of all, since surfman does still call `eglMakeCurrent`.
 
 1. eglBindAPI clash. SDL's GLES context versus surfman's desktop-GL software context
    caused a startup panic. Fixed by forcing `SURFMAN_FORCE_GLES=1` so both stacks are GLES.
@@ -109,8 +111,8 @@ precautionary. #4 still applies, because `connection()` still calls
    destroyed explicitly`). The symptom is that plain `cargo run` panics while
    `SDL_VIDEODRIVER=wayland cargo run` works. Fixed in `main.rs`: when `WAYLAND_DISPLAY`
    is set and `SDL_VIDEODRIVER` is unset, force SDL to the wayland driver so the two agree.
-   On the handheld there's no `WAYLAND_DISPLAY`, so this is skipped and SDL uses kmsdrm as
-   intended; an explicit `SDL_VIDEODRIVER` always wins.
+   Where there's no `WAYLAND_DISPLAY` this is skipped and SDL takes the firmware's own
+   backend; an explicit `SDL_VIDEODRIVER` always wins.
 
 ### EGL 1.4 versus surfman: the device blocker (fixed)
 
@@ -123,24 +125,21 @@ just isn't there. Servo's `register_rendering_context` hard-`expect()`s a surfma
 
 The fix has two parts:
 
-- `src/platform/render/sdl.rs`: `connection()` is now optional. `surfman::Connection::new()`
-  is wrapped in `catch_unwind`, since surfman panics rather than returning `Err` on
-  missing EGL symbols. Capable platforms (desktop, EGL 1.5) keep a real connection and
-  WebGL; EGL 1.4 devices get `None`.
+- `src/platform/render/sdl.rs`: `connection()` is now optional, and
+  `src/platform/render/webgl.rs` builds it from SDL's own `EGLDisplay` rather than
+  through `Connection::new()` — so nothing calls `eglGetPlatformDisplay` and EGL 1.4
+  is no longer the deciding factor. Where SDL is not on EGL, `connection()` is `None`.
 - `components/paint/paint.rs` in our Servo fork (pinned via `[patch.crates-io]`,
   see `docs/SERVO_PATCH.md`): `register_rendering_context` treats the connection as
   optional instead of calling `.expect()`. WebGL is disabled when the connection is
   absent, but everything else renders fine.
 
-WebGL on EGL 1.4 would need a surfman patch to fall back to `eglGetDisplay` (EGL 1.0), or
-to wrap SDL's current EGL display.
-
-Since 2026-08-17 Servo also has a `webgl` cargo feature, so the handheld build leaves the
-engine's WebGL out of the binary instead of shipping a WebGL that can never get a
-connection: retsurf's own `webgl` feature (default on, off under `--no-default-features`)
-enables `servo/webgl`. The patch above still matters for the *default* build on a device
-whose driver can't provide a connection — an Android GPU, or a desktop build run on
-EGL 1.4.
+Wrapping SDL's current EGL display is the route that was taken, and it carries WebGL on
+EGL 1.4 too: measured on a Mali-G31 blob, with the surfman fork supplying the GLES config
+bit. So every aarch64 build ships `webgl` (retsurf's own feature, which enables
+`servo/webgl`); only the armhf/software targets turn it off, having no EGL at all. The
+patch above still matters wherever the driver can't provide a connection, since WebGL then
+goes quiet rather than taking the process with it.
 
 ## Running it
 

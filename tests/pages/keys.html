@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>keys</title>
+<!--
+    What the page actually receives on `window`, with nothing focused - the
+    state a game listens in. The browser consumes several plain keys before they
+    get here (Backspace as Back, Enter as a click, `t`, `f`), so the count per
+    key is the measurement: zero means the chrome took it. Clicks are counted
+    too, for game mode's R2-as-click.
+
+    Large type because the answer has to be readable on a 640x480 panel, and a
+    beacon per event because a headless run has no screen to read at all.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #e8e8f0; }
+  body { font: 700 28px/1.3 monospace; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: 12px; }
+  #last { font-size: 36px; color: #3fb8a0; }
+  #tally { font-size: 17px; color: #ff8a6b; white-space: pre; text-align: center; }
+  #hint { font-size: 16px; color: #8a8a99; }
+</style>
+
+<div id="last">no key yet</div>
+<div id="tally"></div>
+<div id="hint">window keydown, nothing focused</div>
+
+<script>
+  // The keys the browser binds as plain shortcuts, plus game mode's targets.
+  var WATCH = ['Backspace', 'Enter', 't', 'f', 'j', 'ArrowDown', 'Space', 'z', 'Click'];
+  var counts = {};
+  WATCH.forEach(function (k) { counts[k] = 0; });
+
+  // A space would garble the beacon URL, so it reports under its code's name.
+  function name(e) { return e.key === ' ' ? 'Space' : e.key; }
+
+  function report(msg) {
+    fetch('/report?page=keys&' + msg.replace(/ /g, '&')).catch(function () {});
+  }
+
+  function render() {
+    document.getElementById('tally').textContent =
+      WATCH.map(function (k) { return k + '=' + counts[k]; }).join('  ');
+  }
+
+  window.addEventListener('keydown', function (e) {
+    var key = name(e);
+    if (key in counts) counts[key] += 1;
+    document.getElementById('last').textContent =
+      'key=' + key + ' code=' + (e.code || '?');
+    render();
+    report('edge=down key=' + key + ' code=' + (e.code || 'none') +
+           ' target=' + (e.target === document.body ? 'body' : e.target.nodeName));
+  });
+
+  window.addEventListener('keyup', function (e) {
+    report('edge=up key=' + name(e));
+  });
+
+  window.addEventListener('mousedown', function (e) {
+    counts.Click += 1;
+    render();
+    report('edge=down key=Click button=' + e.button);
+  });
+
+  render();
+  report('ready=1');
+</script>

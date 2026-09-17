@@ -1,67 +1,41 @@
+use super::webgl::FrontBuffers;
 use super::BYTES_PER_PIXEL;
 use dpi::PhysicalSize;
+use euclid::default::Size2D;
 use gleam::gl::{self, Gl};
 use servo::{DeviceIntRect, RenderingContext, RgbaImage};
 use std::cell::Cell;
+use std::ffi::c_void;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::sync::Arc;
-
-/// A surfman connection, or `None` (costs only WebGL). surfman 0.12 panics, not
-/// `Err`, on EGL 1.4 Mali blobs, so the probe runs under `catch_unwind` — and
-/// before other threads start, since it swaps the panic hook.
-fn create_surfman_connection() -> Option<surfman::Connection> {
-    #[cfg(not(feature = "webgl"))]
-    {
-        log::info!("WebGL disabled at build time (`webgl` feature off); skipping surfman");
-        None
-    }
-
-    #[cfg(feature = "webgl")]
-    {
-        log::debug!("probing surfman connection (WebGL)");
-        let prev_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|info| {
-            // Log, don't swallow: an unexpected panic here is still recorded.
-            log::debug!("surfman connection probe panicked: {info}");
-        }));
-        let result = std::panic::catch_unwind(surfman::Connection::new);
-        std::panic::set_hook(prev_hook);
-        match result {
-            Ok(Ok(connection)) => Some(connection),
-            Ok(Err(e)) => {
-                log::warn!("surfman connection unavailable ({e:?}); WebGL disabled");
-                None
-            }
-            Err(_) => {
-                log::warn!("surfman connection unsupported on this device; WebGL disabled");
-                None
-            }
-        }
-    }
-}
+use surfman::{Surface, SurfaceTexture};
 
 /// A [`servo::RenderingContext`] over SDL2's single GL/GLES context plus an FBO:
 /// WebRender renders into the FBO, egui draws its colour texture into the window.
 pub struct SdlRenderingContext {
     gl: Rc<dyn Gl>,
     glow: Arc<glow::Context>,
-    // For WebGL/WebGPU external images only; `None` costs WebGL, not rendering.
-    connection: Option<surfman::Connection>,
+    /// The WebGL composite path; `None` costs WebGL, not rendering.
+    webgl: Option<FrontBuffers>,
     fbo: Cell<gl::GLuint>,
     color_tex: Cell<gl::GLuint>,
     size: Cell<PhysicalSize<u32>>,
 }
 
 impl SdlRenderingContext {
-    pub fn new(gl: Rc<dyn Gl>, glow: Arc<glow::Context>, size: PhysicalSize<u32>) -> Rc<Self> {
+    pub fn new(
+        gl: Rc<dyn Gl>,
+        glow: Arc<glow::Context>,
+        size: PhysicalSize<u32>,
+        get_proc: impl Fn(&str) -> *const c_void,
+    ) -> Rc<Self> {
         let fbo = gl.gen_framebuffers(1)[0];
         let color_tex = gl.gen_textures(1)[0];
-        let connection = create_surfman_connection();
         let ctx = Rc::new(Self {
             gl,
             glow,
-            connection,
+            webgl: FrontBuffers::new(get_proc),
             fbo: Cell::new(fbo),
             color_tex: Cell::new(color_tex),
             size: Cell::new(size),
@@ -195,6 +169,22 @@ impl RenderingContext for SdlRenderingContext {
     }
 
     fn connection(&self) -> Option<surfman::Connection> {
-        self.connection.clone()
+        self.webgl.as_ref().map(FrontBuffers::connection)
+    }
+
+    fn create_texture(
+        &self,
+        surface: Surface,
+    ) -> Result<(SurfaceTexture, u32, Size2D<i32>), Surface> {
+        match self.webgl.as_ref() {
+            Some(webgl) => webgl.create_texture(surface),
+            None => Err(surface),
+        }
+    }
+
+    fn destroy_texture(&self, surface_texture: SurfaceTexture) -> Option<Surface> {
+        self.webgl
+            .as_ref()
+            .and_then(|webgl| webgl.destroy_texture(surface_texture))
     }
 }

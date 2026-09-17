@@ -40,10 +40,19 @@ if [ -n "${RETSURF_SERVO_SRC:-}" ]; then
   servo_mount=(-v "$src":"$src")
 fi
 
+# The same, for a surfman checkout: the GLES config bit a Mali blob needs is not
+# in any published surfman. Unset normally.
+surfman_mount=()
+if [ -n "${RETSURF_SURFMAN_SRC:-}" ]; then
+  src=$(cd "$RETSURF_SURFMAN_SRC" && pwd)
+  surfman_mount=(-v "$src":"$src")
+fi
+
 # --network host: the Servo fork and inputbind are fetched from git.
 docker run --rm -i --network host \
   -v "$repo":/repo \
   "${servo_mount[@]}" \
+  "${surfman_mount[@]}" \
   -v "$cache/target":/target \
   -v "$cache/cargo":/cargo \
   -e CARGO_TARGET_DIR=/target -e CARGO_HOME=/cargo -e RUSTUP_HOME=/cargo \
@@ -107,20 +116,19 @@ docker run --rm -i --network host \
     mkdir -p /repo/dist/arm64
     for cpu in $CPUS; do
       case "$cpu" in
-        # No -C target-cpu: runs on any ARMv8.0+. Default features, so webgl is
-        # on and the surfman probe's catch_unwind needs unwind tables.
-        universal) tune=""            ; feats=""                     ; panic=unwind ;;
+        # No -C target-cpu: runs on any ARMv8.0+.
+        universal) tune=""            ; panic=unwind ;;
         # ARMv8.0-A, in-order. RK3326; runs on A53 too (same ISA).
-        a35)       tune=cortex-a35    ; feats="--no-default-features" ; panic=abort  ;;
+        a35)       tune=cortex-a35    ; panic=abort  ;;
         # ARMv8.0-A with crypto off (optional on A53). H700, Allwinner A133 Plus.
-        a53)       tune=cortex-a53    ; feats="--no-default-features" ; panic=abort  ;;
+        a53)       tune=cortex-a53    ; panic=abort  ;;
         # ARMv8.2-A. SIGILLs on the v8.0 cores above, hence a separate binary.
-        a55)       tune=cortex-a55    ; feats="--no-default-features" ; panic=abort  ;;
+        a55)       tune=cortex-a55    ; panic=abort  ;;
         *) echo "unknown cpu: $cpu" >&2; exit 2 ;;
       esac
 
-      # webgl off drops the surfman probe, our only catch_unwind, and unwind
-      # tables with it. The universal binary keeps both.
+      # Nothing in retsurf catches an unwind any more, so `universal` keeping
+      # unwind is a trade about Servo worker panics, not about our own code.
       export CARGO_PROFILE_RELEASE_PANIC="$panic"
 
       # The binary is ~100 MB of demand-paged text off the same card the device
@@ -143,7 +151,7 @@ docker run --rm -i --network host \
       # RETSURF_ARM64_OPT=3 puts the old level back, which is how the two compare.
       export CARGO_PROFILE_RELEASE_OPT_LEVEL="${RETSURF_ARM64_OPT:-s}"
 
-      cargo build --release $feats --target "$TARGET"
+      cargo build --release --target "$TARGET"
       out="/target/$TARGET/release/retsurf"
       aarch64-linux-gnu-strip -o "/repo/dist/arm64/retsurf.$cpu" "$out"
 

@@ -67,6 +67,33 @@ impl servo::WebViewDelegate for AppBrowserInner {
         if let Some(i) = self.tab_index(webview.id()) {
             self.tabs.borrow_mut()[i].state.loading = loading;
         }
+        // A `Connected` only reaches the document loaded when it was sent, so
+        // each new one is told again — otherwise a page that started after the
+        // pad was plugged in lists none.
+        if !loading {
+            for (slot, name) in self.pads.borrow().live() {
+                webview.notify_input_event(servo::InputEvent::Gamepad(
+                    crate::event::gamepad_api::connected(slot, name, self.haptics.get()),
+                ));
+            }
+        }
+    }
+
+    /// Without this Servo answers `screen.width`, `availWidth` and `outerWidth`
+    /// with zeroes, and a page that branches on them takes its narrowest layout.
+    fn screen_geometry(&self, _webview: WebView) -> Option<servo::ScreenGeometry> {
+        Some(self.screen.get())
+    }
+
+    /// The page enters and leaves fullscreen internally whatever we do, so this
+    /// is where the chrome follows it, not a gate on the request.
+    fn notify_fullscreen_state_changed(&self, webview: WebView, fullscreen: bool) {
+        if let Some(i) = self.tab_index(webview.id()) {
+            self.tabs.borrow_mut()[i].state.fullscreen = fullscreen;
+        }
+        // The chrome is rebuilt after the wait in the same pass, so without an
+        // event of its own the bar would hide only on whatever came next.
+        self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
     /// Servo can't download: navigating to a file URL would just fail to render.
@@ -241,6 +268,21 @@ impl servo::WebViewDelegate for AppBrowserInner {
             let response = servo::WebResourceResponse::new(url);
             finish_intercepted(load, response, Vec::new());
         }
+    }
+}
+
+impl servo::GamepadDelegate for AppBrowserInner {
+    /// Queued for the main loop, which owns the SDL controllers this must play
+    /// on (see [`crate::event::handler::AppEventHandler::haptic`]).
+    fn handle_haptic_effect_request(&self, request: servo::GamepadHapticEffectRequest) {
+        if !self.haptics.get() {
+            // Only a document told rumble was supported before the toggle flipped
+            // gets here; "complete" — reporting failure strands its promise.
+            request.succeeded();
+            return;
+        }
+        log::debug!("haptics: queued for pad slot {}", request.gamepad_index());
+        self.haptic_requests.borrow_mut().push(request);
     }
 }
 

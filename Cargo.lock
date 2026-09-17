@@ -5512,9 +5512,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.43"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -5867,7 +5867,7 @@ dependencies = [
 [[package]]
 name = "servo"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "arboard",
@@ -5930,7 +5930,7 @@ dependencies = [
 [[package]]
 name = "servo-allocator"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -5939,7 +5939,7 @@ dependencies = [
 [[package]]
 name = "servo-background-hang-monitor"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "backtrace",
  "crossbeam-channel",
@@ -5954,7 +5954,7 @@ dependencies = [
 [[package]]
 name = "servo-background-hang-monitor-api"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "serde",
  "servo-base",
@@ -5963,7 +5963,7 @@ dependencies = [
 [[package]]
 name = "servo-base"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "crossbeam-channel",
@@ -5989,7 +5989,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bytemuck",
  "crossbeam-channel",
@@ -6015,7 +6015,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "crossbeam-channel",
  "euclid",
@@ -6038,7 +6038,7 @@ dependencies = [
 [[package]]
 name = "servo-config"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "num_enum",
  "serde",
@@ -6051,7 +6051,7 @@ dependencies = [
 [[package]]
 name = "servo-config-macro"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6062,7 +6062,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "backtrace",
@@ -6106,7 +6106,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "base64 0.23.1",
  "content-security-policy",
@@ -6140,7 +6140,7 @@ dependencies = [
 [[package]]
 name = "servo-deny-public-fields"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
@@ -6150,7 +6150,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "atomic_refcell",
  "base64 0.23.1",
@@ -6180,7 +6180,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bytes",
  "http",
@@ -6198,7 +6198,7 @@ dependencies = [
 [[package]]
 name = "servo-dom-struct"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -6209,7 +6209,7 @@ dependencies = [
 [[package]]
 name = "servo-embedder-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "bitflags 2.13.1",
@@ -6243,7 +6243,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6302,7 +6302,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "atomic_refcell",
  "dwrote",
@@ -6327,7 +6327,7 @@ dependencies = [
 [[package]]
 name = "servo-geometry"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "app_units",
  "euclid",
@@ -6340,7 +6340,7 @@ dependencies = [
 [[package]]
 name = "servo-hyper-serde"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "cookie 0.18.2",
  "headers",
@@ -6354,7 +6354,7 @@ dependencies = [
 [[package]]
 name = "servo-jstraceable-derive"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
@@ -6364,7 +6364,7 @@ dependencies = [
 [[package]]
 name = "servo-layout"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "app_units",
@@ -6424,7 +6424,7 @@ dependencies = [
 [[package]]
 name = "servo-layout-api"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6458,7 +6458,7 @@ dependencies = [
 [[package]]
 name = "servo-malloc-size-of"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -6504,7 +6504,7 @@ dependencies = [
 [[package]]
 name = "servo-media"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "servo-base",
  "servo-media-audio",
@@ -6517,7 +6517,7 @@ dependencies = [
 [[package]]
 name = "servo-media-audio"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "byte-slice-cast",
  "euclid",
@@ -6542,7 +6542,7 @@ dependencies = [
 [[package]]
 name = "servo-media-derive"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6552,7 +6552,7 @@ dependencies = [
 [[package]]
 name = "servo-media-dummy"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "servo-base",
  "servo-media",
@@ -6566,7 +6566,7 @@ dependencies = [
 [[package]]
 name = "servo-media-ohos"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "crossbeam-channel",
  "libc",
@@ -6589,7 +6589,7 @@ dependencies = [
 [[package]]
 name = "servo-media-player"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -6602,7 +6602,7 @@ dependencies = [
 [[package]]
 name = "servo-media-streams"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "malloc_size_of_derive",
  "servo-malloc-size-of",
@@ -6612,7 +6612,7 @@ dependencies = [
 [[package]]
 name = "servo-media-thread"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -6631,7 +6631,7 @@ dependencies = [
 [[package]]
 name = "servo-media-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "malloc_size_of_derive",
  "servo-malloc-size-of",
@@ -6640,7 +6640,7 @@ dependencies = [
 [[package]]
 name = "servo-media-webrtc"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "log",
  "servo-media-streams",
@@ -6650,7 +6650,7 @@ dependencies = [
 [[package]]
 name = "servo-metrics"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "malloc_size_of_derive",
  "servo-base",
@@ -6665,7 +6665,7 @@ dependencies = [
 [[package]]
 name = "servo-net"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "async-compression",
  "async-recursion",
@@ -6742,7 +6742,7 @@ dependencies = [
 [[package]]
 name = "servo-net-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bytes",
  "content-security-policy",
@@ -6785,7 +6785,7 @@ dependencies = [
 [[package]]
 name = "servo-paint"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bitflags 2.13.1",
  "crossbeam-channel",
@@ -6821,7 +6821,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-api"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bitflags 2.13.1",
  "crossbeam-channel",
@@ -6856,7 +6856,7 @@ dependencies = [
 [[package]]
 name = "servo-pixels"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "euclid",
  "image",
@@ -6871,7 +6871,7 @@ dependencies = [
 [[package]]
 name = "servo-profile"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "libc",
  "log",
@@ -6889,7 +6889,7 @@ dependencies = [
 [[package]]
 name = "servo-profile-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "crossbeam-channel",
  "ipc-channel",
@@ -6905,7 +6905,7 @@ dependencies = [
 [[package]]
 name = "servo-script"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -7048,7 +7048,7 @@ dependencies = [
 [[package]]
 name = "servo-script-bindings"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -7091,7 +7091,7 @@ dependencies = [
 [[package]]
 name = "servo-script-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "accesskit",
  "bitflags 2.13.1",
@@ -7126,7 +7126,7 @@ dependencies = [
 [[package]]
 name = "servo-storage"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "libc",
  "log",
@@ -7151,7 +7151,7 @@ dependencies = [
 [[package]]
 name = "servo-storage-traits"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -7165,7 +7165,7 @@ dependencies = [
 [[package]]
 name = "servo-timers"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "crossbeam-channel",
  "malloc_size_of_derive",
@@ -7175,7 +7175,7 @@ dependencies = [
 [[package]]
 name = "servo-tracing"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7185,7 +7185,7 @@ dependencies = [
 [[package]]
 name = "servo-url"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "encoding_rs",
  "malloc_size_of_derive",
@@ -7199,7 +7199,7 @@ dependencies = [
 [[package]]
 name = "servo-wakelock"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "serde",
  "servo-embedder-traits",
@@ -7208,7 +7208,7 @@ dependencies = [
 [[package]]
 name = "servo-webgl"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "bitflags 2.13.1",
  "byteorder",
@@ -7232,7 +7232,7 @@ dependencies = [
 [[package]]
 name = "servo-webvtt"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "html5ever",
  "markup5ever",
@@ -7242,7 +7242,7 @@ dependencies = [
 [[package]]
 name = "servo-webxr-api"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -7258,7 +7258,7 @@ dependencies = [
 [[package]]
 name = "servo-xpath"
 version = "0.6.0"
-source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.8.0-1#eb4afa71b0b925ade8f994271b3a7c56a5f1629e"
+source = "git+https://github.com/mxmgorin/servo?tag=retsurf-main-0.9.0-1#7f1d4ba68d2cd285145420836c6c018ca8f36c55"
 dependencies = [
  "log",
  "malloc_size_of_derive",
@@ -7758,8 +7758,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "surfman"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ef7ecad967262d0b8bf1cbe753fe9b13ddf068606d30ceb370b87c73c5964b5"
+source = "git+https://github.com/mxmgorin/surfman?tag=retsurf-main-0.9.0#a0f0cdb6cff8b7cf88bcb432bc1a083d683c185b"
 dependencies = [
  "bitflags 2.13.1",
  "cfg_aliases",
@@ -8046,7 +8045,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

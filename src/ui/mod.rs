@@ -5,6 +5,7 @@
 
 mod cursor;
 mod dial_edit;
+mod game;
 mod hints;
 mod home;
 mod memory;
@@ -28,6 +29,9 @@ use crate::{
         ToolbarPosition, UpdateConfig,
     },
     overlay::dial_edit::DialEdit,
+    overlay::game::input_maps::InputMaps,
+    overlay::game::map_edit::MapEdit,
+    overlay::game::menu::GameMenu,
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::Menu,
@@ -97,6 +101,9 @@ pub(super) fn select_all(ctx: &egui::Context, id: egui::Id, char_count: usize) {
     egui::TextEdit::store_state(ctx, id, state);
 }
 
+/// How long the Game Mode entry toast stays before fading.
+const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
+
 /// Toolbar layout decided before the egui closure ([`AppUi::toolbar_layout`]):
 /// these reads borrow all of `self`, which can't overlap `egui.run`.
 struct ToolbarLayout {
@@ -121,6 +128,23 @@ struct FrameInputs {
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
     osk_caret: usize,
+    /// Why the chrome is hidden this frame, if it is.
+    chrome_hidden: ChromeHidden,
+}
+
+/// The reasons the chrome hides, kept apart so leaving one does not reveal the
+/// bar while the other still holds it.
+#[derive(Clone, Copy, Default)]
+struct ChromeHidden {
+    /// The active tab's page holds the Fullscreen API.
+    page_fullscreen: bool,
+    game_mode: bool,
+}
+
+impl ChromeHidden {
+    fn any(self) -> bool {
+        self.page_fullscreen || self.game_mode
+    }
 }
 
 pub struct AppUi {
@@ -154,6 +178,27 @@ pub struct AppUi {
     browser_tex_id: Option<egui::TextureId>,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
+    /// Game Mode: the browser stops consuming input so the page can have it, and
+    /// the chrome hides. Read by [`crate::event::keyboard`] to decide whether to
+    /// resolve a key against the bindings or forward it.
+    game_mode: bool,
+    /// When Game Mode was entered; the chrome hides with nothing else on screen,
+    /// so a toast names the way out for [`GAME_MODE_TOAST`], then fades.
+    game_mode_toast: Option<Instant>,
+    /// What that toast says, worded at entry from the ways out this device
+    /// actually has (see [`game_mode_toast_text`]).
+    game_mode_toast_text: String,
+    /// Game Mode's own menu (the reserved Select hold). Public — driven
+    /// directly, like the other overlays.
+    pub game_menu: GameMenu,
+    /// Its map list and one map's rows, opened from that menu. Public
+    /// for the same reason.
+    pub input_maps: InputMaps,
+    /// Its map editor, opened from a map. Public for the same reason.
+    pub map_edit: MapEdit,
+    /// The live map's name, mirrored for the menu's row; the maps
+    /// themselves live in the event handler, which resolved them.
+    input_map_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -232,6 +277,7 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
+        input_map_name: String,
         user_agent: String,
     ) -> Self {
         Self {
@@ -246,6 +292,13 @@ impl AppUi {
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
+            game_mode: false,
+            game_mode_toast: None,
+            game_mode_toast_text: String::new(),
+            game_menu: GameMenu::new(),
+            input_maps: InputMaps::new(),
+            map_edit: MapEdit::new(),
+            input_map_name,
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -343,6 +396,7 @@ impl AppUi {
             || self.repaint_pending
             || window.repaint_delay() < Duration::MAX
             || self.cursor_visible_for().is_some()
+            || self.toast_visible_for().is_some()
     }
 
     /// Move the toolbar to a window edge (live config change). The next frame
@@ -402,11 +456,7 @@ impl AppUi {
     /// page's own rects come back in, and what [`AppBrowser`] is fed.
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
-        let ppp = self.egui_ctx.pixels_per_point();
-        (
-            x / ppp - self.webview_rect.left(),
-            y / ppp - self.webview_rect.top(),
-        )
+        browser_rel(self.to_points(x, y), self.webview_rect)
     }
 
     /// A window-pixel distance in points, for the deltas SDL reports in pixels.
@@ -414,6 +464,13 @@ impl AppUi {
     pub fn to_points(&self, dx: f32, dy: f32) -> (f32, f32) {
         let ppp = self.egui_ctx.pixels_per_point();
         (dx / ppp, dy / ppp)
+    }
+
+    /// The gamepad cursor as the page's own coordinate: it is kept in points,
+    /// so nothing converts here.
+    #[inline]
+    pub fn cursor_browser_rel(&self) -> (f32, f32) {
+        browser_rel(self.cursor, self.webview_rect)
     }
 
     /// Resize the browser to the web-view area on SDL window-resize events:
@@ -473,6 +530,10 @@ impl AppUi {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
         }
+        // The Game Mode toast needs one wake at its expiry to be erased.
+        if let Some(left) = self.toast_visible_for() {
+            self.repaint_delay = Some(self.repaint_delay.map_or(left, |d| d.min(left)));
+        }
     }
 
     /// Snapshot the per-frame browser/overlay inputs as owned copies, so the
@@ -494,6 +555,10 @@ impl AppUi {
             tab_infos,
             osk_field: self.osk_target_field(),
             osk_caret: self.osk.caret(),
+            chrome_hidden: ChromeHidden {
+                page_fullscreen: browser.is_fullscreen(),
+                game_mode: self.game_mode,
+            },
         }
     }
 
@@ -519,11 +584,16 @@ impl AppUi {
     /// Auto-hide forces the bar visible while typing and floats it on either
     /// edge: a strip that came and went would resize the web view, and that is
     /// a full Servo reflow mid-scroll. Otherwise the bar is a panel.
-    fn toolbar_layout(&self) -> ToolbarLayout {
-        let typing = self.focus() != Focus::Page;
+    fn toolbar_layout(&self, chrome_hidden: ChromeHidden) -> ToolbarLayout {
+        // Game Mode is the exception: nothing it opens types into the chrome,
+        // so an overlay of its own must not bring the bar back over the game.
+        let typing = self.focus() != Focus::Page && !chrome_hidden.game_mode;
         ToolbarLayout {
             position: self.toolbar_position,
-            shown: !self.toolbar_autohide || self.toolbar_shown || typing,
+            // Typing still wins: auto-hide forces the bar up for a focused field,
+            // and a hidden chrome must not leave an invisible address bar to type into.
+            shown: typing
+                || (!chrome_hidden.any() && (!self.toolbar_autohide || self.toolbar_shown)),
             overlay: self.toolbar_autohide,
         }
     }
@@ -565,13 +635,14 @@ impl AppUi {
                 tab_infos,
                 osk_field,
                 osk_caret,
+                chrome_hidden,
             } = snapshot;
             let caret_for = |f| (osk_field == f).then_some(osk_caret);
             let ToolbarLayout {
                 position,
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
-            } = self.toolbar_layout();
+            } = self.toolbar_layout(chrome_hidden);
             // Snapshot the self-update state here (the About tab reads it): the
             // `self.update` borrow can't overlap the `self`-borrowing closure below.
             let update = self.update.snapshot();
@@ -700,6 +771,21 @@ impl AppUi {
                     settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
+                // The Game Mode map editor: like settings, its own block
+                // rather than the chain below, so the keyboard can open over it
+                // to pick a key for a row.
+                if self.map_edit.visible() {
+                    drop_egui_focus(ctx);
+                    game::map_edit::add_map_edit(ctx, &self.map_edit, commands);
+                }
+
+                // The map screens, for the same reason: the keyboard opens
+                // over them to type a name.
+                if self.input_maps.visible() {
+                    drop_egui_focus(ctx);
+                    game::input_maps::add_input_maps(ctx, &self.input_maps, commands);
+                }
+
                 // The modal prompt draws on top of whatever else is up (its
                 // egui layer order puts it above the other overlays).
                 if self.prompt.visible() {
@@ -721,6 +807,17 @@ impl AppUi {
                 if self.menu.visible {
                     drop_egui_focus(ctx);
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
+                } else if self.game_menu.visible {
+                    // Same reason as the menu's: a focused row would take Enter
+                    // a second time and activate twice.
+                    drop_egui_focus(ctx);
+                    game::menu::add_game_menu(
+                        ctx,
+                        &self.game_menu,
+                        &self.input_map_name,
+                        self.game_mode,
+                        commands,
+                    );
                 } else if self.osk.visible {
                     // Clear a bottom toolbar so its address bar stays visible
                     // below the keys; a top toolbar needs no inset.
@@ -734,6 +831,10 @@ impl AppUi {
                 } else if cursor_visible.is_some() {
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
                     cursor::paint_cursor(ctx, pos, self.scroll_mode);
+                }
+
+                if self.toast_visible_for().is_some() {
+                    add_game_mode_toast(ctx, &self.game_mode_toast_text);
                 }
 
                 // Debug memory overlay (opt-in), drawn last so it sits above
@@ -804,5 +905,146 @@ impl AppUi {
     pub fn point_over_webview(&self, y_px: f32) -> bool {
         let y = y_px / self.egui_ctx.pixels_per_point();
         !self.toolbar_rect.y_range().contains(y)
+    }
+
+    #[inline]
+    pub fn game_mode(&self) -> bool {
+        self.game_mode
+    }
+
+    /// Whether one of Game Mode's own screens owns the input. The browser's
+    /// vocabulary shrinks under any of them, in or out of the mode.
+    #[inline]
+    pub fn game_screen(&self) -> bool {
+        self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()
+    }
+
+    /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
+    /// Dropping egui's keyboard focus is part of it: egui is offered every key
+    /// before we are, so a focused address bar would go on eating them.
+    pub fn enter_game_mode(&mut self, toast: String) {
+        self.game_mode = true;
+        self.game_mode_toast = Some(Instant::now());
+        self.game_mode_toast_text = toast;
+        drop_egui_focus(&self.egui_ctx);
+    }
+
+    pub fn leave_game_mode(&mut self) {
+        self.game_mode = false;
+        self.game_mode_toast = None;
+    }
+
+    /// Adopt the name of a map chosen in the menu, or set by an edited
+    /// config.
+    #[inline]
+    pub fn set_input_map_name(&mut self, name: String) {
+        self.input_map_name = name;
+    }
+
+    /// Time left on the entry toast, or `None` once it has faded.
+    fn toast_visible_for(&self) -> Option<Duration> {
+        self.game_mode_toast
+            .and_then(|t| GAME_MODE_TOAST.checked_sub(t.elapsed()))
+    }
+}
+
+/// Word the entry toast from the ways to the menu this device has: the pad's
+/// reserved hold, and whatever `game_mode` answers to on a keyboard. Leaving is
+/// a row in that menu, so the toast only has to point at it.
+pub fn game_mode_toast_text(pad: bool, keys: &[String]) -> String {
+    let mut ways: Vec<&str> = pad.then_some("hold Select").into_iter().collect();
+    ways.extend(keys.iter().map(String::as_str));
+    let mut text = "Game Mode".to_string();
+    if !ways.is_empty() {
+        text.push_str(" - ");
+        text.push_str(&ways.join(" / "));
+        text.push_str(" for the menu");
+    }
+    text
+}
+
+/// A point in screen points as the page's own coordinate — only the web view's
+/// origin comes off. Both devices end here: the cursor is kept in points and
+/// SDL reports pixels, so one conversion too many aims one of them elsewhere.
+fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
+    (x - webview.left(), y - webview.top())
+}
+
+/// The Game Mode entry toast: the chrome just hid, so name the way back.
+fn add_game_mode_toast(ctx: &egui::Context, text: &str) {
+    egui::Area::new(egui::Id::new("game_mode_toast"))
+        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
+        .order(egui::Order::Foreground)
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(text);
+            });
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{browser_rel, egui, game_mode_toast_text, ChromeHidden};
+
+    /// The gamepad cursor and the mouse must land on the same page pixel. The
+    /// cursor is kept in points and SDL reports pixels; converting the cursor a
+    /// second time put a press at the corner into the middle of the page.
+    #[test]
+    fn the_pad_cursor_and_the_mouse_land_on_the_same_page_pixel() {
+        let webview = egui::Rect::from_min_size(egui::pos2(0.0, 33.0), egui::vec2(640.0, 447.0));
+        let ppp = 2.0;
+        // A point near the bottom-right corner, where the two diverged most.
+        let cursor = (636.0, 476.0);
+        let mouse_px = (cursor.0 * ppp, cursor.1 * ppp);
+        // What the mouse path does before it gets here, and the cursor must not.
+        let to_points = |(x, y): (f32, f32)| (x / ppp, y / ppp);
+        let from_mouse = browser_rel(to_points(mouse_px), webview);
+        assert_eq!(browser_rel(cursor, webview), from_mouse);
+        assert_eq!(from_mouse, (636.0, 443.0));
+    }
+
+    /// The toast is the only thing on screen once the chrome hides, so it has to
+    /// name the gestures this install really has — not the defaults.
+    #[test]
+    fn the_toast_names_the_bound_gestures_and_nothing_else() {
+        let keys = vec!["ctrl+g".to_string()];
+        assert_eq!(
+            game_mode_toast_text(true, &keys),
+            "Game Mode - hold Select / ctrl+g for the menu"
+        );
+        // No pad: naming its hold would point at a button that is not there.
+        assert_eq!(
+            game_mode_toast_text(false, &keys),
+            "Game Mode - ctrl+g for the menu"
+        );
+        assert_eq!(
+            game_mode_toast_text(true, &[]),
+            "Game Mode - hold Select for the menu"
+        );
+        // Nothing to name leaves no dangling separator behind.
+        assert_eq!(game_mode_toast_text(false, &[]), "Game Mode");
+    }
+
+    /// The reasons are separate so that a page dropping fullscreen inside Game
+    /// Mode — which it does on every navigation — cannot flash the chrome back.
+    #[test]
+    fn one_reason_ending_does_not_reveal_the_chrome_while_the_other_holds() {
+        let both = ChromeHidden {
+            page_fullscreen: true,
+            game_mode: true,
+        };
+        assert!(both.any());
+        assert!(ChromeHidden {
+            page_fullscreen: false,
+            ..both
+        }
+        .any());
+        assert!(ChromeHidden {
+            game_mode: false,
+            ..both
+        }
+        .any());
+        assert!(!ChromeHidden::default().any());
     }
 }

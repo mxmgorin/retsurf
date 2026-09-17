@@ -1,0 +1,15 @@
+# Point and click: the left stick moves the cursor, A presses what is under it,
+# and the right stick scrolls the page the game sits on. The pointer is the one
+# way of playing this project has measured on hardware. Copy this into
+# <data dir>/input_maps/mouse.toml to change it; deleting that copy restores this.
+name = "Mouse only"
+
+[pad]
+# One source per click: a second would let go while the first is still held.
+a = "mouse.left"
+
+[stick.left]
+analog = "mouse.cursor"
+
+[stick.right]
+analog = "mouse.scroll"

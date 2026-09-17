@@ -6,7 +6,7 @@
 //! isn't consumed is forwarded to the page as a Servo keyboard event.
 
 use crate::app::{AppCommand, InputCommand, MenuAction};
-use crate::browser::AppBrowser;
+use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::bindings::Action;
 use crate::ui::{AppUi, Focus};
 use inputbind::sdl::{key_code, mods_for};
@@ -74,6 +74,17 @@ pub fn on_key(
         return;
     }
 
+    // Game Mode's own screens capture it the same way, so a key meant for a row
+    // list cannot also reach the game still running underneath. Keyed on the
+    // focus, not visibility: the keyboard opens over the editor to pick a key,
+    // and while it is up the keys are its own.
+    if matches!(ui.focus(), Focus::GameMenu | Focus::GameMapEdit) {
+        if key.pressed {
+            on_game_menu_key(key, bindings, commands);
+        }
+        return;
+    }
+
     if key.pressed {
         on_key_down(key, bindings, ui, browser, commands);
     } else if ui.hints.visible && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
@@ -117,6 +128,29 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
         // dial (Y's role) — a no-op in the other sections (handled in the router).
         Keycode::P => commands.push(AppCommand::Input(InputCommand::Hints)),
         _ => {}
+    }
+}
+
+/// Game Mode's menu and its profile editor: arrows move between rows and step
+/// the focused value, Enter activates, Esc goes back. Everything else goes
+/// through the bindings, which Game Mode has already narrowed to its own.
+fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
+    if let Some((dx, dy)) = arrow_nav(key.kc) {
+        commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+        return;
+    }
+    match key.kc {
+        Keycode::Return | Keycode::KpEnter => {
+            if !key.repeat {
+                commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+            }
+        }
+        Keycode::Escape => commands.push(AppCommand::Input(InputCommand::Cancel)),
+        _ => {
+            if let Some(action) = lookup(key, bindings, true, false) {
+                action.push_tap(commands);
+            }
+        }
     }
 }
 
@@ -276,6 +310,13 @@ fn on_key_down(
         }
     }
 
+    // Esc leaves fullscreen, as it does in every desktop browser — and only
+    // then, since on a page of its own Esc is not a Back key.
+    if key.pressed && matches!(key.kc, Keycode::Escape) && browser.is_fullscreen() {
+        commands.push(AppCommand::Browser(BrowserCommand::ExitFullscreen));
+        return;
+    }
+
     // Overlays whose navigation comes from the `nav_*` bindings, so vim hjkl
     // works there and not just the arrows the fixed handlers above catch.
     let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
@@ -312,7 +353,7 @@ fn lookup(
     fire.then_some(action)
 }
 
-fn into_servo(key: &KeyEvent) -> servo::KeyboardEvent {
+pub(super) fn into_servo(key: &KeyEvent) -> servo::KeyboardEvent {
     super::sdl2_servo::into_keyboard_event(key.kc, key.sc, key.keymod, key.pressed, key.repeat)
 }
 

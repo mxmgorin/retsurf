@@ -1,0 +1,6 @@
+# The whole pad reaches the page raw — sticks included — for games that read
+# the Gamepad API themselves. Nothing is spent on the pointer, so there is no
+# cursor and no click while this map runs; the held Select still opens the menu.
+# Copy this into <data dir>/input_maps/pad.toml to change it; deleting that
+# copy restores this.
+name = "Gamepad passthrough"

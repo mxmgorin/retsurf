@@ -1,5 +1,7 @@
 pub mod bindings;
+pub mod game;
 pub mod gamepad;
+pub mod gamepad_api;
 pub mod handler;
 pub mod keyboard;
 pub(crate) mod sdl2_servo;

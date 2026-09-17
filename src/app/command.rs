@@ -21,11 +21,78 @@ pub enum AppCommand {
     Menu(MenuAction),
     /// Add the current page to bookmarks, or remove it if already saved (★ / Start).
     ToggleBookmark,
+    /// The Game Mode gesture, whatever produced it — a binding or the pad's
+    /// reserved hold. What it does depends on the mode's state (see
+    /// [`crate::app::App::game_mode_gesture`]).
+    GameMode,
+    /// An action on Game Mode's own menu (see [`crate::overlay::game::menu`]).
+    GameMenu(GameMenuAction),
+    /// An action on its input-map screens (see [`crate::overlay::game::input_maps`]).
+    GameInputMaps(GameInputMapsAction),
+    /// An action on its map editor (see [`crate::overlay::game::map_edit`]).
+    GameMapEdit(GameMapEditAction),
     /// An action on the modal page-prompt overlay (select pickers and JS
     /// dialogs — see [`crate::overlay::prompt`]).
     Prompt(PromptAction),
     /// An action on the settings overlay (see [`crate::overlay::settings`]).
     Settings(SettingsAction),
+}
+
+impl AppCommand {
+    /// Whether this still fires while Game Mode is on: the mode's own menu and
+    /// overlays, the way out, the loop's upkeep. A shortcut reaching the browser
+    /// behind the game is the thing the mode exists to stop.
+    pub fn in_game_mode(&self) -> bool {
+        matches!(
+            self,
+            AppCommand::Shutdown
+                | AppCommand::Resize
+                | AppCommand::Input(_)
+                | AppCommand::Prompt(_)
+                | AppCommand::GameMenu(_)
+                | AppCommand::GameInputMaps(_)
+                | AppCommand::GameMapEdit(_)
+                | AppCommand::GameMode
+        )
+    }
+}
+
+/// Actions on Game Mode's menu. The gamepad pushes the relative ones through
+/// the router; the mouse pushes `Click` with the row it hit.
+#[derive(Clone)]
+pub enum GameMenuAction {
+    /// Act on the focused row (A / Enter).
+    Activate,
+    /// Focus row `index` and activate it (clicking it).
+    Click(usize),
+}
+
+/// Actions on Game Mode's input-map screens (the list, one map's rows, the
+/// confirmation over a removal).
+#[derive(Clone)]
+pub enum GameInputMapsAction {
+    /// Back out one screen (B / ✖); the list hands the menu back.
+    Close,
+    /// Take what is focused (A): open a map, or its highlighted row.
+    Activate,
+    /// Focus row `index` and take it (clicking it).
+    Click(usize),
+    /// A name the on-screen keyboard submitted, for a rename or a copy.
+    Name(String),
+}
+
+/// Actions on the Game Mode map editor. The pad pushes the relative ones
+/// through the router; the mouse pushes `Click` with the row it hit.
+#[derive(Clone)]
+pub enum GameMapEditAction {
+    /// Back out one list; past them all it saves and goes back to the map
+    /// it edited (B / ✖).
+    Close,
+    /// Act on what is focused (A): open a stick's rows, open a row's list of
+    /// kinds, or take the kind the list is on.
+    Activate,
+    /// Focus row `index` and open its list (clicking it).
+    Click(usize),
 }
 
 /// Actions on the settings overlay. The mouse pushes `Select` then `Activate` /
@@ -181,4 +248,34 @@ pub enum InputCommand {
         scroll: f32,
         scroll_mode: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The reserved Select must not open the browser's menu over a game, and no
+    /// shortcut resolved under Game Mode's overlays may navigate out of one.
+    #[test]
+    fn game_mode_drops_the_browser_vocabulary_and_keeps_its_own() {
+        for command in [
+            AppCommand::Menu(MenuAction::Open),
+            AppCommand::Settings(SettingsAction::Open),
+            AppCommand::Browser(BrowserCommand::Back),
+            AppCommand::ToggleBookmark,
+        ] {
+            assert!(!command.in_game_mode());
+        }
+        // The mode's own controls, and what the loop needs whatever is on screen.
+        for command in [
+            AppCommand::GameMode,
+            AppCommand::GameMenu(GameMenuAction::Activate),
+            AppCommand::Input(InputCommand::Cancel),
+            AppCommand::Prompt(PromptAction::Cancel),
+            AppCommand::Shutdown,
+            AppCommand::Resize,
+        ] {
+            assert!(command.in_game_mode());
+        }
+    }
 }
