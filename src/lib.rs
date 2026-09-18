@@ -1,5 +1,6 @@
 mod app;
 mod browser;
+mod clock;
 mod config;
 mod data;
 mod event;

@@ -103,7 +103,7 @@ impl Downloads {
                     path: String::new(),
                     received: 0,
                     total: 0,
-                    time: history::now_unix(),
+                    time: crate::clock::now_unix(),
                     state: State::Failed(format!("create dir: {e}")),
                     shared: None,
                 },
@@ -146,7 +146,7 @@ impl Downloads {
                 path,
                 received: size,
                 total: size,
-                time: history::now_unix(),
+                time: crate::clock::now_unix(),
                 state,
                 shared: None,
             },
@@ -185,7 +185,7 @@ impl Downloads {
                     Ok(()) => State::Done,
                     Err(e) => State::Failed(e),
                 };
-                d.time = history::now_unix();
+                d.time = crate::clock::now_unix();
                 d.shared = None;
                 finished = true;
             }

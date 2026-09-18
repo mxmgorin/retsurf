@@ -16,6 +16,7 @@
 mod github;
 mod install;
 
+use crate::clock::now_unix;
 use crate::config::{Channel, UpdateConfig};
 use crate::event::user::{UserEvent, UserEventSender};
 use std::path::PathBuf;
@@ -210,14 +211,6 @@ fn publish(state: &Mutex<UpdateState>, next: UpdateState, sender: &UserEventSend
     sender.send(UserEvent::UpdateProgress);
 }
 
-/// Current time in unix seconds (0 if the clock is before the epoch — treated as
-/// "long ago", so a check is due; harmless).
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
 
 /// The auto-check throttle marker's path in the data dir.
 fn last_check_path() -> PathBuf {

@@ -4,9 +4,9 @@
 //! [`crate::config`]). The full-screen menu (see [`crate::overlay::menu`]) renders it; the
 //! central router drives selection / open / delete / clear.
 
+use crate::clock::now_unix;
 use crate::config::HistoryConfig;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A visited page and when it was last visited (unix seconds, `0` if the device
 /// clock was unavailable — common on handhelds without an RTC until NTP syncs).
@@ -34,15 +34,14 @@ pub struct History {
     /// Highlighted row in the menu's History section. Row 0 is the "Clear all"
     /// reserved row, so the cursor carries a reserve of 1.
     cursor: super::ListCursor,
-    /// Set when `entries` has unsaved changes from [`Self::record`]; cleared by a
-    /// successful [`Self::save`]. Lets per-navigation recording defer the disk
-    /// write (coalesced via [`Self::flush`]) instead of rewriting the whole file
+    /// Set by [`Self::record`], cleared by a successful [`Self::save`]. Lets the
+    /// disk write be deferred and coalesced, instead of rewriting the whole file
     /// on every page load.
     dirty: bool,
 }
 
 impl History {
-    /// Load the saved list (missing/invalid file → empty), trimmed to the cap.
+    /// Load the saved list, trimmed to the cap; a missing or invalid file yields none.
     pub fn load(cfg: &HistoryConfig) -> Self {
         let mut entries = super::load_toml::<Store>("history.toml").entries;
         // Honor a shrunk cap from the config right away.
@@ -106,14 +105,13 @@ impl History {
     }
 
     /// Record a visit: most-recent-first, de-duplicated (a revisit moves to the
-    /// top and re-stamps its time), capped at `max_entries`. No-op when recording
-    /// is disabled or the URL is empty. Marks the store dirty (the disk write is
-    /// deferred — see [`Self::flush`]) rather than rewriting the file per visit.
+    /// top and re-stamps its time), capped at `max_entries`. Only marks the store
+    /// dirty; the disk write is deferred to [`Self::flush`].
     pub fn record(&mut self, url: &str) {
         if !self.enabled || url.is_empty() {
             return;
         }
-        // Already on top → just keep the existing entry (avoids reordering the
+        // Already on top: keep the existing entry (avoids reordering the
         // list for the page we're currently on).
         if self.entries.first().is_some_and(|e| e.url == url) {
             return;
@@ -185,14 +183,6 @@ impl History {
         // entries at `1..=entries.len()`.
         self.cursor.clamp(self.entries.len());
     }
-}
-
-/// Current unix time in seconds, or `0` if the clock is before the epoch / broken.
-pub(crate) fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 /// Format a unix timestamp as a compact `YYYY-MM-DD HH:MM` in UTC, dependency-free
