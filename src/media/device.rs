@@ -66,3 +66,31 @@ impl Drop for Device {
         unsafe { sys::SDL_CloseAudioDevice(self.id) };
     }
 }
+
+/// Poison-tolerant lock: an SDL callback must not unwind across FFI, and a
+/// panicked producer thread must not take its peer down with it.
+pub(crate) fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The callback's `stream` as the f32 slice SDL sized it as. Safety:
+/// `stream`/`len` must be an SDL audio callback's arguments for an f32 device.
+pub(crate) unsafe fn out_slice<'a>(stream: *mut u8, len: c_int) -> &'a mut [f32] {
+    unsafe { std::slice::from_raw_parts_mut(stream as *mut f32, len as usize / size_of::<f32>()) }
+}
+
+/// Fill a callback's `out` from `queue`, scaled by `factor`. The tail past what
+/// the queue held plays silence, not whatever the driver left in the buffer.
+pub(crate) fn drain_into(
+    out: &mut [f32],
+    queue: &mut std::collections::VecDeque<f32>,
+    factor: f32,
+) {
+    let available = queue.len().min(out.len());
+    for (dst, sample) in out.iter_mut().zip(queue.drain(..available)) {
+        *dst = sample * factor;
+    }
+    out[available..].fill(0.0);
+}

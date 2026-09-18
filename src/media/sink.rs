@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::ffi::{c_int, c_void};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use servo_media::audio::audio_node::ChannelInterpretation;
 use servo_media::audio::block::Chunk;
@@ -16,7 +16,7 @@ use servo_media::audio::render_thread::{AudioRenderThreadMsg, SinkEosCallback};
 use servo_media::audio::sink::{AudioSink, AudioSinkError};
 use servo_media::streams::MediaSocket;
 
-use super::device::{Device, BUFFER_FRAMES, CHANNELS};
+use super::device::{lock, Device, BUFFER_FRAMES, CHANNELS};
 
 /// Queue depth ahead of the device: the render thread idles above this mark and is
 /// woken below it. Four device buffers (~93 ms) rides out a slow render pass.
@@ -32,13 +32,6 @@ struct Queue {
     notify: Option<Sender<AudioRenderThreadMsg>>,
 }
 
-/// Poison-tolerant lock — the callback must not unwind across the FFI boundary.
-fn lock(queue: &Mutex<Queue>) -> MutexGuard<'_, Queue> {
-    queue
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 /// SDL's audio thread: drains the queue into the device buffer and wakes the render
 /// thread once the queue falls below target.
 ///
@@ -48,17 +41,10 @@ fn lock(queue: &Mutex<Queue>) -> MutexGuard<'_, Queue> {
 /// outlives the device, so it is live for every call.
 unsafe extern "C" fn audio_callback(userdata: *mut c_void, stream: *mut u8, len: c_int) {
     let queue = unsafe { &*(userdata as *const Mutex<Queue>) };
-    let out = unsafe {
-        std::slice::from_raw_parts_mut(stream as *mut f32, len as usize / size_of::<f32>())
-    };
+    let out = unsafe { super::device::out_slice(stream, len) };
 
     let mut queue = lock(queue);
-    let available = queue.samples.len().min(out.len());
-    for (dst, sample) in out.iter_mut().zip(queue.samples.drain(..available)) {
-        *dst = sample;
-    }
-    // Underrun: play silence rather than whatever the driver left in the buffer.
-    out[available..].fill(0.0);
+    super::device::drain_into(out, &mut queue.samples, 1.0);
 
     if queue.samples.len() < QUEUE_TARGET_SAMPLES {
         if let Some(notify) = &queue.notify {

@@ -21,8 +21,9 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 use super::shared::{lock, player_callback, wait, Pcm, Shared};
 use super::source::ByteReader;
+use super::video::VideoPipeline;
 use crate::media::device::{Device, CHANNELS};
-use crate::media::video::VideoPipeline;
+use crate::media::{triage_decode, DecodeFailure};
 
 /// Decoded PCM buffered ahead of the device; rides out refetch latency.
 const PCM_TARGET_SECONDS: f64 = 1.0;
@@ -214,11 +215,13 @@ fn run_pipeline(
                     break (rate, channels, secs);
                 }
                 Ok(_) => continue,
-                Err(SymphoniaError::DecodeError(e)) => {
-                    log::debug!("audio: skipping malformed packet: {e}");
-                    continue;
-                }
-                Err(e) => return Err(format!("decode failed: {e}")),
+                Err(e) => match triage_decode(e) {
+                    DecodeFailure::Skip => continue,
+                    DecodeFailure::Stop => {
+                        return Err("stream parameters changed before any audio decoded".into())
+                    }
+                    DecodeFailure::Fatal(e) => return Err(format!("decode failed: {e}")),
+                },
             }
         };
         audio_duration = num_frames
@@ -321,9 +324,8 @@ fn run_pipeline(
             shared.events.send(PlayerEvent::SeekDone(target));
         }
 
-        // The device follows the flags; the decoder thread is its only owner.
-        // Nothing left to play also pauses it, or an ended element would keep
-        // the hardware powered ticking silence.
+        // The device follows the flags, and nothing left to play pauses it too:
+        // an ended element would keep the hardware ticking silence.
         if let Some(a) = &audio {
             let queue_empty = lock(&shared.pcm).queue.is_empty();
             let want_play = !(shared.paused.load(Ordering::SeqCst) || (at_eof && queue_empty));
@@ -434,22 +436,20 @@ fn run_pipeline(
 
         let buffer = match a.decoder.decode(&packet) {
             Ok(buffer) => buffer,
-            Err(SymphoniaError::DecodeError(e)) => {
-                log::debug!("audio: skipping malformed packet: {e}");
-                continue 'main;
-            }
-            // A mid-stream format change cannot continue on one device config.
-            Err(SymphoniaError::ResetRequired) => {
-                log::info!("audio: stream parameters changed mid-play; ending");
-                at_eof = true;
-                continue 'main;
-            }
-            Err(e) => {
-                shared
-                    .events
-                    .send(PlayerEvent::Error(format!("decode failed: {e}")));
-                break 'main;
-            }
+            Err(e) => match triage_decode(e) {
+                DecodeFailure::Skip => continue 'main,
+                DecodeFailure::Stop => {
+                    log::info!("audio: stream parameters changed mid-play; ending");
+                    at_eof = true;
+                    continue 'main;
+                }
+                DecodeFailure::Fatal(e) => {
+                    shared
+                        .events
+                        .send(PlayerEvent::Error(format!("decode failed: {e}")));
+                    break 'main;
+                }
+            },
         };
         if buffer.frames() == 0 {
             continue 'main;
@@ -488,9 +488,8 @@ fn run_pipeline(
 }
 
 /// Seek to `target`. Video must restart at an IDR, but symphonia's mp4 seek is
-/// sample-accurate: scan backward in steps until the first video packet after
-/// the seek point is a keyframe (or the file start), and hand it onward. Audio
-/// packets consumed by the scan are pre-target; the audio trim covers them.
+/// sample-accurate, so this scans backward until the first video packet after
+/// the seek point is a keyframe. The audio trim covers what the scan consumed.
 fn seek_to(
     reader: &mut dyn FormatReader,
     target: f64,
@@ -601,10 +600,7 @@ fn emit_position(shared: &Shared, pcm: &mut Pcm, rate: u32, playing: bool) {
     if !playing {
         return;
     }
-    let played = pcm
-        .pushed_frames
-        .saturating_sub(pcm.queue.len() as u64 / u64::from(CHANNELS));
-    let position = pcm.base_secs + played as f64 / f64::from(rate);
+    let position = pcm.position(rate);
     if position - pcm.last_emitted_pos >= POSITION_EVENT_SECONDS {
         pcm.last_emitted_pos = position;
         shared.events.send(PlayerEvent::PositionChanged(position));

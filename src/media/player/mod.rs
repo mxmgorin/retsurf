@@ -15,7 +15,7 @@
 //! never block; everything slow lives on one decoder thread per player
 //! ([`pipeline`]), which owns the SDL device and does the blocking `SeekData`
 //! handshakes ([`source`]). The SDL audio thread only drains the PCM queue.
-//! H.264 video tracks are routed to [`super::video`], which presents against
+//! H.264 video tracks are routed to [`video`], which presents against
 //! this player's clock.
 
 use std::ops::Range;
@@ -34,6 +34,7 @@ mod shared;
 mod source;
 #[cfg(test)]
 mod tests;
+mod video;
 
 use self::pipeline::spawn_decoder;
 pub(crate) use self::shared::Shared;

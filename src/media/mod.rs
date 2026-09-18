@@ -11,7 +11,6 @@ mod decoder;
 mod device;
 mod player;
 mod sink;
-mod video;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -105,58 +104,55 @@ pub fn init(
     subsystem
 }
 
-/// Live audio contexts of one Servo pipeline, so `suspend`/`resume`/`mute` can
-/// reach them. `Weak`: an entry never keeps a closed context alive.
-type Contexts = Vec<Weak<Mutex<AudioContext>>>;
+/// Live media instances (audio contexts, `<audio>` players) of each Servo
+/// pipeline, so `suspend`/`resume`/`mute` can reach them. `Weak`: an entry
+/// never keeps a closed instance alive; every touch drops the dead.
+struct WeakRegistry<T: ?Sized>(Mutex<HashMap<ClientContextId, Vec<Weak<Mutex<T>>>>>);
 
-/// Live `<audio>` players of one Servo pipeline, same lifecycle rules as
-/// [`Contexts`].
-type Players = Vec<Weak<Mutex<dyn Player>>>;
+impl<T: ?Sized> WeakRegistry<T> {
+    fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
 
-struct SdlMediaBackend {
-    contexts: Mutex<HashMap<ClientContextId, Contexts>>,
-    players: Mutex<HashMap<ClientContextId, Players>>,
-    /// Media-instance ids (`MediaInstance::get_id`), unique across the process.
-    next_id: AtomicUsize,
+    /// Track `instance` under `id`, dropping whatever closed pipelines left
+    /// behind before growing the map.
+    fn register(&self, id: &ClientContextId, instance: &Arc<Mutex<T>>) {
+        let mut map = self.0.lock().expect("no panics under this lock");
+        map.retain(|_, entry| {
+            entry.retain(|weak| weak.strong_count() > 0);
+            !entry.is_empty()
+        });
+        map.entry(*id).or_default().push(Arc::downgrade(instance));
+    }
+
+    /// Runs `f` over every live instance of `id`, dropping the entries that died.
+    fn for_each(&self, id: &ClientContextId, f: impl Fn(&T)) {
+        let mut map = self.0.lock().expect("no panics under this lock");
+        let Some(entry) = map.get_mut(id) else {
+            return;
+        };
+        entry.retain(|weak| match weak.upgrade() {
+            Some(instance) => {
+                f(&*instance.lock().expect("no panics under this lock"));
+                true
+            }
+            None => false,
+        });
+    }
 }
 
-impl SdlMediaBackend {
-    /// Runs `f` over every live context of `id`, dropping the entries that died.
-    fn with_contexts(&self, id: &ClientContextId, f: impl Fn(&AudioContext)) {
-        let mut contexts = self.contexts.lock().expect("no panics under this lock");
-        let Some(entry) = contexts.get_mut(id) else {
-            return;
-        };
-        entry.retain(|weak| match weak.upgrade() {
-            Some(context) => {
-                f(&context.lock().expect("no panics under this lock"));
-                true
-            }
-            None => false,
-        });
-    }
-
-    /// Same walk for players; a background tab must quiet its `<audio>` too.
-    fn with_players(&self, id: &ClientContextId, f: impl Fn(&dyn Player)) {
-        let mut players = self.players.lock().expect("no panics under this lock");
-        let Some(entry) = players.get_mut(id) else {
-            return;
-        };
-        entry.retain(|weak| match weak.upgrade() {
-            Some(player) => {
-                f(&*player.lock().expect("no panics under this lock"));
-                true
-            }
-            None => false,
-        });
-    }
+struct SdlMediaBackend {
+    contexts: WeakRegistry<AudioContext>,
+    players: WeakRegistry<dyn Player>,
+    /// Media-instance ids (`MediaInstance::get_id`), unique across the process.
+    next_id: AtomicUsize,
 }
 
 impl BackendInit for SdlMediaBackend {
     fn init() -> Box<dyn Backend> {
         Box::new(SdlMediaBackend {
-            contexts: Mutex::new(HashMap::new()),
-            players: Mutex::new(HashMap::new()),
+            contexts: WeakRegistry::new(),
+            players: WeakRegistry::new(),
             next_id: AtomicUsize::new(0),
         })
     }
@@ -178,25 +174,15 @@ impl Backend for SdlMediaBackend {
             options,
         )?;
         let context = Arc::new(Mutex::new(context));
-
-        let mut contexts = self.contexts.lock().expect("no panics under this lock");
-        // Pipelines come and go; drop whatever they left behind before growing the map.
-        contexts.retain(|_, entry| {
-            entry.retain(|weak| weak.strong_count() > 0);
-            !entry.is_empty()
-        });
-        contexts
-            .entry(*id)
-            .or_default()
-            .push(Arc::downgrade(&context));
+        self.contexts.register(id, &context);
         Ok(context)
     }
 
     fn mute(&self, id: &ClientContextId, val: bool) {
-        self.with_contexts(id, |context| {
+        self.contexts.for_each(id, |context| {
             let _ = context.mute(val);
         });
-        self.with_players(id, |player| {
+        self.players.for_each(id, |player| {
             let _ = MediaInstance::mute(player, val);
         });
     }
@@ -204,19 +190,19 @@ impl Backend for SdlMediaBackend {
     /// Document no longer fully active: stopping the render thread pauses the device,
     /// which is what quiets a background page.
     fn suspend(&self, id: &ClientContextId) {
-        self.with_contexts(id, |context| {
+        self.contexts.for_each(id, |context| {
             let _ = context.suspend();
         });
-        self.with_players(id, |player| {
+        self.players.for_each(id, |player| {
             let _ = player.suspend();
         });
     }
 
     fn resume(&self, id: &ClientContextId) {
-        self.with_contexts(id, |context| {
+        self.contexts.for_each(id, |context| {
             let _ = context.resume();
         });
-        self.with_players(id, |player| {
+        self.players.for_each(id, |player| {
             let _ = player.resume();
         });
     }
@@ -253,16 +239,7 @@ impl Backend for SdlMediaBackend {
             observer,
             video_renderer,
         )));
-
-        let mut players = self.players.lock().expect("no panics under this lock");
-        players.retain(|_, entry| {
-            entry.retain(|weak| weak.strong_count() > 0);
-            !entry.is_empty()
-        });
-        players
-            .entry(*id)
-            .or_default()
-            .push(Arc::downgrade(&player));
+        self.players.register(id, &player);
         player
     }
 
@@ -380,5 +357,27 @@ struct NoDeviceMonitor;
 impl MediaDeviceMonitor for NoDeviceMonitor {
     fn enumerate_devices(&self) -> Option<Vec<MediaDeviceInfo>> {
         Some(vec![])
+    }
+}
+
+/// How a decode loop should treat a failed `decode()` — the one classification,
+/// shared by the player pipeline and `decodeAudioData`.
+pub(crate) enum DecodeFailure {
+    /// One malformed packet; the rest of the stream usually still decodes.
+    Skip,
+    /// Parameters changed mid-stream; one device/buffer config cannot follow.
+    Stop,
+    Fatal(symphonia::core::errors::Error),
+}
+
+pub(crate) fn triage_decode(e: symphonia::core::errors::Error) -> DecodeFailure {
+    use symphonia::core::errors::Error;
+    match e {
+        Error::DecodeError(e) => {
+            log::debug!("audio: skipping malformed packet: {e}");
+            DecodeFailure::Skip
+        }
+        Error::ResetRequired => DecodeFailure::Stop,
+        e => DecodeFailure::Fatal(e),
     }
 }

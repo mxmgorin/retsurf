@@ -114,14 +114,12 @@ fn decode_planar(
 
         let audio = match decoder.decode(&packet) {
             Ok(audio) => audio,
-            // One malformed packet: the rest of the file usually still decodes.
-            Err(SymphoniaError::DecodeError(e)) => {
-                log::debug!("audio: skipping malformed packet: {e}");
-                continue;
-            }
-            // Parameters changed mid-stream; one `AudioBuffer` cannot represent that.
-            Err(SymphoniaError::ResetRequired) => break,
-            Err(e) => return Err(from_symphonia(e)),
+            Err(e) => match super::triage_decode(e) {
+                super::DecodeFailure::Skip => continue,
+                // Keep what decoded up to the parameter change.
+                super::DecodeFailure::Stop => break,
+                super::DecodeFailure::Fatal(e) => return Err(from_symphonia(e)),
+            },
         };
         if audio.frames() == 0 {
             continue;

@@ -22,13 +22,7 @@ const KEEP_BACK_BYTES: usize = 4 * 1024 * 1024;
 /// the element clamps it into the seekable ranges first.
 const NO_SEEK: u64 = u64::MAX;
 
-/// Poison-tolerant lock: the SDL callback must not unwind across FFI, and a
-/// panicked decoder thread must not take the script thread down with it.
-pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
+pub(super) use crate::media::device::lock;
 
 pub(super) fn wait<'a, T>(cv: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
     cv.wait(guard)
@@ -91,6 +85,17 @@ pub(super) struct Pcm {
     /// Media time of the newest decoded sample; `buffered()`'s fallback.
     pub(super) decoded_secs: f64,
     pub(super) last_emitted_pos: f64,
+}
+
+impl Pcm {
+    /// The audio clock: media time of the frame the device plays next — the one
+    /// formula, shared by [`Shared::clock_secs`] and the position events.
+    pub(super) fn position(&self, rate: u32) -> f64 {
+        let played = self
+            .pushed_frames
+            .saturating_sub(self.queue.len() as u64 / u64::from(CHANNELS));
+        self.base_secs + played as f64 / f64::from(rate)
+    }
 }
 
 pub(super) struct MetaState {
@@ -217,11 +222,7 @@ impl Shared {
     pub(crate) fn clock_secs(&self) -> f64 {
         let clock = lock(&self.clock);
         if let Some(rate) = clock.audio_rate {
-            let pcm = lock(&self.pcm);
-            let played = pcm
-                .pushed_frames
-                .saturating_sub(pcm.queue.len() as u64 / u64::from(CHANNELS));
-            return pcm.base_secs + played as f64 / f64::from(rate);
+            return lock(&self.pcm).position(rate);
         }
         match clock.anchor {
             Some(anchor) => clock.at + anchor.elapsed().as_secs_f64(),
@@ -268,9 +269,7 @@ pub(super) unsafe extern "C" fn player_callback(
     len: c_int,
 ) {
     let shared = unsafe { &*(userdata as *const Shared) };
-    let out = unsafe {
-        std::slice::from_raw_parts_mut(stream as *mut f32, len as usize / size_of::<f32>())
-    };
+    let out = unsafe { crate::media::device::out_slice(stream, len) };
 
     let silent =
         shared.muted.load(Ordering::Relaxed) || !shared.track_enabled.load(Ordering::Relaxed);
@@ -281,11 +280,7 @@ pub(super) unsafe extern "C" fn player_callback(
     };
 
     let mut pcm = lock(&shared.pcm);
-    let available = pcm.queue.len().min(out.len());
-    for (dst, sample) in out.iter_mut().zip(pcm.queue.drain(..available)) {
-        *dst = sample * factor;
-    }
-    out[available..].fill(0.0);
+    crate::media::device::drain_into(out, &mut pcm.queue, factor);
     drop(pcm);
 
     // Every tick, not just below a low-water mark: the decoder also paces

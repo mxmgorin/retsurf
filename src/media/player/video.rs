@@ -21,7 +21,7 @@ use servo_media::player::video::{Buffer, VideoFrame, VideoFrameData, VideoFrameR
 use servo_media::player::PlayerEvent;
 use yuv::{yuv420_to_bgra, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
-use super::player::Shared;
+use super::Shared;
 
 /// Compressed packets buffered ahead of the decoder; the demux thread's send
 /// blocking on a full channel is the video-only pacing. Sized to hold a whole
