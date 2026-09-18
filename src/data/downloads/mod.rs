@@ -48,13 +48,7 @@ impl Download {
     /// done, the error otherwise.
     pub fn status_text(&self) -> String {
         match &self.state {
-            State::Active if self.total > 0 => format!(
-                "{}% · {} / {}",
-                self.received * 100 / self.total,
-                format_size(self.received),
-                format_size(self.total),
-            ),
-            State::Active => format_size(self.received),
+            State::Active => format_progress(self.received, self.total),
             State::Done => format!(
                 "{} · {}",
                 format_size(self.received),
@@ -276,6 +270,19 @@ impl Downloads {
 
 fn file_name_of(path: &str) -> String {
     path.rsplit('/').next().unwrap_or(path).to_string()
+}
+
+/// `NN% · a / b` while the total is known, else just what has arrived so far.
+/// Shared by the menu's download rows and the About tab's update row.
+pub fn format_progress(received: u64, total: u64) -> String {
+    match (received * 100).checked_div(total) {
+        Some(pct) => format!(
+            "{pct}% · {} / {}",
+            format_size(received),
+            format_size(total)
+        ),
+        None => format_size(received),
+    }
 }
 
 /// Compact human size, e.g. `831 B`, `3.4 MB`.

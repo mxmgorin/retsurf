@@ -140,16 +140,7 @@ fn update_row_text(state: &UpdateState) -> (String, String) {
             ..
         } => (format!("Download {version}"), "Open page".to_string()),
         UpdateState::Downloading { received, total } => {
-            let value = if *total > 0 {
-                format!(
-                    "{}%  ·  {} / {}",
-                    received * 100 / total,
-                    format_size(*received),
-                    format_size(*total)
-                )
-            } else {
-                format_size(*received)
-            };
+            let value = crate::data::downloads::format_progress(*received, *total);
             ("Downloading update".to_string(), value)
         }
         UpdateState::Installing => ("Installing update".to_string(), "...".to_string()),
