@@ -50,8 +50,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # v4 drops the obsolete `tools` package Google removed from the repo;
+      # `packages` is pinned so a changed default can't reintroduce a dead one.
       - name: Set up Android SDK + NDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install NDK + platform + build-tools
         run: |
