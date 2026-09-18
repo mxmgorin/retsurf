@@ -2,7 +2,7 @@
 //! a saved session. All tabs share one rendering context, so exactly one is
 //! shown at a time.
 
-use super::{engine, AppBrowser, Tab, TabInfo};
+use super::{AppBrowser, Tab, TabInfo};
 use ::url::Url;
 
 impl AppBrowser {
@@ -36,24 +36,18 @@ impl AppBrowser {
             .collect()
     }
 
-    /// Build a webview loading `url` (with the default page zoom applied), or
+    /// Build a webview loading `url` (with the shared per-webview setup), or
     /// `None` if the URL won't parse. It is not shown or focused — the callers
     /// decide whether the new tab is foreground or background.
     fn build_tab(&self, url: &str) -> Option<servo::WebView> {
         let url = Url::parse(url).ok()?;
-        let webview =
+        let builder =
             servo::WebViewBuilder::new(&self.inner.servo, self.inner.rendering_ctx.clone())
-                .url(url)
-                .hidpi_scale_factor(euclid::Scale::new(self.inner.hidpi.get()))
-                .delegate(self.inner.clone())
-                .gamepad_delegate(self.inner.clone())
-                .user_content_manager(self.inner.user_content.clone())
-                .build();
-        if self.inner.default_zoom != 1.0 {
-            webview.set_page_zoom(self.inner.default_zoom);
-        }
-        webview.notify_theme_change(engine::theme(self.inner.page_theme.get()));
-        Some(webview)
+                .url(url);
+        Some(
+            self.inner
+                .build_webview(builder, self.inner.clone(), self.inner.clone()),
+        )
     }
 
     /// Open a new tab at `url` and make it the active (shown) one.
@@ -61,20 +55,7 @@ impl AppBrowser {
         let Some(webview) = self.build_tab(url) else {
             return;
         };
-
-        // Hide the previously shown tab before switching to the new one (all tabs
-        // share one rendering context, so only one may be shown at a time).
-        if let Some(cur) = self.inner.active_webview() {
-            cur.hide();
-        }
-        webview.show();
-        webview.focus();
-
-        let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.push(Tab::loading(webview));
-        self.inner.active.set(tabs.len() - 1);
-        drop(tabs);
-        self.inner.repaint_pending.set(true);
+        self.inner.adopt_tab(Tab::loading(webview));
         self.trim_tabs();
     }
 
@@ -209,14 +190,8 @@ impl AppBrowser {
             log::warn!("failed to parse home_page `{home}`");
             return;
         };
-        let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.clear();
-        webview.show();
-        webview.focus();
-        tabs.push(Tab::loading(webview));
-        self.inner.active.set(0);
-        drop(tabs);
-        self.inner.repaint_pending.set(true);
+        self.inner.tabs.borrow_mut().clear();
+        self.inner.adopt_tab(Tab::loading(webview));
     }
 
     /// Drop the tab at `index`, keeping at least one open.

@@ -147,8 +147,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// `window.open`. Build it (reusing this webview's delegate and our shared
     /// rendering context) and adopt it as a new foreground tab. Servo destroys
     /// the new webview immediately unless we keep a live handle, so it must go
-    /// into `tabs`. The new webview drives its own navigation, so we don't set a
-    /// URL — mirroring [`super::AppBrowser::build_tab`] otherwise.
+    /// into `tabs`. The new webview drives its own navigation, so no URL is set;
+    /// the rest of the setup is the shared `build_webview`.
     fn request_create_new(&self, parent_webview: WebView, request: servo::CreateNewWebViewRequest) {
         // A page must not evict a tab of the user's, so the popup is declined
         // at the cap — except at one, where declining is a dead link.
@@ -157,40 +157,22 @@ impl servo::WebViewDelegate for AppBrowserInner {
             log::warn!("tab cap reached: declined a page-opened tab");
             return;
         }
-        let webview = request
-            .builder(self.rendering_ctx.clone())
-            .hidpi_scale_factor(euclid::Scale::new(self.hidpi.get()))
-            .delegate(parent_webview.delegate())
-            .gamepad_delegate(parent_webview.gamepad_delegate())
-            .user_content_manager(self.user_content.clone())
-            .build();
-        if self.default_zoom != 1.0 {
-            webview.set_page_zoom(self.default_zoom);
-        }
-        webview.notify_theme_change(super::engine::theme(self.page_theme.get()));
+        let webview = self.build_webview(
+            request.builder(self.rendering_ctx.clone()),
+            parent_webview.delegate(),
+            parent_webview.gamepad_delegate(),
+        );
 
-        // Only one tab may be shown (all share one rendering context), so hide
-        // the current one before showing the new tab — matching `open_tab`.
-        if let Some(cur) = self.active_webview() {
-            cur.hide();
-        }
-        webview.show();
-        webview.focus();
-
-        let mut tabs = self.tabs.borrow_mut();
         // Dropping a `WebView` closes it in Servo, so the tab it replaces goes
         // with it rather than lingering behind the cap.
         if replaces {
-            tabs.clear();
+            self.tabs.borrow_mut().clear();
         }
-        tabs.push(Tab {
+        self.adopt_tab(Tab {
             webview,
             state: BrowserState::default(),
             page_images: RefCell::default(),
         });
-        self.active.set(tabs.len() - 1);
-        drop(tabs);
-        self.repaint_pending.set(true);
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 

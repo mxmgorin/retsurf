@@ -294,6 +294,42 @@ impl AppBrowserInner {
         }
     }
 
+    /// Finish `builder` with the setup every webview gets, however it is
+    /// created — the popup path once drifted and lost the shim and the theme.
+    fn build_webview(
+        &self,
+        builder: servo::WebViewBuilder,
+        delegate: Rc<dyn servo::WebViewDelegate>,
+        gamepad: Rc<dyn servo::GamepadDelegate>,
+    ) -> WebView {
+        let webview = builder
+            .hidpi_scale_factor(euclid::Scale::new(self.hidpi.get()))
+            .delegate(delegate)
+            .gamepad_delegate(gamepad)
+            .user_content_manager(self.user_content.clone())
+            .build();
+        if self.default_zoom != 1.0 {
+            webview.set_page_zoom(self.default_zoom);
+        }
+        webview.notify_theme_change(engine::theme(self.page_theme.get()));
+        webview
+    }
+
+    /// Adopt `tab` as the new shown tab: hide the current one first (all tabs
+    /// share one rendering context, so only one may be shown at a time).
+    fn adopt_tab(&self, tab: Tab) {
+        if let Some(cur) = self.active_webview() {
+            cur.hide();
+        }
+        tab.webview.show();
+        tab.webview.focus();
+        let mut tabs = self.tabs.borrow_mut();
+        tabs.push(tab);
+        self.active.set(tabs.len() - 1);
+        drop(tabs);
+        self.repaint_pending.set(true);
+    }
+
     /// The currently shown tab's webview, if any.
     fn active_webview(&self) -> Option<WebView> {
         self.tabs
