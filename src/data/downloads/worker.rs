@@ -264,26 +264,27 @@ fn has_extension(name: &str) -> bool {
     matches!(name.rsplit_once('.'), Some((stem, ext)) if !stem.is_empty() && !ext.is_empty())
 }
 
-/// Reserve a free destination (`name`, `stem-1.ext`, …): creating the `.part`
-/// exclusively is the reservation, so parallel workers can't collide.
-fn create_unique(dir: &str, filename: &str) -> Result<(String, String, std::fs::File), String> {
+/// Candidate destinations for `filename` in `dir` — the name itself, then
+/// `stem-1.ext`, `stem-2.ext`, … Both reservation strategies walk this list.
+fn candidates<'a>(dir: &'a str, filename: &'a str) -> impl Iterator<Item = String> + 'a {
     let (stem, ext) = match filename.rsplit_once('.') {
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
         _ => (filename.to_string(), String::new()),
     };
-    let mut n = 0u32;
-    loop {
-        let name = if n == 0 {
-            filename.to_string()
-        } else {
-            format!("{stem}-{n}{ext}")
-        };
-        let path = format!("{dir}{name}");
-        let part = format!("{path}.part");
-        n += 1;
+    (0u32..).map(move |n| match n {
+        0 => format!("{dir}{filename}"),
+        n => format!("{dir}{stem}-{n}{ext}"),
+    })
+}
+
+/// Reserve a free destination: creating the `.part` exclusively is the
+/// reservation, so parallel workers can't collide.
+fn create_unique(dir: &str, filename: &str) -> Result<(String, String, std::fs::File), String> {
+    for path in candidates(dir, filename) {
         if std::path::Path::new(&path).exists() {
             continue;
         }
+        let part = format!("{path}.part");
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -294,29 +295,18 @@ fn create_unique(dir: &str, filename: &str) -> Result<(String, String, std::fs::
             Err(e) => return Err(format!("create: {e}")),
         }
     }
+    unreachable!("candidates never ends")
 }
 
-/// `dir/filename`, suffixed `-1`, `-2`, … until neither the file nor its `.part`
-/// exists. For whole-file writes on the main thread; workers use [`create_unique`].
+/// The first candidate where neither the file nor its `.part` exists. For
+/// whole-file writes on the main thread; workers use [`create_unique`].
 pub(super) fn unique_path(dir: &str, filename: &str) -> String {
-    let (stem, ext) = match filename.rsplit_once('.') {
-        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
-        _ => (filename.to_string(), String::new()),
-    };
-    let mut n = 0u32;
-    loop {
-        let name = if n == 0 {
-            filename.to_string()
-        } else {
-            format!("{stem}-{n}{ext}")
-        };
-        let path = format!("{dir}{name}");
-        let part = format!("{path}.part");
-        if !std::path::Path::new(&path).exists() && !std::path::Path::new(&part).exists() {
-            return path;
-        }
-        n += 1;
-    }
+    candidates(dir, filename)
+        .find(|path| {
+            !std::path::Path::new(path).exists()
+                && !std::path::Path::new(&format!("{path}.part")).exists()
+        })
+        .expect("candidates never ends")
 }
 
 #[cfg(test)]
