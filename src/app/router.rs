@@ -138,26 +138,20 @@ impl App {
                     self.browser.execute_command(&command, &self.config.browser);
                 }
             },
-            InputCommand::ToggleOsk => {
-                if focus == Focus::Menu {
-                    // X deletes the highlighted entry (closes a tab in the Tabs section).
-                    self.delete_menu_selection();
-                } else if focus == Focus::DialEdit {
-                    // X deletes the focused pin tile (no-op on the field or the
-                    // trailing "Pin settings" tile, which adds with A).
-                    self.ui.dial_edit_remove_selected();
-                } else if focus == Focus::Settings {
-                    // X is unused in settings (rows edit with A and Left/Right).
-                } else if matches!(
-                    focus,
-                    Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit
-                ) {
-                    // X is unused here too: the keyboard has a row of its own.
-                } else if focus == Focus::Hints && self.config.input.hint_badges {
-                    // In hint mode X is a combo symbol, not the OSK toggle (unless
-                    // combos are disabled, when it falls through to the OSK below).
-                    self.hint_sym(Sym::X);
-                } else {
+            InputCommand::ToggleOsk => match focus {
+                // X deletes the highlighted entry (closes a tab in the Tabs section).
+                Focus::Menu => self.delete_menu_selection(),
+                // X deletes the focused pin tile (no-op on the field or the
+                // trailing "Pin settings" tile, which adds with A).
+                Focus::DialEdit => self.ui.dial_edit_remove_selected(),
+                // X is unused in settings (rows edit with A and Left/Right) and
+                // on Game Mode's screens (the keyboard has a row of its own).
+                Focus::Settings => {}
+                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                // In hint mode X is a combo symbol, not the OSK toggle (unless
+                // combos are disabled, when it falls through to the OSK below).
+                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
+                Focus::Hints | Focus::Osk | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
                     // On the start page, X types into the search field — focus it
@@ -172,11 +166,11 @@ impl App {
                     };
                     self.ui.osk(cmd, &self.browser, out);
                 }
-            }
+            },
             // Tab switching is parked while a modal prompt is up — it belongs
             // to the page that opened it.
             InputCommand::CycleTab(delta) => {
-                if !self.ui.prompt.visible() && !takes_over(focus) {
+                if !self.ui.prompt.visible() && !focus.takes_over() {
                     self.browser.cycle_tab(*delta);
                 }
             }
@@ -264,16 +258,17 @@ impl App {
                 Focus::Hints if self.config.input.hint_badges => {
                     self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                 }
-                // Page navigation is parked while the modal prompt is up (it
-                // may sit under the keyboard), like tab switching.
-                _ if self.ui.prompt.visible() => {}
-                _ => {
-                    let cmd = if *delta < 0 {
-                        BrowserCommand::Back
-                    } else {
-                        BrowserCommand::Forward
-                    };
-                    self.browser.execute_command(&cmd, &self.config.browser);
+                Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
+                    // Page navigation is parked while the modal prompt is up (it
+                    // may sit under the keyboard), like tab switching.
+                    if !self.ui.prompt.visible() {
+                        let cmd = if *delta < 0 {
+                            BrowserCommand::Back
+                        } else {
+                            BrowserCommand::Forward
+                        };
+                        self.browser.execute_command(&cmd, &self.config.browser);
+                    }
                 }
             },
             InputCommand::Trigger { right, pressed } => {
@@ -286,7 +281,7 @@ impl App {
                     } else {
                         self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
-                } else if *pressed && !self.ui.prompt.visible() && !takes_over(focus) {
+                } else if *pressed && !self.ui.prompt.visible() && !focus.takes_over() {
                     // Quick tab switch: L2 previous, R2 next (wraps).
                     self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
@@ -296,7 +291,7 @@ impl App {
             InputCommand::Osk(cmd) => {
                 if focus == Focus::Osk {
                     self.ui.osk(*cmd, &self.browser, out);
-                } else if matches!(cmd, OskCommand::Space) && !takes_over(focus) {
+                } else if matches!(cmd, OskCommand::Space) && !focus.takes_over() {
                     self.browser
                         .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }
@@ -528,15 +523,6 @@ impl App {
         }
         false
     }
-}
-
-/// Overlays that own the device outright, so a browser-level shortcut — tab
-/// switching, reload, back/forward — must not fire underneath them.
-fn takes_over(focus: Focus) -> bool {
-    matches!(
-        focus,
-        Focus::Settings | Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit
-    )
 }
 
 /// Map a discrete D-pad press direction to its combo symbol (hint mode).

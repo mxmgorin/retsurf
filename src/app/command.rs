@@ -41,19 +41,23 @@ pub enum AppCommand {
 impl AppCommand {
     /// Whether this still fires while Game Mode is on: the mode's own menu and
     /// overlays, the way out, the loop's upkeep. A shortcut reaching the browser
-    /// behind the game is the thing the mode exists to stop.
+    /// behind the game is the thing the mode exists to stop. Exhaustive so a new
+    /// command must place itself.
     pub fn in_game_mode(&self) -> bool {
-        matches!(
-            self,
+        match self {
             AppCommand::Shutdown
-                | AppCommand::Resize
-                | AppCommand::Input(_)
-                | AppCommand::Prompt(_)
-                | AppCommand::GameMenu(_)
-                | AppCommand::GameInputMaps(_)
-                | AppCommand::GameMapEdit(_)
-                | AppCommand::GameMode
-        )
+            | AppCommand::Resize
+            | AppCommand::Input(_)
+            | AppCommand::Prompt(_)
+            | AppCommand::GameMenu(_)
+            | AppCommand::GameInputMaps(_)
+            | AppCommand::GameMapEdit(_)
+            | AppCommand::GameMode => true,
+            AppCommand::Browser(_)
+            | AppCommand::Menu(_)
+            | AppCommand::ToggleBookmark
+            | AppCommand::Settings(_) => false,
+        }
     }
 }
 

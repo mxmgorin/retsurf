@@ -912,8 +912,9 @@ impl AppUi {
         self.game_mode
     }
 
-    /// Whether one of Game Mode's own screens owns the input. The browser's
-    /// vocabulary shrinks under any of them, in or out of the mode.
+    /// Whether one of Game Mode's own screens is up. The browser's vocabulary
+    /// shrinks under any of them, in or out of the mode. Visibility, not
+    /// [`Focus::is_game_screen`]: it stays true with the OSK open over one.
     #[inline]
     pub fn game_screen(&self) -> bool {
         self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()

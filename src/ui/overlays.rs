@@ -45,6 +45,39 @@ pub enum Focus {
     Page,
 }
 
+impl Focus {
+    /// One of Game Mode's own screens: the menu, the map list, the map editor.
+    /// Exhaustive so a new variant must place itself.
+    pub fn is_game_screen(self) -> bool {
+        match self {
+            Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => true,
+            Focus::Osk
+            | Focus::Prompt
+            | Focus::Menu
+            | Focus::Settings
+            | Focus::Hints
+            | Focus::DialEdit
+            | Focus::Home
+            | Focus::Page => false,
+        }
+    }
+
+    /// Overlays that own the device outright, so a browser-level shortcut — tab
+    /// switching, reload, back/forward — must not fire underneath them.
+    pub fn takes_over(self) -> bool {
+        match self {
+            Focus::Settings | Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => true,
+            Focus::Osk
+            | Focus::Prompt
+            | Focus::Menu
+            | Focus::Hints
+            | Focus::DialEdit
+            | Focus::Home
+            | Focus::Page => false,
+        }
+    }
+}
+
 impl AppUi {
     /// The current input owner — see [`Focus`] for the precedence.
     #[inline]
