@@ -31,7 +31,7 @@ pub use pads::PadSlots;
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{AppConfig, ExperimentalConfig, PageTheme},
-    event::user::{UserEvent, UserEventSender},
+    event::user::{FrameQueue, UserEvent, UserEventSender},
 };
 use servo::profile_traits::mem::MemoryReportResult;
 use servo::{EventLoopWaker, RenderingContext, WebView};
@@ -150,14 +150,14 @@ struct AppBrowserInner {
     /// URLs the active webview has actually navigated to since the last drain, for
     /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
     /// the address-bar text — so typing a URL doesn't pollute history.
-    visited: RefCell<Vec<String>>,
+    visited: FrameQueue<String>,
     /// Download navigations denied by [`delegate`], drained once per frame.
-    download_requests: RefCell<Vec<DownloadRequest>>,
+    download_requests: FrameQueue<DownloadRequest>,
     /// Webviews whose page signalled a captured blob download (see
     /// [`blob_download`]), drained once per frame into `blob_downloads`.
-    blob_pings: RefCell<Vec<WebView>>,
+    blob_pings: FrameQueue<WebView>,
     /// Files captured from pages, waiting for the main loop to save them.
-    blob_downloads: RefCell<Vec<BlobDownload>>,
+    blob_downloads: FrameQueue<BlobDownload>,
     /// Lowercased URL path extensions treated as downloads (from `[downloads]`).
     download_exts: Vec<String>,
     /// Network-level ad blocking, consulted for every resource load.
@@ -174,10 +174,10 @@ struct AppBrowserInner {
     ime_control: Cell<Option<servo::EmbedderControlId>>,
     /// Select pickers and JS dialogs the page opened (see [`delegate`]),
     /// drained once per frame by the main loop into the prompt overlay.
-    embedder_controls: RefCell<Vec<servo::EmbedderControl>>,
+    embedder_controls: FrameQueue<servo::EmbedderControl>,
     /// Controls Servo retracted before they were answered, drained alongside
     /// `embedder_controls` so the overlay drops them.
-    dismissed_controls: RefCell<Vec<servo::EmbedderControlId>>,
+    dismissed_controls: FrameQueue<servo::EmbedderControlId>,
     /// Injects the download-capture shim (see [`blob_download`]) into every
     /// document before its own scripts run; attached to each webview at build.
     user_content: Rc<servo::UserContentManager>,
@@ -205,7 +205,7 @@ struct AppBrowserInner {
     haptics: Cell<bool>,
     /// Rumble requests from pages, queued by the delegate for the main loop to
     /// play on the SDL controllers it does not own. Drained every pass.
-    haptic_requests: RefCell<Vec<servo::GamepadHapticEffectRequest>>,
+    haptic_requests: FrameQueue<servo::GamepadHapticEffectRequest>,
     /// The panel and the window on it, for the page's `screen` and `outerWidth`.
     /// Servo answers those with zeroes unless the delegate supplies them.
     screen: Cell<servo::ScreenGeometry>,
@@ -250,14 +250,14 @@ impl AppBrowserInner {
         Self {
             tabs: RefCell::new(vec![]),
             active: Cell::new(0),
-            event_sender,
             servo,
             rendering_ctx,
             repaint_pending: Cell::new(false),
-            visited: RefCell::new(vec![]),
-            download_requests: RefCell::new(vec![]),
-            blob_pings: RefCell::new(vec![]),
-            blob_downloads: RefCell::new(vec![]),
+            // History entries only matter once a pass happens anyway.
+            visited: FrameQueue::silent(event_sender.clone()),
+            download_requests: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
+            blob_pings: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
+            blob_downloads: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             download_exts: download_exts
                 .into_iter()
                 .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
@@ -266,8 +266,8 @@ impl AppBrowserInner {
             content_filter: Cell::new(content_filter),
             hint_rects: RefCell::new(None),
             ime_control: Cell::new(None),
-            embedder_controls: RefCell::new(vec![]),
-            dismissed_controls: RefCell::new(vec![]),
+            embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
+            dismissed_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             user_content,
             default_zoom,
             hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
@@ -276,9 +276,10 @@ impl AppBrowserInner {
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
-            haptic_requests: RefCell::new(vec![]),
+            haptic_requests: FrameQueue::new(UserEvent::HapticPending, event_sender.clone()),
             screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
+            event_sender,
         }
     }
 
@@ -393,20 +394,20 @@ impl AppBrowser {
     /// log. Drained once per frame by the main loop.
     #[inline]
     pub fn take_visited(&self) -> Vec<String> {
-        std::mem::take(&mut self.inner.visited.borrow_mut())
+        self.inner.visited.take()
     }
 
     /// Take and clear the download navigations denied since the last call.
     #[inline]
     pub fn take_download_requests(&self) -> Vec<DownloadRequest> {
-        std::mem::take(&mut self.inner.download_requests.borrow_mut())
+        self.inner.download_requests.take()
     }
 
     /// Read back entries captured by the injected script (see [`blob_download`]).
     /// One signalled page yields one entry per call; the read is asynchronous, so
     /// files land in `blob_downloads` and links in `download_requests`.
     pub fn poll_blob_downloads(&self) {
-        let pings: Vec<WebView> = self.inner.blob_pings.borrow_mut().drain(..).collect();
+        let pings = self.inner.blob_pings.take();
         for webview in pings {
             let inner = self.inner.clone();
             // Snapshot the linking page now; the callback runs frames later.
@@ -418,10 +419,10 @@ impl AppBrowser {
                 match result {
                     Ok(servo::JSValue::String(taken)) => match blob_download::parse_taken(&taken) {
                         Some(blob_download::Captured::File(item)) => {
-                            inner.blob_downloads.borrow_mut().push(item);
+                            inner.blob_downloads.push(item);
                         }
                         Some(blob_download::Captured::Link { url, name }) => {
-                            inner.download_requests.borrow_mut().push(DownloadRequest {
+                            inner.download_requests.push(DownloadRequest {
                                 url,
                                 referer,
                                 suggested_name: name,
@@ -432,7 +433,6 @@ impl AppBrowser {
                     Ok(other) => log::warn!("blob download returned unexpected value: {other:?}"),
                     Err(e) => log::warn!("blob download read failed: {e:?}"),
                 }
-                inner.event_sender.send(UserEvent::DownloadUpdate);
             });
         }
     }
@@ -440,7 +440,7 @@ impl AppBrowser {
     /// Take and clear the files captured from pages since the last call.
     #[inline]
     pub fn take_blob_downloads(&self) -> Vec<BlobDownload> {
-        std::mem::take(&mut self.inner.blob_downloads.borrow_mut())
+        self.inner.blob_downloads.take()
     }
 
     /// Ask Servo for a memory report (the data behind `about:memory`), delivered
@@ -503,14 +503,14 @@ impl AppBrowser {
     /// call, for the modal prompt overlay. Drained once per frame.
     #[inline]
     pub fn take_embedder_controls(&self) -> Vec<servo::EmbedderControl> {
-        std::mem::take(&mut self.inner.embedder_controls.borrow_mut())
+        self.inner.embedder_controls.take()
     }
 
     /// Take the ids of controls Servo retracted since the last call, so the
     /// prompt overlay drops them. Drained once per frame.
     #[inline]
     pub fn take_dismissed_controls(&self) -> Vec<servo::EmbedderControlId> {
-        std::mem::take(&mut self.inner.dismissed_controls.borrow_mut())
+        self.inner.dismissed_controls.take()
     }
 
     /// Whether an editable element on the page currently holds focus (guards
@@ -593,7 +593,7 @@ impl AppBrowser {
 
     /// Rumble requests queued since the last pass (see the delegate).
     pub fn take_haptic_requests(&self) -> Vec<servo::GamepadHapticEffectRequest> {
-        std::mem::take(&mut self.inner.haptic_requests.borrow_mut())
+        self.inner.haptic_requests.take()
     }
 
     /// `[input] haptics`, applied live. Documents already loaded keep the

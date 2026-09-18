@@ -1,5 +1,47 @@
 use crate::app::AppCommand;
 use sdl2::sys::{SDL_Event, SDL_PushEvent, SDL_UserEvent};
+use std::cell::RefCell;
+
+/// A queue the main loop drains once per pass. `push` also fires the wake that
+/// makes the pass happen while the loop idles at the event pump — the pairing
+/// lives here so a push site cannot forget its wake.
+pub struct FrameQueue<T> {
+    items: RefCell<Vec<T>>,
+    wake: Option<UserEvent>,
+    sender: UserEventSender,
+}
+
+impl<T> FrameQueue<T> {
+    pub fn new(wake: UserEvent, sender: UserEventSender) -> Self {
+        Self {
+            items: RefCell::new(vec![]),
+            wake: Some(wake),
+            sender,
+        }
+    }
+
+    /// A queue that deliberately wakes nothing: its items only matter once a
+    /// pass happens anyway.
+    pub fn silent(sender: UserEventSender) -> Self {
+        Self {
+            items: RefCell::new(vec![]),
+            wake: None,
+            sender,
+        }
+    }
+
+    pub fn push(&self, item: T) {
+        self.items.borrow_mut().push(item);
+        if let Some(wake) = self.wake {
+            self.sender.send(wake);
+        }
+    }
+
+    /// Take and clear the items queued since the last call.
+    pub fn take(&self) -> Vec<T> {
+        std::mem::take(&mut self.items.borrow_mut())
+    }
+}
 
 pub fn handle_user(code: i32) -> Option<AppCommand> {
     let event = UserEvent::from_code(code);

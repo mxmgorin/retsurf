@@ -48,7 +48,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             tabs[i].state.page_url = url.clone();
             drop(tabs);
             if i == self.active.get() {
-                self.visited.borrow_mut().push(url);
+                self.visited.push(url);
             }
         }
     }
@@ -110,15 +110,11 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let referer = self
             .tab_index(webview.id())
             .and_then(|i| referer_for(&self.tabs.borrow()[i].state.page_url));
-        self.download_requests
-            .borrow_mut()
-            .push(super::DownloadRequest {
-                url,
-                referer,
-                suggested_name: None,
-            });
-        // Wake the main loop so the download starts right away even when idle.
-        self.event_sender.send(UserEvent::DownloadUpdate);
+        self.download_requests.push(super::DownloadRequest {
+            url,
+            referer,
+            suggested_name: None,
+        });
     }
 
     /// Servo requests an IME whenever an editable element gains focus — we
@@ -131,9 +127,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         match control {
             servo::EmbedderControl::InputMethod(ime) => self.ime_control.set(Some(ime.id())),
             servo::EmbedderControl::SelectElement(_) | servo::EmbedderControl::SimpleDialog(_) => {
-                self.embedder_controls.borrow_mut().push(control);
-                // Wake the main loop so the prompt shows even when idle.
-                self.event_sender.send(UserEvent::ControlPending);
+                self.embedder_controls.push(control);
             }
             _ => log::info!("unhandled embedder control: dismissed with its default"),
         }
@@ -146,8 +140,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
         // A queued select/dialog Servo retracted (navigation, element removal,
         // …) — ids we never queued are harmless to push, the drain ignores them.
-        self.dismissed_controls.borrow_mut().push(id);
-        self.event_sender.send(UserEvent::ControlPending);
+        self.dismissed_controls.push(id);
     }
 
     /// A page asked to open a new webview — a `target="_blank"` link or
@@ -215,8 +208,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // URL. Answer it here (it names no real host) and queue the tab; the
         // bytes come back over `evaluate_javascript`.
         if url.as_str().starts_with(super::blob_download::PING_URL) {
-            self.blob_pings.borrow_mut().push(webview);
-            self.event_sender.send(UserEvent::DownloadUpdate);
+            self.blob_pings.push(webview);
             finish_intercepted(load, servo::WebResourceResponse::new(url), Vec::new());
             return;
         }
@@ -285,9 +277,7 @@ impl servo::GamepadDelegate for AppBrowserInner {
             return;
         }
         log::debug!("haptics: queued for pad slot {}", request.gamepad_index());
-        self.haptic_requests.borrow_mut().push(request);
-        // Wake the main loop so the rumble plays right away even when idle.
-        self.event_sender.send(UserEvent::HapticPending);
+        self.haptic_requests.push(request);
     }
 }
 
