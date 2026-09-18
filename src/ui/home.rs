@@ -334,6 +334,12 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
     });
 }
 
+/// Grid slots for `pins`: one per pin plus the trailing "Edit" tile. Shared with
+/// the navigation side ([`crate::ui::AppUi`]) so paint and nav can't drift.
+pub(super) fn slot_count(pins: &[String]) -> usize {
+    pins.len() + 1
+}
+
 /// The speed-dial grid: one tile per pinned shortcut (the brand initial over its
 /// name), followed by a trailing "Edit" tile that opens the speed-dial editor.
 fn add_dial(
@@ -344,8 +350,7 @@ fn add_dial(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    let tiles = pins.len() + 1; // + the trailing "Edit" tile
-    tile_grid(ui, width, cols, tiles, |ui, i| {
+    tile_grid(ui, width, cols, slot_count(pins), |ui, i| {
         let selected = home.tile() == Some(i);
         match pins.get(i) {
             Some(url) => {

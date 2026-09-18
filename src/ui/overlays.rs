@@ -2,7 +2,7 @@
 //! on, OSK input routing, and the per-overlay passthroughs (menu, settings,
 //! start page, speed-dial editor, hints) the router and app drive.
 
-use super::{dial_edit, settings, AppUi, OskField};
+use super::{dial_edit, home, settings, AppUi, OskField};
 use crate::{
     app::{AppCommand, SettingsAction},
     browser::AppBrowser,
@@ -303,11 +303,11 @@ impl AppUi {
         self.home.input().to_string()
     }
 
-    /// Move the start-page selection by one dominant-axis step. The grid holds
-    /// one tile per pin plus a trailing "+ Add" tile, hence `len() + 1`.
+    /// Move the start-page selection by one dominant-axis step across the pin
+    /// grid (see [`home::slot_count`]).
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
-        let count = self.menu.dial.urls().len() + 1;
+        let count = home::slot_count(self.menu.dial.urls());
         self.home.move_sel(dx, dy, count);
     }
 
@@ -382,19 +382,16 @@ impl AppUi {
         self.dial_edit.tile()
     }
 
-    fn dial_settings_pinned(&self) -> bool {
-        self.menu.dial.contains(crate::data::dial::SETTINGS_PIN)
-    }
-
     #[inline]
     pub(super) fn dial_edit_slots(&self) -> usize {
         dial_edit::slot_count(self.menu.dial.urls())
     }
 
     /// Whether the trailing "Pin settings" slot is focused — drives **A** in the
-    /// editor.
+    /// editor. The slot exists only while `slot_count` runs past the pins.
     pub fn dial_edit_pin_settings_selected(&self) -> bool {
-        !self.dial_settings_pinned() && self.dial_edit.tile() == Some(self.menu.dial.urls().len())
+        let pins = self.menu.dial.urls().len();
+        self.dial_edit.tile() == Some(pins) && self.dial_edit_slots() > pins
     }
 
     /// Delete the editor's focused pin (X). The trailing tile's slot is out of

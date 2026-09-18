@@ -573,10 +573,8 @@ impl AppUi {
     /// render. The pin list isn't snapshotted — the overlays borrow it straight
     /// from the live store at their call sites.
     fn clamp_overlay_selections(&mut self) {
-        let pin_count = self.menu.dial.urls().len();
         if self.home_active {
-            // +1 for the trailing "Edit" tile, so its selection isn't clamped off.
-            self.home.clamp(pin_count + 1);
+            self.home.clamp(home::slot_count(self.menu.dial.urls()));
         }
         if self.dial_edit.visible() {
             // The editor's grid is the pins plus, while the ⚙ shortcut is off the
