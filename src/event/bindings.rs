@@ -83,34 +83,36 @@ pub enum Action {
     Scroll,
 }
 
-/// Every action. [`GROUPS`] decides display order, so this only has to be complete.
-const ALL: [Action; 25] = [
-    Action::Confirm,
-    Action::Cancel,
-    Action::Osk,
-    Action::Reload,
-    Action::Prev,
-    Action::Next,
-    Action::Hints,
-    Action::Bookmark,
-    Action::Home,
-    Action::Reader,
-    Action::Menu,
-    Action::Settings,
-    Action::Quit,
-    Action::GameMode,
-    Action::TabNext,
-    Action::TabPrev,
-    Action::NewTab,
-    Action::ZoomIn,
-    Action::ZoomOut,
-    Action::ZoomReset,
-    Action::NavUp,
-    Action::NavDown,
-    Action::NavLeft,
-    Action::NavRight,
-    Action::Scroll,
-];
+/// Every action, flattened from [`GROUPS`] — an action missing there could
+/// neither parse from `bindings.toml` nor reach the Controls screen.
+const ALL: [Action; group_len()] = flatten_groups();
+
+const fn group_len() -> usize {
+    let mut n = 0;
+    let mut g = 0;
+    while g < GROUPS.len() {
+        n += GROUPS[g].1.len();
+        g += 1;
+    }
+    n
+}
+
+const fn flatten_groups() -> [Action; group_len()] {
+    let mut out = [Action::Confirm; group_len()];
+    let mut i = 0;
+    let mut g = 0;
+    while g < GROUPS.len() {
+        let members = GROUPS[g].1;
+        let mut m = 0;
+        while m < members.len() {
+            out[i] = members[m];
+            i += 1;
+            m += 1;
+        }
+        g += 1;
+    }
+    out
+}
 
 impl Bindable for Action {
     fn name(&self) -> &'static str {
@@ -253,7 +255,8 @@ impl Action {
 }
 
 /// The Controls screen's sections, in display order (actions sort by name
-/// within each). Every [`ALL`] entry belongs to exactly one — a test checks it.
+/// within each). Also the source [`ALL`] flattens, so listing an action here is
+/// what makes it exist; a test checks nothing is listed twice.
 pub const GROUPS: Groups<Action> = &[
     (
         "General",
