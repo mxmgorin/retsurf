@@ -4,12 +4,9 @@
 
 use crate::app::{AppCommand, GameMenuAction};
 use crate::overlay::game::menu::{GameMenu, GameRow};
-use crate::ui::panel::{ROW_GAP, ROW_RADIUS};
+use crate::ui::panel::{self, ROW_GAP};
 use crate::ui::theme::{ACCENT, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
-
-/// Row height, matching the settings overlay's field rows.
-const ROW_H: f32 = 30.0;
 
 /// Panel width where the screen has room for it; a 640px panel gets the fallback
 /// below (the whole width less a margin).
@@ -53,7 +50,7 @@ pub(in crate::ui) fn add_game_menu(
                             _ => "",
                         };
                         let label = row.label(in_game_mode);
-                        let resp = add_row(ui, width, index == menu.selected(), label, value);
+                        let resp = panel::row(ui, width, index == menu.selected(), label, value);
                         if resp.clicked() {
                             commands.push(AppCommand::GameMenu(GameMenuAction::Click(index)));
                         }
@@ -73,23 +70,3 @@ fn add_header(ui: &mut egui::Ui) {
     ui.add_space(ROW_GAP * 2.0);
 }
 
-/// One row: the label, and a value pushed to the trailing edge — the same shape
-/// as the settings rows, so the highlight reads identically.
-fn add_row(
-    ui: &mut egui::Ui,
-    width: f32,
-    selected: bool,
-    label: &str,
-    value: &str,
-) -> egui::Response {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
-}

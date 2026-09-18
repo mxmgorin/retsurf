@@ -5,12 +5,8 @@
 
 use crate::app::{AppCommand, GameMapEditAction};
 use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow};
-use crate::ui::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use crate::ui::theme::{ACCENT, ROW_FONT};
+use crate::ui::panel;
 use egui_sdl2::egui;
-
-/// Row height, matching the settings overlay's field rows.
-const ROW_H: f32 = 30.0;
 
 /// What an unbound source reads as.
 const UNBOUND: &str = "-";
@@ -20,31 +16,14 @@ pub(in crate::ui) fn add_map_edit(
     edit: &MapEdit,
     commands: &mut Vec<AppCommand>,
 ) {
-    let screen = ctx.content_rect();
-    let width = screen.width() - SIDES;
-    let closed = panel::panel(ctx, "map_edit", screen, |ui| {
-        ui.label(
-            egui::RichText::new(title(edit))
-                .color(ACCENT)
-                .size(ROW_FONT)
-                .strong(),
-        );
-        ui.add_space(ROW_GAP * 3.0);
-        ui.spacing_mut().item_spacing.y = ROW_GAP;
-        let rows = rows(edit);
-        section_scroll(ui, screen).show(ui, |ui| {
-            for (index, (label, value)) in rows.into_iter().enumerate() {
-                let selected = index == edit.selected();
-                let resp = add_row(ui, width, selected, &label, &value);
-                if selected {
-                    center_selected(&resp);
-                }
-                if resp.clicked() {
-                    commands.push(AppCommand::GameMapEdit(GameMapEditAction::Click(index)));
-                }
-            }
-        });
-    });
+    let closed = panel::row_list(
+        ctx,
+        "map_edit",
+        &title(edit),
+        rows(edit),
+        edit.selected(),
+        |index| commands.push(AppCommand::GameMapEdit(GameMapEditAction::Click(index))),
+    );
     if closed {
         commands.push(AppCommand::GameMapEdit(GameMapEditAction::Close));
     }
@@ -97,24 +76,4 @@ fn rows(edit: &MapEdit) -> Vec<(String, String)> {
             StickRow::Direction(dir) => (dir.name().to_string(), stick.dirs[dir as usize].clone()),
         })
         .collect()
-}
-
-/// The shape the settings rows use, so the highlight reads identically.
-fn add_row(
-    ui: &mut egui::Ui,
-    width: f32,
-    selected: bool,
-    label: &str,
-    value: &str,
-) -> egui::Response {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
 }

@@ -17,14 +17,10 @@ use inputbind::Action as _;
 /// The reset rows, in the order the Controls list counts them.
 const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboard defaults"];
 
-/// Row height, tighter than the menu's so the long field lists fit.
-const ROW_H: f32 = 30.0;
 /// The square step buttons trailing a numeric row.
 const STEP_W: f32 = 26.0;
 
-/// A selectable row showing `label` on the left and `value` (in the accent) on
-/// the right, the value pushed to the trailing edge by a grow atom — same shape
-/// as the menu's rows so the cursor highlight reads identically.
+/// The shared row shape (see [`panel::row`]), taking this file's owned strings.
 fn setting_row(
     ui: &mut egui::Ui,
     width: f32,
@@ -32,16 +28,7 @@ fn setting_row(
     label: String,
     value: String,
 ) -> egui::Response {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
+    panel::row(ui, width, selected, &label, &value)
 }
 
 /// A left/right step button for a numeric row, accent on the focused row.
@@ -53,7 +40,7 @@ fn step_button(
 ) -> egui::Response {
     let color = if selected { ACCENT } else { dim };
     ui.add_sized(
-        [STEP_W, ROW_H],
+        [STEP_W, panel::ROW_H],
         egui::Button::new(theme::icon(glyph).color(color)).corner_radius(ROW_RADIUS),
     )
 }

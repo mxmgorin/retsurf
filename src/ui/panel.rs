@@ -1,13 +1,13 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, CLOSE_SIZE, PANEL_FILL, ROW_FONT};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
 
-/// Shared row radius and gap so both overlays read alike (row height stays
-/// per-overlay).
+/// Shared row metrics so every overlay's list reads alike.
 pub(super) const ROW_RADIUS: f32 = 6.0;
 pub(super) const ROW_GAP: f32 = 4.0;
+pub(super) const ROW_H: f32 = 30.0;
 
 /// Panel inner padding; the sides get more room than the top and bottom.
 /// [`SIDES`] is the pair, subtracted from the screen width for row widths.
@@ -20,8 +20,7 @@ const TAB_H: f32 = 28.0;
 
 /// The full-screen panel shell. `constrain(false)`: the frame fills the screen
 /// exactly, so an egui "fit" shift would cancel the left padding. The close
-/// button is painted outside the content flow so it can't shift it (B also
-/// closes). Returns whether it was clicked.
+/// button is painted outside the content flow so it can't shift it.
 pub(super) fn panel(
     ctx: &egui::Context,
     id: &str,
@@ -48,6 +47,63 @@ pub(super) fn panel(
                 });
         });
     closed
+}
+
+/// A selectable row: `label` left, `value` (in the accent) pushed to the
+/// trailing edge — one shape, so the highlight reads identically everywhere.
+pub(super) fn row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    value: &str,
+) -> egui::Response {
+    let label = egui::RichText::new(label)
+        .color(egui::Color32::WHITE)
+        .size(ROW_FONT);
+    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+/// A titled full-screen panel over one scrolling list of `(label, value)` rows;
+/// `on_click` gets the index of a clicked row. Returns whether it was closed.
+pub(super) fn row_list(
+    ctx: &egui::Context,
+    id: &str,
+    title: &str,
+    rows: Vec<(String, String)>,
+    selected: usize,
+    mut on_click: impl FnMut(usize),
+) -> bool {
+    let screen = ctx.content_rect();
+    let width = screen.width() - SIDES;
+    panel(ctx, id, screen, |ui| {
+        ui.label(
+            egui::RichText::new(title)
+                .color(ACCENT)
+                .size(ROW_FONT)
+                .strong(),
+        );
+        ui.add_space(ROW_GAP * 3.0);
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
+        section_scroll(ui, screen).show(ui, |ui| {
+            for (index, (label, value)) in rows.into_iter().enumerate() {
+                let is_selected = index == selected;
+                let resp = row(ui, width, is_selected, &label, &value);
+                if is_selected {
+                    center_selected(&resp);
+                }
+                if resp.clicked() {
+                    on_click(index);
+                }
+            }
+        });
+    })
 }
 
 /// The top section bar: a selectable tab per section, with `trailing` laid out
@@ -103,8 +159,7 @@ pub(super) fn center_selected(resp: &egui::Response) {
 
 /// A section's scroll area, capped to the room down to the screen bottom: the
 /// panel's `Area` auto-sizes, so an unbounded `ScrollArea` would grow past the
-/// screen and clip instead of scrolling. Callers pair it with
-/// [`center_selected`].
+/// screen and clip instead of scrolling.
 pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollArea {
     let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
     egui::ScrollArea::vertical()
