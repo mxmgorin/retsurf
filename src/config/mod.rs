@@ -140,6 +140,7 @@ impl AppConfig {
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);
         fix_u32("display.height", &mut self.display.height, b::HEIGHT);
+        fix_u32("display.max_fps", &mut self.display.max_fps, b::MAX_FPS);
         fix_f32("display.scale", &mut self.display.scale, b::SCALE);
         fix_u64(
             "display.cursor_linger_ms",

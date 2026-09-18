@@ -168,10 +168,13 @@ impl servo::WebViewDelegate for AppBrowserInner {
             .builder(self.rendering_ctx.clone())
             .hidpi_scale_factor(euclid::Scale::new(self.hidpi.get()))
             .delegate(parent_webview.delegate())
+            .gamepad_delegate(parent_webview.gamepad_delegate())
+            .user_content_manager(self.user_content.clone())
             .build();
         if self.default_zoom != 1.0 {
             webview.set_page_zoom(self.default_zoom);
         }
+        webview.notify_theme_change(super::engine::theme(self.page_theme.get()));
 
         // Only one tab may be shown (all share one rendering context), so hide
         // the current one before showing the new tab — matching `open_tab`.
@@ -283,6 +286,8 @@ impl servo::GamepadDelegate for AppBrowserInner {
         }
         log::debug!("haptics: queued for pad slot {}", request.gamepad_index());
         self.haptic_requests.borrow_mut().push(request);
+        // Wake the main loop so the rumble plays right away even when idle.
+        self.event_sender.send(UserEvent::HapticPending);
     }
 }
 

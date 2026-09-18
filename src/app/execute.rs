@@ -404,9 +404,12 @@ impl App {
         self.refresh_map_edit();
     }
 
-    /// Re-snapshot the editor's rows from the map it has open.
+    /// Re-snapshot the editor's rows from the map it has open. A stale id keeps
+    /// the last snapshot: writes to it are already no-ops (see `set_map_target`).
     fn refresh_map_edit(&mut self) {
-        let map = self.event_handler.input_map(self.ui.map_edit.map_id());
+        let Some(map) = self.event_handler.input_map(self.ui.map_edit.map_id()) else {
+            return;
+        };
         let text = |raw: Option<&RawTarget>| match raw {
             Some(raw) => raw.text().to_string(),
             None => UNBOUND.to_string(),

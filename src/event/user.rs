@@ -19,6 +19,9 @@ pub fn handle_user(code: i32) -> Option<AppCommand> {
         // Sent by the self-update worker purely to wake the loop; the About tab
         // re-reads the updater snapshot each frame, so the wake just repaints.
         UserEvent::UpdateProgress => None,
+        // Sent by the gamepad delegate purely to wake the loop; the main loop
+        // drains the queued haptic requests.
+        UserEvent::HapticPending => None,
     }
 }
 
@@ -31,16 +34,18 @@ pub enum UserEvent {
     HintsReady = 3,
     ControlPending = 4,
     UpdateProgress = 5,
+    HapticPending = 6,
 }
 
 impl UserEvent {
-    pub const ALL: [UserEvent; 6] = [
+    pub const ALL: [UserEvent; 7] = [
         UserEvent::BrowserWakeup,
         UserEvent::BrowserFrameReady,
         UserEvent::DownloadUpdate,
         UserEvent::HintsReady,
         UserEvent::ControlPending,
         UserEvent::UpdateProgress,
+        UserEvent::HapticPending,
     ];
 
     pub fn from_code(code: i32) -> UserEvent {

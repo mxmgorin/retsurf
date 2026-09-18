@@ -50,9 +50,10 @@ pub fn run_app() {
     // way to compare two of them in one sitting.
     if let Some(fps) = std::env::var("RETSURF_MAX_FPS")
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|v| v.parse::<u32>().ok())
     {
-        app_config.display.max_fps = fps;
+        // Lands after `load`'s sanitize pass, so it clamps here.
+        app_config.display.max_fps = fps.min(config::bounds::MAX_FPS.max as u32);
     }
     if app_config.display.software_render && !cfg!(feature = "software") {
         log::warn!(

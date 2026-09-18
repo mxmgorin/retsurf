@@ -78,7 +78,10 @@ pub fn on_key(
     // list cannot also reach the game still running underneath. Keyed on the
     // focus, not visibility: the keyboard opens over the editor to pick a key,
     // and while it is up the keys are its own.
-    if matches!(ui.focus(), Focus::GameMenu | Focus::GameMapEdit) {
+    if matches!(
+        ui.focus(),
+        Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit
+    ) {
         if key.pressed {
             on_game_menu_key(key, bindings, commands);
         }
@@ -131,7 +134,7 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
     }
 }
 
-/// Game Mode's menu and its profile editor: arrows move between rows and step
+/// Game Mode's menu, map list and map editor: arrows move between rows and step
 /// the focused value, Enter activates, Esc goes back. Everything else goes
 /// through the bindings, which Game Mode has already narrowed to its own.
 fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {

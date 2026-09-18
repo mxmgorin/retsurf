@@ -136,9 +136,10 @@ impl AppEventHandler {
         &self.input_maps
     }
 
-    /// The map `id` names, for the rows that show what it sends.
-    pub fn input_map(&self, id: &str) -> &InputMap {
-        input_map::pick(&self.input_maps, id)
+    /// The map `id` names, for the rows that show what it sends. `None` for a
+    /// stale id, failing the same way as [`Self::input_map_mut`].
+    pub fn input_map(&self, id: &str) -> Option<&InputMap> {
+        self.input_maps.iter().find(|p| p.id == id)
     }
 
     /// The same, to write one row of it (the editor). Held in memory until
