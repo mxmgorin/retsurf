@@ -252,8 +252,7 @@ impl Settings {
 
     /// Switch the active section by `delta` (L1/R1; clamped, no wrap).
     pub fn switch_section(&mut self, delta: i32) {
-        let last = SettingsSection::ALL.len() as i32 - 1;
-        let i = (self.section.index() as i32 + delta).clamp(0, last) as usize;
+        let i = crate::list::step(self.section.index(), delta, SettingsSection::ALL.len());
         self.set_section(SettingsSection::ALL[i]);
     }
 
@@ -264,8 +263,7 @@ impl Settings {
         self.armed = None;
         if self.is_info_section() {
             // About: a flat list (update rows, then links), all selectable.
-            let last = self.about_row_count(update_rows) as i32 - 1;
-            self.selected = (self.selected as i32 + dy).clamp(0, last.max(0)) as usize;
+            self.selected = crate::list::step(self.selected, dy, self.about_row_count(update_rows));
             return;
         }
         if self.is_controls_section() {
@@ -276,7 +274,7 @@ impl Settings {
         let Some(pos) = rows.iter().position(|&g| g == self.selected) else {
             return;
         };
-        let np = (pos as i32 + dy).clamp(0, rows.len() as i32 - 1) as usize;
+        let np = crate::list::step(pos, dy, rows.len());
         self.selected = rows[np];
     }
 

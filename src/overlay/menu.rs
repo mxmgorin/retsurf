@@ -124,13 +124,12 @@ impl Menu {
 
     /// Switch the active section by `delta` (clamped to the ends, no wrap).
     pub fn switch_section(&mut self, delta: i32) {
-        let last = Section::ALL.len() as i32 - 1;
-        let i = (self.section.index() as i32 + delta).clamp(0, last) as usize;
+        let i = crate::list::step(self.section.index(), delta, Section::ALL.len());
         self.section = Section::ALL[i];
         self.clear_armed = false;
     }
 
-    /// Jump straight to a section (clicking its tab).
+    /// Jump straight to a section.
     pub fn set_section(&mut self, section: Section) {
         self.section = section;
         self.clear_armed = false;
@@ -158,8 +157,7 @@ impl Menu {
             Section::Downloads => self.downloads.move_sel(dy),
             // Index 0 is the "+ New tab" button; the tabs follow at `1..=tab_count`.
             Section::Tabs => {
-                let last = self.tab_count as i32;
-                self.tab_selected = (self.tab_selected as i32 + dy).clamp(0, last) as usize;
+                self.tab_selected = crate::list::step(self.tab_selected, dy, self.tab_count + 1);
             }
         }
     }
@@ -212,7 +210,7 @@ impl Menu {
         }
     }
 
-    /// Remove the entry at `index` in the active section (clicking its remove button).
+    /// Remove the entry at `index` in the active section.
     pub fn remove_at(&mut self, index: usize) {
         match self.section {
             Section::Bookmarks => self.bookmarks.remove(index),

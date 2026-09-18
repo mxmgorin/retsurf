@@ -301,8 +301,7 @@ impl MapEdit {
 
     /// Move it, clamped to the ends of that list.
     pub fn move_sel(&mut self, dy: i32) {
-        let last = self.rows() as i32 - 1;
-        let at = (self.selected() as i32 + dy).clamp(0, last.max(0)) as usize;
+        let at = crate::list::step(self.selected(), dy, self.rows());
         match (&mut self.kind, &mut self.stick) {
             (Some(slot), _) => *slot = at,
             (None, Some((_, slot))) => *slot = at,

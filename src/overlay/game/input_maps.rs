@@ -232,8 +232,7 @@ impl InputMaps {
 
     /// Move it, clamped to the ends of that list.
     pub fn move_sel(&mut self, dy: i32) {
-        let last = self.level_len() as i32 - 1;
-        let at = (self.selected() as i32 + dy).clamp(0, last.max(0)) as usize;
+        let at = crate::list::step(self.selected(), dy, self.level_len());
         match (&mut self.confirm, self.open) {
             (Some(slot), _) => *slot = at,
             (None, Some(_)) => self.at = at,
@@ -241,7 +240,7 @@ impl InputMaps {
         }
     }
 
-    /// Focus a row by index (clicking it).
+    /// Focus a row by index.
     pub fn select(&mut self, index: usize) {
         if index < self.level_len() {
             self.move_sel(index as i32 - self.selected() as i32);

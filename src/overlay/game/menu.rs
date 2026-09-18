@@ -30,9 +30,8 @@ impl GameRow {
     ];
 
     /// The row's label. Only the toggle words itself by state; the panel is
-    /// titled GAME MODE, so it needs no noun of its own. No trailing ellipsis:
-    /// it is reserved for a row that asks for something before it acts (see
-    /// [`super::input_maps::MapAction::label`]).
+    /// titled GAME MODE, so it needs no noun of its own. No trailing ellipsis —
+    /// that marks a row which asks for something before it acts.
     pub fn label(self, in_game_mode: bool) -> &'static str {
         match (self, in_game_mode) {
             (GameRow::Resume, _) => "Resume",
@@ -63,8 +62,7 @@ impl GameMenu {
 
     /// Show it, highlighting what the opener most likely wants: inside the mode
     /// Resume, so an accidental open over a running game is one A-press from
-    /// back, not from ending it; outside it the row that enters, which is what
-    /// the screen was opened for.
+    /// back and not from ending it; outside it, the row that enters.
     pub fn open(&mut self, in_game_mode: bool) {
         self.visible = true;
         let wanted = match in_game_mode {
@@ -83,11 +81,10 @@ impl GameMenu {
 
     /// Move the highlight by `dy` rows (clamped to the ends, like the menu's).
     pub fn move_sel(&mut self, dy: i32) {
-        let last = GameRow::ALL.len() as i32 - 1;
-        self.selected = (self.selected as i32 + dy).clamp(0, last) as usize;
+        self.selected = crate::list::step(self.selected, dy, GameRow::ALL.len());
     }
 
-    /// Focus a row by index (clicking it).
+    /// Focus a row by index.
     pub fn select(&mut self, index: usize) {
         if index < GameRow::ALL.len() {
             self.selected = index;
