@@ -145,6 +145,10 @@ pub enum EditPress {
     Take(Kind, Slot),
 }
 
+/// What an unbound source reads as in the editor's rows — the one spelling,
+/// shared by the snapshot builder and the renderer's fallback.
+pub const UNBOUND: &str = "-";
+
 /// What the map says, as the rows show it — a snapshot, since the map
 /// lives in the event handler that resolved it.
 #[derive(Default)]

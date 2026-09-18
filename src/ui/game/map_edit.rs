@@ -4,12 +4,9 @@
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use crate::app::{AppCommand, GameMapEditAction};
-use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow};
+use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow, UNBOUND};
 use crate::ui::panel;
 use egui_sdl2::egui;
-
-/// What an unbound source reads as.
-const UNBOUND: &str = "-";
 
 pub(in crate::ui) fn add_map_edit(
     ctx: &egui::Context,

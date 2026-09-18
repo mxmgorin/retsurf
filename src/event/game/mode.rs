@@ -9,7 +9,7 @@ use crate::app::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
 use crate::config::InputConfig;
 use crate::event::sdl2_servo::key_event;
-use inputbind::sdl::axis_value;
+use inputbind::sdl::{axis_value, trigger_of};
 use inputbind::{Pad, Trigger};
 use sdl2::controller::Axis;
 use std::time::{Duration, Instant};
@@ -49,15 +49,6 @@ fn stick_axis(axis: Axis) -> Option<(usize, bool)> {
         Axis::LeftY => (0, true),
         Axis::RightX => (1, false),
         Axis::RightY => (1, true),
-        _ => return None,
-    })
-}
-
-/// The pad a trigger axis stands for.
-fn trigger_pad(axis: Axis) -> Option<Pad> {
-    Some(match axis {
-        Axis::TriggerLeft => Pad::L2,
-        Axis::TriggerRight => Pad::R2,
         _ => return None,
     })
 }
@@ -185,7 +176,7 @@ impl GameInput {
     ) -> bool {
         let value = axis_value(value);
         // A trigger is a pad with a threshold; the edges it crosses are presses.
-        if let Some(pad) = trigger_pad(axis) {
+        if let Some(pad) = trigger_of(axis) {
             let index = usize::from(pad == Pad::R2);
             let (released, pressed) = self.triggers[index].axis(value);
             for (edge, down) in [(released, false), (pressed, true)] {

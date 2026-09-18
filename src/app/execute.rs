@@ -14,15 +14,12 @@ use crate::event::bindings::Action;
 use crate::event::game::input_map::{Dir, RawTarget, Side};
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
-use crate::overlay::game::map_edit::{EditPress, Slot, StickTargets, Take, Targets};
+use crate::overlay::game::map_edit::{EditPress, Slot, StickTargets, Take, Targets, UNBOUND};
 use crate::overlay::game::menu::GameRow;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
 use inputbind::Pad;
-
-/// What an unbound source reads as in the editor's rows.
-const UNBOUND: &str = "-";
 
 /// What a stick's row reads as once it is four directions.
 const DIRECTIONS: &str = "directions";
