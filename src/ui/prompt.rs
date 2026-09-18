@@ -5,7 +5,7 @@
 
 use super::theme::{self, ACCENT, DIM, SCRIM};
 use crate::app::{AppCommand, PromptAction};
-use crate::overlay::prompt::Prompt;
+use crate::overlay::prompt::{select_rows, Prompt, SelectRow};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 use servo::{EmbedderControl, SelectElement, SelectElementOption, SimpleDialog};
@@ -87,40 +87,31 @@ fn add_select(
     ui.add_space(6.0);
 
     let selected_slot = prompt.selected_slot();
-    // Slot indices assigned in display order — the same flattening as
-    // `slot_ids`, so they line up with the navigation.
-    let mut slot = 0;
+    let rows = select_rows(select);
+    // The OK button takes the slot past the options (see `Prompt::slot_count`).
+    let ok_slot = rows
+        .iter()
+        .filter(|row| matches!(row, SelectRow::Option { slot: Some(_), .. }))
+        .count();
     egui::ScrollArea::vertical()
         .max_height(screen.height() * 0.6)
         .show(ui, |ui| {
-            for entry in select.options() {
-                match entry {
-                    servo::SelectElementOptionOrOptgroup::Option(option) => {
+            for row in rows {
+                match row {
+                    SelectRow::Option { option, slot } => {
                         add_option_row(
                             ui,
                             option,
                             row_w,
-                            &mut slot,
+                            slot,
                             selected_slot,
                             prompt,
                             multiple,
                             commands,
                         );
                     }
-                    servo::SelectElementOptionOrOptgroup::Optgroup { label, options } => {
+                    SelectRow::Group(label) => {
                         ui.label(egui::RichText::new(label).color(dim).small());
-                        for option in options {
-                            add_option_row(
-                                ui,
-                                option,
-                                row_w,
-                                &mut slot,
-                                selected_slot,
-                                prompt,
-                                multiple,
-                                commands,
-                            );
-                        }
                     }
                 }
             }
@@ -131,25 +122,25 @@ fn add_select(
         let ok = ui.add_sized(
             [90.0, ROW_H],
             egui::Button::selectable(
-                slot == selected_slot,
+                ok_slot == selected_slot,
                 egui::RichText::new("OK").color(egui::Color32::WHITE),
             ),
         );
         if ok.clicked() {
-            commands.push(AppCommand::Prompt(PromptAction::ClickSlot(slot)));
+            commands.push(AppCommand::Prompt(PromptAction::ClickSlot(ok_slot)));
         }
     }
 }
 
-/// One option row. Enabled options take the next slot; disabled ones render
-/// dim and unclickable. The chosen state is marked with a check box (multi) or a
-/// radio dot (single).
+/// One option row: enabled ones carry the slot [`select_rows`] gave them;
+/// disabled ones render dim and unclickable. The chosen state is marked with a
+/// check box (multi) or a radio dot (single).
 #[allow(clippy::too_many_arguments)]
 fn add_option_row(
     ui: &mut egui::Ui,
     option: &SelectElementOption,
     row_w: f32,
-    slot: &mut usize,
+    slot: Option<usize>,
     selected_slot: usize,
     prompt: &Prompt,
     multiple: bool,
@@ -169,17 +160,15 @@ fn add_option_row(
         option.label.clone()
     };
 
-    if option.is_disabled {
+    let Some(this) = slot else {
         ui.add_sized(
             [row_w, ROW_H],
             egui::Label::new(egui::RichText::new(label).color(egui::Color32::from_gray(0x66)))
                 .truncate(),
         );
         return;
-    }
+    };
 
-    let this = *slot;
-    *slot += 1;
     let text = if chosen {
         egui::RichText::new(label).color(ACCENT).strong()
     } else {

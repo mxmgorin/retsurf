@@ -7,7 +7,7 @@
 //! Navigation works over *slots* — the focusable items of the front control:
 //! a select's enabled options (plus a trailing **OK** for multi-selects), or a
 //! dialog's buttons (**OK**, then **Cancel**). The selection is a slot index;
-//! the renderer maps slots back to rows with the same flattening order.
+//! [`select_rows`] is the one flattening both it and the renderer are built on.
 
 use servo::{EmbedderControl, EmbedderControlId, SelectElement, SimpleDialog};
 use std::collections::VecDeque;
@@ -79,8 +79,7 @@ impl Prompt {
         self.selected
     }
 
-    /// Whether `id` is among the front select's chosen options (the ☑ / •
-    /// markers).
+    /// Whether `id` is among the front select's chosen options.
     #[inline]
     pub fn is_chosen(&self, id: usize) -> bool {
         self.chosen.contains(&id)
@@ -170,7 +169,7 @@ impl Prompt {
         }
     }
 
-    /// Dismiss the front control with its default response (**B** / Esc / ✖):
+    /// Dismiss the front control with its default response:
     /// dropping it answers it — a select keeps its original selection, a
     /// dialog cancels (alerts just confirm; that's their only answer).
     pub fn cancel(&mut self) {
@@ -216,22 +215,60 @@ impl Prompt {
     }
 }
 
-/// A select's enabled option ids in display order — the slot list both the
-/// navigation here and the renderer's rows are built over. Disabled options
-/// and group labels aren't slots.
-pub fn slot_ids(select: &SelectElement) -> Vec<usize> {
-    let mut ids = Vec::new();
+/// One row of a select's display list: an optgroup label, or an option with
+/// the slot the navigation knows it by (`None` when disabled — not focusable).
+pub enum SelectRow<'a> {
+    Group(&'a str),
+    Option {
+        option: &'a servo::SelectElementOption,
+        slot: Option<usize>,
+    },
+}
+
+/// A select's rows in display order, slots assigned along the way — the one
+/// flattening, so the navigation and the painted rows cannot drift.
+pub fn select_rows(select: &SelectElement) -> Vec<SelectRow<'_>> {
+    let mut rows = Vec::new();
+    let mut next_slot = 0;
+    let mut slot_for = |disabled: bool| {
+        (!disabled).then(|| {
+            next_slot += 1;
+            next_slot - 1
+        })
+    };
     for entry in select.options() {
         match entry {
-            servo::SelectElementOptionOrOptgroup::Option(o) => {
-                if !o.is_disabled {
-                    ids.push(o.id);
-                }
+            servo::SelectElementOptionOrOptgroup::Option(option) => {
+                rows.push(SelectRow::Option {
+                    option,
+                    slot: slot_for(option.is_disabled),
+                });
             }
-            servo::SelectElementOptionOrOptgroup::Optgroup { options, .. } => {
-                ids.extend(options.iter().filter(|o| !o.is_disabled).map(|o| o.id));
+            servo::SelectElementOptionOrOptgroup::Optgroup { label, options } => {
+                rows.push(SelectRow::Group(label));
+                for option in options {
+                    rows.push(SelectRow::Option {
+                        option,
+                        slot: slot_for(option.is_disabled),
+                    });
+                }
             }
         }
     }
-    ids
+    rows
+}
+
+/// The enabled option ids in display order — [`select_rows`]' slots projected
+/// onto ids, for the navigation here.
+pub fn slot_ids(select: &SelectElement) -> Vec<usize> {
+    select_rows(select)
+        .into_iter()
+        .filter_map(|row| match row {
+            SelectRow::Option {
+                option,
+                slot: Some(_),
+            } => Some(option.id),
+            _ => None,
+        })
+        .collect()
 }
