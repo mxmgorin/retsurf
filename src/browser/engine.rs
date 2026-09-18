@@ -8,13 +8,9 @@ use crate::{
     config::{self, BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig},
 };
 
-/// Servo options: with `persist_site_data` on, point `config_dir` at the
-/// `servo/` subfolder of the user data dir — Servo's net and storage threads
-/// then load cookies / HSTS / localStorage from it at startup and write them
-/// back on a clean shutdown (see [`AppBrowser::shutdown`]), so logins survive
-/// restarts. The subfolder keeps Servo's files apart from retsurf's own.
-///
-/// [`AppBrowser::shutdown`]: super::AppBrowser::shutdown
+/// Servo options: with `persist_site_data` on, `config_dir` points at the
+/// `servo/` subfolder of the user data dir, which Servo's net and storage
+/// threads read at startup and write back on a clean shutdown.
 pub(super) fn build_opts(config: &BrowserConfig) -> servo::Opts {
     let mut opts = servo::Opts::default();
     if config.persist_site_data {
@@ -23,10 +19,9 @@ pub(super) fn build_opts(config: &BrowserConfig) -> servo::Opts {
     opts
 }
 
-/// Servo preferences sized to the hardware (see [`PerformanceConfig`]) plus
-/// the configured user agent. These must go through `ServoBuilder` — the
-/// thread pools are created at startup, so `set_preference` after `build()`
-/// would be too late.
+/// Servo preferences sized to the hardware (see [`PerformanceConfig`]) plus the
+/// configured user agent. These must go through `ServoBuilder`: the thread pools
+/// are created at startup, so `set_preference` after `build()` is too late.
 pub(super) fn build_preferences(
     config: &BrowserConfig,
     perf: &PerformanceConfig,
@@ -35,16 +30,13 @@ pub(super) fn build_preferences(
         .map(std::num::NonZeroUsize::get)
         .unwrap_or(4) as i64;
 
-    // The memory profile is the holistic baseline: JS GC ceilings, back-forward
-    // cache depth, HTTP/canvas caches, which DOM subsystems start, and tier-sized
-    // thread counts. `auto` resolves from the build target + detected RAM.
+    // The memory profile is the holistic baseline, from GC ceilings to thread
+    // counts; `auto` resolves it from the build target and detected RAM.
     let profile = memory::resolve(perf.memory_profile);
     let mut prefs = memory::preferences(profile);
 
-    // Tiers hardcode thread counts for their assumed core count (e.g. Generous
-    // assumes an octa-core A527); clamp down so a quad-core board isn't
-    // oversubscribed. Only ever clamps down — never raises the tier's choice.
-    // Desktop is left untouched: it's Servo's own defaults, run as upstream ships.
+    // A tier's thread counts assume its own core count, so a smaller board is
+    // clamped down — never up. Desktop keeps Servo's defaults untouched.
     if profile != crate::config::MemoryProfile::Desktop {
         let cores_u = cores as u64;
         prefs.layout_threads = prefs.layout_threads.clamp(1, cores);
@@ -90,11 +82,9 @@ pub(super) fn build_preferences(
     prefs
 }
 
-/// `RETSURF_SERVO_PREFS=name=value[,name=value...]` sets engine prefs the config
-/// does not expose, for a measurement that would otherwise need a rebuild
-/// (`expose_servointernals_globally=true` is what `navigator.servo` needs). The
-/// name is checked against `Preferences::all_fields` first — Servo's setter panics
-/// on an unknown one — and the value is parsed to the pref's own type.
+/// `RETSURF_SERVO_PREFS=name=value[,...]` sets engine prefs the config does not
+/// expose, for a measurement that would otherwise need a rebuild. The name is
+/// checked against `Preferences::all_fields` first: Servo's setter panics.
 fn apply_pref_overrides(prefs: &mut servo::Preferences) {
     let Ok(spec) = std::env::var("RETSURF_SERVO_PREFS") else {
         return;
@@ -172,11 +162,9 @@ pub fn effective_user_agent(config: &BrowserConfig) -> String {
         .unwrap_or_else(|| servo::Preferences::default().user_agent)
 }
 
-/// Resolve the `[browser] user_agent` config value: empty (or `default`)
-/// keeps Servo's platform default, the keywords pick a stock UA string, and
-/// anything else is sent verbatim. `mobile` is the interesting one on a
-/// handheld — sites serve their phone layouts, which fit a small screen far
-/// better than the desktop ones.
+/// Resolve the `[browser] user_agent` config value: empty (or `default`) keeps
+/// Servo's platform default, a keyword picks a stock UA string, anything else is
+/// sent verbatim. `mobile` is the one that fits a handheld screen.
 fn resolve_user_agent(value: &str) -> Option<String> {
     let value = value.trim();
     let platform = match value.to_ascii_lowercase().as_str() {
@@ -192,24 +180,39 @@ fn resolve_user_agent(value: &str) -> Option<String> {
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
 fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
+    // Destructured without `..` so a new feature fails to compile here rather
+    // than shipping unapplied.
+    let ExperimentalConfig {
+        webgl2,
+        webgpu,
+        offscreen_canvas,
+        grid,
+        columns,
+        container_queries,
+        fontface,
+        intersection_observer,
+        resize_observer,
+        indexeddb,
+        storage_manager,
+        notification,
+        async_clipboard,
+        permissions,
+    } = exp;
     [
-        ("dom_webgl2_enabled", exp.webgl2),
-        ("dom_webgpu_enabled", exp.webgpu),
-        ("dom_offscreen_canvas_enabled", exp.offscreen_canvas),
-        ("layout_grid_enabled", exp.grid),
-        ("layout_columns_enabled", exp.columns),
-        ("layout_container_queries_enabled", exp.container_queries),
-        ("dom_fontface_enabled", exp.fontface),
-        (
-            "dom_intersection_observer_enabled",
-            exp.intersection_observer,
-        ),
-        ("dom_resize_observer_enabled", exp.resize_observer),
-        ("dom_indexeddb_enabled", exp.indexeddb),
-        ("dom_storage_manager_api_enabled", exp.storage_manager),
-        ("dom_notification_enabled", exp.notification),
-        ("dom_async_clipboard_enabled", exp.async_clipboard),
-        ("dom_permissions_enabled", exp.permissions),
+        ("dom_webgl2_enabled", *webgl2),
+        ("dom_webgpu_enabled", *webgpu),
+        ("dom_offscreen_canvas_enabled", *offscreen_canvas),
+        ("layout_grid_enabled", *grid),
+        ("layout_columns_enabled", *columns),
+        ("layout_container_queries_enabled", *container_queries),
+        ("dom_fontface_enabled", *fontface),
+        ("dom_intersection_observer_enabled", *intersection_observer),
+        ("dom_resize_observer_enabled", *resize_observer),
+        ("dom_indexeddb_enabled", *indexeddb),
+        ("dom_storage_manager_api_enabled", *storage_manager),
+        ("dom_notification_enabled", *notification),
+        ("dom_async_clipboard_enabled", *async_clipboard),
+        ("dom_permissions_enabled", *permissions),
     ]
 }
 

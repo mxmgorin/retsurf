@@ -107,41 +107,27 @@ impl ExperimentalPreset {
 
     /// The feature set this preset enables (`Custom` maps to `Balanced`).
     pub fn features(self) -> ExperimentalConfig {
-        let all = ExperimentalConfig {
-            webgl2: true,
-            webgpu: true,
-            offscreen_canvas: true,
-            grid: true,
-            columns: true,
-            container_queries: true,
-            fontface: true,
-            intersection_observer: true,
-            resize_observer: true,
-            indexeddb: true,
-            storage_manager: true,
-            notification: true,
-            async_clipboard: true,
-            permissions: true,
-        };
-        let none = ExperimentalConfig {
-            webgl2: false,
-            webgpu: false,
-            offscreen_canvas: false,
-            grid: false,
-            columns: false,
-            container_queries: false,
-            fontface: false,
-            intersection_observer: false,
-            resize_observer: false,
-            indexeddb: false,
-            storage_manager: false,
-            notification: false,
-            async_clipboard: false,
-            permissions: false,
+        // Every feature at `on` — the one full spelling of the field list, so
+        // a new field cannot be missed in one of two copies.
+        let uniform = |on: bool| ExperimentalConfig {
+            webgl2: on,
+            webgpu: on,
+            offscreen_canvas: on,
+            grid: on,
+            columns: on,
+            container_queries: on,
+            fontface: on,
+            intersection_observer: on,
+            resize_observer: on,
+            indexeddb: on,
+            storage_manager: on,
+            notification: on,
+            async_clipboard: on,
+            permissions: on,
         };
         match self {
-            ExperimentalPreset::Full => all,
-            ExperimentalPreset::Off => none,
+            ExperimentalPreset::Full => uniform(true),
+            ExperimentalPreset::Off => uniform(false),
             // Layout + compat essentials; graphics + niche DOM APIs off.
             ExperimentalPreset::Minimal => ExperimentalConfig {
                 grid: true,
@@ -152,7 +138,7 @@ impl ExperimentalPreset {
                 resize_observer: true,
                 indexeddb: true,
                 storage_manager: true,
-                ..none
+                ..uniform(false)
             },
             // Handheld default: essentials + the graphics the hardware supports.
             // WebGPU (immature), notifications/permissions/clipboard (low value) off.
