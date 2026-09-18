@@ -7,6 +7,7 @@
 
 pub mod dial_edit;
 pub mod game;
+pub mod grid;
 pub mod hints;
 pub mod home;
 pub mod menu;
