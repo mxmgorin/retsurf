@@ -4,7 +4,7 @@
 //! default. The report is requested from the main loop and aggregated here;
 //! the holding state lives in [`crate::ui::AppUi`].
 
-use super::theme::DIM;
+use super::theme::{DIM, HAIRLINE};
 use egui_sdl2::egui;
 use servo::profile_traits::mem::{MemoryReportResult, ReportKind};
 use std::cmp::Reverse;
@@ -61,9 +61,8 @@ impl MemorySummary {
         let mut rows: Vec<(String, usize)> = groups.into_iter().collect();
         rows.sort_by_key(|&(_, size)| Reverse(size));
         rows.truncate(12);
-        // Gauges include one `resident-according-to-smaps/*` entry per memory
-        // mapping — keep only the largest few (vsize/resident lead) so the
-        // overlay stays compact.
+        // Gauges hold one `resident-according-to-smaps/*` entry per mapping; keep
+        // the largest few, so the overlay stays compact.
         gauges.sort_by_key(|&(_, size)| Reverse(size));
         gauges.truncate(6);
         Self {
@@ -125,7 +124,6 @@ fn group_key(path: &[String]) -> String {
     }
 }
 
-/// Format a byte count compactly.
 fn fmt_bytes(bytes: usize) -> String {
     const MIB: f64 = 1024.0 * 1024.0;
     const KIB: f64 = 1024.0;
@@ -149,7 +147,7 @@ pub(super) fn add_memory(ctx: &egui::Context, summary: &MemorySummary) {
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(egui::Color32::from_black_alpha(220))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x55)))
+                .stroke(egui::Stroke::new(1.0, HAIRLINE))
                 .corner_radius(6.0)
                 .inner_margin(8.0)
                 .show(ui, |ui| {

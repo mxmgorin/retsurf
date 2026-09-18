@@ -5,7 +5,7 @@
 use crate::app::{AppCommand, GameMenuAction};
 use crate::overlay::game::menu::{GameMenu, GameRow};
 use crate::ui::panel::{self, ROW_GAP};
-use crate::ui::theme::{ACCENT, PANEL_FILL, ROW_FONT};
+use crate::ui::theme::{self, ACCENT, ROW_FONT};
 use egui_sdl2::egui;
 
 /// Panel width where the screen has room for it; a 640px panel gets the fallback
@@ -35,27 +35,22 @@ pub(in crate::ui) fn add_game_menu(
                 0.0,
                 egui::Color32::from_black_alpha(160),
             );
-            egui::Frame::default()
-                .fill(PANEL_FILL)
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x55)))
-                .corner_radius(10.0)
-                .inner_margin(14.0)
-                .show(ui, |ui| {
-                    ui.set_max_width(width);
-                    add_header(ui);
-                    ui.spacing_mut().item_spacing.y = ROW_GAP;
-                    for (index, row) in GameRow::ALL.into_iter().enumerate() {
-                        let value = match row {
-                            GameRow::InputMap => map_name,
-                            _ => "",
-                        };
-                        let label = row.label(in_game_mode);
-                        let resp = panel::row(ui, width, index == menu.selected(), label, value);
-                        if resp.clicked() {
-                            commands.push(AppCommand::GameMenu(GameMenuAction::Click(index)));
-                        }
+            theme::card_frame().show(ui, |ui| {
+                ui.set_max_width(width);
+                add_header(ui);
+                ui.spacing_mut().item_spacing.y = ROW_GAP;
+                for (index, row) in GameRow::ALL.into_iter().enumerate() {
+                    let value = match row {
+                        GameRow::InputMap => map_name,
+                        _ => "",
+                    };
+                    let label = row.label(in_game_mode);
+                    let resp = panel::row(ui, width, index == menu.selected(), label, value);
+                    if resp.clicked() {
+                        commands.push(AppCommand::GameMenu(GameMenuAction::Click(index)));
                     }
-                });
+                }
+            });
         });
 }
 

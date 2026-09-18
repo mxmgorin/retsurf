@@ -4,18 +4,12 @@
 //! [`super::home::paint_tile`] look; edits go through [`crate::app::MenuAction`].
 
 use super::home::{paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
-use super::theme::{ACCENT, CLOSE_SIZE};
+use super::theme::{ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
 use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::dial_edit::DialEdit;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
-
-const BG: egui::Color32 = egui::Color32::from_rgb(0x16, 0x17, 0x1a);
-const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
-const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
-const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
-const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
 
 /// Draw the full-screen speed-dial editor over the (blank) start page.
 pub(super) fn add_dial_edit(

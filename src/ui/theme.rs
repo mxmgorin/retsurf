@@ -1,9 +1,6 @@
-//! Shared UI accent, icon font, and the egui visual theme. One place defines the
-//! green accent so the start page, the menu, and egui's own selection highlights
-//! all agree; [`apply`] installs it (and the Phosphor icon faces every chrome
-//! glyph comes from) onto the egui context once at startup, so every
-//! `selectable` widget (menu section bar, list rows), text selection, and link
-//! picks it up without per-widget styling.
+//! Shared UI accent, icon font, and the egui visual theme. [`apply`] installs
+//! them on the egui context once at startup, so every `selectable` widget, text
+//! selection and link picks the accent up without per-widget styling.
 
 use egui_phosphor::Variant;
 use egui_sdl2::egui;
@@ -23,6 +20,28 @@ pub const SCRIM: egui::Color32 = egui::Color32::from_black_alpha(140);
 /// A refused action: the success teal cannot read as "this did not happen".
 pub const WARN: egui::Color32 = egui::Color32::from_rgb(0xe8, 0x73, 0x5a);
 
+// The start-page palette, shared by the dial editor (its tiles must match).
+pub const BG: egui::Color32 = egui::Color32::from_rgb(0x16, 0x17, 0x1a);
+pub const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
+pub const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
+pub const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
+pub const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
+/// The wordmark gradient's warm (coral) end, paired with [`ACCENT`].
+pub const SURF_WARM: egui::Color32 = egui::Color32::from_rgb(0xff, 0x8c, 0x69);
+
+/// Hairline ring around a floating card, and the memory overlay's border.
+pub const HAIRLINE: egui::Color32 = egui::Color32::from_gray(0x55);
+
+/// The centered floating card (modal prompt, game menu): one frame, so the two
+/// read as the same surface.
+pub fn card_frame() -> egui::Frame {
+    egui::Frame::default()
+        .fill(PANEL_FILL)
+        .stroke(egui::Stroke::new(1.0, HAIRLINE))
+        .corner_radius(10.0)
+        .inner_margin(14.0)
+}
+
 /// Row / section-bar font size shared across the full-screen overlays.
 pub const ROW_FONT: f32 = 15.0;
 
@@ -30,10 +49,9 @@ pub const ROW_FONT: f32 = 15.0;
 /// sizes a handheld runs; the lighter weights wash out under 20px.
 const ICON_VARIANT: Variant = Variant::Bold;
 
-/// Family holding Phosphor's filled weight — the "on" half of an icon pair (see
-/// [`icon_fill`]). A named family, not another fallback in `Proportional`, so the
-/// solid glyphs stay opt-in per widget instead of shadowing the outlined ones
-/// (both weights map a glyph to the same code point).
+/// Family holding Phosphor's filled weight (see [`icon_fill`]). A named family,
+/// not another fallback in `Proportional`: both weights map a glyph to the same
+/// code point, so the solid one would shadow the outlined one.
 const FILL_FAMILY: &str = "phosphor-fill";
 
 /// Icon size for buttons and rows. Phosphor draws its artwork inset in the em
@@ -41,19 +59,11 @@ const FILL_FAMILY: &str = "phosphor-fill";
 pub const ICON_SIZE: f32 = 15.0;
 
 /// Install the icon font and the accent on egui's dark theme: a translucent
-/// accent fill behind selected widgets (so white text stays readable over the
-/// dark panels) ringed by the solid accent, plus accent-colored links and text
-/// caret.
+/// accent fill behind selected widgets, ringed by the solid accent, plus
+/// accent-colored links and caret.
 pub fn apply(ctx: &egui::Context) {
-    // Chrome icons are Phosphor glyphs: egui's bundled fonts cover only a
-    // scattered subset of icon-ish Unicode, in mismatched weights, and every
-    // addition had to be cmap-checked against three faces first.
-    //
-    // `add_to_fonts` puts Phosphor *second* in the Proportional family. Both
-    // neighbours matter: Ubuntu-Light stays first, so row metrics are unchanged
-    // (epaint reads a family's metrics from its first face only), and the two
-    // emoji faces stay behind it, so Phosphor wins the private-use range they
-    // also map.
+    // `add_to_fonts` puts Phosphor *second*: Ubuntu-Light keeps the family's
+    // metrics, and Phosphor still wins the private-use range the emoji faces map.
     let mut fonts = egui::FontDefinitions::default();
     egui_phosphor::add_to_fonts(&mut fonts, ICON_VARIANT);
     fonts
@@ -68,15 +78,13 @@ pub fn apply(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 
     let mut visuals = egui::Visuals::dark();
-    // Selected `selectable` widgets and highlighted text: a low-alpha accent
-    // wash tints the row without swamping the foreground text, ringed crisply.
+    // A low-alpha wash tints the row without swamping the text over it.
     visuals.selection.bg_fill = ACCENT.linear_multiply(0.30);
     visuals.selection.stroke = egui::Stroke::new(1.0, ACCENT);
     visuals.hyperlink_color = ACCENT;
     visuals.text_cursor.stroke.color = ACCENT;
-    // A blinking caret asks egui for a frame twice a second, and on a device
-    // with no GPU one frame is a full software rasterization of the chrome —
-    // 80 ms on a Miyoo, spent to toggle a one-pixel line. It stays solid.
+    // A blink asks for a frame twice a second, and without a GPU that is a full
+    // software rasterization of the chrome (80 ms on a Miyoo).
     visuals.text_cursor.blink = false;
     ctx.set_visuals(visuals);
 }
@@ -87,9 +95,8 @@ pub fn icon(glyph: &str) -> egui::RichText {
     egui::RichText::new(glyph).size(ICON_SIZE)
 }
 
-/// The filled counterpart of [`icon`] — the same glyph in Phosphor's solid
-/// weight, for the "on" half of a pair (a saved bookmark against an unsaved
-/// one). Takes the matching [`egui_phosphor::fill`] constant.
+/// The filled counterpart of [`icon`], for the "on" half of a pair (a saved
+/// bookmark against an unsaved one). Takes an [`egui_phosphor::fill`] constant.
 pub fn icon_fill(glyph: &str) -> egui::RichText {
     egui::RichText::new(glyph)
         .size(ICON_SIZE)
@@ -99,11 +106,9 @@ pub fn icon_fill(glyph: &str) -> egui::RichText {
 /// Side of the square close button (logical px).
 pub const CLOSE_SIZE: f32 = 28.0;
 
-/// A mouse-only close button drawn at `rect`: a rounded outline with a centered
-/// X, both brightening to the accent on hover. Shared by the full-screen
-/// overlays (the menu and the dial editor) — a gamepad closes them with B
-/// instead. Returns the click response. `id` must be unique per call site (two
-/// overlays can be on screen at once).
+/// A mouse-only close button drawn at `rect`; a gamepad closes the overlay with
+/// B instead. `id` must be unique per call site — two overlays can be on screen
+/// at once.
 pub fn close_button(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
     let resp = ui.interact(rect, id, egui::Sense::click());
     let hot = resp.hovered();

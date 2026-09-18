@@ -3,7 +3,7 @@
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
-use super::theme::{ACCENT, DIM, PANEL_FILL, SCRIM};
+use super::theme::{self, ACCENT, DIM, SCRIM};
 use crate::app::{AppCommand, PromptAction};
 use crate::overlay::prompt::Prompt;
 use egui_phosphor::bold;
@@ -51,22 +51,16 @@ pub(super) fn add_prompt(
         .order(egui::Order::Tooltip)
         .anchor(egui::Align2::CENTER_CENTER, offset)
         .show(ctx, |ui| {
-            egui::Frame::default()
-                .fill(PANEL_FILL)
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x55)))
-                .corner_radius(10.0)
-                .inner_margin(14.0)
-                .show(ui, |ui| {
-                    ui.set_max_width((screen.width() - 64.0).min(480.0));
-                    if let Some((message, has_input, has_cancel)) = dialog {
-                        add_dialog(
-                            ui, screen, prompt, &message, has_input, has_cancel, osk_caret,
-                            commands,
-                        );
-                    } else if let Some(EmbedderControl::SelectElement(select)) = prompt.front() {
-                        add_select(ui, screen, prompt, select, commands);
-                    }
-                });
+            theme::card_frame().show(ui, |ui| {
+                ui.set_max_width((screen.width() - 64.0).min(480.0));
+                if let Some((message, has_input, has_cancel)) = dialog {
+                    add_dialog(
+                        ui, screen, prompt, &message, has_input, has_cancel, osk_caret, commands,
+                    );
+                } else if let Some(EmbedderControl::SelectElement(select)) = prompt.front() {
+                    add_select(ui, screen, prompt, select, commands);
+                }
+            });
         });
 }
 

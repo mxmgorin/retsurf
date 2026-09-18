@@ -6,7 +6,7 @@
 //! Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in the active tab)
 //! — the same path the menu's lists use.
 
-use super::theme::ACCENT;
+use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use crate::app::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
@@ -14,12 +14,6 @@ use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::cell::RefCell;
 use std::collections::HashMap;
-
-const BG: egui::Color32 = egui::Color32::from_rgb(0x16, 0x17, 0x1a);
-const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
-const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
-const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
-const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
 
 /// Typeface for the start-page body text (search field, tiles, hints). egui
 /// bundles only two real text faces — `Ubuntu-Light` (via
@@ -270,9 +264,6 @@ fn add_wordmark(ui: &mut egui::Ui) {
         egui::Stroke::new(WAVE_STROKE, ACCENT),
     ));
 }
-
-/// Warm end of the `surf` gradient — the brand coral (`brand.py` CORAL).
-const SURF_WARM: egui::Color32 = egui::Color32::from_rgb(0xff, 0x8c, 0x69);
 
 /// Component-wise sRGB lerp. Fine for a subtle brand tint (no need for linear space).
 fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
