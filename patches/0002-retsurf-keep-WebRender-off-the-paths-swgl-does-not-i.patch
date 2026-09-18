@@ -1,18 +1,18 @@
-From dd5d83eec711bd13c2c7dd5b366c03284fd2dc10 Mon Sep 17 00:00:00 2001
+From 70b90d0396b34778349464eb3ea479703da11ad8 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Wed, 26 Aug 2026 12:20:11 +0300
-Subject: [PATCH 4/7] retsurf: keep WebRender off the paths swgl does not
+Subject: [PATCH 2/5] retsurf: keep WebRender off the paths swgl does not
  implement
 
 ---
- components/paint/painter.rs | 13 +++++++++++--
- 1 file changed, 11 insertions(+), 2 deletions(-)
+ components/paint/painter.rs | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
 
 diff --git a/components/paint/painter.rs b/components/paint/painter.rs
-index 155ce10dfc6..194d5f2bb6c 100644
+index 062af171a65..031d32ab5f8 100644
 --- a/components/paint/painter.rs
 +++ b/components/paint/painter.rs
-@@ -201,13 +201,16 @@ impl Painter {
+@@ -200,13 +200,16 @@ impl Painter {
              clear_color[3] as f32,
          );
  
@@ -30,17 +30,16 @@ index 155ce10dfc6..194d5f2bb6c 100644
          let worker_threads = std::thread::available_parallelism()
              .map(|i| i.get())
              .unwrap_or(pref!(thread_pool_fallback_workers) as usize)
-@@ -246,7 +249,13 @@ impl Painter {
+@@ -245,7 +248,12 @@ impl Painter {
                  enable_aa: pref!(gfx_text_antialiasing_enabled),
                  enable_subpixel_aa: pref!(gfx_subpixel_text_antialiasing_enabled),
                  allow_texture_swizzling: pref!(gfx_texture_swizzling_enabled),
 -                enable_dithering: true,
-+                // swgl builds no dithered variant of the gradient shader, so
-+                // asking for one leaves WebRender with no program to bind.
++                // swgl builds no dithered gradient shader, so WebRender would
++                // bind a program that is not there.
 +                enable_dithering: !is_software_webrender,
-+                // Clearing picture-cache tiles by drawing a quad is a driver
-+                // workaround (Mali-T crashes on glClear); it needs a depth func
-+                // of GL_ALWAYS, which swgl does not implement.
++                // The quad-drawn tile clear is a glClear workaround for Mali-T
++                // and needs a GL_ALWAYS depth func, which swgl lacks.
 +                clear_caches_with_quads: !is_software_webrender,
                  clear_color,
                  upload_method,

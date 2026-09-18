@@ -1,19 +1,19 @@
-From 546f48308c0d1b876be92fd26a1f2a869dec7c41 Mon Sep 17 00:00:00 2001
+From 4979b8f1357aa7e296c614991180c9746c487579 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Fri, 11 Sep 2026 12:26:09 +0300
-Subject: [PATCH 7/7] retsurf: hand the front buffer back when it cannot be
+Subject: [PATCH 4/5] retsurf: hand the front buffer back when it cannot be
  sampled
 
 ---
- components/paint/webrender_external_images.rs | 13 +++++++--
+ components/paint/webrender_external_images.rs | 12 +++++++--
  components/shared/paint/rendering_context.rs  | 27 ++++++++++++-------
- 2 files changed, 28 insertions(+), 12 deletions(-)
+ 2 files changed, 27 insertions(+), 12 deletions(-)
 
 diff --git a/components/paint/webrender_external_images.rs b/components/paint/webrender_external_images.rs
-index 66ad1994df9..0e9ace75154 100644
+index 66ad1994df9..345acc6ecbb 100644
 --- a/components/paint/webrender_external_images.rs
 +++ b/components/paint/webrender_external_images.rs
-@@ -47,9 +47,18 @@ impl WebGLExternalImages {
+@@ -47,9 +47,17 @@ impl WebGLExternalImages {
              *busy_webgl_context_map.entry(id).or_default() += 1;
          }
  
@@ -25,8 +25,7 @@ index 66ad1994df9..0e9ace75154 100644
 +            match self.rendering_context.create_texture(front_buffer) {
 +                Ok(texture) => texture,
 +                Err(front_buffer) => {
-+                    // An embedder that leaves `create_texture` defaulted gets an
-+                    // empty canvas; dropping the surface here would panic instead.
++                    // Dropping a surface rather than returning it panics inside surfman.
 +                    swap_chain.recycle_surface(front_buffer);
 +                    return None;
 +                },
@@ -35,7 +34,7 @@ index 66ad1994df9..0e9ace75154 100644
  
          Some((gl_texture, size))
 diff --git a/components/shared/paint/rendering_context.rs b/components/shared/paint/rendering_context.rs
-index 6eda5da3941..2eb3b249955 100644
+index 6eda5da3941..4be60968e02 100644
 --- a/components/shared/paint/rendering_context.rs
 +++ b/components/shared/paint/rendering_context.rs
 @@ -65,12 +65,13 @@ pub trait RenderingContext {
@@ -43,8 +42,8 @@ index 6eda5da3941..2eb3b249955 100644
      fn glow_gl_api(&self) -> Arc<glow::Context>;
      /// Creates a texture from a given surface and returns the surface texture,
 -    /// the OpenGL texture object, and the size of the surface. Default to `None`.
-+    /// the OpenGL texture object, and the size of the surface. A context that
-+    /// cannot do this hands the surface back: dropping one panics inside surfman.
++    /// the OpenGL texture object, and the size of the surface. Hand the surface
++    /// back when that cannot be done: dropping one panics inside surfman.
      fn create_texture(
          &self,
 -        _surface: Surface,

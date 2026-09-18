@@ -1,0 +1,67 @@
+From 4018b427960e27aa4be6d12e29707c77068c7d43 Mon Sep 17 00:00:00 2001
+From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
+Date: Fri, 18 Sep 2026 12:59:46 +0300
+Subject: [PATCH 1/5] retsurf: drop a dying document's rooted callbacks
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+CallbackObject takes an unconditional GC root that only Drop removes, and the
+Rust object lives exactly as long as its reflector. So one event listener kept
+its whole realm alive and no collection could reclaim it — which is why two
+forced full GCs returned zero bytes.
+
+Found by installing SpiderMonkey's dumpHeap and grouping the roots of the dump
+by the global they point into: after ten navigations every one of the eleven
+navigated-away windows held exactly one CallbackObject::root and one
+Promise::root, with 12 Window, 12 HTMLBodyElement and 6600 HTMLDivElement still
+alive after a full GC.
+
+Clearing the listeners of the tree, the window and the FontFaceSet at pipeline
+exit, together with releasing document.fonts.ready, took js/malloc-heap from
+34 MB to 6 over the same run and live windows from 12 to 1. The promise half is
+no longer ours to carry: upstream stores the ready promise as a TracedPromise,
+which is traced rather than rooted.
+---
+ components/script/dom/document/document.rs    | 15 +++++++++++++++
+ components/script/event_loop/script_thread.rs |  1 +
+ 2 files changed, 16 insertions(+)
+
+diff --git a/components/script/dom/document/document.rs b/components/script/dom/document/document.rs
+index 355000d0980..df077d407ad 100644
+--- a/components/script/dom/document/document.rs
++++ b/components/script/dom/document/document.rs
+@@ -1028,6 +1028,21 @@ impl Document {
+         &self.window
+     }
+ 
++    /// Drop the GC roots Rust holds into this document's realm: a callback left
++    /// behind keeps the whole document alive for the life of the process.
++    pub(crate) fn release_rooted_handles(&self) {
++        for node in self
++            .upcast::<Node>()
++            .traverse_preorder(ShadowIncluding::Yes)
++        {
++            node.upcast::<EventTarget>().remove_all_listeners();
++        }
++        if let Some(fonts) = self.fonts.get() {
++            fonts.upcast::<EventTarget>().remove_all_listeners();
++        }
++        self.window.upcast::<EventTarget>().remove_all_listeners();
++    }
++
+     #[inline]
+     pub(crate) fn is_html_document(&self) -> bool {
+         self.is_html_document
+diff --git a/components/script/event_loop/script_thread.rs b/components/script/event_loop/script_thread.rs
+index fea38d51b3d..7f4f1bbdabf 100644
+--- a/components/script/event_loop/script_thread.rs
++++ b/components/script/event_loop/script_thread.rs
+@@ -3169,6 +3169,7 @@ impl ScriptThread {
+ 
+                 debug!("{pipeline_id}: Clearing JavaScript runtime");
+                 window.clear_js_runtime();
++                document.release_rooted_handles();
+             }
+         }
+ 

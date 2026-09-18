@@ -129,10 +129,10 @@ The fix has two parts:
   `src/platform/render/webgl.rs` builds it from SDL's own `EGLDisplay` rather than
   through `Connection::new()` — so nothing calls `eglGetPlatformDisplay` and EGL 1.4
   is no longer the deciding factor. Where SDL is not on EGL, `connection()` is `None`.
-- `components/paint/paint.rs` in our Servo fork (pinned via `[patch.crates-io]`,
-  see `docs/SERVO_PATCH.md`): `register_rendering_context` treats the connection as
-  optional instead of calling `.expect()`. WebGL is disabled when the connection is
-  absent, but everything else renders fine.
+- `components/paint/paint.rs`: `register_rendering_context` treats the connection
+  as optional instead of calling `.expect()`. WebGL is disabled when the connection
+  is absent, but everything else renders fine. This half was our fork patch until
+  it landed upstream as servo/servo#47803; it now comes with the engine.
 
 Wrapping SDL's current EGL display is the route that was taken, and it carries WebGL on
 EGL 1.4 too: measured on a Mali-G31 blob, with the surfman fork supplying the GLES config

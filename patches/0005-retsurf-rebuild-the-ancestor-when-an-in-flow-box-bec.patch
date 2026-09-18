@@ -1,30 +1,26 @@
-From 7f1d4ba68d2cd285145420836c6c018ca8f36c55 Mon Sep 17 00:00:00 2001
+From 41bcc95a128531d99e23a2361bd40c5e0849d6d2 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:03:17 +0300
-Subject: [PATCH] retsurf: rebuild the ancestor when an in-flow box becomes
+Subject: [PATCH 5/5] retsurf: rebuild the ancestor when an in-flow box becomes
  absolutely positioned
 
 ---
- components/layout/dom.rs | 6 ++++++
- 1 file changed, 6 insertions(+)
+ components/layout/dom.rs | 5 +++++
+ 1 file changed, 5 insertions(+)
 
 diff --git a/components/layout/dom.rs b/components/layout/dom.rs
-index d4eaec0fb19..0debcaf4814 100644
+index d4eaec0fb19..e11c219a22f 100644
 --- a/components/layout/dom.rs
 +++ b/components/layout/dom.rs
-@@ -721,6 +721,12 @@ impl<'dom> NodeExt<'dom> for ServoLayoutNode<'dom> {
+@@ -721,6 +721,11 @@ impl<'dom> NodeExt<'dom> for ServoLayoutNode<'dom> {
                  let mut block_level = block_level.borrow_mut();
                  match &mut *block_level {
                      BlockLevelBox::Independent(independent_formatting_context) => {
-+                        // An in-flow box that has just become absolutely positioned
-+                        // belongs to its containing block's out-of-flow list, which
-+                        // only rebuilding an ancestor can move it to.
++                        // A box that just went out of flow belongs to its containing
++                        // block's out-of-flow list, which only an ancestor rebuild reaches.
 +                        if info.style.clone_position().is_absolutely_positioned() {
 +                            return false;
 +                        }
                          let DisplayGeneratingBox::OutsideInside {
                              outside: DisplayOutside::Block,
                              inside: display_inside,
--- 
-2.55.0
-

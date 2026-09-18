@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The engine moved up to Servo `main` as of 2026-09-18** (178 upstream
+  commits), pinned by the tag `retsurf-main-0.9.0-2`. The bump cost one
+  dependency line: Servo took `content-security-policy` to 0.9, and two copies of
+  its `Destination` do not interoperate, so the crate we read that enum from moved
+  with it.
+
+- The engine's patch set is down from eight to five. Three landed upstream: the
+  optional surfman connection together with its painter-removal half
+  (servo/servo#47803) and the malloc-heap GC thresholds by pref (#47999), whose
+  upstream spelling of the pref is `js_mem_gc_malloc_threshold_base_mb`. The
+  rooted-handles patch lost its promise half without landing — upstream now holds
+  `document.fonts.ready` as a `TracedPromise`, which the GC traces rather than
+  roots, so only the event listeners are still ours to release. `patches/` mirrors
+  what is left.
+
 ## [0.8.0] - 2026-09-08
 
 ### Added

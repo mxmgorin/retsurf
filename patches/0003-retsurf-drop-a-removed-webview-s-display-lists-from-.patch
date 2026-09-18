@@ -1,7 +1,7 @@
-From eb4afa71b0b925ade8f994271b3a7c56a5f1629e Mon Sep 17 00:00:00 2001
+From f75d1c0b604a5a4687b72a0e3653fe30f1d601fd Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Sun, 6 Sep 2026 15:32:10 +0300
-Subject: [PATCH 6/7] retsurf: drop a removed webview's display lists from the
+Subject: [PATCH 3/5] retsurf: drop a removed webview's display lists from the
  WebRender scene
 
 ---
@@ -9,10 +9,10 @@ Subject: [PATCH 6/7] retsurf: drop a removed webview's display lists from the
  1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/components/paint/painter.rs b/components/paint/painter.rs
-index 194d5f2bb6c..4c6237db465 100644
+index 031d32ab5f8..583daa87073 100644
 --- a/components/paint/painter.rs
 +++ b/components/paint/painter.rs
-@@ -1240,11 +1240,19 @@ impl Painter {
+@@ -1241,11 +1241,19 @@ impl Painter {
      }
  
      pub(crate) fn remove_webview(&mut self, webview_id: WebViewId) {
@@ -22,8 +22,8 @@ index 194d5f2bb6c..4c6237db465 100644
              return;
          };
  
-+        // A pipeline this WebView still had never gets its own exit message here,
-+        // so its display list would stay in the scene.
++        // Pipelines still on this WebView get no exit message of their own, so
++        // their display lists would stay in the scene.
 +        let mut transaction = Transaction::new();
 +        for pipeline_id in webview_renderer.pipelines.keys() {
 +            transaction.remove_pipeline(pipeline_id.into());

@@ -150,9 +150,8 @@ fn micro() -> Preferences {
     p.js_mem_gc_incremental_slice_ms = 5; // ms
 
     // Measured on the device: the malloc heap climbed 2.4 MB a navigation to
-    // SpiderMonkey's 38 MB default before anything collected it, which is a
-    // third of this machine's RAM.
-    p.js_mem_gc_malloc_threshold_mb = 6;
+    // SpiderMonkey's 38 MB default, a third of this machine's RAM.
+    p.js_mem_gc_malloc_threshold_base_mb = 6;
     p.js_mem_gc_urgent_threshold_mb = 4;
 
     // Keep no page alive for Back: `1` costs the whole previous document (48 MB
@@ -197,7 +196,7 @@ fn embedded() -> Preferences {
 
     // The malloc heap is what `js_mem_max` does not cover, and SpiderMonkey's own
     // threshold for it (38 MB) assumes a desktop.
-    p.js_mem_gc_malloc_threshold_mb = 12;
+    p.js_mem_gc_malloc_threshold_base_mb = 12;
     p.js_mem_gc_urgent_threshold_mb = 8;
     // Defensive: pin current Servo defaults so a crate bump can't silently flip them.
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
