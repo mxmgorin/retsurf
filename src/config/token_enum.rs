@@ -13,12 +13,9 @@
 //! [`CursorMode`]: crate::config::CursorMode
 //! [`MemoryProfile`]: crate::config::MemoryProfile
 
-/// Generate a string-keyed config enum from a `Variant => "token", "Label"` table.
-///
-/// `default <Variant>;` names the fallback returned by [`Default`] and by
-/// `from_value` for an unrecognized token. A variant may list retired spellings as
-/// `"token" | "old"`, which parse but are never written back. See the
-/// [module docs](self).
+/// Generate a string-keyed config enum from a `Variant => "token", "Label"`
+/// table. `default <Variant>;` names the fallback for an unrecognized token, and
+/// a variant may list retired spellings that parse but are never written back.
 macro_rules! token_enum {
     (
         $(#[$emeta:meta])*
@@ -91,6 +88,28 @@ macro_rules! token_enum {
                 d: D,
             ) -> ::core::result::Result<Self, D::Error> {
                 Ok(Self::from_value(&<String as ::serde::Deserialize>::deserialize(d)?))
+            }
+        }
+
+        // One test module per invocation (fine while each file declares one
+        // enum; a second invocation fails loudly on the duplicate name).
+        #[cfg(test)]
+        mod token_round_trip {
+            /// Every variant parses back from its own token (a duplicated token
+            /// or alias would resolve to the wrong variant), and an unknown
+            /// token falls back to the default — the lenient parse contract.
+            #[test]
+            fn every_variant_round_trips() {
+                $(
+                    assert_eq!(
+                        super::$name::from_value(super::$name::$variant.as_str()),
+                        super::$name::$variant,
+                    );
+                )+
+                assert_eq!(
+                    super::$name::from_value("not-a-real-token"),
+                    <super::$name as ::core::default::Default>::default(),
+                );
             }
         }
     };

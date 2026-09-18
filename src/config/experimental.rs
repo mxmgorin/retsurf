@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// Servo experimental web-platform features (`[experimental]`). retsurf turns
-/// these on after startup — Servo ships them off but the modern web needs them.
-/// The 14 bools are the source of truth; the settings "Web features" preset
-/// ([`ExperimentalPreset`]) is derived from them. Default is `Balanced`
-/// (essentials + WebGL2/OffscreenCanvas). Future per-site overrides hang off here.
+/// Servo experimental web-platform features (`[experimental]`), which retsurf
+/// turns on after startup: Servo ships them off, but the modern web needs them.
+/// The bools are the source of truth; the settings preset is derived from them.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExperimentalConfig {
@@ -175,11 +173,13 @@ mod tests {
         assert_eq!(ExperimentalPreset::detect(&c), ExperimentalPreset::Balanced);
     }
 
-    /// Every named preset round-trips: applying it then detecting yields itself.
+    /// Every named preset round-trips, both features -> `detect` and
+    /// token -> `from_value`.
     #[test]
     fn named_presets_round_trip() {
         for p in ExperimentalPreset::NAMED {
             assert_eq!(ExperimentalPreset::detect(&p.features()), p, "{p:?}");
+            assert_eq!(ExperimentalPreset::from_value(p.as_str()), p, "{p:?}");
         }
     }
 

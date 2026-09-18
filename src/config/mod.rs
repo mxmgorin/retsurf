@@ -71,13 +71,9 @@ pub(crate) fn env_flag(name: &str) -> Option<bool> {
 }
 
 impl AppConfig {
-    /// Load configuration from a TOML file. The path is `RETSURF_CONFIG` when set,
-    /// otherwise `retsurf.toml` next to the executable (so a portable handheld
-    /// install keeps everything in one folder regardless of working directory).
-    /// A missing file yields defaults (and a template is written so it can be
-    /// edited); a malformed file is logged and falls back to defaults.
-    /// Unknown/omitted fields fall back to their defaults too, so a partial file
-    /// (e.g. just `[input]`) is valid.
+    /// Load configuration from a TOML file: `RETSURF_CONFIG` when set, otherwise
+    /// `retsurf.toml` next to the executable, so a portable install keeps
+    /// everything in one folder. Any missing or malformed part falls back.
     pub fn load() -> Self {
         let path = paths::config_path();
         match std::fs::read_to_string(&path) {
@@ -106,10 +102,9 @@ impl AppConfig {
         self.write_to(path, "default config");
     }
 
-    /// Persist the current config to the config file — the GUI settings screen
-    /// (see [`crate::overlay::settings`]) writes through here when it closes.
-    /// Best-effort like [`Self::write_template`]: a failure is logged, not fatal,
-    /// so the handheld's read-only-SD case degrades to in-memory-only changes.
+    /// Persist the current config, as the settings screen does when it closes.
+    /// Best-effort like [`Self::write_template`], so a read-only SD card degrades
+    /// to in-memory-only changes.
     pub fn save(&self) {
         self.write_to(&paths::config_path(), "config");
     }
@@ -124,10 +119,9 @@ impl AppConfig {
         }
     }
 
-    /// Clamp hand-editable values to the same ranges the Settings GUI enforces
-    /// (see [`crate::overlay::settings`]); a hand-edited file otherwise bypasses
-    /// them, and an out-of-range value (e.g. `page_zoom = 0`, `width = 0`, a
-    /// negative speed, or a NaN) can break rendering or input. Logs corrections.
+    /// Clamp hand-editable values to the ranges the Settings GUI enforces: a
+    /// hand-edited file bypasses them, and an out-of-range value (`page_zoom = 0`,
+    /// a NaN) breaks rendering or input. Logs its corrections.
     pub(crate) fn sanitize(&mut self) {
         use bounds as b;
 
@@ -239,9 +233,8 @@ fn fix_ord<T: PartialOrd + Copy + std::fmt::Display>(name: &str, v: &mut T, min:
     }
 }
 
-// Type-specific wrappers over `fix_ord` that cast the shared `i64` bounds to the
-// field's own integer width. The bounds are small and non-negative, so the cast
-// is exact.
+// Wrappers over `fix_ord` casting the shared `i64` bounds to the field's own
+// width; the bounds are small and non-negative, so the cast is exact.
 fn fix_u32(name: &str, v: &mut u32, b: bounds::IntBounds) {
     fix_ord(name, v, b.min as u32, b.max as u32);
 }
@@ -258,49 +251,8 @@ fn fix_usize(name: &str, v: &mut usize, b: bounds::IntBounds) {
 mod tests {
     use super::{Channel, CursorMode, MemoryProfile, ToolbarPosition};
 
-    /// Every `CHOICES` token round-trips through `from_value` -> `as_str`
-    /// unchanged, and an unknown token falls back to the default — the lenient
-    /// parse contract the GUI and hand-edited configs both rely on.
-    fn check<T: PartialEq + Copy + std::fmt::Debug>(
-        choices: &[(&str, &str)],
-        from: impl Fn(&str) -> T,
-        as_str: impl Fn(T) -> &'static str,
-        default: T,
-    ) {
-        for (_, token) in choices {
-            assert_eq!(as_str(from(token)), *token, "round-trip for `{token}`");
-        }
-        assert_eq!(from("not-a-real-token"), default);
-    }
-
-    #[test]
-    fn config_enums_round_trip() {
-        check(
-            CursorMode::CHOICES,
-            CursorMode::from_value,
-            CursorMode::as_str,
-            CursorMode::default(),
-        );
-        check(
-            ToolbarPosition::CHOICES,
-            ToolbarPosition::from_value,
-            ToolbarPosition::as_str,
-            ToolbarPosition::default(),
-        );
-        check(
-            MemoryProfile::CHOICES,
-            MemoryProfile::from_value,
-            MemoryProfile::as_str,
-            MemoryProfile::default(),
-        );
-        check(
-            Channel::CHOICES,
-            Channel::from_value,
-            Channel::as_str,
-            Channel::default(),
-        );
-    }
-
+    // Per-variant round-trips live in each `token_enum!` invocation's own
+    // generated test; this only covers what the macro cannot know.
     #[test]
     fn from_value_is_lenient() {
         // Case- and whitespace-insensitive, unified across all the enums.
