@@ -52,7 +52,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A mismatched release must not produce the Miyoo packages either.
       - name: Verify tag matches Cargo.toml version
@@ -337,7 +337,7 @@ jobs:
           fi
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-linux-armhf
           path: dist/retsurf-linux-armhf
@@ -368,14 +368,14 @@ jobs:
         run: tools/armhf/package-miyoo.sh -n
 
       - name: Upload the Allium package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-allium
           path: dist/retsurf-allium.zip
           retention-days: 14
 
       - name: Upload the OnionOS package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-onionos
           path: dist/retsurf-onionos.zip
@@ -385,7 +385,7 @@ jobs:
       # Kind::Manual (src/update), so nothing ever downloads them to verify.
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/retsurf-allium.zip

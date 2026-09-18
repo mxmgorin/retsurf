@@ -27,7 +27,7 @@ jobs:
       # shader bindgen dies on clang 15: it dropped __builtin_ia32_* sat-math.
       LIBCLANG_PATH: /usr/lib/llvm-14/lib
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/linux-build-env
 

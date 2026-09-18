@@ -29,7 +29,7 @@ jobs:
       sha: ${{ steps.check.outputs.sha }}
       short: ${{ steps.check.outputs.short }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: check
         env:
@@ -88,9 +88,9 @@ jobs:
     needs: [changed, linux, linux-arm, linux-armhf, macos, windows, android]
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: art
 
@@ -126,7 +126,7 @@ jobs:
 
       # prerelease + make_latest keep this out of the way of the stable channel,
       # which picks the highest semver tag and cannot parse `nightly` anyway.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           name: Nightly

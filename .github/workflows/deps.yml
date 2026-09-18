@@ -23,7 +23,7 @@ jobs:
   audit:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Prebuilt binary; `cargo install` would compile it on every run.
       - uses: taiki-e/install-action@v2

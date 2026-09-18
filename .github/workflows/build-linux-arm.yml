@@ -58,7 +58,7 @@ jobs:
           apt-get install -y --no-install-recommends git curl ca-certificates
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Gates the `package` job too (it needs build-arm), so a mismatched release
       # never produces the PortMaster zip either.
@@ -150,7 +150,7 @@ jobs:
           ls -la dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-${{ matrix.suffix }}
           path: dist/retsurf.${{ matrix.suffix }}
@@ -162,10 +162,10 @@ jobs:
     needs: build-arm
     runs-on: ubuntu-22.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download per-core binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: retsurf-a*
           path: bins
@@ -210,7 +210,7 @@ jobs:
           ls -laR "$pm"
 
       - name: Upload PortMaster artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-portmaster
           path: portmaster-dist
@@ -228,7 +228,7 @@ jobs:
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             retsurf-portmaster.zip
@@ -250,7 +250,7 @@ jobs:
           apt-get install -y --no-install-recommends git curl ca-certificates
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verify tag matches Cargo.toml version
         if: github.event_name == 'release'
@@ -308,7 +308,7 @@ jobs:
           ls -la dist/
 
       - name: Upload universal artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retsurf-linux-aarch64
           path: dist/retsurf-linux-aarch64
@@ -325,7 +325,7 @@ jobs:
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             retsurf-linux-aarch64.zip
