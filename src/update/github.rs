@@ -32,34 +32,41 @@ struct Asset {
     size: u64,
 }
 
-/// Query `.../releases/latest` and classify the result relative to this build. A
-/// 404 (no release published yet) is [`UpdateState::UpToDate`], not an error. When a
-/// newer release exists, offer an in-place install if `asset` is set and present in
-/// the release, otherwise offer to open the release page. `Err` only on real
-/// network/parse failures.
-pub(super) fn latest_release(asset: Option<&str>) -> Result<UpdateState, String> {
-    let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let mut response = match ureq::get(&url)
+/// One GitHub API GET, parsed. `Ok(None)` on a 404 — the caller decides what an
+/// absent resource means for its channel. `Err` only on real network/parse
+/// failures.
+fn fetch<T: serde::de::DeserializeOwned>(url: &str) -> Result<Option<T>, String> {
+    let mut response = match ureq::get(url)
         .header("User-Agent", USER_AGENT)
         .header("Accept", "application/vnd.github+json")
         .call()
     {
         Ok(r) => r,
-        // No release yet -> nothing to update to (not a failure).
-        Err(ureq::Error::StatusCode(404)) => {
-            return Ok(UpdateState::UpToDate {
-                current: current().to_string(),
-            });
-        }
+        Err(ureq::Error::StatusCode(404)) => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
-
     let body = response
         .body_mut()
         .read_to_vec()
         .map_err(|e| e.to_string())?;
-    let release: Release =
-        serde_json::from_slice(&body).map_err(|e| format!("parse release: {e}"))?;
+    serde_json::from_slice(&body)
+        .map(Some)
+        .map_err(|e| format!("parse response: {e}"))
+}
+
+fn up_to_date(current: &str) -> UpdateState {
+    UpdateState::UpToDate {
+        current: current.to_string(),
+    }
+}
+
+/// Query `.../releases/latest` and classify the result relative to this build.
+/// A 404 (no release published yet) is [`UpdateState::UpToDate`], not an error.
+pub(super) fn latest_release(asset: Option<&str>) -> Result<UpdateState, String> {
+    let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
+    let Some(release) = fetch::<Release>(&url)? else {
+        return Ok(up_to_date(current()));
+    };
     classify(&release, asset)
 }
 
@@ -69,17 +76,7 @@ pub(super) fn latest_release(asset: Option<&str>) -> Result<UpdateState, String>
 /// releases) is [`UpdateState::UpToDate`]. This is the `beta` channel.
 pub(super) fn latest_beta(asset: Option<&str>) -> Result<UpdateState, String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=30");
-    let mut response = ureq::get(&url)
-        .header("User-Agent", USER_AGENT)
-        .header("Accept", "application/vnd.github+json")
-        .call()
-        .map_err(|e| e.to_string())?;
-    let body = response
-        .body_mut()
-        .read_to_vec()
-        .map_err(|e| e.to_string())?;
-    let releases: Vec<Release> =
-        serde_json::from_slice(&body).map_err(|e| format!("parse releases: {e}"))?;
+    let releases: Vec<Release> = fetch(&url)?.unwrap_or_default();
 
     // Highest semver among non-draft releases (pre-releases included); tags that
     // aren't valid semver are skipped rather than failing the whole check.
@@ -93,9 +90,7 @@ pub(super) fn latest_beta(asset: Option<&str>) -> Result<UpdateState, String> {
         .max_by(|a, b| a.0.cmp(&b.0));
     match newest {
         Some((_, release)) => classify(release, asset),
-        None => Ok(UpdateState::UpToDate {
-            current: current().to_string(),
-        }),
+        None => Ok(up_to_date(current())),
     }
 }
 
@@ -107,12 +102,15 @@ fn classify(release: &Release, asset: Option<&str>) -> Result<UpdateState, Strin
     let latest = semver::Version::parse(&tag).map_err(|e| format!("bad tag `{tag}`: {e}"))?;
     let current_ver = semver::Version::parse(current()).map_err(|e| e.to_string())?;
     if latest <= current_ver {
-        return Ok(UpdateState::UpToDate {
-            current: current().to_string(),
-        });
+        return Ok(up_to_date(current()));
     }
-    // Prefer an in-place asset (with its optional checksum sidecar); fall back to
-    // opening the release page for manual download.
+    Ok(available(release, asset, tag))
+}
+
+/// The `Available` state for `release`: an in-place install offer when `asset`
+/// is present (with its optional checksum sidecar), else the release page. The
+/// notes and page back the About tab's preview and "View on GitHub" link.
+fn available(release: &Release, asset: Option<&str>, version: String) -> UpdateState {
     let offer = match asset.and_then(|want| find_asset(release, want)) {
         Some(a) => Offer::Install {
             url: a.browser_download_url.clone(),
@@ -122,19 +120,13 @@ fn classify(release: &Release, asset: Option<&str>) -> Result<UpdateState, Strin
         },
         None => Offer::Open,
     };
-    // The notes (release body) and page back the About tab's read-only preview and
-    // "View on GitHub" link; both are shown regardless of the install path.
-    let notes = {
-        let body = release.body.trim();
-        (!body.is_empty()).then(|| body.to_string())
-    };
-    let page = (!release.html_url.is_empty()).then(|| release.html_url.clone());
-    Ok(UpdateState::Available {
-        version: tag,
-        notes,
-        page,
+    let body = release.body.trim();
+    UpdateState::Available {
+        version,
+        notes: (!body.is_empty()).then(|| body.to_string()),
+        page: (!release.html_url.is_empty()).then(|| release.html_url.clone()),
         offer,
-    })
+    }
 }
 
 fn find_asset<'a>(release: &'a Release, name: &str) -> Option<&'a Asset> {
@@ -146,25 +138,9 @@ fn find_asset<'a>(release: &'a Release, name: &str) -> Option<&'a Asset> {
 /// (none published yet) is not an error.
 pub(super) fn latest_nightly(asset: Option<&str>) -> Result<UpdateState, String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/tags/{NIGHTLY_TAG}");
-    let mut response = match ureq::get(&url)
-        .header("User-Agent", USER_AGENT)
-        .header("Accept", "application/vnd.github+json")
-        .call()
-    {
-        Ok(r) => r,
-        Err(ureq::Error::StatusCode(404)) => {
-            return Ok(UpdateState::UpToDate {
-                current: current_sha().to_string(),
-            });
-        }
-        Err(e) => return Err(e.to_string()),
+    let Some(release) = fetch::<Release>(&url)? else {
+        return Ok(up_to_date(current_sha()));
     };
-    let body = response
-        .body_mut()
-        .read_to_vec()
-        .map_err(|e| e.to_string())?;
-    let release: Release =
-        serde_json::from_slice(&body).map_err(|e| format!("parse release: {e}"))?;
 
     let Some(sha) = nightly_commit(&release.body) else {
         return Err("nightly release records no commit".to_string());
@@ -172,29 +148,11 @@ pub(super) fn latest_nightly(asset: Option<&str>) -> Result<UpdateState, String>
     // A local build has no git hash and so never matches — the channel then always
     // offers the published nightly, which is what a developer wants.
     if current_sha() != "unknown" && sha.starts_with(current_sha()) {
-        return Ok(UpdateState::UpToDate {
-            current: current_sha().to_string(),
-        });
+        return Ok(up_to_date(current_sha()));
     }
 
-    let offer = match asset.and_then(|want| find_asset(&release, want)) {
-        Some(a) => Offer::Install {
-            url: a.browser_download_url.clone(),
-            size: a.size,
-            sha256: find_asset(&release, &format!("{}.sha256", a.name))
-                .and_then(|s| fetch_sha256(&s.browser_download_url)),
-        },
-        None => Offer::Open,
-    };
-    Ok(UpdateState::Available {
-        version: format!("nightly {}", sha.get(..7).unwrap_or(sha)),
-        notes: {
-            let body = release.body.trim();
-            (!body.is_empty()).then(|| body.to_string())
-        },
-        page: (!release.html_url.is_empty()).then(|| release.html_url.clone()),
-        offer,
-    })
+    let version = format!("nightly {}", sha.get(..7).unwrap_or(sha));
+    Ok(available(&release, asset, version))
 }
 
 /// The commit a nightly was built from — the workflow writes it as a `commit: <sha>`
