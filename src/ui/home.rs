@@ -7,7 +7,7 @@
 //! — the same path the menu's lists use.
 
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
-use crate::app::{AppCommand, MenuAction};
+use crate::command::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
 use egui_phosphor::bold;

@@ -5,7 +5,7 @@
 //! past the hold it opens the Game Mode menu.
 
 use super::input_map::{Dir, InputMap, KeyTarget, Side, StickRole, Target};
-use crate::app::{AppCommand, InputCommand};
+use crate::command::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
 use crate::config::InputConfig;
 use crate::event::sdl2_servo::key_event;

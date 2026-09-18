@@ -1,13 +1,12 @@
 //! The application core: construction, the main loop, and command execution.
-//! The command vocabulary is defined in [`command`]; the contextual-input
+//! The command vocabulary is defined in [`crate::command`]; the contextual-input
 //! routing (gamepad / keyboard intents against the current UI state) lives in
 //! [`router`].
 
-mod command;
 mod execute;
 mod router;
 
-pub use command::{
+use crate::command::{
     AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand, MenuAction,
     PromptAction, SettingsAction,
 };

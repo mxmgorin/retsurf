@@ -3,7 +3,7 @@
 //! the list of what the focused row can send — each over the shared panel
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
-use crate::app::{AppCommand, GameMapEditAction};
+use crate::command::{AppCommand, GameMapEditAction};
 use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow, UNBOUND};
 use crate::ui::panel;
 use egui_sdl2::egui;

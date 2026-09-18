@@ -5,8 +5,8 @@ use super::gamepad_api;
 use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
-    app::{AppCommand, SettingsAction},
     browser::AppBrowser,
+    command::{AppCommand, SettingsAction},
     config::{GameModeConfig, InputConfig},
     event::{user::handle_user, window::handle_window},
     platform::window::AppWindow,

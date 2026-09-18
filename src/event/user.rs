@@ -1,4 +1,4 @@
-use crate::app::AppCommand;
+use crate::command::AppCommand;
 use sdl2::sys::{SDL_Event, SDL_PushEvent, SDL_UserEvent};
 use std::cell::RefCell;
 

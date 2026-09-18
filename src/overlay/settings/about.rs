@@ -3,10 +3,7 @@
 //! by `build.rs`. [`crate::ui::settings`] lays it out.
 
 /// The read-only facts shown on the [`super::SettingsSection::About`] tab.
-/// Everything is baked in at compile time by `build.rs` (see its docs):
-/// `version` is the crate version, `git_hash`/`build_date` pin the source, and
-/// `components` are the resolved versions of the headline dependencies.
-/// `credits` is the attribution block rendered below the table.
+/// Everything is baked in at compile time by `build.rs` (see its docs).
 pub struct AboutInfo {
     pub version: &'static str,
     pub git_hash: &'static str,
@@ -20,7 +17,7 @@ pub struct AboutInfo {
     pub credits: &'static [&'static str],
     /// Clickable `(label, url)` links shown below the credits; selecting one
     /// saves & closes the overlay and loads the URL (see
-    /// [`crate::app::SettingsAction::OpenLink`]).
+    /// [`crate::command::SettingsAction::OpenLink`]).
     pub links: &'static [(&'static str, &'static str)],
 }
 

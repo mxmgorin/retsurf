@@ -12,7 +12,7 @@
 //! The **Fn** key swaps the characters for [`NAMED_ROWS`]: the page gets those
 //! as real events, a key picker ([`OskTarget::Capture`]) records them by name.
 
-use crate::app::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
+use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};

@@ -3,7 +3,7 @@
 //! count, active downloads).
 
 use super::theme;
-use crate::app::{AppCommand, MenuAction, SettingsAction};
+use crate::command::{AppCommand, MenuAction, SettingsAction};
 use crate::browser::{BrowserCommand, BrowserState};
 use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;

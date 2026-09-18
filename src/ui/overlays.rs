@@ -4,8 +4,8 @@
 
 use super::{dial_edit, home, settings, AppUi, OskField};
 use crate::{
-    app::{AppCommand, SettingsAction},
     browser::AppBrowser,
+    command::{AppCommand, SettingsAction},
     config::AppConfig,
     event::user::UserEventSender,
     overlay::dial_edit::EditItem,

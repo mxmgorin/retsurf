@@ -5,7 +5,7 @@
 //! has focus, and the menu / hint overlays get their fixed keys first. Whatever
 //! isn't consumed is forwarded to the page as a Servo keyboard event.
 
-use crate::app::{AppCommand, InputCommand, MenuAction};
+use crate::command::{AppCommand, InputCommand, MenuAction};
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::event::bindings::Action;
 use crate::ui::{AppUi, Focus};

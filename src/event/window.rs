@@ -1,4 +1,4 @@
-use crate::app::AppCommand;
+use crate::command::AppCommand;
 use sdl2::event::WindowEvent;
 
 pub fn handle_window(win_event: WindowEvent) -> Option<AppCommand> {

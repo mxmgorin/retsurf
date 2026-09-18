@@ -1,11 +1,11 @@
 //! Rendering of the speed-dial editor overlay (state lives in
 //! [`crate::overlay::dial_edit`]): a title, the pins as a deletable tile grid,
 //! and a URL field + "Add" beneath. Tiles reuse the start page's
-//! [`super::home::paint_tile`] look; edits go through [`crate::app::MenuAction`].
+//! [`super::home::paint_tile`] look; edits go through [`crate::command::MenuAction`].
 
 use super::home::{paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
-use crate::app::{AppCommand, MenuAction};
+use crate::command::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::dial_edit::DialEdit;
 use egui_phosphor::bold;

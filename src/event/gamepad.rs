@@ -9,7 +9,7 @@
 //! [`Action::Scroll`] is handled here rather than routed: it latches
 //! `scroll_mode`, which turns the aim vector into page scrolling.
 
-use crate::app::{AppCommand, InputCommand};
+use crate::command::{AppCommand, InputCommand};
 use crate::config::InputConfig;
 use crate::event::bindings::Action;
 use inputbind::sdl::{axis_value, pad_of, trigger_of};
@@ -125,9 +125,8 @@ impl Gamepad {
         bindings: &Bindings<Action>,
         commands: &mut Vec<AppCommand>,
     ) {
-        // L2/R2 are throttle-style axes: the router reads the intent as the
-        // on-screen keyboard's Shift/Enter, or tab cycling. They feed the pad
-        // machine too, so `l2`/`r2` gestures are bindable like any other.
+        // L2/R2 are throttle-style axes. They feed the pad machine too, so
+        // `l2`/`r2` gestures are bindable like any other.
         if let Some(pad) = trigger_of(axis) {
             let edges = self.trigger_edges(axis, value);
             let right = pad == Pad::R2;
@@ -190,9 +189,8 @@ impl Gamepad {
         bindings: &Bindings<Action>,
         commands: &mut Vec<AppCommand>,
     ) {
-        // The D-pad contributes to the aim vector on both edges (per axis, so a
-        // held diagonal keeps both), and emits a discrete press edge for hint
-        // mode's combo symbols (ignored elsewhere). It is also a bindable pad.
+        // The D-pad feeds the aim vector on both edges, per axis so a held
+        // diagonal keeps both, and a press edge for hint mode's combo symbols.
         if let Some((dx, dy)) = pad.vector() {
             if dx != 0 {
                 self.dpad.0 = if pressed { dx as f32 } else { 0.0 };

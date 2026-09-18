@@ -2,7 +2,7 @@
 //! [`crate::overlay::game::menu`]): a centered panel over the running game.
 //! Up/Down move, A / Left/Right act on the focused row, B resumes.
 
-use crate::app::{AppCommand, GameMenuAction};
+use crate::command::{AppCommand, GameMenuAction};
 use crate::overlay::game::menu::{GameMenu, GameRow};
 use crate::ui::panel::{self, ROW_GAP};
 use crate::ui::theme::{self, ACCENT, ROW_FONT};
@@ -64,4 +64,3 @@ fn add_header(ui: &mut egui::Ui) {
     );
     ui.add_space(ROW_GAP * 2.0);
 }
-

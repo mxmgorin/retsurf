@@ -5,7 +5,7 @@
 
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
-use crate::app::{AppCommand, SettingsAction};
+use crate::command::{AppCommand, SettingsAction};
 use crate::data::downloads::format_size;
 use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
@@ -61,10 +61,9 @@ fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
     });
 }
 
-/// The [`SettingsAction`] the About tab's update row triggers on A / click for the
-/// current `state`, or `None` while a check/download/install is in progress. Shared
-/// by the renderer and the gamepad activation path ([`super::AppUi::about_activate`])
-/// so the two never drift.
+/// The [`SettingsAction`] the About tab's update row triggers for `state`, or
+/// `None` while work is in progress. Shared by the renderer and the gamepad
+/// path ([`super::AppUi::about_activate`]), so the two never drift.
 pub(super) fn update_command(state: &UpdateState) -> Option<SettingsAction> {
     match state {
         UpdateState::Idle | UpdateState::UpToDate { .. } | UpdateState::Error(_) => {
@@ -84,10 +83,9 @@ pub(super) fn update_command(state: &UpdateState) -> Option<SettingsAction> {
     }
 }
 
-/// The release page to link to ("View release notes on GitHub") when an update is
-/// available and carries one. `None` otherwise — the CI channel and non-available
-/// states have nothing to link to. Keeps the About focus nav, the renderer, and
-/// [`super::AppUi::about_activate`] agreeing on whether the link row exists.
+/// The release page to link to when an update is available and carries one.
+/// Keeps the About focus nav, the renderer and [`super::AppUi::about_activate`]
+/// agreeing on whether the link row exists.
 pub(super) fn release_link(state: &UpdateState) -> Option<String> {
     match state {
         UpdateState::Available {
@@ -152,13 +150,9 @@ fn update_row_text(state: &UpdateState) -> (String, String) {
     }
 }
 
-/// Render the self-update block on the About tab and return how many focusable rows
-/// it drew (see [`update_row_count`]): a header, the selectable action row (About
-/// focus index 0), and — when an update is available — the release notes (read-only)
-/// followed by a "View release notes on GitHub" link row (focus index 1). Its
-/// label/action depend on the update state; gamepad A goes through
-/// [`super::AppUi::about_activate`], a click pushes the same command. Shown on every
-/// platform — in-place install where supported, else a "Download" that opens the page.
+/// Render the self-update block on the About tab and return how many focusable
+/// rows it drew (see [`update_row_count`]): the action row (focus index 0) and,
+/// when an update is available, the notes and a link row (focus index 1).
 fn add_update(
     ui: &mut egui::Ui,
     full_w: f32,
@@ -186,9 +180,8 @@ fn add_update(
         }
     }
 
-    // When an update is available: its notes (read-only), then a link row that opens
-    // the release page on GitHub (About focus index 1). The notes text isn't a focus
-    // target, so it doesn't shift the row indices.
+    // The notes are read-only, so they are not a focus target and do not shift
+    // the row indices; the link row below is focus index 1.
     if let UpdateState::Available {
         notes: Some(body), ..
     } = update

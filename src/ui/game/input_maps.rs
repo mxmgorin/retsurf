@@ -3,7 +3,7 @@
 //! rows, and the confirmation over a removal — each over the shared panel
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
-use crate::app::{AppCommand, GameInputMapsAction};
+use crate::command::{AppCommand, GameInputMapsAction};
 use crate::overlay::game::input_maps::{InputMaps, MapAction, NameFor, NEW_MAP_LABEL};
 use crate::ui::panel;
 use egui_sdl2::egui;

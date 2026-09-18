@@ -22,8 +22,8 @@ mod toolbar;
 pub use self::overlays::Focus;
 
 use crate::{
-    app::AppCommand,
     browser::AppBrowser,
+    command::AppCommand,
     config::{
         DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
         ToolbarPosition, UpdateConfig,

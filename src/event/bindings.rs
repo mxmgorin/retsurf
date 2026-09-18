@@ -16,8 +16,8 @@
 //! Plain key gestures (no Ctrl/Alt, Vimium-style) are muted while a text input
 //! holds focus; see [`crate::event::keyboard`].
 
-use crate::app::{AppCommand, InputCommand, MenuAction, SettingsAction};
 use crate::browser::BrowserCommand;
+use crate::command::{AppCommand, InputCommand, MenuAction, SettingsAction};
 use crate::config;
 use crate::overlay::osk::OskCommand;
 use inputbind::editor::{Groups, Requirement};
@@ -224,9 +224,8 @@ impl Action {
             Action::Confirm => AppCommand::Input(InputCommand::Confirm(pressed)),
             Action::Cancel => AppCommand::Input(InputCommand::Cancel),
             Action::Osk => AppCommand::Input(InputCommand::ToggleOsk),
-            // Routed through the contextual OSK-space intent: space while the
-            // keyboard is open, reload otherwise — same behavior the hardcoded
-            // Y button had.
+            // Through the contextual OSK-space intent: space while the keyboard
+            // is open, reload otherwise — what the hardcoded Y button did.
             Action::Reload => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
             Action::Prev => AppCommand::Input(InputCommand::Shoulder(-1)),
             Action::Next => AppCommand::Input(InputCommand::Shoulder(1)),

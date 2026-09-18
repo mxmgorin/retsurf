@@ -4,7 +4,7 @@
 //! page dimmed behind it.
 
 use super::theme::{self, ACCENT, DIM, SCRIM};
-use crate::app::{AppCommand, PromptAction};
+use crate::command::{AppCommand, PromptAction};
 use crate::overlay::prompt::{select_rows, Prompt, SelectRow};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
