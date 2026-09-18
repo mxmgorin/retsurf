@@ -634,8 +634,7 @@ impl AppEventHandler {
                 // when scrolling up; Servo's positive `dy` reveals lower content.
                 const WHEEL_STEP: f32 = 60.0;
                 let dy = -y as f32 * WHEEL_STEP;
-                browser.scroll(-x as f32 * WHEEL_STEP, dy, mx, my);
-                ui.notify_page_scroll(dy);
+                ui.scroll_page(browser, -x as f32 * WHEEL_STEP, dy, mx, my);
             }
             // Touch: SDL finger coords are normalized to the window; scale to the
             // pixel space mouse events use. These only reach here for the web-view
@@ -665,8 +664,7 @@ impl AppEventHandler {
                     // Content follows the finger: dragging down reveals upper
                     // content, and Servo's positive dy reveals lower content, so
                     // negate the deltas.
-                    browser.scroll(-dx, -dy, bx, by);
-                    ui.notify_page_scroll(-dy);
+                    ui.scroll_page(browser, -dx, -dy, bx, by);
                 }
             }
             Event::FingerUp { finger_id, .. } => {

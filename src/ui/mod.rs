@@ -416,10 +416,17 @@ impl AppUi {
         }
     }
 
+    /// Scroll the page and feed the toolbar auto-hide in one call — the only
+    /// spelling of the pair, so a scroll cannot silently stop the auto-hide.
+    pub fn scroll_page(&mut self, browser: &AppBrowser, dx: f32, dy: f32, x: f32, y: f32) {
+        browser.scroll(dx, dy, x, y);
+        self.notify_page_scroll(dy);
+    }
+
     /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:
     /// positive reveals lower content) so the toolbar can hide on scroll-down and
     /// reveal on scroll-up. Accumulates to a threshold; a no-op without auto-hide.
-    pub fn notify_page_scroll(&mut self, dy: f32) {
+    fn notify_page_scroll(&mut self, dy: f32) {
         if !self.toolbar_autohide || dy == 0.0 {
             return;
         }

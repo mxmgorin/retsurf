@@ -337,8 +337,7 @@ impl App {
         // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
         // the selection to the bottom edge; up is the mirror.
         let chunk = dy as f32 * height * HINT_EDGE_SCROLL_FRACTION;
-        self.browser.scroll(0.0, chunk, sx, sy);
-        self.ui.notify_page_scroll(chunk);
+        self.ui.scroll_page(&self.browser, 0.0, chunk, sx, sy);
         let edge_y = if dy > 0 { height } else { 0.0 };
         self.ui.hints.mark_stale_at((sx, edge_y));
     }
@@ -458,8 +457,7 @@ impl App {
                     .hints
                     .selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
-                self.browser.scroll(0.0, dy, x, y);
-                self.ui.notify_page_scroll(dy);
+                self.ui.scroll_page(&self.browser, 0.0, dy, x, y);
                 self.ui.hints.mark_stale();
             }
             return;
@@ -473,8 +471,7 @@ impl App {
                 // The parked cursor may sit over the toolbar; scroll the page
                 // from its top edge in that case.
                 let (x, y) = self.ui.cursor_browser_rel();
-                self.browser.scroll(0.0, dy, x, y.max(1.0));
-                self.ui.notify_page_scroll(dy);
+                self.ui.scroll_page(&self.browser, 0.0, dy, x, y.max(1.0));
                 // Keep the scroll-mode indicator alive while actively scrolling;
                 // it lingers and auto-hides like the cursor once scrolling stops.
                 self.ui.mark_cursor_active();
@@ -500,8 +497,7 @@ impl App {
             // Stick down (+1) reveals lower content (positive Servo dy).
             let dy = scroll * scroll_speed * dt;
             let (x, y) = self.ui.cursor_browser_rel();
-            self.browser.scroll(0.0, dy, x, y);
-            self.ui.notify_page_scroll(dy);
+            self.ui.scroll_page(&self.browser, 0.0, dy, x, y);
         }
     }
 
