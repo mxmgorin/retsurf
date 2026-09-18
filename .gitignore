@@ -28,3 +28,6 @@ target
 
 # Build output of tools/armhf/package-allium.sh
 /dist
+
+# Byte-code of the test scripts under tests/
+__pycache__/

@@ -68,6 +68,19 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 
 See [`docs/ANDROID_PORT.md`](ANDROID_PORT.md) for how the port is put together.
 
+## Tests
+
+```sh
+cargo test                           # unit tests + the engine-source guard
+python3 tests/run_pages.py           # the pages, in a headless browser
+```
+
+The page runner needs a release binary, `Xvfb`, `xdotool` (the pages that need a
+gesture get one) and `ffmpeg` (the server builds its test clip with it). It points
+one browser per page at `tests/serve.py`, waits for that page's beacons and checks
+them, so a regression fails rather than needing to be looked at. The `Check`
+workflow runs both.
+
 ## Handhelds
 
 CI builds these on its own runners; the scripts below exist for building locally,

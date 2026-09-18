@@ -1,7 +1,7 @@
 name: Check
 
-# The signal every push gets: does it build, do the tests pass, is clippy clean.
-# Deliberately not the shipping build — no fat LTO, no packaging, no artifact.
+# The signal every push gets: does it build, do the tests and the pages pass, is
+# clippy clean. Not the shipping build — no fat LTO, no packaging, no artifact.
 # Binaries come from Nightly and from releases, so nothing here has a consumer.
 on:
   workflow_dispatch:
@@ -43,3 +43,19 @@ jobs:
       # so the dependencies stay as the build left them.
       - name: Clippy
         run: cargo clippy --release --all-targets -- -D warnings
+
+      # The only step that runs a browser: layout, media, WebGL, input and the
+      # download triggers, through the pages' own beacons. Software GL: no GPU here.
+      - name: Pages
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xdotool ffmpeg libgl1-mesa-dri
+          python3 tests/run_pages.py --binary target/release/retsurf
+
+      - name: Upload page logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: page-logs
+          path: /tmp/retsurf-pages
+          retention-days: 7
