@@ -5,7 +5,7 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
-use crate::browser::TabInfo;
+use crate::data::session::TabInfo;
 use crate::data::history;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};

@@ -3,10 +3,21 @@
 //! Snapshotted on the main loop's flush throttle and at exit, not per
 //! navigation.
 
-use crate::browser::TabInfo;
 use serde::{Deserialize, Serialize};
 
 const FILE: &str = "session.toml";
+
+/// A read-only snapshot of a tab: what the session records, and what the menu's
+/// Tabs section shows.
+pub struct TabInfo {
+    /// Page title, falling back to the URL (then "New tab") when unknown.
+    pub title: String,
+    /// The tab's current location (the bookmark target for Y in the menu); may
+    /// be empty for a freshly opened tab that hasn't navigated yet.
+    pub url: String,
+    /// Whether this is the currently shown tab.
+    pub active: bool,
+}
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).
 #[derive(Default, PartialEq, Serialize, Deserialize)]
@@ -24,7 +35,7 @@ pub struct Session {
 }
 
 impl Session {
-    /// Load the stored session (missing/invalid file → no tabs).
+    /// Load the stored session; a missing or invalid file yields no tabs.
     pub fn load() -> Self {
         Self {
             saved: super::load_toml::<Store>(FILE),

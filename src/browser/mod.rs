@@ -19,7 +19,6 @@ mod reader;
 mod tabs;
 mod url;
 
-pub use blob_download::BlobDownload;
 pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
 pub use home::HOME_URL;
@@ -28,6 +27,7 @@ pub use url::try_into_url;
 mod pads;
 pub use pads::PadSlots;
 
+use crate::data::downloads::{BlobDownload, DownloadRequest};
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{AppConfig, ExperimentalConfig, PageTheme},
@@ -114,27 +114,6 @@ impl Tab {
             page_images: RefCell::default(),
         }
     }
-}
-
-/// A denied download navigation or an `a[download]` link, for
-/// [`crate::data::downloads`] to fetch.
-pub struct DownloadRequest {
-    pub url: String,
-    /// Linking page, sent as Referer.
-    pub referer: Option<String>,
-    /// Name the page's `download` attribute asked for (already sanitized).
-    pub suggested_name: Option<String>,
-}
-
-/// A read-only snapshot of a tab for the menu's Tabs section.
-pub struct TabInfo {
-    /// Page title, falling back to the URL (then "New tab") when unknown.
-    pub title: String,
-    /// The tab's current location (the bookmark target for Y in the menu); may
-    /// be empty for a freshly opened tab that hasn't navigated yet.
-    pub url: String,
-    /// Whether this is the currently shown tab.
-    pub active: bool,
 }
 
 /// Shared state behind the [`AppBrowser`] handle. Servo calls back into it as

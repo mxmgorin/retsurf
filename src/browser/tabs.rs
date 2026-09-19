@@ -2,7 +2,8 @@
 //! a saved session. All tabs share one rendering context, so exactly one is
 //! shown at a time.
 
-use super::{AppBrowser, Tab, TabInfo};
+use super::{AppBrowser, Tab};
+use crate::data::session::TabInfo;
 use ::url::Url;
 
 impl AppBrowser {

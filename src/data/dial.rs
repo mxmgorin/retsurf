@@ -2,18 +2,15 @@
 //! `dial.toml` in the user data dir. Unlike bookmarks (a menu-only list), the
 //! dial is what the built-in start page shows as tiles — curated separately so
 //! the two don't fight over one list. Entries are pinned *from* the menu's
-//! Bookmarks / History sections (Y) and unpinned on the dial itself (X); there
+//! Bookmarks / History sections and unpinned on the dial itself; there
 //! is no in-list selection here (the start page owns tile focus, see
 //! [`crate::overlay::home`]). A first run with no file ships [`DEFAULTS`].
 
-use crate::config;
 use serde::{Deserialize, Serialize};
 
-/// A special speed-dial entry that opens the settings overlay instead of
-/// navigating to a URL. Stored, ordered and removed like any pin, but recognized
-/// on activation (see [`crate::app`]) and drawn as a ⚙ tile (see
-/// [`crate::ui::home::paint_tile`]). Re-added from the speed-dial editor's
-/// trailing "Pin settings" tile once removed.
+/// A speed-dial entry that opens the settings overlay instead of navigating.
+/// Stored and ordered like any pin, but recognized on activation and drawn as a
+/// gear; the editor's "Pin settings" tile puts it back once removed.
 pub const SETTINGS_PIN: &str = "retsurf:settings";
 
 /// Shipped on first run so the start page isn't empty before anything is pinned.
@@ -68,7 +65,7 @@ impl Dial {
     }
 
     fn path() -> String {
-        format!("{}dial.toml", config::data_dir())
+        super::data_path("dial.toml")
     }
 
     /// Best-effort persist; failures are logged, not fatal.
@@ -88,7 +85,7 @@ impl Dial {
     }
 
     /// Pin `url` to the end of the dial if not already present; persists. No-op
-    /// on a duplicate (the start page's "+ Add" tile uses this).
+    /// on a duplicate.
     pub fn pin(&mut self, url: &str) {
         if !self.contains(url) {
             self.urls.push(url.to_string());
@@ -96,8 +93,7 @@ impl Dial {
         }
     }
 
-    /// Remove the pin at `index` (if in range); persists. Used by the editor's
-    /// per-tile ✖ / X.
+    /// Remove the pin at `index` (if in range); persists.
     pub fn remove(&mut self, index: usize) {
         if index < self.urls.len() {
             self.urls.remove(index);

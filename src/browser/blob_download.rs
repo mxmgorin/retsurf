@@ -4,6 +4,7 @@
 //! and the entries come back over `evaluate_javascript`: in-page bytes
 //! (`blob:`/`data:`) arrive whole, `a[download]` http(s) links as URLs to fetch.
 
+use crate::data::downloads::BlobDownload;
 use base64::Engine;
 use serde::Deserialize;
 use std::sync::LazyLock;
@@ -39,13 +40,6 @@ enum Taken {
     File { name: String, data: String },
     Link { url: String, name: String },
     Failed { error: String },
-}
-
-/// One file captured from a page, ready for [`crate::data::downloads`].
-pub struct BlobDownload {
-    pub filename: String,
-    /// `Err` carries a page-side failure (over the size limit, unreadable blob).
-    pub bytes: Result<Vec<u8>, String>,
 }
 
 /// One drained queue entry.

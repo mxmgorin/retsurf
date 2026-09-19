@@ -123,7 +123,7 @@ struct FrameInputs {
     /// Page-zoom chip percentage (`None` at the default zoom).
     zoom_pct: Option<u16>,
     /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
-    tab_infos: Vec<crate::browser::TabInfo>,
+    tab_infos: Vec<crate::data::session::TabInfo>,
     /// The field the OSK types into this frame (if any).
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.

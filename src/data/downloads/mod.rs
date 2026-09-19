@@ -10,6 +10,24 @@ mod store;
 mod worker;
 
 use crate::config::DownloadsConfig;
+
+/// A denied download navigation or an `a[download]` link, handed over by
+/// [`crate::browser`] for the workers here to fetch.
+pub struct DownloadRequest {
+    pub url: String,
+    /// Linking page, sent as Referer.
+    pub referer: Option<String>,
+    /// Name the page's `download` attribute asked for (already sanitized).
+    pub suggested_name: Option<String>,
+}
+
+/// One file captured whole from a page (see the browser's blob shim) — no fetch
+/// to run, the entry is born finished.
+pub struct BlobDownload {
+    pub filename: String,
+    /// `Err` carries a page-side failure (over the size limit, unreadable blob).
+    pub bytes: Result<Vec<u8>, String>,
+}
 use crate::data::history;
 use crate::event::user::UserEventSender;
 use std::sync::atomic::Ordering;
@@ -87,7 +105,7 @@ impl Downloads {
     }
 
     /// Begin fetching a denied navigation, adding an Active entry on top.
-    pub fn start(&mut self, request: crate::browser::DownloadRequest, sender: &UserEventSender) {
+    pub fn start(&mut self, request: DownloadRequest, sender: &UserEventSender) {
         if let Err(e) = std::fs::create_dir_all(&self.dir) {
             log::warn!("could not create download dir `{}`: {e}", self.dir);
             self.items.insert(
@@ -127,7 +145,7 @@ impl Downloads {
 
     /// Record a file the page built in JavaScript and handed us whole (see
     /// [`crate::browser::BlobDownload`]). No fetch to run, so the entry is born finished.
-    pub fn save_captured(&mut self, item: crate::browser::BlobDownload) {
+    pub fn save_captured(&mut self, item: BlobDownload) {
         let (filename, path, size, state) = match self.write_captured(&item.filename, item.bytes) {
             Ok((path, size)) => (file_name_of(&path), path, size, State::Done),
             Err(e) => (item.filename, String::new(), 0, State::Failed(e)),
@@ -233,8 +251,8 @@ impl Downloads {
         self.cursor.entry_index().and_then(|i| self.open_url(i))
     }
 
-    /// X/✖ on an entry: cancel it if still active (it stays, turning Failed once the
-    /// worker stops), otherwise drop it from the list. The file on disk is kept either way.
+    /// Cancel the entry if still active (it stays, turning Failed once the worker
+    /// stops), otherwise drop it from the list. The file on disk is kept either way.
     pub fn remove(&mut self, index: usize) {
         let Some(d) = self.items.get(index) else {
             return;

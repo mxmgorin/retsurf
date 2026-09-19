@@ -14,7 +14,7 @@ use crate::list::ListCursor;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Full path of a data file (`<file>`) in the user data dir.
-fn data_path(file: &str) -> String {
+pub(super) fn data_path(file: &str) -> String {
     format!("{}{file}", config::data_dir())
 }
 
@@ -57,4 +57,3 @@ fn remove(file: &str, what: &str) {
         Err(e) => log::warn!("could not remove {what}: {e}"),
     }
 }
-

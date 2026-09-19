@@ -5,7 +5,7 @@
 //! no idle timeout).
 
 use super::naming::{create_unique, pick_filename};
-use crate::browser::DownloadRequest;
+use super::DownloadRequest;
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,7 +20,7 @@ const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 /// Cancel grace before the watchdog resolves the entry for a blocked worker.
 const CANCEL_GRACE: Duration = Duration::from_secs(3);
 
-/// Worker → main-thread progress; `result` is write-once via `done`.
+/// Worker-to-main-thread progress; `result` is write-once via `done`.
 pub(super) struct Shared {
     pub received: AtomicU64,
     pub total: AtomicU64,
