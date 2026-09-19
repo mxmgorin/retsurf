@@ -1,4 +1,3 @@
-use crate::command::AppCommand;
 use sdl2::sys::{SDL_Event, SDL_PushEvent, SDL_UserEvent};
 use std::cell::RefCell;
 
@@ -43,56 +42,25 @@ impl<T> FrameQueue<T> {
     }
 }
 
-pub fn handle_user(code: i32) -> Option<AppCommand> {
-    let event = UserEvent::from_code(code);
-
-    match event {
-        UserEvent::BrowserWakeup => None,
-        UserEvent::BrowserFrameReady => None,
-        // Sent by download workers/interception purely to wake the loop; the
-        // per-frame downloads poll in `App::run` picks up the new state.
-        UserEvent::DownloadUpdate => None,
-        // Sent by the hint-collection JS callback purely to wake the loop; the
-        // main loop drains the collected rects.
-        UserEvent::HintsReady => None,
-        // Sent by the embedder-control delegate purely to wake the loop; the
-        // main loop drains the pending/dismissed controls.
-        UserEvent::ControlPending => None,
-        // Sent by the self-update worker purely to wake the loop; the About tab
-        // re-reads the updater snapshot each frame, so the wake just repaints.
-        UserEvent::UpdateProgress => None,
-        // Sent by the gamepad delegate purely to wake the loop; the main loop
-        // drains the queued haptic requests.
-        UserEvent::HapticPending => None,
-    }
-}
-
+/// Why the loop was woken. Every variant is a pure wake — the per-frame drains
+/// pick up whatever was queued — so the receive side never dispatches on it;
+/// the names exist to document the senders.
 #[repr(i32)]
 #[derive(Copy, Clone)]
 pub enum UserEvent {
+    /// Servo's own event-loop waker.
     BrowserWakeup = 0,
     BrowserFrameReady = 1,
+    /// Download workers and interception; the per-frame downloads poll reads it.
     DownloadUpdate = 2,
+    /// The hint-collection JS callback; the loop drains the collected rects.
     HintsReady = 3,
+    /// The embedder-control delegate; the loop drains pending/dismissed controls.
     ControlPending = 4,
+    /// The self-update worker; the About tab re-reads the snapshot each frame.
     UpdateProgress = 5,
+    /// The gamepad delegate; the loop drains the queued haptic requests.
     HapticPending = 6,
-}
-
-impl UserEvent {
-    pub const ALL: [UserEvent; 7] = [
-        UserEvent::BrowserWakeup,
-        UserEvent::BrowserFrameReady,
-        UserEvent::DownloadUpdate,
-        UserEvent::HintsReady,
-        UserEvent::ControlPending,
-        UserEvent::UpdateProgress,
-        UserEvent::HapticPending,
-    ];
-
-    pub fn from_code(code: i32) -> UserEvent {
-        Self::ALL[code as usize]
-    }
 }
 
 #[derive(Clone)]

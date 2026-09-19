@@ -371,7 +371,7 @@ impl AppUi {
     }
 
     #[inline]
-    pub fn take_repain_delay(&mut self) -> Option<Duration> {
+    pub fn take_repaint_delay(&mut self) -> Option<Duration> {
         self.repaint_delay.take()
     }
 

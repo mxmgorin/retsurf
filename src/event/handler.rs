@@ -8,7 +8,7 @@ use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
     config::{GameModeConfig, InputConfig},
-    event::{user::handle_user, window::handle_window},
+    event::window::handle_window,
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
@@ -41,7 +41,7 @@ pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
-    /// Gesture → action tables for both devices, from `bindings.toml`.
+    /// Gesture-to-action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
     /// The text the tables were built from, so the chrome can name a gesture
     /// the way the file spells it (see [`Self::key_gestures`]).
@@ -78,9 +78,8 @@ impl AppEventHandler {
     ) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
-        // `RETSURF_KEYMAP=miyoo|desktop` wins over the driver name, and has to:
-        // the Miyoo SDL2 this package bundles calls its driver `Mini`, which is
-        // not the `mmiyoo` the detection knows.
+        // `RETSURF_KEYMAP` wins over the driver name, and has to: the bundled
+        // Miyoo SDL2 calls its driver `Mini`, not the `mmiyoo` detection knows.
         let keymap = Keymap::detect(
             sdl.video()?.current_video_driver(),
             std::env::var("RETSURF_KEYMAP").ok().as_deref(),
@@ -217,7 +216,12 @@ impl AppEventHandler {
 
     /// Re-adopt `id` if it is the one the mode is running, so an edit to it
     /// takes effect without a restart.
-    fn readopt_input_map(&mut self, id: &str, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+    fn readopt_input_map(
+        &mut self,
+        id: &str,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
         if id == self.game_input.map_id() {
             let map = self.maps.pick(id).clone();
             self.game_input.set_map(map, browser, commands);
@@ -289,7 +293,7 @@ impl AppEventHandler {
         if waited {
             // An animating page waits too: Servo rings the queue through its
             // event-loop waker on every paint message, so this wakes on the frame.
-            let delay = ui.take_repain_delay();
+            let delay = ui.take_repaint_delay();
             let delay = if browser.is_animating() {
                 Some(delay.map_or(ANIMATION_WAIT, |delay| delay.min(ANIMATION_WAIT)))
             } else {
@@ -530,7 +534,8 @@ impl AppEventHandler {
             if key.pressed {
                 ui.note_input_keyboard(false);
             }
-            self.gamepad.on_pad(pad, key.pressed, &self.bindings, commands);
+            self.gamepad
+                .on_pad(pad, key.pressed, &self.bindings, commands);
             return;
         }
         // Remember the input came from the keyboard so hint mode picks
@@ -583,13 +588,8 @@ impl AppEventHandler {
             return;
         }
 
-        // egui reports *every* key consumed while a text field holds focus, which
-        // used to swallow our Ctrl shortcuts whole: no ctrl+m, ctrl+r or settings
-        // while the caret sat in the address bar. Modified keys stay ours (egui
-        // still saw the event above, so typing is unaffected).
-        // Game Mode hands the keyboard to the page, so egui must not be offered
-        // it: it consumes Tab and the arrows with nothing focused. Only while
-        // the page owns the focus — an overlay in front needs its keys back.
+        // A modified key stays ours: egui reports *every* key consumed while a
+        // text field has focus. Game Mode's keys belong to the page, not egui.
         let egui_first = !self.is_pad_as_keys(&event) && !(self.game_active && is_key(&event));
         if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
@@ -641,19 +641,15 @@ impl AppEventHandler {
                 let dy = -y as f32 * WHEEL_STEP;
                 ui.scroll_page(browser, -x as f32 * WHEEL_STEP, dy, mx, my);
             }
-            // Touch: SDL finger coords are normalized to the window; scale to the
-            // pixel space mouse events use. These only reach here for the web-view
-            // area (egui consumes touch over the toolbar). A drag scrolls, a tap
-            // clicks. See [`super::touch`].
+            // SDL finger coords are normalized to the window; scale them to the
+            // pixel space mouse events use. See [`super::touch`].
             Event::FingerDown {
                 finger_id, x, y, ..
             } => {
                 let (w, h) = window.size();
                 let (px, py) = (x * w as f32, y * h as f32);
-                // Only the web view scrolls/taps from touch; toolbar touches are
-                // egui's (it synthesizes pointer events from them). Starting a
-                // gesture for a toolbar touch would leak (its up is consumed by
-                // egui, so it never resolves) and could click the page underneath.
+                // Toolbar touches are egui's, and a gesture started for one would
+                // leak: egui consumes its up, so the gesture never resolves.
                 if ui.point_over_webview(py) {
                     self.touch.down(finger_id, px, py);
                 }
@@ -666,9 +662,8 @@ impl AppEventHandler {
                 if let Some((dx, dy)) = self.touch.motion(finger_id, px, py) {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
                     let (dx, dy) = ui.to_points(dx, dy);
-                    // Content follows the finger: dragging down reveals upper
-                    // content, and Servo's positive dy reveals lower content, so
-                    // negate the deltas.
+                    // Content follows the finger, and Servo's positive dy reveals
+                    // lower content, so the deltas are negated.
                     ui.scroll_page(browser, -dx, -dy, bx, by);
                 }
             }
@@ -687,9 +682,8 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                // MENU, on a device that sends it as Esc and a launcher that
-                // has handed it over. Not a binding: it is the only way out
-                // there, so it must survive whatever the tables are edited to.
+                // MENU, where the device sends it as Esc. Not a binding: it is
+                // the only way out there, so no edit may take it away.
                 if self.menu_quits && kc == Keycode::Escape && self.keymap != Keymap::Desktop {
                     commands.push(AppCommand::Shutdown);
                     return;
@@ -740,11 +734,9 @@ impl AppEventHandler {
                 self.on_pad_button(which, button, false, ui, browser, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
-            Event::User { code, .. } => {
-                if let Some(cmd) = handle_user(code) {
-                    commands.push(cmd);
-                }
-            }
+            // Every user event is a pure wake ([`UserEvent`]); the pass this
+            // event started runs the per-frame drains, which is the delivery.
+            Event::User { .. } => {}
             Event::Window { win_event, .. } => {
                 if let Some(cmd) = handle_window(win_event) {
                     commands.push(cmd);

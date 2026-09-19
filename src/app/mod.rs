@@ -20,18 +20,12 @@ use crate::{config::AppConfig, platform::window::AppWindow};
 use sdl2::Sdl;
 use std::time::{Duration, Instant};
 
-#[derive(PartialEq)]
-pub enum AppState {
-    Initialized,
-    Running,
-    ShuttingDown,
-}
-
 pub struct App {
     event_handler: AppEventHandler,
     config: AppConfig,
     window: AppWindow,
-    state: AppState,
+    /// Cleared by [`App::shutdown`]; the main loop runs while it holds.
+    running: bool,
     browser: AppBrowser,
     ui: AppUi,
     /// For handing to download workers so they can wake the idle-blocked loop.
@@ -73,10 +67,9 @@ pub struct App {
     _audio: Option<sdl2::AudioSubsystem>,
 }
 
-/// How often the main loop opportunistically flushes the deferred stores —
-/// history and the tab session — to disk (only on frames it's already awake
-/// for: navigation, paint, input). Coalesces the per-navigation writes that
-/// used to rewrite `history.toml` on every page load.
+/// How often the main loop flushes the deferred stores — history and the tab
+/// session — to disk, on frames it is awake for anyway. Coalesces the writes
+/// that used to rewrite `history.toml` on every page load.
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 
 /// How often the debug memory overlay (`[debug] memory_overlay`) refreshes its
@@ -135,7 +128,7 @@ impl App {
             event_handler,
             ui,
             event_sender,
-            state: AppState::Initialized,
+            running: false,
             last_tick: Instant::now(),
             osk_nav_dir: (0, 0),
             osk_nav_next: Instant::now(),
@@ -172,16 +165,14 @@ impl App {
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
         self.ui.update.auto_check(&self.event_sender);
-        self.state = AppState::Running;
+        self.running = true;
         let mut commands = Vec::with_capacity(4);
 
-        while self.state == AppState::Running {
+        while self.running {
             self.browser.pump_event_loop();
 
-            // Android can resize the surface on rotation without delivering an
-            // SDL size-changed event, leaving egui laid out for the previous
-            // orientation. Refresh egui's cached size from the live window each
-            // frame so the layout follows the actual surface.
+            // Android can resize the surface on rotation without an SDL
+            // size-changed event, leaving egui laid out for the old orientation.
             #[cfg(target_os = "android")]
             self.ui.sync_window_size(&mut self.window);
 
@@ -199,20 +190,16 @@ impl App {
                 self.heap_trim_at = None;
             }
 
-            // Recording only marks history dirty; flush it on a throttle so a busy
-            // browsing burst collapses to one write per interval. This piggybacks
-            // on frames the loop is already awake for — it never schedules an idle
-            // wake (the blocking wait stays battery-efficient). A clean exit and
-            // menu close flush the remainder.
+            // Recording only marks history dirty; the throttled flush collapses a
+            // browsing burst to one write, and never schedules an idle wake.
             if self.last_flush.elapsed() >= FLUSH_INTERVAL {
                 self.ui.menu.flush_history();
                 self.save_session();
                 self.last_flush = Instant::now();
             }
 
-            // Debug memory overlay: on a throttle, ask Servo for a fresh report,
-            // and adopt the latest one that has arrived (it comes back async, a
-            // frame or two later). Both no-ops unless the overlay is enabled.
+            // Ask Servo for a report on a throttle, and adopt the latest one to
+            // have arrived — it comes back async, a frame or two later.
             if self.ui.memory_reports_wanted() {
                 if self.last_memory_report.elapsed() >= MEMORY_REPORT_INTERVAL {
                     self.browser.request_memory_report();
@@ -238,9 +225,8 @@ impl App {
                 self.ui.request_repaint();
             }
 
-            // Mirror whether the active tab is on the start page, so the UI's
-            // focus precedence and the input router both see `Focus::Home` this
-            // frame (set before input is handled in `wait`).
+            // Set before `wait` handles input, so the UI's focus precedence and
+            // the router both see `Focus::Home` this frame.
             let home_changed = self.ui.set_home_active(self.browser.on_home_page());
 
             let waited = self.event_handler.wait(
@@ -305,20 +291,16 @@ impl App {
                 .update(&mut self.window, &mut self.browser, &mut commands);
             self.frame_timer.ui_done(at);
 
-            // Android: raise/hide the system soft keyboard to match focus. The
-            // address bar (egui) and page text fields (Servo) are the two sinks;
-            // egui-sdl2 delivers the resulting SDL_TEXTINPUT to the focused field.
-            // Desktop leaves SDL's always-on text input alone and uses the OSK.
+            // Android raises the system soft keyboard to match focus; desktop
+            // leaves SDL's always-on text input alone and uses the OSK.
             #[cfg(target_os = "android")]
             {
                 let want = self.ui.wants_keyboard() || self.browser.text_input_focused();
                 crate::platform::window::set_text_input(want);
             }
 
-            // A prompt change needs a follow-up frame like commands below do
-            // (egui sizes a fresh overlay invisibly on its first pass, and
-            // `update` just rebuilt the idle wait) — request it after `update`
-            // so it isn't clobbered.
+            // egui sizes a fresh overlay invisibly on its first pass, so a change
+            // needs a follow-up frame; requested after `update` rebuilt the wait.
             if prompt_changed || home_changed {
                 self.ui.request_repaint();
             }
@@ -352,14 +334,13 @@ impl App {
         // are written to disk, so logins survive (see `AppBrowser::shutdown`).
         self.browser.shutdown();
 
-        // Servo's SoftwareRenderingContext does not destroy its surfman context on
-        // drop, which trips surfman's "destroy explicitly" guard and panics during
-        // unwinding. Exit before running destructors; the OS reclaims everything.
+        // Servo's SoftwareRenderingContext leaves its surfman context undestroyed,
+        // which trips surfman's own guard and panics. Exit before the destructors.
         std::process::exit(0);
     }
 
     fn shutdown(&mut self) {
-        self.state = AppState::ShuttingDown;
+        self.running = false;
     }
 
     /// Reopen at the size the window was left at. [`AppWindow::remembered_size`]
@@ -407,9 +388,8 @@ impl App {
     }
 
     /// Put the frame on the panel — unless neither the page nor the chrome
-    /// changed, which on a GPU-less device is most of them (see
-    /// [`AppUi::take_frame_dirty`]). Reports whether anything was presented, which
-    /// is what decides the pacing below.
+    /// changed, which on a GPU-less device is most of them. Reports whether
+    /// anything was presented, which is what decides the pacing below.
     fn draw(&mut self, page_painted: bool) -> bool {
         if !page_painted && !self.ui.take_frame_dirty(&self.window) {
             return false;

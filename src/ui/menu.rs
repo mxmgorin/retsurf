@@ -5,8 +5,8 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
-use crate::data::session::TabInfo;
 use crate::data::history;
+use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, AtomExt as _};
@@ -40,10 +40,9 @@ fn bookmark_button(ui: &mut egui::Ui, bookmarked: bool, dim: egui::Color32) -> e
     )
 }
 
-/// A selectable list row at the standard height: rounded, truncated, the shared
-/// font size, with its label left-aligned. The caller supplies the colored
-/// label; the trailing [`egui::Atom::grow`] fills the rest of the row so the
-/// text sits at the left edge instead of egui's default centering.
+/// A selectable list row at the standard height, with its label left-aligned:
+/// the trailing [`egui::Atom::grow`] fills the rest of the row, where egui
+/// would otherwise center the text.
 fn row_button(
     ui: &mut egui::Ui,
     width: f32,
@@ -225,9 +224,9 @@ pub(super) fn add_menu(
             Section::Tabs => {
                 add_tabs_section(ui, screen, menu, tabs, menu.tab_selected(), commands)
             }
-            Section::Bookmarks => add_bookmarks_section(ui, screen, menu, dim, commands),
-            Section::History => add_history_section(ui, screen, menu, dim, commands),
-            Section::Downloads => add_downloads_section(ui, screen, menu, dim, commands),
+            Section::Bookmarks => add_bookmarks_section(ui, screen, menu, commands),
+            Section::History => add_history_section(ui, screen, menu, commands),
+            Section::Downloads => add_downloads_section(ui, screen, menu, commands),
         }
     });
     if closed {
@@ -250,9 +249,8 @@ fn add_tabs_section(
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        // "+ New tab" action at the top (selection index 0): a plain full-width
-        // row, same height/indent as the tab rows below, marked by the selectable
-        // highlight when it's the cursor row (no fill of its own).
+        // "+ New tab" at the top (selection index 0): a plain full-width row with
+        // no fill of its own, so only the cursor highlight marks it.
         let new_tab = row_button(
             ui,
             screen.width() - SIDES,
@@ -269,9 +267,8 @@ fn add_tabs_section(
         for (i, tab) in tabs.iter().enumerate() {
             let sel = selected == i + 1; // index 0 is the "+ New tab" button
             ui.horizontal(|ui| {
-                // The active (shown) tab stands out in the accent color and bold;
-                // the cursor's row uses the selectable highlight, so the two are
-                // distinguishable even on the same row.
+                // The active tab is accent and bold, the cursor's row is the
+                // selectable highlight: the two must read apart on one row.
                 let text = if tab.active {
                     egui::RichText::new(&tab.title).color(ACCENT).strong()
                 } else {
@@ -305,9 +302,9 @@ fn add_bookmarks_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     menu: &Menu,
-    dim: egui::Color32,
     commands: &mut Vec<AppCommand>,
 ) {
+    let dim = DIM;
     let bookmarks = menu.bookmarks();
     if bookmarks.urls().is_empty() {
         ui.label(
@@ -352,9 +349,9 @@ fn add_downloads_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     menu: &Menu,
-    dim: egui::Color32,
     commands: &mut Vec<AppCommand>,
 ) {
+    let dim = DIM;
     let downloads = &menu.downloads;
     if downloads.items().is_empty() {
         ui.label(egui::RichText::new("No downloads yet.").color(dim));
@@ -409,9 +406,9 @@ fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     menu: &Menu,
-    dim: egui::Color32,
     commands: &mut Vec<AppCommand>,
 ) {
+    let dim = DIM;
     let hist = menu.history();
     if hist.entries().is_empty() {
         ui.label(egui::RichText::new("No history yet.").color(dim));
@@ -425,8 +422,7 @@ fn add_history_section(
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // Top row (cursor index 0, mirroring Tabs' "+ New tab"): drops every
-        // entry, by mouse or A. Dim, to read as a secondary/destructive action
-        // set apart from the URL rows.
+        // entry. Dim, to set a destructive action apart from the URL rows.
         clear_row(
             ui,
             screen.width() - SIDES,
