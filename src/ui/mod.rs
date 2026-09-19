@@ -232,11 +232,11 @@ pub struct AppUi {
     pub settings: Settings,
     /// Self-update manager (About tab): in-place on PortMaster / desktop
     /// installs, "open the release page" elsewhere. See [`crate::update`].
-    update: Updater,
+    pub update: Updater,
     /// The built-in start page overlay's selection / search-field state.
-    home: Home,
+    pub home: Home,
     /// The standalone speed-dial editor overlay (opened from the start page).
-    dial_edit: DialEdit,
+    pub dial_edit: DialEdit,
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,

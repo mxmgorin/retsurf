@@ -18,10 +18,8 @@ use std::time::{Duration, Instant};
 const HINT_EDGE_SCROLL_FRACTION: f32 = 0.8;
 
 impl App {
-    /// Route one contextual input intent against the current input owner —
-    /// see [`Focus`] for the overlay precedence (the on-screen keyboard stays
-    /// above the modal prompt, since it's how a gamepad types into a
-    /// `prompt()` field).
+    /// Route one contextual input intent against the current input owner — see
+    /// [`Focus`] for the overlay precedence.
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         let focus = self.ui.focus();
         match command {
@@ -66,10 +64,8 @@ impl App {
                     }
                 }
                 Focus::Hints => {
-                    // Tap vs hold on the selected hint: the press just starts the
-                    // clock (so the click lands on release, where the duration is
-                    // known); a hold past the gesture threshold opens the hint's
-                    // link in a background tab instead, a tap clicks it as before.
+                    // Tap vs hold on the selected hint: the press starts the
+                    // clock, and a hold opens the link in a background tab.
                     if *pressed {
                         self.hint_press_at = Some(Instant::now());
                     } else {
@@ -127,7 +123,7 @@ impl App {
                     }
                 }
                 // B in the editor returns to the start page.
-                Focus::DialEdit => self.ui.close_pins_editor(),
+                Focus::DialEdit => self.ui.dial_edit.close(),
                 // B on the start page goes back like a normal page — except that
                 // it is also the only way out of a page holding fullscreen.
                 Focus::Home | Focus::Page => {
@@ -157,7 +153,7 @@ impl App {
                     // On the start page, X types into the search field — focus it
                     // so a tile selection doesn't swallow the typed text.
                     if focus == Focus::Home {
-                        self.ui.home_focus_search();
+                        self.ui.home.focus_search();
                     }
                     let cmd = if focus == Focus::Osk {
                         OskCommand::Backspace
@@ -174,10 +170,8 @@ impl App {
                     self.browser.cycle_tab(*delta);
                 }
             }
-            // One overlay-navigation step (keyboard arrows / nav_* bindings, or
-            // the stick shaped by `route_analog`): whichever overlay is open
-            // owns it; with none open it's a no-op (the event handler forwards
-            // unconsumed arrows to the page instead).
+            // One overlay-navigation step: whichever overlay is open owns it,
+            // and with none open the handler forwards the arrows to the page.
             InputCommand::Nav(dx, dy) => match focus {
                 Focus::Osk => self.ui.osk(OskCommand::Move(*dx, *dy), &self.browser, out),
                 Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
@@ -220,15 +214,8 @@ impl App {
                     self.hint_key(*c);
                 }
             }
-            // Y / L3: contextually a pin/bookmark toggle or link-hint navigation.
-            // In the menu it depends on the section — Bookmarks pins (or unpins)
-            // the selected entry to the speed dial, while History and Tabs toggle
-            // a bookmark on the selected entry / tab. With the keyboard open it
-            // types a space (its dedicated OSK shortcut — see [`crate::overlay::osk`]).
-            // On the bare page it toggles link hints (collection is asynchronous —
-            // badges appear once the page reports its elements). The start page
-            // ignores it: pins are managed from the speed-dial editor, not unpinned
-            // by a stray Y on a tile.
+            // Y / L3: a pin/bookmark toggle, a space over the keyboard, or link
+            // hints on the page. Unpinning is the dial editor's job, not a press.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
                 Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
@@ -305,11 +292,9 @@ impl App {
         }
     }
 
-    /// Hint-mode directional input: hop the selection, or — when it is already
-    /// at a vertical edge with no hint further that way — scroll the page a
-    /// screen-ward chunk to reveal more, then re-collect (the selection lands on
-    /// a freshly-revealed hint at that edge). Horizontal edges stay put: pages
-    /// rarely scroll sideways, and an accidental sideways nudge shouldn't move it.
+    /// Hint-mode directional input: hop the selection, or scroll a chunk and
+    /// re-collect when it is already at a vertical edge. Horizontal edges stay
+    /// put — pages rarely scroll sideways.
     fn hints_nav(&mut self, dx: i32, dy: i32) {
         if self.ui.hints.move_sel((dx, dy)) || dy == 0 {
             return;
@@ -318,14 +303,8 @@ impl App {
         if height <= 0.0 {
             return;
         }
-        // The scroll is hit-tested at a point to pick the scroller. Use the hint's
-        // column but mid-viewport height, NOT the edge hint's own position: the
-        // top/bottom edge hint often sits in a sticky header/footer (e.g.
-        // DuckDuckGo's search bar) that doesn't scroll the document, so scrolling
-        // there moves nothing — that's why scroll-up failed there. Mid-height
-        // lands on the main content; keeping the column still scrolls a nested
-        // side-container the hints live in. Fall back to the cursor's column if
-        // the selection somehow went away.
+        // The scroll is hit-tested to pick its scroller: the hint's column, at
+        // mid-viewport, because an edge hint often sits in a sticky header.
         let (sx, _) = self
             .ui
             .hints
@@ -343,9 +322,8 @@ impl App {
     }
 
     /// Feed a combo symbol to hint mode and, when it resolves to one hint, click
-    /// it (via the shared `activate_hint` path). A dead-end or completed-but-unused
-    /// combo (`NoMatch`) just clears the buffer inside `push_sym` — the faded
-    /// badges already show it went nowhere — and a `Pending` combo waits for more.
+    /// it. A dead end clears the buffer inside `push_sym`, where the faded badges
+    /// already show it went nowhere; a `Pending` combo waits for more.
     fn hint_sym(&mut self, sym: Sym) {
         if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
             self.ui.hints.select(idx);
@@ -391,10 +369,9 @@ impl App {
         }
     }
 
-    /// Apply per-frame analog state: keyboard grid navigation (with auto-repeat)
-    /// while the keyboard is open, otherwise cursor movement and page scroll.
-    /// `scroll_mode` only changes the bare-page meaning of the aim vector
-    /// (scroll instead of cursor) — overlay navigation always gets the raw aim.
+    /// Apply per-frame analog state: grid navigation while the keyboard is open,
+    /// otherwise cursor movement and page scroll. `scroll_mode` changes only the
+    /// bare-page meaning of the aim vector; an overlay gets the raw aim.
     fn route_analog(
         &mut self,
         aim: (f32, f32),
@@ -410,15 +387,7 @@ impl App {
         let dt = (now - self.last_tick).as_secs_f32();
         self.last_tick = now;
         // The loop blocks on input while idle, so the first frame after a press
-        // sees the whole idle gap as `dt`. Integrating that teleports the cursor
-        // (a D-pad tap jumps ~`cursor_speed * dt`), so treat any over-long frame
-        // as a fresh start: no motion this frame. Otherwise scale motion by the
-        // *actual* elapsed time — motion is `speed * dt`, so on-screen speed only
-        // stays steady when `dt` tracks real frame time — capped at a few frames so
-        // a one-off hitch (e.g. a top bar's reflow as it hides, a GC) can't lurch
-        // the page. Low-passing `dt` instead, as before, drifted from elapsed time
-        // whenever frame times varied and made the dt-scaled gamepad scroll stutter
-        // (the fixed-delta mouse wheel never scaled by `dt`, so it stayed smooth).
+        // would integrate the whole gap; an over-long frame is a fresh start.
         let dt = if dt > 0.1 { 0.0 } else { dt.min(0.05) };
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
@@ -430,15 +399,11 @@ impl App {
             cfg.hint_badges,
         );
 
-        // Overlays (menu / OSK / hints / prompt): the stick becomes discrete
-        // navigation, shaped (dead zone + auto-repeat) into the same `Nav` steps
-        // the keyboard arrows emit — one execution path for both devices. The menu
-        // takes the dominant axis only, so a diagonal nudge does just one thing.
+        // Over an overlay the stick becomes the same discrete `Nav` steps the
+        // keyboard arrows emit, so both devices share one execution path.
         if self.ui.focus() != Focus::Page {
-            // Hint mode with combos on hops on the stick alone — the D-pad is
-            // reserved for combo symbols (a discrete `DpadPress`), so it must not
-            // also drive a hop. With combos off, or any other overlay, the merged
-            // aim (stick + D-pad) drives navigation as usual.
+            // Hint mode with combos on hops on the stick alone: the D-pad is
+            // reserved for combo symbols, so it must not also drive a hop.
             let nav_vec = if self.ui.focus() == Focus::Hints && hint_badges {
                 stick
             } else {

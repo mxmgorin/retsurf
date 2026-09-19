@@ -87,8 +87,8 @@ impl App {
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
             MenuAction::ToggleBookmark(url) => self.ui.menu.toggle_bookmark(url),
-            MenuAction::DialEdit => self.ui.open_pins_editor(),
-            MenuAction::DialClose => self.ui.close_pins_editor(),
+            MenuAction::DialEdit => self.ui.dial_edit.open(),
+            MenuAction::DialClose => self.ui.dial_edit.close(),
             MenuAction::DialAdd(url) => self.dial_add(url),
             MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
             MenuAction::DialPinSettings => self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN),
@@ -234,11 +234,11 @@ impl App {
                 // A channel edited in this visit is still only in the overlay draft
                 // (`apply_config` runs on close), so adopt it before checking.
                 if let Some(update) = self.ui.settings.pending_update().cloned() {
-                    self.ui.set_update_config(&update);
+                    self.ui.update.set_config(&update);
                 }
-                self.ui.update_check(&self.event_sender);
+                self.ui.update.check(&self.event_sender);
             }
-            SettingsAction::InstallUpdate => self.ui.update_install(&self.event_sender),
+            SettingsAction::InstallUpdate => self.ui.update.install(&self.event_sender),
             SettingsAction::QuitForUpdate => {
                 self.settings_close(out);
                 self.shutdown();
@@ -339,7 +339,7 @@ impl App {
             self.config.debug.memory_overlay,
             self.config.debug.memory_log,
         );
-        self.ui.set_update_config(&self.config.update);
+        self.ui.update.set_config(&self.config.update);
         // Lightweight-mode block flags take effect on the next subresource load,
         // no restart needed (unlike the engine-thread counts beside them).
         self.browser.set_content_filter(
@@ -368,7 +368,7 @@ impl App {
     /// the OSK to type into it.
     pub(super) fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
         if self.ui.home_tile_is_edit() {
-            self.ui.open_pins_editor();
+            self.ui.dial_edit.open();
         } else if let Some(url) = self.ui.home_selected_url() {
             self.open_url(url);
         } else {
@@ -379,9 +379,9 @@ impl App {
     /// A in the speed-dial editor: open the OSK on the field, pin via the Add
     /// button, or nothing on a tile (tiles are edit-only here).
     pub(super) fn dial_edit_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.dial_edit_item() {
+        match self.ui.dial_edit.item() {
             EditItem::Field => {
-                self.ui.dial_edit_focus_field();
+                self.ui.dial_edit.focus_field();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
             // A on the trailing tile pins the settings shortcut; pin tiles are
@@ -403,7 +403,7 @@ impl App {
         {
             self.ui.menu.dial.pin(url.as_str());
         }
-        self.ui.dial_edit_clear_input();
+        self.ui.dial_edit.clear_input();
     }
 
     /// Load `url` in the focused tab and close the menu. The settings pin is a

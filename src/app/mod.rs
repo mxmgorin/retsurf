@@ -171,7 +171,7 @@ impl App {
         self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
-        self.ui.update_auto_check(&self.event_sender);
+        self.ui.update.auto_check(&self.event_sender);
         self.state = AppState::Running;
         let mut commands = Vec::with_capacity(4);
 

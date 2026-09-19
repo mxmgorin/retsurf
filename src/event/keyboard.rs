@@ -202,7 +202,7 @@ fn on_key_down(
                 return;
             }
             if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                let text = ui.home_search_text();
+                let text = ui.home.input().to_string();
                 if !text.trim().is_empty() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(text)));
                 }
@@ -218,7 +218,7 @@ fn on_key_down(
                 return;
             }
             // P toggles the focused tile's pin (Y's role).
-            if ui.home_tile_selected() && matches!(key.kc, Keycode::P) {
+            if ui.home.tile().is_some() && matches!(key.kc, Keycode::P) {
                 commands.push(AppCommand::Input(InputCommand::Hints));
                 return;
             }
@@ -256,7 +256,7 @@ fn on_key_down(
                 return;
             }
             if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                let text = ui.dial_edit_input();
+                let text = ui.dial_edit.input().to_string();
                 if !text.trim().is_empty() {
                     commands.push(AppCommand::Menu(MenuAction::DialAdd(text)));
                 }
@@ -273,7 +273,7 @@ fn on_key_down(
             }
             // Delete the focused tile (X's role), routed as the same intent.
             if matches!(key.kc, Keycode::Delete | Keycode::Backspace)
-                && ui.dial_edit_tile().is_some()
+                && ui.dial_edit.tile().is_some()
             {
                 commands.push(AppCommand::Input(InputCommand::ToggleOsk));
                 return;

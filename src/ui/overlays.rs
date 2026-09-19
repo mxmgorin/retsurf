@@ -7,8 +7,6 @@ use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
     config::AppConfig,
-    event::user::UserEventSender,
-    overlay::dial_edit::EditItem,
     overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
     overlay::osk::{OskCommand, OskTarget},
 };
@@ -250,32 +248,6 @@ impl AppUi {
         self.last_input_keyboard = keyboard;
     }
 
-    /// Kick off a self-update check in the background (About tab; a no-op off a
-    /// PortMaster install). See [`crate::update`].
-    #[inline]
-    pub fn update_check(&self, sender: &UserEventSender) {
-        self.update.check(sender);
-    }
-
-    /// Startup: run a throttled background update check if `[update] auto_check` is
-    /// on and one is due (see [`crate::update::Updater::auto_check`]).
-    #[inline]
-    pub fn update_auto_check(&self, sender: &UserEventSender) {
-        self.update.auto_check(sender);
-    }
-
-    /// Download + install the available update in the background (About tab).
-    #[inline]
-    pub fn update_install(&self, sender: &UserEventSender) {
-        self.update.install(sender);
-    }
-
-    /// Adopt edited `[update]` settings live (settings overlay), for the next check.
-    #[inline]
-    pub fn set_update_config(&mut self, cfg: &crate::config::UpdateConfig) {
-        self.update.set_config(cfg);
-    }
-
     /// Mirror whether the active tab is on the start page (each frame); entry
     /// resets the overlay to an empty search field. Returns whether it changed:
     /// activation comes from an async navigation, and without a follow-up
@@ -288,19 +260,6 @@ impl AppUi {
         }
         self.home_active = active;
         changed
-    }
-
-    /// Focus the start page's search field (when the OSK opens to type).
-    #[inline]
-    pub fn home_focus_search(&mut self) {
-        self.home.focus_search();
-    }
-
-    /// The start-page search field's current text (for submitting it from the
-    /// keyboard's Enter).
-    #[inline]
-    pub fn home_search_text(&self) -> String {
-        self.home.input().to_string()
     }
 
     /// Move the start-page selection by one dominant-axis step across the pin
@@ -326,60 +285,12 @@ impl AppUi {
         self.home.tile() == Some(self.menu.dial.urls().len())
     }
 
-    /// Whether a start-page tile (not the search field) is focused.
-    #[inline]
-    pub fn home_tile_selected(&self) -> bool {
-        self.home.tile().is_some()
-    }
-
     // --- Speed-dial editor (the standalone overlay opened from the start page) ---
-
-    /// Open the speed-dial editor overlay.
-    #[inline]
-    pub fn open_pins_editor(&mut self) {
-        self.dial_edit.open();
-    }
-
-    /// Close the speed-dial editor (back to the start page).
-    #[inline]
-    pub fn close_pins_editor(&mut self) {
-        self.dial_edit.close();
-    }
-
-    /// The editor's focused item (drives the **A** action in the router).
-    #[inline]
-    pub fn dial_edit_item(&self) -> EditItem {
-        self.dial_edit.item()
-    }
-
-    /// Focus the editor's URL field (e.g. before opening the OSK to type).
-    #[inline]
-    pub fn dial_edit_focus_field(&mut self) {
-        self.dial_edit.focus_field();
-    }
-
-    /// The editor's URL field text (trimmed submission lives in the app).
-    #[inline]
-    pub fn dial_edit_input(&self) -> String {
-        self.dial_edit.input().to_string()
-    }
-
-    /// Clear the editor's URL field (after pinning its contents).
-    #[inline]
-    pub fn dial_edit_clear_input(&mut self) {
-        self.dial_edit.clear_input();
-    }
 
     /// Move the editor's selection by one dominant-axis step.
     #[inline]
     pub fn dial_edit_move(&mut self, dx: i32, dy: i32) {
         self.dial_edit.move_sel(dx, dy, self.dial_edit_slots());
-    }
-
-    /// The editor's focused pin index, if a tile (not the field) is focused.
-    #[inline]
-    pub fn dial_edit_tile(&self) -> Option<usize> {
-        self.dial_edit.tile()
     }
 
     #[inline]
