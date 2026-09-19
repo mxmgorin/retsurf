@@ -53,11 +53,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
     }
 
-    /// `HeadParsed` is dropped: Servo sends it from `HTMLBodyElement::bind_to_tree`
-    /// (measured on 0.5), so a script inserting a `<body>` after the load emits one
-    /// with no `Complete` to follow — that left the tab busy forever on wikipedia.
-    /// `Started` covers only page-initiated navigations; ours arm the flag
-    /// themselves (see [`super::AppBrowser::mark_loading`]).
+    /// `HeadParsed` is dropped: Servo sends it from `HTMLBodyElement::bind_to_tree`,
+    /// so a late `<body>` emits one with no `Complete` to follow. `Started` covers
+    /// only page-initiated navigations; ours arm the flag themselves.
     fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
         let loading = match status {
             servo::LoadStatus::Started => true,
@@ -68,8 +66,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             self.tabs.borrow_mut()[i].state.loading = loading;
         }
         // A `Connected` only reaches the document loaded when it was sent, so
-        // each new one is told again — otherwise a page that started after the
-        // pad was plugged in lists none.
+        // each new one is told again.
         if !loading {
             for (slot, name) in self.pads.borrow().live() {
                 webview.notify_input_event(servo::InputEvent::Gamepad(
@@ -117,12 +114,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
         });
     }
 
-    /// Servo requests an IME whenever an editable element gains focus — we
-    /// don't show one, but the request marks "the user is typing", which mutes
-    /// plain-key keyboard shortcuts. Select pickers and JS dialogs are queued
-    /// for the modal prompt overlay (see [`crate::overlay::prompt`]); the rest (color /
-    /// file pickers, context menus) aren't rendered yet — dropping them
-    /// dismisses them with their defaults.
+    /// An IME request marks "the user is typing", which mutes plain-key
+    /// shortcuts; we show no keyboard for it. Select pickers and JS dialogs are
+    /// queued for the prompt overlay, and the rest dismissed with their defaults.
     fn show_embedder_control(&self, _webview: WebView, control: servo::EmbedderControl) {
         match control {
             servo::EmbedderControl::InputMethod(ime) => self.ime_control.set(Some(ime.id())),
@@ -143,12 +137,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.dismissed_controls.push(id);
     }
 
-    /// A page asked to open a new webview — a `target="_blank"` link or
-    /// `window.open`. Build it (reusing this webview's delegate and our shared
-    /// rendering context) and adopt it as a new foreground tab. Servo destroys
-    /// the new webview immediately unless we keep a live handle, so it must go
-    /// into `tabs`. The new webview drives its own navigation, so no URL is set;
-    /// the rest of the setup is the shared `build_webview`.
+    /// A page asked to open a new webview (`target="_blank"`, `window.open`).
+    /// Servo destroys it immediately unless we keep a live handle, so it must go
+    /// into `tabs`; it drives its own navigation, so no URL is set.
     fn request_create_new(&self, parent_webview: WebView, request: servo::CreateNewWebViewRequest) {
         // A page must not evict a tab of the user's, so the popup is declined
         // at the cap — except at one, where declining is a dead link.
@@ -176,19 +167,15 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
-    /// Intercept resource loads. A top-level navigation to the built-in start
-    /// page (`retsurf:home`) is answered with locally rendered HTML (see
-    /// [`super::home`]); otherwise loads run through the ad blocker, where a
-    /// blocked load gets an empty 200 response so scripts/images fail soft
-    /// instead of raising network errors. Everything else proceeds untouched
-    /// (dropping the load means "do not intercept").
+    /// Intercept resource loads: the built-in start page is answered with local
+    /// HTML, and a load the ad blocker refuses gets an empty 200 so it fails soft.
+    /// Dropping the load means "do not intercept".
     fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
         let req = load.request();
         let url = req.url.clone();
 
-        // The injected capture script signals a waiting file by loading this
-        // URL. Answer it here (it names no real host) and queue the tab; the
-        // bytes come back over `evaluate_javascript`.
+        // The injected capture script signals a waiting file by loading this URL,
+        // which names no real host; the bytes come back over `evaluate_javascript`.
         if url.as_str().starts_with(super::blob_download::PING_URL) {
             self.blob_pings.push(webview);
             finish_intercepted(load, servo::WebResourceResponse::new(url), Vec::new());
@@ -204,10 +191,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let mut block =
             is_subresource && (self.adblock.should_block(req) || filter.blocks(req.destination));
 
-        // Per-page image cap: soft-block images past the limit so a huge grid
-        // doesn't freeze the device (Servo loads them all eagerly, no lazy-load).
-        // Counted per distinct image: Servo fetches once per element, and pages
-        // reuse one spacer gif dozens of times.
+        // Per-page image cap: Servo loads every image eagerly, and a huge grid
+        // freezes the device. Counted per distinct image, not per element.
         if let Some(i) = self.tab_index(webview.id()) {
             let tabs = self.tabs.borrow();
             let images = &tabs[i].page_images;
@@ -215,17 +200,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
                 images.borrow_mut().clear();
             } else if is_subresource && !block && req.destination == Destination::Image {
                 if let Some(cap) = filter.image_cap() {
-                    let mut images = images.borrow_mut();
-                    let owner = owner_key(req.referrer_url.as_ref());
-                    let bucket = images.entry(owner).or_default();
-                    let key = image_key(&url);
-                    if !bucket.contains(&key) {
-                        if bucket.len() >= cap {
-                            log::debug!("image cap: blocked {url}");
-                            block = true;
-                        } else {
-                            bucket.insert(key);
-                        }
+                    if !images
+                        .borrow_mut()
+                        .allow(&url, req.referrer_url.as_ref(), cap)
+                    {
+                        log::debug!("image cap: blocked {url}");
+                        block = true;
                     }
                 }
             }
@@ -263,24 +243,6 @@ impl servo::GamepadDelegate for AppBrowserInner {
     }
 }
 
-/// Which document a subresource load belongs to, for the per-document image
-/// budget. The referrer is the requesting document, so an iframe's images land in
-/// their own bucket and a page whose iframe reloads does not lose slots to it.
-/// A load with no referrer shares the one bucket, which is what the main document
-/// gets.
-fn owner_key(referrer: Option<&Url>) -> u64 {
-    referrer.map_or(0, image_key)
-}
-
-/// Image identity for the per-page cap. Hashed, not stored verbatim: inline `data:`
-/// images run to hundreds of kilobytes each. A collision costs one image's slot.
-fn image_key(url: &Url) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::hash::DefaultHasher::new();
-    url.as_str().hash(&mut hasher);
-    hasher.finish()
-}
-
 /// The linking page as a Referer: http(s) only, fragment and credentials stripped.
 pub(super) fn referer_for(location: &str) -> Option<String> {
     let mut url = Url::parse(location).ok()?;
@@ -293,11 +255,9 @@ pub(super) fn referer_for(location: &str) -> Option<String> {
     Some(url.to_string())
 }
 
-/// Answer an intercepted load with `body`, always sending a chunk — even an empty
-/// one. Servo's request interceptor only marks the response body `Done` once at
-/// least one chunk arrived, and net's subresource-integrity check panics on a body
-/// that isn't `Done`, so finishing empty kills the process on any blocked
-/// subresource carrying an `integrity` attribute.
+/// Answer an intercepted load with `body`, always sending a chunk — even an
+/// empty one. Servo marks a body `Done` only once a chunk arrived, and net's
+/// subresource-integrity check panics on a body that isn't.
 fn finish_intercepted(
     load: servo::WebResourceLoad,
     response: servo::WebResourceResponse,
