@@ -1,28 +1,10 @@
-//! Main-thread priority, and per-thread cost from `/proc/self/task` for
-//! `[debug] thread_cpu` — wall clock alone cannot tell work from waiting.
+//! Per-thread cost from `/proc/self/task` for `[debug] thread_cpu` — wall
+//! clock alone cannot tell work from waiting.
 
 use std::collections::HashMap;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::time::{Duration, Instant};
-
-/// Renice the main thread to `RETSURF_MAIN_NICE` (unset or `0` = leave alone).
-/// Off by default: measured on the Flip it earns nothing, because two cores at
-/// 21% utilisation are not contended. A knob because it is worth -38% when they are.
-pub fn prioritize_main() {
-    let Some(nice) = std::env::var("RETSURF_MAIN_NICE")
-        .ok()
-        .and_then(|value| value.parse::<i32>().ok())
-        .filter(|n| *n != 0)
-    else {
-        return;
-    };
-    match priority::set_nice(nice) {
-        Ok(()) => log::info!("main thread nice {nice}"),
-        // Wants CAP_SYS_NICE or root; declining costs only the priority.
-        Err(e) => log::info!("main thread nice {nice} declined ({e})"),
-    }
-}
 
 /// How often the per-thread deltas reach the log.
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
@@ -190,41 +172,6 @@ fn format_faults(families: &HashMap<String, Cost>, sum: Cost) -> String {
 
 fn ms(duration: Duration) -> f32 {
     duration.as_secs_f32() * 1000.0
-}
-
-#[cfg(target_os = "linux")]
-mod priority {
-    use std::io;
-    use std::os::raw::c_int;
-
-    /// `PRIO_PROCESS` from `sys/resource.h`. Linux keeps nice per task, so
-    /// `who = 0` moves the calling thread alone.
-    const PRIO_PROCESS: c_int = 0;
-    const CALLING_THREAD: u32 = 0;
-
-    pub fn set_nice(nice: i32) -> io::Result<()> {
-        // Unlike `getpriority`, -1 here is only ever the error return.
-        match unsafe { setpriority(PRIO_PROCESS, CALLING_THREAD, nice) } {
-            0 => Ok(()),
-            _ => Err(io::Error::last_os_error()),
-        }
-    }
-
-    extern "C" {
-        fn setpriority(which: c_int, who: u32, prio: c_int) -> c_int;
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-mod priority {
-    use std::io;
-
-    pub fn set_nice(_: i32) -> io::Result<()> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "no thread priority on this platform",
-        ))
-    }
 }
 
 #[cfg(target_os = "linux")]

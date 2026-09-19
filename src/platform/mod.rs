@@ -8,5 +8,6 @@ pub mod cpufreq;
 pub mod heap;
 pub mod render;
 pub mod resources;
-pub mod threads;
+pub mod priority;
+pub mod thread_cpu;
 pub mod window;

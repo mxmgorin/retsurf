@@ -61,7 +61,7 @@ pub struct App {
     /// Paint timing for `[debug] frame_timing`; inert unless that is on.
     frame_timer: FrameTimer,
     /// Per-thread cost for `[debug] thread_cpu`; inert unless that is on.
-    thread_cpu: crate::platform::threads::ThreadCpu,
+    thread_cpu: crate::platform::thread_cpu::ThreadCpu,
     /// Holds `performance` while a page loads (`[performance] cpu_boost_on_load`).
     cpu_boost: crate::platform::cpufreq::LoadBoost,
     /// When the last frame reached the panel: a present must not outrun it.
@@ -107,7 +107,7 @@ impl App {
         log::info!("init: browser ready; creating event handler + ui");
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.
-        crate::platform::threads::prioritize_main();
+        crate::platform::priority::prioritize_main();
         let event_handler = AppEventHandler::new(sdl, config.input.clone(), &config.game_mode)?;
         let ui = AppUi::new(
             &window,
@@ -125,7 +125,7 @@ impl App {
 
         // Read before `config` moves into the struct below.
         let frame_timer = FrameTimer::new(config.debug.frame_timing);
-        let thread_cpu = crate::platform::threads::ThreadCpu::new(config.debug.thread_cpu);
+        let thread_cpu = crate::platform::thread_cpu::ThreadCpu::new(config.debug.thread_cpu);
         let cpu_boost =
             crate::platform::cpufreq::LoadBoost::new(config.performance.cpu_boost_on_load);
         Ok(Self {

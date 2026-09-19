@@ -20,6 +20,6 @@ pub struct DebugConfig {
     pub frame_timing: bool,
     /// CPU and major faults per thread family, plus run totals at exit — what
     /// `frame_timing` cannot say: work done, or waiting. See
-    /// [`crate::platform::threads`].
+    /// [`crate::platform::thread_cpu`].
     pub thread_cpu: bool,
 }
