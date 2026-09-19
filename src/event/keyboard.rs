@@ -5,8 +5,8 @@
 //! has focus, and the menu / hint overlays get their fixed keys first. Whatever
 //! isn't consumed is forwarded to the page as a Servo keyboard event.
 
-use crate::command::{AppCommand, InputCommand, MenuAction};
 use crate::browser::{AppBrowser, BrowserCommand};
+use crate::command::{AppCommand, InputCommand, MenuAction};
 use crate::event::bindings::Action;
 use crate::ui::{AppUi, Focus};
 use inputbind::sdl::{key_code, mods_for};
@@ -31,9 +31,8 @@ pub fn on_key(
     browser: &AppBrowser,
     commands: &mut Vec<AppCommand>,
 ) {
-    // Android's hardware/gesture Back arrives as AC_BACK (the SDL trap-back
-    // hint is set in lib.rs). Map it to the focus-aware Cancel intent so it
-    // works in every context, swallowing both edges so nothing leaks to the page.
+    // Android's hardware Back arrives as AC_BACK. Mapped to the focus-aware
+    // Cancel, and both edges swallowed so nothing leaks to the page.
     if key.kc == Keycode::AcBack {
         if key.pressed && !key.repeat {
             commands.push(AppCommand::Input(InputCommand::Cancel));
@@ -41,11 +40,8 @@ pub fn on_key(
         return;
     }
 
-    // A modal page prompt (select picker / JS dialog) captures the keyboard
-    // first: Enter activates, Esc dismisses, the `nav_*` bindings move the
-    // focus, and everything else is muted so a shortcut can't fire under the
-    // modal. The on-screen keyboard stays above it — that's how a gamepad types
-    // into `prompt()`.
+    // A modal page prompt captures the keyboard first, muting everything but
+    // Enter, Esc and the `nav_*` bindings, so no shortcut fires under it.
     if ui.focus() == Focus::Prompt {
         if key.pressed {
             match key.kc {
@@ -74,10 +70,8 @@ pub fn on_key(
         return;
     }
 
-    // Game Mode's own screens capture it the same way, so a key meant for a row
-    // list cannot also reach the game still running underneath. Keyed on the
-    // focus, not visibility: the keyboard opens over the editor to pick a key,
-    // and while it is up the keys are its own.
+    // Game Mode's own screens capture it the same way. Keyed on the focus, not
+    // visibility: the keyboard opens over the editor and owns the keys there.
     if ui.focus().is_game_screen() {
         if key.pressed {
             on_game_menu_key(key, bindings, commands);
@@ -88,9 +82,8 @@ pub fn on_key(
     if key.pressed {
         on_key_down(key, bindings, ui, browser, commands);
     } else if ui.hints.visible && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-        // Hint mode times Enter as a tap-vs-hold gesture, so its release edge
-        // decides (click vs open-in-new-tab) in the router rather than going to
-        // the page like other key-ups.
+        // Hint mode times Enter as tap-vs-hold, so the router decides on the
+        // release edge instead of passing it to the page.
         commands.push(AppCommand::Input(InputCommand::Confirm(false)));
     } else {
         browser.handle_input(servo::InputEvent::Keyboard(into_servo(key)));
@@ -154,6 +147,59 @@ fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut 
     }
 }
 
+/// Tab / Shift+Tab as the Shoulder intent (L1/R1's role, one step per press;
+/// a repeat is consumed without another step). `false` = not Tab.
+fn tab_step(key: &KeyEvent, commands: &mut Vec<AppCommand>) -> bool {
+    if !matches!(key.kc, Keycode::Tab) {
+        return false;
+    }
+    if !key.repeat {
+        let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+        let delta = if shift { -1 } else { 1 };
+        commands.push(AppCommand::Input(InputCommand::Shoulder(delta)));
+    }
+    true
+}
+
+/// Plain arrows as overlay Nav; Ctrl'd ones fall through to the bindings
+/// (`prev`/`next`). `false` = not a plain arrow.
+fn arrows_move(key: &KeyEvent, commands: &mut Vec<AppCommand>) -> bool {
+    if key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) {
+        return false;
+    }
+    let Some((dx, dy)) = arrow_nav(key.kc) else {
+        return false;
+    };
+    commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+    true
+}
+
+/// A non-repeat Enter as the Confirm intent. `false` = not that edge.
+fn enter_confirms(key: &KeyEvent, commands: &mut Vec<AppCommand>) -> bool {
+    if key.repeat || !matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+        return false;
+    }
+    commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+    true
+}
+
+/// A non-repeat Enter submitting a field's `text` as `make(text)`. Consumed
+/// even when blank — an empty submit is not a keypress for the page.
+fn enter_submits(
+    key: &KeyEvent,
+    text: &str,
+    make: impl FnOnce(String) -> AppCommand,
+    commands: &mut Vec<AppCommand>,
+) -> bool {
+    if key.repeat || !matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
+        return false;
+    }
+    if !text.trim().is_empty() {
+        commands.push(make(text.to_string()));
+    }
+    true
+}
+
 fn on_key_down(
     key: &KeyEvent,
     bindings: &Bindings<Action>,
@@ -161,9 +207,8 @@ fn on_key_down(
     browser: &AppBrowser,
     commands: &mut Vec<AppCommand>,
 ) {
-    // Hint mode's fixed keys (its navigation comes from the `nav_*` bindings
-    // below). Enter is a tap-vs-hold gesture timed in the router, so only its
-    // first edge counts.
+    // Hint mode's fixed keys (its navigation comes from the `nav_*` bindings).
+    // Enter is timed as tap-vs-hold, so only its first edge counts.
     if ui.hints.visible {
         match key.kc {
             Keycode::Return | Keycode::KpEnter => {
@@ -178,9 +223,8 @@ fn on_key_down(
             }
             _ => {}
         }
-        // Keyboard-opened hint mode: letter keys type the on-badge hint code
-        // (Vimium-style), so capture every letter here before the shortcut table
-        // or the page sees it. Modified keys (Ctrl+R etc.) still fall through.
+        // Keyboard-opened hint mode types the badge code, so every letter is
+        // captured before the shortcut table; a modified key falls through.
         let modified = key
             .keymod
             .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD);
@@ -192,20 +236,16 @@ fn on_key_down(
         }
     }
 
-    // The start page: arrows move the selection and Enter activates — the same
-    // intents the gamepad routes. While its search field holds keyboard focus,
-    // typing/caret/Enter belong to the text editor; only Down leaves the field.
+    // The start page routes the gamepad's own intents. While its search field
+    // holds focus the editor keeps them, and only Down leaves the field.
     if ui.focus() == Focus::Home {
         if ui.home_field_editing() {
             if matches!(key.kc, Keycode::Down) {
                 commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
                 return;
             }
-            if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                let text = ui.home.input().to_string();
-                if !text.trim().is_empty() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(text)));
-                }
+            let open = |text| AppCommand::Menu(MenuAction::OpenUrl(text));
+            if enter_submits(key, ui.home.input(), open, commands) {
                 return;
             }
         } else {
@@ -213,8 +253,7 @@ fn on_key_down(
                 commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
                 return;
             }
-            if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+            if enter_confirms(key, commands) {
                 return;
             }
             // P toggles the focused tile's pin (Y's role).
@@ -225,28 +264,20 @@ fn on_key_down(
         }
     }
 
-    // The speed-dial editor mirrors the start page. Its URL field, while it
-    // holds egui focus, keeps typing/caret to the editor; Up/Down leave it
-    // (grid / Pin settings), Enter pins.
+    // The speed-dial editor mirrors the start page: its URL field keeps typing
+    // while it holds egui focus, Up/Down leave it, Enter pins.
     if ui.focus() == Focus::DialEdit {
         if matches!(key.kc, Keycode::Escape) {
             commands.push(AppCommand::Input(InputCommand::Cancel));
             return;
         }
-        // Tab / Shift+Tab reorder the focused pin, like L1/R1 (and like the
-        // section switch they drive in the menu and settings).
-        if matches!(key.kc, Keycode::Tab) {
-            if !key.repeat {
-                let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
-                let delta = if shift { -1 } else { 1 };
-                commands.push(AppCommand::Input(InputCommand::Shoulder(delta)));
-            }
+        // Tab / Shift+Tab reorder the focused pin, as L1/R1 do.
+        if tab_step(key, commands) {
             return;
         }
-        // Ctrl+arrows fall through to the bindings (`prev`/`next`, i.e. the same
-        // reorder); only the plain ones move the selection.
-        let ctrl = key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
         if ui.dial_edit_field_editing() {
+            // Up/Down leave the field (grid / Pin settings); Left/Right stay
+            // caret moves inside it.
             if matches!(key.kc, Keycode::Up) {
                 commands.push(AppCommand::Input(InputCommand::Nav(0, -1)));
                 return;
@@ -255,20 +286,17 @@ fn on_key_down(
                 commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
                 return;
             }
-            if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                let text = ui.dial_edit.input().to_string();
-                if !text.trim().is_empty() {
-                    commands.push(AppCommand::Menu(MenuAction::DialAdd(text)));
-                }
+            let pin = |text| AppCommand::Menu(MenuAction::DialAdd(text));
+            if enter_submits(key, ui.dial_edit.input(), pin, commands) {
                 return;
             }
         } else {
-            if let Some((dx, dy)) = arrow_nav(key.kc).filter(|_| !ctrl) {
-                commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+            // Ctrl+arrows fall through to the bindings (`prev`/`next`, i.e.
+            // the same reorder); only the plain ones move the selection.
+            if arrows_move(key, commands) {
                 return;
             }
-            if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-                commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+            if enter_confirms(key, commands) {
                 return;
             }
             // Delete the focused tile (X's role), routed as the same intent.
@@ -281,27 +309,16 @@ fn on_key_down(
         }
     }
 
-    // The settings overlay: plain arrows move the selection (Up/Down) and adjust
-    // the focused value (Left/Right); Tab / Shift+Tab and Ctrl+Left/Right switch
-    // section; Enter activates; Esc saves and closes. No text field can hold egui
-    // focus here (typing goes through the OSK), so arrows are never caret moves.
+    // The settings overlay. No text field can hold egui focus here (typing goes
+    // through the OSK), so an arrow is never a caret move.
     if ui.focus() == Focus::Settings {
-        if matches!(key.kc, Keycode::Tab) {
-            if !key.repeat {
-                let shift = key.keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
-                let delta = if shift { -1 } else { 1 };
-                commands.push(AppCommand::Input(InputCommand::Shoulder(delta)));
-            }
+        if tab_step(key, commands) {
             return;
         }
-        let ctrl = key.keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
-        let nav = if ctrl { None } else { arrow_nav(key.kc) };
-        if let Some((dx, dy)) = nav {
-            commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
+        if arrows_move(key, commands) {
             return;
         }
-        if !key.repeat && matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-            commands.push(AppCommand::Input(InputCommand::Confirm(true)));
+        if enter_confirms(key, commands) {
             return;
         }
         if matches!(key.kc, Keycode::Escape) {
@@ -318,7 +335,7 @@ fn on_key_down(
     }
 
     // Overlays whose navigation comes from the `nav_*` bindings, so vim hjkl
-    // works there and not just the arrows the fixed handlers above catch.
+    // works there too.
     let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
     let typing = browser.text_input_focused()
         || ui.address_bar_focused()
@@ -332,10 +349,9 @@ fn on_key_down(
     browser.handle_input(servo::InputEvent::Keyboard(into_servo(key)));
 }
 
-/// Resolve a key event against the `[keyboard]` bindings, applying the firing
-/// rules: `nav_*` steps need an open overlay (and, unlike the other shortcuts,
-/// auto-repeat while held); plain bindings (no Ctrl/Alt) are muted while
-/// anything editable has focus, so they can't hijack typing.
+/// Resolve a key event against the `[keyboard]` bindings: `nav_*` steps need an
+/// open overlay and auto-repeat while held; a plain binding (no Ctrl/Alt) is
+/// muted while anything editable has focus, so it can't hijack typing.
 fn lookup(
     key: &KeyEvent,
     bindings: &Bindings<Action>,
