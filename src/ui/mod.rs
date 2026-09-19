@@ -3,9 +3,11 @@
 //! [`crate::platform::window::AppWindow`], which owns the renderer it belongs
 //! to; the widgets are rendered by the submodules ([`toolbar`], [`menu`], [`osk`]).
 
+mod chrome;
 mod cursor;
 mod dial_edit;
 mod game;
+mod game_mode;
 mod hints;
 mod home;
 mod memory;
@@ -19,6 +21,7 @@ mod settings;
 mod theme;
 mod toolbar;
 
+pub use self::game_mode::game_mode_toast_text;
 pub use self::overlays::Focus;
 
 use crate::{
@@ -100,9 +103,6 @@ pub(super) fn select_all(ctx: &egui::Context, id: egui::Id, char_count: usize) {
     state.cursor.set_char_range(Some(range));
     egui::TextEdit::store_state(ctx, id, state);
 }
-
-/// How long the Game Mode entry toast stays before fading.
-const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
 
 /// Toolbar layout decided before the egui closure ([`AppUi::toolbar_layout`]):
 /// these reads borrow all of `self`, which can't overlap `egui.run`.
@@ -399,53 +399,6 @@ impl AppUi {
             || self.toast_visible_for().is_some()
     }
 
-    /// Move the toolbar to a window edge (live config change). The next frame
-    /// re-lays the panel and the web view follows automatically.
-    #[inline]
-    pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {
-        self.toolbar_position = pos;
-    }
-
-    /// Enable/disable scroll-driven auto-hide (live config change). Re-showing
-    /// the toolbar avoids leaving it stuck hidden from a prior scroll.
-    #[inline]
-    pub fn set_toolbar_autohide(&mut self, on: bool) {
-        self.toolbar_autohide = on;
-        if !on {
-            self.toolbar_shown = true;
-        }
-    }
-
-    /// Scroll the page and feed the toolbar auto-hide in one call — the only
-    /// spelling of the pair, so a scroll cannot silently stop the auto-hide.
-    pub fn scroll_page(&mut self, browser: &AppBrowser, dx: f32, dy: f32, x: f32, y: f32) {
-        browser.scroll(dx, dy, x, y);
-        self.notify_page_scroll(dy);
-    }
-
-    /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:
-    /// positive reveals lower content) so the toolbar can hide on scroll-down and
-    /// reveal on scroll-up. Accumulates to a threshold; a no-op without auto-hide.
-    fn notify_page_scroll(&mut self, dy: f32) {
-        if !self.toolbar_autohide || dy == 0.0 {
-            return;
-        }
-        // Reset the accumulator on a direction change so a flick the other way
-        // responds immediately instead of cancelling out a long prior drag.
-        if (dy > 0.0) != (self.scroll_accum > 0.0) {
-            self.scroll_accum = 0.0;
-        }
-        self.scroll_accum += dy;
-        const THRESHOLD: f32 = 48.0;
-        if self.scroll_accum > THRESHOLD {
-            self.toolbar_shown = false;
-            self.scroll_accum = 0.0;
-        } else if self.scroll_accum < -THRESHOLD {
-            self.toolbar_shown = true;
-            self.scroll_accum = 0.0;
-        }
-    }
-
     /// Height of the browser viewport (logical px) — for screen-relative scrolls.
     #[inline]
     pub fn browser_area_height(&self) -> f32 {
@@ -478,31 +431,6 @@ impl AppUi {
     #[inline]
     pub fn cursor_browser_rel(&self) -> (f32, f32) {
         browser_rel(self.cursor, self.webview_rect)
-    }
-
-    /// Resize the browser to the web-view area on SDL window-resize events:
-    /// egui's reactive sizing reads the central rect a frame later and lags the
-    /// window. Uses the toolbar height measured in [`AppUi::update`] and shares
-    /// `browser_viewport` with it, so the two never double-resize.
-    pub fn resize_browser(&mut self, window: &AppWindow, browser: &AppBrowser) {
-        let (dw, dh) = window.drawable_size();
-        if dw == 0 || dh == 0 {
-            return;
-        }
-        // An auto-hide bar floats as an overlay on either edge, so the web view
-        // stays full-height; without auto-hide the bar reserves a strip.
-        let overlay = self.toolbar_autohide;
-        let toolbar_px = if overlay {
-            0
-        } else {
-            (self.toolbar_height * self.egui_ctx.pixels_per_point()).round() as u32
-        };
-        let size = (dw, dh.saturating_sub(toolbar_px).max(1));
-        if size != self.browser_viewport {
-            self.browser_viewport = size;
-            self.forced_passes = self.forced_passes.max(1);
-            browser.resize(size.0, size.1);
-        }
     }
 
     /// Refresh egui's cached window size from the live window, once per frame:
@@ -581,25 +509,6 @@ impl AppUi {
             // dial, the trailing "Pin settings" tile.
             let slots = self.dial_edit_slots();
             self.dial_edit.clamp(slots);
-        }
-    }
-
-    /// Decide the toolbar layout before the egui closure (these reads — esp.
-    /// `focus()` — borrow all of `self`, which can't overlap `egui.run`).
-    /// Auto-hide forces the bar visible while typing and floats it on either
-    /// edge: a strip that came and went would resize the web view, and that is
-    /// a full Servo reflow mid-scroll. Otherwise the bar is a panel.
-    fn toolbar_layout(&self, chrome_hidden: ChromeHidden) -> ToolbarLayout {
-        // Game Mode is the exception: nothing it opens types into the chrome,
-        // so an overlay of its own must not bring the bar back over the game.
-        let typing = self.focus() != Focus::Page && !chrome_hidden.game_mode;
-        ToolbarLayout {
-            position: self.toolbar_position,
-            // Typing still wins: auto-hide forces the bar up for a focused field,
-            // and a hidden chrome must not leave an invisible address bar to type into.
-            shown: typing
-                || (!chrome_hidden.any() && (!self.toolbar_autohide || self.toolbar_shown)),
-            overlay: self.toolbar_autohide,
         }
     }
 
@@ -839,7 +748,7 @@ impl AppUi {
                 }
 
                 if self.toast_visible_for().is_some() {
-                    add_game_mode_toast(ctx, &self.game_mode_toast_text);
+                    game_mode::add_game_mode_toast(ctx, &self.game_mode_toast_text);
                 }
 
                 // Debug memory overlay (opt-in), drawn last so it sits above
@@ -895,78 +804,6 @@ impl AppUi {
         timing
     }
 
-    #[inline]
-    fn is_pointer_over_toolbar(&self, window: &AppWindow) -> bool {
-        let Some(pos) = window.pointer_pos_in_points() else {
-            return false;
-        };
-        self.toolbar_rect.contains(pos)
-    }
-
-    /// Whether a *pixel*-space y (raw SDL finger events) lands in the web view,
-    /// below the toolbar: touches over the toolbar are egui's, so only web-view
-    /// touches should start a page scroll/tap gesture.
-    #[inline]
-    pub fn point_over_webview(&self, y_px: f32) -> bool {
-        let y = y_px / self.egui_ctx.pixels_per_point();
-        !self.toolbar_rect.y_range().contains(y)
-    }
-
-    #[inline]
-    pub fn game_mode(&self) -> bool {
-        self.game_mode
-    }
-
-    /// Whether one of Game Mode's own screens is up. The browser's vocabulary
-    /// shrinks under any of them, in or out of the mode. Visibility, not
-    /// [`Focus::is_game_screen`]: it stays true with the OSK open over one.
-    #[inline]
-    pub fn game_screen(&self) -> bool {
-        self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()
-    }
-
-    /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
-    /// Dropping egui's keyboard focus is part of it: egui is offered every key
-    /// before we are, so a focused address bar would go on eating them.
-    pub fn enter_game_mode(&mut self, toast: String) {
-        self.game_mode = true;
-        self.game_mode_toast = Some(Instant::now());
-        self.game_mode_toast_text = toast;
-        drop_egui_focus(&self.egui_ctx);
-    }
-
-    pub fn leave_game_mode(&mut self) {
-        self.game_mode = false;
-        self.game_mode_toast = None;
-    }
-
-    /// Adopt the name of a map chosen in the menu, or set by an edited
-    /// config.
-    #[inline]
-    pub fn set_input_map_name(&mut self, name: String) {
-        self.input_map_name = name;
-    }
-
-    /// Time left on the entry toast, or `None` once it has faded.
-    fn toast_visible_for(&self) -> Option<Duration> {
-        self.game_mode_toast
-            .and_then(|t| GAME_MODE_TOAST.checked_sub(t.elapsed()))
-    }
-}
-
-/// Word the entry toast from the ways to the menu this device has: the pad's
-/// reserved hold, and whatever `game_mode` answers to on a keyboard. Leaving is
-/// a row in that menu, so the toast only has to point at it.
-pub fn game_mode_toast_text(pad: bool, keys: &[String]) -> String {
-    let mut ways: Vec<&str> = pad.then_some("hold Select").into_iter().collect();
-    ways.extend(keys.iter().map(String::as_str));
-    let mut text = "Game Mode".to_string();
-    if !ways.is_empty() {
-        text.push_str(" - ");
-        text.push_str(&ways.join(" / "));
-        text.push_str(" for the menu");
-    }
-    text
 }
 
 /// A point in screen points as the page's own coordinate — only the web view's
@@ -976,22 +813,9 @@ fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
     (x - webview.left(), y - webview.top())
 }
 
-/// The Game Mode entry toast: the chrome just hid, so name the way back.
-fn add_game_mode_toast(ctx: &egui::Context, text: &str) {
-    egui::Area::new(egui::Id::new("game_mode_toast"))
-        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
-        .order(egui::Order::Foreground)
-        .interactable(false)
-        .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.label(text);
-            });
-        });
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{browser_rel, egui, game_mode_toast_text, ChromeHidden};
+    use super::{browser_rel, egui, ChromeHidden};
 
     /// The gamepad cursor and the mouse must land on the same page pixel. The
     /// cursor is kept in points and SDL reports pixels; converting the cursor a
@@ -1008,28 +832,6 @@ mod tests {
         let from_mouse = browser_rel(to_points(mouse_px), webview);
         assert_eq!(browser_rel(cursor, webview), from_mouse);
         assert_eq!(from_mouse, (636.0, 443.0));
-    }
-
-    /// The toast is the only thing on screen once the chrome hides, so it has to
-    /// name the gestures this install really has — not the defaults.
-    #[test]
-    fn the_toast_names_the_bound_gestures_and_nothing_else() {
-        let keys = vec!["ctrl+g".to_string()];
-        assert_eq!(
-            game_mode_toast_text(true, &keys),
-            "Game Mode - hold Select / ctrl+g for the menu"
-        );
-        // No pad: naming its hold would point at a button that is not there.
-        assert_eq!(
-            game_mode_toast_text(false, &keys),
-            "Game Mode - ctrl+g for the menu"
-        );
-        assert_eq!(
-            game_mode_toast_text(true, &[]),
-            "Game Mode - hold Select for the menu"
-        );
-        // Nothing to name leaves no dangling separator behind.
-        assert_eq!(game_mode_toast_text(false, &[]), "Game Mode");
     }
 
     /// The reasons are separate so that a page dropping fullscreen inside Game
