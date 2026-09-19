@@ -76,13 +76,36 @@ impl Focus {
     }
 }
 
+/// Where typed input lands while the keyboard is up — one ladder (see
+/// [`AppUi::osk_destination`]), so the routing and the caret parking that both
+/// hang off it cannot drift.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OskDest {
+    Prompt,
+    Settings,
+    Capture,
+    GameName,
+    DialEdit,
+    Home,
+    AddressBar,
+    Page,
+}
+
 impl AppUi {
     /// The current input owner — see [`Focus`] for the precedence.
     #[inline]
     pub fn focus(&self) -> Focus {
         if self.osk.visible {
             Focus::Osk
-        } else if self.prompt.visible() {
+        } else {
+            self.focus_below_osk()
+        }
+    }
+
+    /// The precedence below the keyboard — what the OSK would type into, and
+    /// what [`Self::focus`] returns once it is down.
+    fn focus_below_osk(&self) -> Focus {
+        if self.prompt.visible() {
             Focus::Prompt
         } else if self.menu.visible {
             Focus::Menu
@@ -105,35 +128,46 @@ impl AppUi {
         }
     }
 
-    /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input
-    /// to a modal `prompt()` dialog's field when one is up, else the address
-    /// bar when it holds focus, otherwise the focused page element.
-    pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
-        let to_address_bar = self.address_bar_focused();
-        self.osk.set_picking(self.map_edit.picking().is_some());
-        let target = if self.prompt.visible() && self.prompt.has_text_field() {
-            OskTarget::Prompt(self.prompt.input_mut())
-        } else if self.settings.visible() && self.settings.selected_is_text() {
-            // The settings overlay's focused text row: typing lands in the draft
-            // (the OSK only opens over a text row — see `App::settings_confirm`).
-            OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
-        } else if self.map_edit.picking().is_some() {
+    /// Where the keyboard types, derived from the focus underneath it. The
+    /// sub-branches are what the plain focus cannot say: a prompt without a
+    /// text field, a settings row that is not text, a picker or a rename.
+    fn osk_destination(&self) -> OskDest {
+        match self.focus_below_osk() {
+            Focus::Prompt if self.prompt.has_text_field() => OskDest::Prompt,
             // The map editor turned the keyboard into a key picker.
-            OskTarget::Capture(self.map_edit.picked_mut())
-        } else if self.input_maps.naming().is_some() {
+            Focus::GameMapEdit if self.map_edit.picking().is_some() => OskDest::Capture,
             // A map being renamed or copied: the keyboard types its name.
-            OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
-        } else if self.dial_edit.visible() {
+            Focus::GameInputMaps if self.input_maps.naming().is_some() => OskDest::GameName,
+            Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
-            OskTarget::DialEdit(self.dial_edit.input_mut())
-        } else if self.home_active {
+            Focus::DialEdit => OskDest::DialEdit,
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
-            OskTarget::Home(self.home.input_mut())
-        } else if to_address_bar {
-            OskTarget::AddressBar
-        } else {
-            OskTarget::Page
+            Focus::Home => OskDest::Home,
+            _ if self.address_bar_focused() => OskDest::AddressBar,
+            _ => OskDest::Page,
+        }
+    }
+
+    /// Apply an [`OskCommand`] to the on-screen keyboard, routing typed input
+    /// by [`Self::osk_destination`].
+    pub fn osk(&mut self, cmd: OskCommand, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        self.osk.set_picking(self.map_edit.picking().is_some());
+        let target = match self.osk_destination() {
+            OskDest::Prompt => OskTarget::Prompt(self.prompt.input_mut()),
+            // Typing lands in the draft (the OSK only opens over a text row —
+            // see `App::settings_confirm`).
+            OskDest::Settings => {
+                OskTarget::Settings(self.settings.selected_text_mut().expect("text row"))
+            }
+            OskDest::Capture => OskTarget::Capture(self.map_edit.picked_mut()),
+            OskDest::GameName => {
+                OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
+            }
+            OskDest::DialEdit => OskTarget::DialEdit(self.dial_edit.input_mut()),
+            OskDest::Home => OskTarget::Home(self.home.input_mut()),
+            OskDest::AddressBar => OskTarget::AddressBar,
+            OskDest::Page => OskTarget::Page,
         };
         let to_page = matches!(target, OskTarget::Page);
         self.osk.handle(cmd, target, browser, commands);
@@ -149,22 +183,21 @@ impl AppUi {
         }
     }
 
-    /// The egui text field the OSK types into — the target priority of
-    /// [`AppUi::osk`], with the no-egui-caret cases (Page, settings rows)
-    /// collapsed to `None`. Parks that field's caret (see [`OskField`]).
+    /// The egui text field the OSK types into — [`Self::osk_destination`] with
+    /// the no-egui-caret cases collapsed to `None` (the page, a settings row's
+    /// painted text, the picker and the rename the OSK draws itself).
     pub(super) fn osk_target_field(&self) -> OskField {
         if !self.osk.visible {
-            OskField::None
-        } else if self.prompt.visible() && self.prompt.has_text_field() {
-            OskField::Prompt
-        } else if self.dial_edit.visible() {
-            OskField::DialEdit
-        } else if self.home_active {
-            OskField::Home
-        } else if self.address_bar_focused() {
-            OskField::AddressBar
-        } else {
-            OskField::None
+            return OskField::None;
+        }
+        match self.osk_destination() {
+            OskDest::Prompt => OskField::Prompt,
+            OskDest::DialEdit => OskField::DialEdit,
+            OskDest::Home => OskField::Home,
+            OskDest::AddressBar => OskField::AddressBar,
+            OskDest::Settings | OskDest::Capture | OskDest::GameName | OskDest::Page => {
+                OskField::None
+            }
         }
     }
 
