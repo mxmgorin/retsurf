@@ -25,6 +25,10 @@ const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
 /// to send is paid at this rate; a delivered frame returns the wait at once.
 const ANIMATION_WAIT: Duration = Duration::from_millis(16);
 
+/// Longest an idle pass waits. Bounded because sdl2's unbounded `wait_event`
+/// panics when SDL reports a failed wait, which an interrupted poll is enough for.
+const IDLE_WAIT: Duration = Duration::from_millis(500);
+
 /// Cap on one rumble effect, matching Chrome; SDL wants milliseconds.
 const MAX_RUMBLE_MS: f64 = 5000.0;
 
@@ -291,18 +295,9 @@ impl AppEventHandler {
             } else {
                 delay
             };
-            match delay {
-                Some(delay) => {
-                    if let Some(event) =
-                        self.event_pump.wait_event_timeout(delay.as_millis() as u32)
-                    {
-                        self.handle_event(event, window, ui, browser, commands);
-                    }
-                }
-                None => {
-                    let event = self.event_pump.wait_event();
-                    self.handle_event(event, window, ui, browser, commands);
-                }
+            let delay = delay.unwrap_or(IDLE_WAIT);
+            if let Some(event) = self.event_pump.wait_event_timeout(delay.as_millis() as u32) {
+                self.handle_event(event, window, ui, browser, commands);
             }
         }
 
@@ -517,6 +512,65 @@ impl AppEventHandler {
         browser.handle_input(servo::InputEvent::Keyboard(event));
     }
 
+    /// One key edge, either direction: a key-wired pad feeds the pad machine,
+    /// anything else the keyboard path — Game Mode first when it holds the device.
+    fn on_key_event(
+        &mut self,
+        key: KeyEvent,
+        ui: &mut AppUi,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        if let Some(pad) = self.keymap.pad(key.kc) {
+            if self.game_active {
+                self.game_input.on_pad(pad, key.pressed, browser, commands);
+                return;
+            }
+            // A pad press reclaims hint badges as button combos.
+            if key.pressed {
+                ui.note_input_keyboard(false);
+            }
+            self.gamepad.on_pad(pad, key.pressed, &self.bindings, commands);
+            return;
+        }
+        // Remember the input came from the keyboard so hint mode picks
+        // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
+        if key.pressed {
+            ui.note_input_keyboard(true);
+        }
+        if self.game_active {
+            self.game_key(&key, browser, commands);
+            return;
+        }
+        super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
+    }
+
+    /// One pad-button edge, either direction — the controller twin of
+    /// [`Self::on_key_event`].
+    fn on_pad_button(
+        &mut self,
+        which: u32,
+        button: sdl2::controller::Button,
+        pressed: bool,
+        ui: &mut AppUi,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        if self.game_active {
+            self.game_button(which, button, pressed, browser, commands);
+            return;
+        }
+        // A pad press reclaims hint badges as button combos (see the key path).
+        if pressed {
+            ui.note_input_keyboard(false);
+        }
+        self.to_page(browser, which, |slot| {
+            gamepad_api::button(slot, button, pressed)
+        });
+        self.gamepad
+            .on_button(button, pressed, &self.bindings, commands);
+    }
+
     fn handle_event(
         &mut self,
         event: Event,
@@ -633,13 +687,6 @@ impl AppEventHandler {
                 repeat,
                 ..
             } => {
-                let key = KeyEvent {
-                    kc,
-                    sc,
-                    keymod,
-                    repeat,
-                    pressed: true,
-                };
                 // MENU, on a device that sends it as Esc and a launcher that
                 // has handed it over. Not a binding: it is the only way out
                 // there, so it must survive whatever the tables are edited to.
@@ -647,23 +694,14 @@ impl AppEventHandler {
                     commands.push(AppCommand::Shutdown);
                     return;
                 }
-                if let Some(pad) = self.keymap.pad(kc) {
-                    if self.game_active {
-                        self.game_input.on_pad(pad, true, browser, commands);
-                        return;
-                    }
-                    ui.note_input_keyboard(false);
-                    self.gamepad.on_pad(pad, true, &self.bindings, commands);
-                    return;
-                }
-                // Remember the input came from the keyboard so hint mode picks
-                // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
-                ui.note_input_keyboard(true);
-                if self.game_active {
-                    self.game_key(&key, browser, commands);
-                    return;
-                }
-                super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
+                let key = KeyEvent {
+                    kc,
+                    sc,
+                    keymod,
+                    repeat,
+                    pressed: true,
+                };
+                self.on_key_event(key, ui, browser, commands);
             }
             Event::KeyUp {
                 keycode: Some(kc),
@@ -679,19 +717,7 @@ impl AppEventHandler {
                     repeat,
                     pressed: false,
                 };
-                if let Some(pad) = self.keymap.pad(kc) {
-                    if self.game_active {
-                        self.game_input.on_pad(pad, false, browser, commands);
-                    } else {
-                        self.gamepad.on_pad(pad, false, &self.bindings, commands);
-                    }
-                    return;
-                }
-                if self.game_active {
-                    self.game_key(&key, browser, commands);
-                    return;
-                }
-                super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
+                self.on_key_event(key, ui, browser, commands);
             }
             Event::ControllerAxisMotion {
                 which, axis, value, ..
@@ -708,28 +734,10 @@ impl AppEventHandler {
                 self.gamepad.on_axis(axis, value, &self.bindings, commands);
             }
             Event::ControllerButtonDown { which, button, .. } => {
-                if self.game_active {
-                    self.game_button(which, button, true, browser, commands);
-                    return;
-                }
-                // A pad press reclaims hint badges as button combos (see KeyDown).
-                ui.note_input_keyboard(false);
-                self.to_page(browser, which, |slot| {
-                    gamepad_api::button(slot, button, true)
-                });
-                self.gamepad
-                    .on_button(button, true, &self.bindings, commands);
+                self.on_pad_button(which, button, true, ui, browser, commands);
             }
             Event::ControllerButtonUp { which, button, .. } => {
-                if self.game_active {
-                    self.game_button(which, button, false, browser, commands);
-                    return;
-                }
-                self.to_page(browser, which, |slot| {
-                    gamepad_api::button(slot, button, false)
-                });
-                self.gamepad
-                    .on_button(button, false, &self.bindings, commands);
+                self.on_pad_button(which, button, false, ui, browser, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
             Event::User { code, .. } => {
