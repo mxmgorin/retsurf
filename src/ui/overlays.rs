@@ -13,9 +13,8 @@ use crate::{
 use egui_sdl2::egui;
 
 /// Which surface owns contextual input (Confirm, Cancel, overlay `Nav`): one
-/// precedence order derived from the visibility flags, so routing never
-/// re-combines `*_visible()` checks. The OSK outranks the modal prompt (a
-/// gamepad types into one through it); menu / keyboard / hints never coexist.
+/// precedence order over the visibility flags, so routing never re-combines
+/// `*_visible()` checks. The OSK outranks the modal prompt, being typed through.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
     /// The on-screen keyboard — above everything, including the modal prompt.
@@ -282,9 +281,8 @@ impl AppUi {
     }
 
     /// Mirror whether the active tab is on the start page (each frame); entry
-    /// resets the overlay to an empty search field. Returns whether it changed:
-    /// activation comes from an async navigation, and without a follow-up
-    /// repaint the idle loop sizes the fresh overlay invisibly and never paints it.
+    /// resets the overlay to an empty search field. Returns whether it changed —
+    /// without a follow-up repaint the idle loop never paints the fresh overlay.
     #[inline]
     pub fn set_home_active(&mut self, active: bool) -> bool {
         let changed = active != self.home_active;
@@ -338,7 +336,7 @@ impl AppUi {
         self.dial_edit.tile() == Some(pins) && self.dial_edit_slots() > pins
     }
 
-    /// Delete the editor's focused pin (X). The trailing tile's slot is out of
+    /// Delete the editor's focused pin. The trailing tile's slot is out of
     /// range, so it's a no-op there.
     pub fn dial_edit_remove_selected(&mut self) {
         if let Some(slot) = self.dial_edit.tile() {
@@ -346,7 +344,7 @@ impl AppUi {
         }
     }
 
-    /// Move the editor's focused pin by `delta` slots (L1/R1), taking the
+    /// Move the editor's focused pin by `delta` slots, taking the
     /// selection with it.
     pub fn dial_edit_move_selected(&mut self, delta: i32) {
         let Some(slot) = self.dial_edit.tile() else {
@@ -403,22 +401,24 @@ impl AppUi {
     /// Whether the address-bar text field currently holds keyboard focus (also
     /// guards plain-key keyboard shortcuts in the event handler).
     pub fn address_bar_focused(&self) -> bool {
-        self.egui_ctx
-            .memory(|m| m.has_focus(egui::Id::new("location")))
+        self.field_focused(super::ids::LOCATION)
     }
 
     /// Whether the start page's search field holds egui keyboard focus (a desktop
     /// click into it). While it does, arrow keys edit text rather than moving the
     /// start-page selection, and plain-key shortcuts are muted.
     pub fn home_field_editing(&self) -> bool {
-        self.egui_ctx
-            .memory(|m| m.has_focus(egui::Id::new("home_search")))
+        self.field_focused(super::ids::HOME_SEARCH)
     }
 
     /// Whether the speed-dial editor's URL field holds egui keyboard focus —
     /// [`Self::home_field_editing`] for the editor's `dial_edit_url` field.
     pub fn dial_edit_field_editing(&self) -> bool {
-        self.egui_ctx
-            .memory(|m| m.has_focus(egui::Id::new("dial_edit_url")))
+        self.field_focused(super::ids::DIAL_EDIT_URL)
+    }
+
+    /// Whether the chrome text field `id` holds egui keyboard focus.
+    fn field_focused(&self, id: &str) -> bool {
+        self.egui_ctx.memory(|m| m.has_focus(egui::Id::new(id)))
     }
 }

@@ -58,13 +58,13 @@ pub(super) fn add_dial_edit(
 }
 
 /// Grid slots for `pins`: one per pin (slot index *is* the dial index), plus the
-/// trailing "Pin settings" tile while the ⚙ sentinel is off the dial. Shared with
+/// trailing "Pin settings" tile while `SETTINGS_PIN` is off the dial. Shared with
 /// the navigation side ([`crate::ui::AppUi`]) so paint and nav can't drift.
 pub(super) fn slot_count(pins: &[String]) -> usize {
     pins.len() + usize::from(!pins.iter().any(|u| u == SETTINGS_PIN))
 }
 
-/// The tile grid: a deletable tile per pin in dial order (the ⚙ sentinel among
+/// The tile grid: a deletable tile per pin in dial order (`SETTINGS_PIN` among
 /// them, so the grid matches the start page), plus a trailing "Pin settings" slot
 /// while that sentinel is absent.
 fn add_grid(
@@ -94,7 +94,7 @@ fn add_grid(
 }
 
 /// The trailing "Pin settings" tile: an outline action slot (like the start page's
-/// Edit tile), drawn only while the ⚙ shortcut is off the dial. Returns whether it
+/// Edit tile), drawn only while `SETTINGS_PIN` is off the dial. Returns whether it
 /// was clicked.
 fn add_pin_settings_tile(ui: &mut egui::Ui, selected: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
@@ -171,7 +171,7 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
 /// buffer on the handheld.
 fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<usize>) {
     let selected = edit.field_focused();
-    let edit_id = egui::Id::new("dial_edit_url");
+    let edit_id = egui::Id::new(super::ids::DIAL_EDIT_URL);
     // While the OSK types here, mirror its caret (egui won't follow the external
     // edit on its own); desktop editing is left untouched.
     if let Some(pos) = osk_caret {
@@ -201,9 +201,8 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Opti
         if resp.gained_focus() {
             edit.focus_field();
         }
-        // Keep egui keyboard focus tracking the selection (mirrors the start
-        // page's search field): hold focus while the field is the selected item,
-        // release it when the selection moves to a tile / Add.
+        // Keep egui focus tracking the selection, as the start page's search
+        // field does: held while selected, released once it moves to a tile.
         if edit.field_focused() {
             if !resp.has_focus() {
                 resp.request_focus();

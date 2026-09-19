@@ -1,7 +1,6 @@
-//! The egui layer: [`AppUi`] owns the gamepad cursor and the overlay state
-//! holders, and lays the chrome out over the page. egui itself lives in
-//! [`crate::platform::window::AppWindow`], which owns the renderer it belongs
-//! to; the widgets are rendered by the submodules ([`toolbar`], [`menu`], [`osk`]).
+//! The egui layer: [`AppUi`] holds the gamepad cursor and the overlay state and
+//! lays the chrome out over the page; the widgets live in the submodules. egui
+//! itself belongs to [`crate::platform::window::AppWindow`].
 
 mod chrome;
 mod cursor;
@@ -57,10 +56,9 @@ pub fn init_egui_ctx(ctx: &egui::Context) {
     }
 }
 
-/// The text field the OSK currently types into, so its renderer can park egui's
-/// caret at the buffer end — egui keys its caret by widget id and won't follow an
-/// external edit. `None` when the OSK is hidden or types somewhere without an
-/// egui caret (the page, or a settings row, whose value is painted text).
+/// The field the OSK types into, so its renderer can park egui's caret — egui
+/// keys the caret by widget id and won't follow an external edit. `None` where
+/// there is no egui caret (the page, a settings row).
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub(super) enum OskField {
     None,
@@ -70,8 +68,15 @@ pub(super) enum OskField {
     Home,
 }
 
-/// Drop egui's own keyboard focus, so Enter reaches only the overlay's selected
-/// row (see the callers).
+/// The egui ids of the chrome's text fields — spelled once, because the
+/// widget that creates one and the focus query that asks about it must agree.
+pub(super) mod ids {
+    pub const LOCATION: &str = "location";
+    pub const HOME_SEARCH: &str = "home_search";
+    pub const DIAL_EDIT_URL: &str = "dial_edit_url";
+}
+
+/// Drop egui's keyboard focus, so Enter reaches only the overlay's selected row.
 fn drop_egui_focus(ctx: &egui::Context) {
     ctx.memory_mut(|m| {
         if let Some(id) = m.focused() {
@@ -118,17 +123,14 @@ struct ToolbarLayout {
 /// [`AppUi::frame_snapshot`]), as owned copies — so the browser borrow doesn't
 /// leak into `egui.run` (which borrows `self`).
 struct FrameInputs {
-    /// Open tab count, shown in the toolbar's tab chip.
     tab_count: usize,
     /// Page-zoom chip percentage (`None` at the default zoom).
     zoom_pct: Option<u16>,
     /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
     tab_infos: Vec<crate::data::session::TabInfo>,
-    /// The field the OSK types into this frame (if any).
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
     osk_caret: usize,
-    /// Why the chrome is hidden this frame, if it is.
     chrome_hidden: ChromeHidden,
 }
 
@@ -136,7 +138,6 @@ struct FrameInputs {
 /// bar while the other still holds it.
 #[derive(Clone, Copy, Default)]
 struct ChromeHidden {
-    /// The active tab's page holds the Fullscreen API.
     page_fullscreen: bool,
     game_mode: bool,
 }
@@ -148,21 +149,18 @@ impl ChromeHidden {
 }
 
 pub struct AppUi {
-    /// The window's egui context, cached so focus/scale queries don't each need
-    /// the window. Refreshed every frame: the software backend builds a fresh
-    /// context on a resize.
+    /// Cached so focus/scale queries don't each need the window; refreshed every
+    /// frame, because a software resize builds a fresh context.
     egui_ctx: egui::Context,
     repaint_delay: Option<Duration>,
     /// The web view's rect (logical px), measured from the central panel each
-    /// frame. Maps cursor/browser coordinates, keeps the pointer out of the
-    /// toolbar, and anchors the home/hints overlays.
+    /// frame. Maps cursor/browser coordinates and anchors the overlays.
     webview_rect: egui::Rect,
     /// Toolbar thickness (logical px), measured each frame. Stays valid across
     /// window-size changes, so the SDL-resize fast path sizes the viewport with it.
     toolbar_height: f32,
-    /// The toolbar's current on-screen rect (logical px) — the panel strip, or
-    /// the auto-hide overlay's slid position (off-screen when hidden). Used by the
-    /// hit-tests to tell "this points at the chrome" from "this points at the page".
+    /// The toolbar's on-screen rect (logical px), `NOTHING` while hidden; the
+    /// hit-tests tell chrome from page with it.
     toolbar_rect: egui::Rect,
     /// The on-screen keyboard's drawn height (logical px), measured while it is up.
     osk_height: f32,
@@ -178,23 +176,19 @@ pub struct AppUi {
     browser_tex_id: Option<egui::TextureId>,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
-    /// Game Mode: the browser stops consuming input so the page can have it, and
-    /// the chrome hides. Read by [`crate::event::keyboard`] to decide whether to
-    /// resolve a key against the bindings or forward it.
+    /// Game Mode: the browser stops consuming input and the chrome hides.
+    /// [`crate::event::keyboard`] reads it to forward a key instead of binding it.
     game_mode: bool,
     /// When Game Mode was entered; the chrome hides with nothing else on screen,
     /// so a toast names the way out for [`GAME_MODE_TOAST`], then fades.
     game_mode_toast: Option<Instant>,
-    /// What that toast says, worded at entry from the ways out this device
-    /// actually has (see [`game_mode_toast_text`]).
+    /// Worded at entry from the ways out this device has.
     game_mode_toast_text: String,
-    /// Game Mode's own menu (the reserved Select hold). Public — driven
-    /// directly, like the other overlays.
+    /// Game Mode's own menu (the reserved Select hold).
     pub game_menu: GameMenu,
-    /// Its map list and one map's rows, opened from that menu. Public
-    /// for the same reason.
+    /// Its map list and one map's rows, opened from that menu.
     pub input_maps: InputMaps,
-    /// Its map editor, opened from a map. Public for the same reason.
+    /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
     /// The live map's name, mirrored for the menu's row; the maps
     /// themselves live in the event handler, which resolved them.
@@ -207,28 +201,23 @@ pub struct AppUi {
     cursor_last_move: Option<Instant>,
     /// How long the cursor stays visible after a move (from the interface config).
     cursor_linger: Duration,
-    /// `[display] scale`: the user's factor over the fit to the panel. Applied live.
+    /// `[display] scale`: the user's factor over the fit to the panel.
     ui_scale: f32,
     /// `RETSURF_SCALE`, standing in for the panel's own fit where a launcher
     /// knows better (Android, which reports a density a resolution cannot).
     forced_scale: Option<f32>,
-    /// Which edge the toolbar renders on (from the display config). Applied live.
     toolbar_position: ToolbarPosition,
-    /// Whether the toolbar hides on scroll-down / reveals on scroll-up (config).
     toolbar_autohide: bool,
-    /// Auto-hide target visibility: shown after a scroll up, hidden after a
-    /// scroll down; forced shown while a field is typed into.
+    /// Auto-hide target: hidden after a scroll down, forced shown while typing.
     toolbar_shown: bool,
     /// Signed scroll distance accumulated since the last direction flip; the
     /// toolbar flips visibility once it crosses a threshold (debounces jitter).
     scroll_accum: f32,
-    /// On-screen keyboard: state, rendering, and input routing all live here.
     osk: Osk,
-    /// The full-screen menu (Tabs / Bookmarks / History / Downloads). Public —
-    /// driven directly; open via [`AppUi::menu_open`] so competing overlays close.
+    /// The full-screen menu (Tabs / Bookmarks / History / Downloads); open it
+    /// via [`AppUi::menu_open`] so competing overlays close.
     pub menu: Menu,
-    /// The full-screen settings overlay (edits a config draft). Public — driven
-    /// directly; open/close/move go through the `settings_*` coordinators.
+    /// The full-screen settings overlay (edits a config draft).
     pub settings: Settings,
     /// Self-update manager (About tab): in-place on PortMaster / desktop
     /// installs, "open the release page" elsewhere. See [`crate::update`].
@@ -240,20 +229,15 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
-    /// Link-hint navigation state (L3); rects come from the browser. Public —
-    /// a round starts via `hints_begin_collect` / `hints_apply` (see [`overlays`]).
+    /// Link-hint navigation state; the rects come from the browser.
     pub hints: Hints,
-    /// Modal page prompts: queued `<select>` pickers and JS dialogs. Public —
-    /// the router and main loop drive [`Prompt`]'s own methods directly.
+    /// Modal page prompts: queued `<select>` pickers and JS dialogs.
     pub prompt: Prompt,
-    /// The gamepad's latched D-pad scroll mode, mirrored each frame by the
-    /// router; drawn as an autoscroll-style indicator in place of the cursor.
+    /// The gamepad's latched D-pad scroll mode, drawn in place of the cursor.
     scroll_mode: bool,
-    /// Whether hint mode draws combo badges (cached from the input config; the
-    /// router gates symbol routing on the same flag). Off = plain spatial hops.
+    /// Whether hint mode draws combo badges; off = plain spatial hops.
     hint_badges: bool,
-    /// Whether the most recent input came from the keyboard (vs a gamepad).
-    /// Read when hint mode opens to pick the badge alphabet.
+    /// Whether the last input came from the keyboard; picks the badge alphabet.
     last_input_keyboard: bool,
     /// Whether the debug memory overlay is enabled (`[debug] memory_overlay`).
     memory_overlay: bool,
@@ -331,16 +315,15 @@ impl AppUi {
         }
     }
 
-    /// Whether anything wants Servo's memory report — the overlay to draw it or
-    /// the log to record it. Drives the main loop's periodic requests (see
-    /// [`crate::browser::AppBrowser::request_memory_report`]).
+    /// Whether anything wants Servo's memory report; drives the main loop's
+    /// periodic requests.
     #[inline]
     pub fn memory_reports_wanted(&self) -> bool {
         self.memory_overlay || self.memory_log
     }
 
-    /// Adopt edited diagnostics live (from a settings save). Clears the stale
-    /// snapshot once nothing wants it, so it doesn't flash on the next enable.
+    /// Adopt edited diagnostics live. Clears the stale snapshot once nothing
+    /// wants it, so it doesn't flash on the next enable.
     pub fn set_memory_debug(&mut self, overlay: bool, to_log: bool) {
         self.memory_overlay = overlay;
         self.memory_log = to_log;
@@ -355,7 +338,6 @@ impl AppUi {
     }
 
     /// Write the latest figures to the log, if `[debug] memory_log` asked for it.
-    /// `compose_bytes` is the compositor's, from [`AppWindow::compose_bytes`].
     pub fn log_memory_summary(&self, ctx: &egui::Context, compose_bytes: usize) {
         if let (true, Some(summary)) = (self.memory_log, &self.memory_summary) {
             summary.log();
@@ -375,20 +357,18 @@ impl AppUi {
         self.repaint_delay.take()
     }
 
-    /// Ask the loop to render one more frame without blocking on input: commands
-    /// drain *after* this frame's [`AppUi::update`], so a UI change they make
-    /// would otherwise wait for the next input. Two passes, not one — this pass
-    /// draws output built before the command ran; the next holds the change.
+    /// Render one more frame without blocking on input: commands drain *after*
+    /// [`AppUi::update`], so a UI change they make would wait for the next input.
+    /// Two passes — this one draws output built before the command ran.
     #[inline]
     pub fn request_repaint(&mut self) {
         self.repaint_delay = Some(Duration::ZERO);
         self.forced_passes = 2;
     }
 
-    /// Whether the frame just built differs from the one on the panel. Composing
-    /// and presenting is the whole frame cost on a GPU-less device (~90 ms at
-    /// 752x560), so an identical frame is worth not drawing. egui reporting `MAX`
-    /// means idle; a consumed event, an animation, or the cursor say otherwise.
+    /// Whether the frame just built differs from the one on the panel. Compose
+    /// and present is the whole frame cost without a GPU (~90 ms at 752x560), so
+    /// an identical frame is worth not drawing.
     pub fn take_frame_dirty(&mut self, window: &AppWindow) -> bool {
         let forced = self.forced_passes > 0;
         self.forced_passes = self.forced_passes.saturating_sub(1);
@@ -405,15 +385,14 @@ impl AppUi {
         self.webview_rect.height()
     }
 
-    /// Width of the browser viewport (logical px) — to keep scroll hit-test
-    /// points inside the visible area.
+    /// Width of the browser viewport (logical px) — keeps hit-test points inside.
     #[inline]
     pub fn browser_area_width(&self) -> f32 {
         self.webview_rect.width()
     }
 
     /// A window pixel (as SDL reports events) in web-view points — the space the
-    /// page's own rects come back in, and what [`AppBrowser`] is fed.
+    /// page's own rects come back in.
     #[inline]
     pub fn to_browser_rel_pos(&self, x: f32, y: f32) -> (f32, f32) {
         browser_rel(self.to_points(x, y), self.webview_rect)
@@ -426,22 +405,20 @@ impl AppUi {
         (dx / ppp, dy / ppp)
     }
 
-    /// The gamepad cursor as the page's own coordinate: it is kept in points,
-    /// so nothing converts here.
+    /// The gamepad cursor as a page coordinate; it is kept in points already.
     #[inline]
     pub fn cursor_browser_rel(&self) -> (f32, f32) {
         browser_rel(self.cursor, self.webview_rect)
     }
 
-    /// Refresh egui's cached window size from the live window, once per frame:
-    /// SDL doesn't deliver a size-changed event on Android rotation, and the UI
-    /// would keep laying out for the previous orientation.
+    /// Refresh egui's cached window size once per frame: SDL delivers no
+    /// size-changed event on Android rotation, and the UI would keep laying out
+    /// for the previous orientation.
     #[cfg(target_os = "android")]
     pub fn sync_window_size(&mut self, window: &mut AppWindow) {
         window.sync_egui_window_size();
     }
 
-    /// Handles the event and returns whether it is consumed
     pub fn handle_event(&mut self, window: &mut AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = window.on_event(event);
         self.repaint_pending |= resp.repaint;
@@ -450,17 +427,14 @@ impl AppUi {
     }
 
     /// Fold the idle-repaint sources into `repaint_delay` so the blocking wait
-    /// wakes on its own when something time-based comes due. Each source only
-    /// ever shortens the wait; `None` leaves it untouched.
+    /// wakes when something time-based comes due. Each source only shortens it.
     fn schedule_idle_repaints(&mut self, cursor_visible: Option<Duration>) {
         self.repaint_delay = cursor_visible;
-        // A pending post-scroll hint refresh also needs the loop to wake by
-        // itself — without this the wait blocks on input and it never fires.
+        // Without this the wait blocks on input and the hint refresh never fires.
         if let Some(refresh) = self.hints.refresh_in() {
             self.repaint_delay = Some(self.repaint_delay.map_or(refresh, |d| d.min(refresh)));
         }
-        // Keep the loop ticking ~1 Hz while a memory report is wanted, so its
-        // periodic request fires and the figures stay fresh when idle.
+        // ~1 Hz while a report is wanted, so its periodic request fires when idle.
         if self.memory_reports_wanted() {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
@@ -471,10 +445,9 @@ impl AppUi {
         }
     }
 
-    /// Snapshot the per-frame browser/overlay inputs as owned copies, so the
-    /// browser borrow doesn't leak into `egui.run` (which borrows `self`). The
-    /// tab reads happen *before* the long `get_state_mut` borrow taken just
-    /// before `run`: both touch the browser's tab list and can't overlap.
+    /// Snapshot the per-frame browser inputs as owned copies, so the browser
+    /// borrow doesn't leak into `egui.run`. The tab reads happen *before* the
+    /// long `get_state_mut` borrow below: both touch the browser's tab list.
     fn frame_snapshot(&mut self, browser: &mut AppBrowser) -> FrameInputs {
         let tab_count = browser.tab_count();
         let zoom_pct = browser.zoom_chip();
@@ -497,16 +470,14 @@ impl AppUi {
         }
     }
 
-    /// Keep the start-page / speed-dial-editor selections in range before they
-    /// render. The pin list isn't snapshotted — the overlays borrow it straight
-    /// from the live store at their call sites.
+    /// Keep the start-page / dial-editor selections in range before they render.
     fn clamp_overlay_selections(&mut self) {
         if self.home_active {
             self.home.clamp(home::slot_count(self.menu.dial.urls()));
         }
         if self.dial_edit.visible() {
-            // The editor's grid is the pins plus, while the ⚙ shortcut is off the
-            // dial, the trailing "Pin settings" tile.
+            // The grid is the pins plus a trailing "Pin settings" tile while the
+            // settings shortcut is off the dial.
             let slots = self.dial_edit_slots();
             self.dial_edit.clamp(slots);
         }
@@ -519,16 +490,16 @@ impl AppUi {
         commands: &mut Vec<AppCommand>,
     ) {
         let mut desired_px: Option<(u32, u32)> = None;
-        // A software resize (handled in the previous frame's paint) leaves a
-        // fresh context behind; adopt it before anything queries it.
+        // A software resize leaves a fresh context behind; adopt it before
+        // anything queries it.
         if self.egui_ctx != *window.egui_ctx() {
             self.egui_ctx = window.egui_ctx().clone();
         }
         // Before the layout: every rect below is measured in the zoom in force.
         self.sync_scale(browser);
 
-        // The cursor draws only while it lingers after a move; ask the loop to
-        // wake when the linger ends so it gets erased without another event.
+        // The cursor draws only while it lingers; wake at the end of the linger
+        // so it gets erased without another event.
         let cursor_visible = if self.focus() == Focus::Page {
             self.cursor_visible_for()
         } else {
@@ -541,8 +512,8 @@ impl AppUi {
 
         {
             let mut state = browser.get_state_mut();
-            // Owned copies (see `FrameInputs`); `caret_for` parks each
-            // `TextEdit`'s cursor at the OSK caret for the field it types into.
+            // `caret_for` parks a `TextEdit`'s cursor at the OSK caret, for the
+            // one field the OSK types into.
             let FrameInputs {
                 tab_count,
                 zoom_pct,
@@ -557,8 +528,7 @@ impl AppUi {
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
             } = self.toolbar_layout(chrome_hidden);
-            // Snapshot the self-update state here (the About tab reads it): the
-            // `self.update` borrow can't overlap the `self`-borrowing closure below.
+            // The `self.update` borrow can't overlap the `self`-borrowing closure.
             let update = self.update.snapshot();
             // Toolbar update chip: shown only once a check has found a newer build.
             let update_available = matches!(update, UpdateState::Available { .. });
@@ -571,24 +541,21 @@ impl AppUi {
                 );
                 root.set_clip_rect(ctx.content_rect());
 
-                let bookmarked = self.menu.is_bookmarked(&state.location);
-                let active_downloads = self.menu.downloads.active_count();
+                let inputs = toolbar::ToolbarInputs {
+                    bookmarked: self.menu.is_bookmarked(&state.location),
+                    tab_count,
+                    active_downloads: self.menu.downloads.active_count(),
+                    update_available,
+                    zoom_pct,
+                    osk_caret: caret_for(OskField::AddressBar),
+                    position,
+                };
 
                 // 1) Reserved-space toolbar (auto-hide off): the panel reserves
                 //    its strip and the page reflows below it.
                 if !toolbar_overlay && toolbar_shown {
-                    self.toolbar_rect = toolbar::add_toolbar(
-                        &mut root,
-                        &mut state,
-                        commands,
-                        bookmarked,
-                        tab_count,
-                        active_downloads,
-                        update_available,
-                        zoom_pct,
-                        caret_for(OskField::AddressBar),
-                        position,
-                    );
+                    self.toolbar_rect =
+                        toolbar::add_toolbar(&mut root, &mut state, commands, &inputs);
                 } else {
                     self.toolbar_rect = egui::Rect::NOTHING;
                 }
@@ -636,13 +603,7 @@ impl AppUi {
                             ctx.content_rect().width(),
                             &mut state,
                             commands,
-                            bookmarked,
-                            tab_count,
-                            active_downloads,
-                            update_available,
-                            zoom_pct,
-                            caret_for(OskField::AddressBar),
-                            position,
+                            &inputs,
                         );
                         self.toolbar_height = self.toolbar_rect.height();
                     } else {
@@ -650,9 +611,8 @@ impl AppUi {
                     }
                 }
 
-                // The start page is a backdrop over the (blank) web view, drawn
-                // below the foreground overlays so they can open on top. The dial
-                // editor fully covers it, so skip it underneath.
+                // A backdrop over the blank web view, below the foreground
+                // overlays; the dial editor covers it entirely.
                 if self.home_active && !self.dial_edit.visible() {
                     home::add_home(
                         ctx,
@@ -664,8 +624,7 @@ impl AppUi {
                     );
                 }
 
-                // The speed-dial editor: a full-screen overlay above the start
-                // page; the OSK (below) can still open on top to type a URL.
+                // Above the start page; the OSK can still open on top to type a URL.
                 if self.dial_edit.visible() {
                     dial_edit::add_dial_edit(
                         ctx,
@@ -676,8 +635,7 @@ impl AppUi {
                     );
                 }
 
-                // Settings: drawn before the menu/OSK chain so the OSK can open
-                // on top to type into a text field.
+                // Before the menu/OSK chain, so the OSK can open on top of a field.
                 if self.settings.visible() {
                     // The overlay owns its row selection; an egui-focused row
                     // would take Enter a second time and activate twice.
@@ -685,23 +643,20 @@ impl AppUi {
                     settings::add_settings(ctx, &self.settings, &update, commands);
                 }
 
-                // The Game Mode map editor: like settings, its own block
-                // rather than the chain below, so the keyboard can open over it
-                // to pick a key for a row.
+                // Its own block rather than the chain below, so the keyboard can
+                // open over it to pick a key for a row.
                 if self.map_edit.visible() {
                     drop_egui_focus(ctx);
                     game::map_edit::add_map_edit(ctx, &self.map_edit, commands);
                 }
 
-                // The map screens, for the same reason: the keyboard opens
-                // over them to type a name.
+                // Same, for the keyboard that types a map name.
                 if self.input_maps.visible() {
                     drop_egui_focus(ctx);
                     game::input_maps::add_input_maps(ctx, &self.input_maps, commands);
                 }
 
-                // The modal prompt draws on top of whatever else is up (its
-                // egui layer order puts it above the other overlays).
+                // Its layer order puts it above whatever else is up.
                 if self.prompt.visible() {
                     // Last frame's height; the OSK is drawn after this.
                     let osk_lift = if self.osk.visible {
@@ -722,8 +677,7 @@ impl AppUi {
                     drop_egui_focus(ctx);
                     menu::add_menu(ctx, &self.menu, &tab_infos, commands);
                 } else if self.game_menu.visible {
-                    // Same reason as the menu's: a focused row would take Enter
-                    // a second time and activate twice.
+                    // Same as the menu's: a focused row would activate twice.
                     drop_egui_focus(ctx);
                     game::menu::add_game_menu(
                         ctx,
@@ -734,7 +688,7 @@ impl AppUi {
                     );
                 } else if self.osk.visible {
                     // Clear a bottom toolbar so its address bar stays visible
-                    // below the keys; a top toolbar needs no inset.
+                    // below the keys.
                     let bottom_inset = match self.toolbar_position {
                         ToolbarPosition::Bottom => self.toolbar_height,
                         ToolbarPosition::Top => 0.0,
@@ -751,8 +705,8 @@ impl AppUi {
                     game_mode::add_game_mode_toast(ctx, &self.game_mode_toast_text);
                 }
 
-                // Debug memory overlay (opt-in), drawn last so it sits above
-                // everything; non-interactive, so it never blocks input.
+                // Drawn last so it sits above everything; non-interactive, so it
+                // never blocks input.
                 if self.memory_overlay {
                     if let Some(summary) = &self.memory_summary {
                         memory::add_memory(ctx, summary);
@@ -768,18 +722,15 @@ impl AppUi {
             }
         }
 
-        // The keyboard just opened over a page field: now that it has been drawn
-        // (so its height is known), ask the page to scroll the field clear of it.
+        // Now that the keyboard's height is known, scroll the field clear of it.
         if self.osk_lift_pending && self.osk_height > 0.0 {
             let covered = (self.osk_height / self.webview_rect.height()).clamp(0.0, 0.9);
             browser.lift_focus_above(covered);
             self.osk_lift_pending = false;
         }
 
-        // Fold in egui's own repaint timing: a freshly shown anchored `Area`
-        // sizes itself invisibly and asks for an immediate follow-up to paint
-        // positioned — without this the overlay appears only after the next
-        // keypress. `MAX` means egui is idle, so it never shortens our wait.
+        // A freshly shown anchored `Area` sizes itself invisibly and asks for a
+        // follow-up to paint positioned; without this it waits for a keypress.
         let egui_delay = window.repaint_delay();
         if egui_delay < Duration::MAX {
             self.repaint_delay = Some(self.repaint_delay.map_or(egui_delay, |d| d.min(egui_delay)));
@@ -803,7 +754,6 @@ impl AppUi {
         self.repaint_pending = false;
         timing
     }
-
 }
 
 /// A point in screen points as the page's own coordinate — only the web view's
@@ -817,9 +767,8 @@ fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
 mod tests {
     use super::{browser_rel, egui, ChromeHidden};
 
-    /// The gamepad cursor and the mouse must land on the same page pixel. The
-    /// cursor is kept in points and SDL reports pixels; converting the cursor a
-    /// second time put a press at the corner into the middle of the page.
+    /// The cursor is kept in points and SDL reports pixels; converting the
+    /// cursor twice put a press at the corner into the middle of the page.
     #[test]
     fn the_pad_cursor_and_the_mouse_land_on_the_same_page_pixel() {
         let webview = egui::Rect::from_min_size(egui::pos2(0.0, 33.0), egui::vec2(640.0, 447.0));

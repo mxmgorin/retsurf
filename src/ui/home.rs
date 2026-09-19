@@ -1,10 +1,7 @@
 //! Rendering of the built-in start page overlay (state lives in
-//! [`crate::overlay::home`]): a wordmark, a search / URL field, a speed-dial grid
-//! of the pinned shortcuts ([`crate::data::dial`]), and a bottom control-hint
-//! bar. Gamepad/keyboard navigation (move the selection, activate a tile) is
-//! routed by [`crate::app`]; the mouse can click the field or a tile directly.
-//! Tiles open via [`MenuAction::OpenUrl`] (which loads the URL in the active tab)
-//! — the same path the menu's lists use.
+//! [`crate::overlay::home`]): a wordmark, a search / URL field, a speed-dial
+//! grid of the pinned shortcuts, and a bottom control-hint bar. Navigation is
+//! routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use crate::command::{AppCommand, MenuAction};
@@ -15,11 +12,9 @@ use egui_sdl2::egui;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-/// Typeface for the start-page body text (search field, tiles, hints). egui
-/// bundles only two real text faces — `Ubuntu-Light` (via
-/// [`egui::FontId::proportional`]) and `Hack` (via [`egui::FontId::monospace`]);
-/// swap the call below to flip the body between them. The wordmark deliberately
-/// stays on Hack via [`add_wordmark`] regardless of this choice.
+/// Typeface for the start-page body text. egui bundles only two real text faces
+/// — `Ubuntu-Light` and `Hack`; swap the call below to flip between them. The
+/// wordmark stays on Hack via [`add_wordmark`] regardless.
 fn font(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
 }
@@ -47,10 +42,9 @@ const HINT_BASE: f32 = 18.0;
 const HINT_PILL_H: f32 = 18.0;
 const HINT_BAND: f32 = HINT_BASE + HINT_PILL_H / 2.0 + 8.0;
 
-/// Draw the start-page overlay over the (blank) web view — confined to the
-/// `webview` rect (the window minus the toolbar strip), so the address bar and
-/// toolbar buttons stay usable. Any activation is pushed as a command for the
-/// app to execute.
+/// Draw the start-page overlay over the (blank) web view, confined to the
+/// `webview` rect so the toolbar stays usable. Any activation is pushed as a
+/// command for the app to execute.
 pub(super) fn add_home(
     ctx: &egui::Context,
     home: &mut Home,
@@ -71,9 +65,8 @@ pub(super) fn add_home(
                 .fill(BG)
                 .inner_margin(0.0)
                 .show(ui, |ui| {
-                    // Pin the region to the current area: `Area` caches its size by
-                    // id and `set_min_size` only grows, so a portrait rotation would
-                    // keep centering against the stale landscape width.
+                    // `Area` caches its size by id and `set_min_size` only grows,
+                    // so a rotation would keep centering against the stale width.
                     ui.set_min_size(area.size());
                     ui.set_max_size(area.size());
                     // Columns first, then the field takes the grid's width: sized the
@@ -105,9 +98,8 @@ pub(super) fn add_home(
                         add_search(ui, home, block_w, osk_caret);
                         ui.add_space(GAP_MID);
                         let rest = (floor - ui.cursor().top()).max(TILE_H);
-                        // The viewport spans the page and the grid centers inside it:
-                        // shrunk to its content, the scrollbar's width would push the
-                        // tiles off the page's centerline.
+                        // The viewport spans the page and the grid centers inside
+                        // it; shrunk to fit, the scrollbar would push it off-center.
                         egui::ScrollArea::vertical()
                             .max_height(rest)
                             .auto_shrink([false, true])
@@ -122,9 +114,8 @@ pub(super) fn add_home(
         });
 }
 
-/// The bottom control-hint bar: little key-cap pills with their action, centered
-/// near the foot of the page. Painted (not laid out in the centered flow) so it
-/// stays pinned to the bottom regardless of how many tiles there are.
+/// The bottom control-hint bar: key-cap pills with their action. Painted rather
+/// than laid out in the flow, so the tile count can't move it.
 fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     const HINTS: &[(&str, &str)] = &[("A", "Open"), (bold::LIST, "Menu")];
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
@@ -171,10 +162,9 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     }
 }
 
-/// The brand wordmark: "ret" in ink, "surf" in the brand gradient (teal warming to
-/// coral), matching the SVG wordmark. egui has no gradient text fill, so the `surf`
-/// glyphs are tagged with a marker color ([`ACCENT`]), tessellated here, and
-/// recolored by height.
+/// The brand wordmark: "ret" in ink, "surf" in the brand gradient. egui has no
+/// gradient text fill, so the `surf` glyphs are tagged with a marker color
+/// ([`ACCENT`]), tessellated here, and recolored by height.
 fn wordmark_job() -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
@@ -186,9 +176,8 @@ fn wordmark_job() -> egui::text::LayoutJob {
         ..Default::default()
     };
     job.append("ret", 0.0, fmt(INK));
-    // Leading space: epaint skips extra_letter_spacing on a section's first glyph,
-    // so the ret/surf joint needs it added back to match the other gaps. ACCENT
-    // here is a marker recolored to the gradient below.
+    // epaint skips extra_letter_spacing on a section's first glyph, so the
+    // ret/surf joint needs it back. ACCENT is a marker recolored below.
     job.append("surf", WORDMARK_TRACKING, fmt(ACCENT));
     job
 }
@@ -208,9 +197,8 @@ fn add_wordmark(ui: &mut egui::Ui) {
         egui::Sense::hover(),
     );
 
-    // Tessellate the galley into a mesh and recolor the `surf` (marker-colored)
-    // vertices by their height: teal over the lower ~55%, warming to coral along
-    // the top edge — the same stops as `_surf_gradient` in the brand SVGs.
+    // Recolor the marker-colored `surf` vertices by height: teal over the lower
+    // ~55%, warming to coral — the stops of `_surf_gradient` in the brand SVGs.
     let ppp = ui.ctx().pixels_per_point();
     let tex = ui.ctx().fonts(|f| f.font_image_size());
     let mut mesh = egui::epaint::Mesh::default();
@@ -219,10 +207,7 @@ fn add_wordmark(ui: &mut egui::Ui) {
     egui::epaint::Tessellator::new(ppp, opts, tex, Vec::new()).tessellate_text(&shape, &mut mesh);
 
     // Key the gradient to the x-height, not the full vertex span: `f`'s ascender
-    // reaches higher than the other glyphs, so spanning to it would leave the
-    // x-height tops only partway to coral while `f`'s tip hit full coral (making
-    // `f` look yellower). Anchoring at the x-height clamps everything above it to
-    // coral, so every glyph's top matches — same as the SVG's y2=1120 stop.
+    // reaches higher, and spanning to it left the other glyph tops short of coral.
     let ys: Vec<f32> = mesh
         .vertices
         .iter()
@@ -244,9 +229,8 @@ fn add_wordmark(ui: &mut egui::Ui) {
     }
     ui.painter().add(egui::Shape::mesh(mesh));
 
-    // The brand wave: a solid-teal sine stroked under the text, ~3 periods and
-    // overhanging the letters slightly on each side (matching the PNG wordmark).
-    // Starts on the centerline dipping down first, same phase as the SVG path.
+    // The brand wave: a solid-teal sine under the text, ~3 periods, starting on
+    // the centerline and dipping down first — the SVG path's phase.
     const N: usize = 120;
     const PERIODS: f32 = 3.0;
     let over = gsize.x * 0.02;
@@ -277,7 +261,7 @@ fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
 /// the keyboard/router layer).
 fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<usize>) {
     let selected = home.search_focused();
-    let edit_id = egui::Id::new("home_search");
+    let edit_id = egui::Id::new(super::ids::HOME_SEARCH);
     // While the OSK types here, mirror its caret (egui won't follow the external
     // edit on its own); desktop editing is left untouched.
     if let Some(pos) = osk_caret {
@@ -310,20 +294,11 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
         if resp.gained_focus() {
             home.focus_search();
         }
-        // Keep egui keyboard focus in sync with the selection: focus the field
-        // when it's the selected item (so a keyboard can type immediately) and
-        // release it when the selection moves to a tile (so arrows navigate).
-        // Enter is handled in the keyboard/router layer, not via egui's
-        // lost-focus (which this per-frame re-focus would race).
+        // Keep egui focus in sync with the selection, so a keyboard types at once
+        // and the arrows navigate again once the selection leaves the field.
         if home.search_focused() {
-            // On Android, don't force egui focus onto the search field just
-            // because it's the selected item — that pops the system soft keyboard
-            // on every home visit (the user complained it "always opens"). The
-            // field still focuses, and the IME appears, when the user taps it
-            // (the `gained_focus` branch above). Desktop/handheld keep the
-            // type-immediately behavior.
-            // Only claim focus when nothing else holds it: re-claiming it every
-            // frame made the address bar unclickable on the start page.
+            // Not on Android, where it pops the soft keyboard on every visit; and
+            // only if nothing else holds focus, or the address bar goes unclickable.
             #[cfg(not(target_os = "android"))]
             if ui.ctx().memory(|m| m.focused()).is_none() {
                 resp.request_focus();
@@ -408,9 +383,8 @@ pub(super) fn tile_grid(
 pub(super) const GLYPH: f32 = 52.0;
 
 /// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
-/// the brand name beneath it — accent-ringed and brightened when selected or
-/// hovered. Custom-painted (not a Button) for the two-tier look. Returns its
-/// click response.
+/// the brand name beneath it. Custom-painted (not a Button) for the two-tier
+/// look.
 fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     keep_visible(ui, &resp, rect, selected);
@@ -432,9 +406,8 @@ fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected
     }
 }
 
-/// Paint a speed-dial tile's visuals (glyph square + brand initial + name) into
-/// `rect`. Shared by the start page and the dial editor ([`super::dial_edit`]);
-/// the caller owns the click region (and any extra overlays like a delete badge).
+/// Paint a speed-dial tile's visuals into `rect`. Shared by the start page and
+/// the dial editor; the caller owns the click region and any extra overlay.
 pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, active: bool) {
     // Glyph square, centered near the top of the tile.
     let glyph = egui::Rect::from_center_size(
@@ -483,9 +456,8 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
     );
 }
 
-/// The trailing "Edit" tile: an empty (fill-less) glyph square holding a pencil,
-/// with "Edit" beneath — accent-ringed and brightened when selected or hovered, like a
-/// real tile but unfilled so it reads as an action slot. Opens the dial editor.
+/// The trailing "Edit" tile: a glyph square holding a pencil, unfilled so it
+/// reads as an action slot rather than a real tile. Opens the dial editor.
 fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     keep_visible(ui, &resp, rect, selected);
@@ -532,10 +504,8 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 thread_local! {
-    /// Memoizes [`brand_label`] per URL. `paint_tile` derives a label for every
-    /// visible speed-dial tile on each home repaint, and the derivation parses a
-    /// `Url`; the pin set changes rarely, so caching keeps this map tiny and
-    /// skips the per-frame parse. Single-threaded — egui runs on the main thread.
+    /// Memoizes [`brand_label`] per URL: it parses a `Url`, and runs for every
+    /// visible tile on each home repaint. Single-threaded — egui is main-thread.
     static BRAND_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
