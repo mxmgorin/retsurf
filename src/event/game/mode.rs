@@ -5,8 +5,8 @@
 //! past the hold it opens the Game Mode menu.
 
 use super::input_map::{Dir, InputMap, KeyTarget, Side, StickRole, Target};
-use crate::command::{AppCommand, InputCommand};
 use crate::browser::AppBrowser;
+use crate::command::{AppCommand, InputCommand};
 use crate::config::InputConfig;
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::{axis_value, trigger_of};
@@ -17,9 +17,6 @@ use std::time::{Duration, Instant};
 /// Stick-to-direction hysteresis: engage at the dead zone, release below this
 /// fraction of it, so a stick resting at the edge cannot spam edges.
 const STICK_RELEASE_RATIO: f32 = 0.8;
-
-/// Left, then right — the order [`InputMap::stick`] and the state arrays use.
-const STICKS: [Side; 2] = Side::ALL;
 
 /// Arrow directions down for a digital (-1/0/1) x/y pair, in [`Dir::ALL`] order.
 fn dirs(x: i32, y: i32) -> [bool; 4] {
@@ -42,13 +39,14 @@ fn axis_digital(value: f32, prev: i32, deadzone: f32) -> i32 {
     }
 }
 
-/// Which stick an axis belongs to, and whether it is the Y one.
-fn stick_axis(axis: Axis) -> Option<(usize, bool)> {
+/// Which stick an axis belongs to, and whether it is the Y one. The state
+/// arrays index by `side as usize` — [`Side::ALL`]'s left-then-right order.
+fn stick_axis(axis: Axis) -> Option<(Side, bool)> {
     Some(match axis {
-        Axis::LeftX => (0, false),
-        Axis::LeftY => (0, true),
-        Axis::RightX => (1, false),
-        Axis::RightY => (1, true),
+        Axis::LeftX => (Side::Left, false),
+        Axis::LeftY => (Side::Left, true),
+        Axis::RightX => (Side::Right, false),
+        Axis::RightY => (Side::Right, true),
         _ => return None,
     })
 }
@@ -186,11 +184,12 @@ impl GameInput {
             }
             return self.map.pad(self.layer(), pad).is_some_and(bound);
         }
-        let Some((index, is_y)) = stick_axis(axis) else {
+        let Some((side, is_y)) = stick_axis(axis) else {
             return false;
         };
+        let index = side as usize;
         // Read the role before touching the state: both borrow `self`.
-        let role = self.map.stick(STICKS[index]);
+        let role = self.map.stick(side);
         // A stick told to send nothing keeps its axis anyway, or `none` and
         // `passthrough` would be the same thing written twice.
         if *role == StickRole::Analog(Target::None) {
@@ -213,7 +212,7 @@ impl GameInput {
             true => self.digital[index].1 = digital,
             false => self.digital[index].0 = digital,
         }
-        self.refresh_stick(index, browser, commands);
+        self.refresh_stick(side, browser, commands);
         // Half an axis cannot be withheld, so a stick read as directions keeps
         // the whole axis from the page.
         true
@@ -319,17 +318,13 @@ impl GameInput {
     /// Re-derive one stick's four directions and send the edges that changed.
     /// Only a direction that actually flipped is cloned out of the map —
     /// axis samples arrive in floods, edges do not.
-    fn refresh_stick(
-        &mut self,
-        index: usize,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
+    fn refresh_stick(&mut self, side: Side, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        let index = side as usize;
         let (x, y) = self.digital[index];
         let want = dirs(x, y);
         let mut edges: [Option<Target>; 4] = [None, None, None, None];
         {
-            let StickRole::Digital(targets) = self.map.stick(STICKS[index]) else {
+            let StickRole::Digital(targets) = self.map.stick(side) else {
                 return;
             };
             for dir in Dir::ALL {
@@ -396,13 +391,13 @@ impl GameInput {
     fn analog(&self) -> ((f32, f32), f32) {
         let mut aim = (0.0, 0.0);
         let mut scroll = 0.0;
-        for (index, side) in STICKS.into_iter().enumerate() {
+        for side in Side::ALL {
             let (speed, to_cursor) = match self.map.stick(side) {
                 StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
                 StickRole::Analog(Target::Scroll { speed }) => (*speed, false),
                 _ => continue,
             };
-            let (x, y) = self.vectors[index];
+            let (x, y) = self.vectors[side as usize];
             let live = |v: f32| match v.abs() < self.deadzone {
                 true => 0.0,
                 false => v * speed,

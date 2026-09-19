@@ -9,24 +9,6 @@
 use crate::event::game::input_map::{Dir, Side};
 use inputbind::Pad;
 
-/// A row of the top list: every button, then the two sticks.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Source {
-    Button(Pad),
-    Stick(Side),
-}
-
-impl Source {
-    /// How the file spells it, which is also the row's label. A stick carries
-    /// its table's name because the D-pad already holds `left` and `right`.
-    pub fn name(self) -> String {
-        match self {
-            Source::Button(pad) => pad.name().to_string(),
-            Source::Stick(side) => format!("stick.{}", side.name()),
-        }
-    }
-}
-
 /// What one row writes to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Slot {
@@ -38,7 +20,9 @@ pub enum Slot {
 }
 
 impl Slot {
-    /// How the file spells it, for the title of the list opened over it.
+    /// How the file spells it: the row's label, and the title of the list
+    /// opened over it. A stick carries its table's name because the D-pad
+    /// already holds `left` and `right`.
     pub fn name(self) -> String {
         match self {
             Slot::Button(pad) => pad.name().to_string(),
@@ -170,14 +154,15 @@ pub struct StickTargets {
     pub dirs: [String; 4],
 }
 
-/// Every source the editor lists: Select carries the Game Mode menu in every
-/// map, so it is not one of them.
-pub fn sources() -> Vec<Source> {
+/// Every source the editor lists — buttons, then the two whole sticks (never a
+/// [`Slot::Direction`]; those live on a stick's own screen). Select carries the
+/// Game Mode menu in every map, so it is not one of them.
+pub fn sources() -> Vec<Slot> {
     Pad::ALL
         .into_iter()
         .filter(|pad| *pad != Pad::Select)
-        .map(Source::Button)
-        .chain(Side::ALL.into_iter().map(Source::Stick))
+        .map(Slot::Button)
+        .chain(Side::ALL.into_iter().map(Slot::Stick))
         .collect()
 }
 
@@ -313,7 +298,7 @@ impl MapEdit {
         }
     }
 
-    /// Focus a row by index (clicking it).
+    /// Focus a row by index.
     pub fn select(&mut self, index: usize) {
         if index < self.rows() {
             self.move_sel(index as i32 - self.selected() as i32);
@@ -333,10 +318,7 @@ impl MapEdit {
     /// is open, when it is that stick's.
     pub fn slot(&self) -> Option<Slot> {
         let Some((side, at)) = self.stick else {
-            return match sources().get(self.selected)? {
-                Source::Button(pad) => Some(Slot::Button(*pad)),
-                Source::Stick(side) => Some(Slot::Stick(*side)),
-            };
+            return sources().get(self.selected).copied();
         };
         match self.stick_rows().get(at)? {
             StickRow::Sends => Some(Slot::Stick(side)),
@@ -421,9 +403,9 @@ mod tests {
     #[test]
     fn the_reserved_pad_is_not_a_row_and_the_sticks_are() {
         let sources = sources();
-        assert!(!sources.contains(&Source::Button(Pad::Select)));
+        assert!(!sources.contains(&Slot::Button(Pad::Select)));
         assert_eq!(sources.len(), Pad::COUNT - 1 + Side::ALL.len());
-        assert_eq!(sources.last(), Some(&Source::Stick(Side::Right)));
+        assert_eq!(sources.last(), Some(&Slot::Stick(Side::Right)));
     }
 
     /// Every kind is on screen, and only the key one defers to the keyboard.

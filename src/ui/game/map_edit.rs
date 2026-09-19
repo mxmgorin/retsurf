@@ -4,7 +4,7 @@
 //! chrome, so a long list scrolls the way the menu's and settings' do.
 
 use crate::command::{AppCommand, GameMapEditAction};
-use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Source, StickRow, UNBOUND};
+use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Slot, StickRow, UNBOUND};
 use crate::ui::panel;
 use egui_sdl2::egui;
 
@@ -54,12 +54,13 @@ fn rows(edit: &MapEdit) -> Vec<(String, String)> {
             .into_iter()
             .map(|source| {
                 let value = match source {
-                    Source::Button(pad) => targets
+                    Slot::Button(pad) => targets
                         .pads
                         .get(pad as usize)
                         .cloned()
                         .unwrap_or_else(|| UNBOUND.to_string()),
-                    Source::Stick(side) => targets.sticks[side as usize].role.clone(),
+                    Slot::Stick(side) => targets.sticks[side as usize].role.clone(),
+                    Slot::Direction(..) => unreachable!("sources() holds no direction rows"),
                 };
                 (source.name(), value)
             })
