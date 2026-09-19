@@ -12,8 +12,8 @@
 //! The **Fn** key swaps the characters for [`NAMED_ROWS`]: the page gets those
 //! as real events, a key picker ([`OskTarget::Capture`]) records them by name.
 
-use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
 use crate::browser::{AppBrowser, BrowserCommand};
+use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
@@ -21,9 +21,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-/// Where typed input goes: the egui address bar, a modal `prompt()` dialog's
-/// text field (its edit buffer is borrowed in), or the web page's focused
-/// element (via Servo keyboard events). Picked per command by
+/// Where typed input goes: the egui address bar, a borrowed edit buffer, or the
+/// page's focused element (via Servo keyboard events). Picked per command by
 /// [`crate::ui::AppUi::osk`] from what currently holds focus.
 pub enum OskTarget<'a> {
     AddressBar,
@@ -47,23 +46,19 @@ pub enum OskTarget<'a> {
     Page,
 }
 
-/// An operation on the on-screen keyboard. The router produces these from
-/// contextual buttons (A→Activate, X→Show/Backspace, B→Hide), the stick (→Move)
-/// and the dedicated keys (Space/Shift/Enter), then dispatches them via
-/// [`Osk::handle`].
+/// An operation on the on-screen keyboard. The router produces these from the
+/// contextual buttons, the stick and the dedicated keys, then dispatches them
+/// via [`Osk::handle`].
 #[derive(Clone, Copy)]
 pub enum OskCommand {
-    /// Show the keyboard.
     Show,
-    /// Hide the keyboard.
     Hide,
     /// Apply the selected key.
     Activate,
     /// Delete the character before the caret.
     Backspace,
-    /// Type a space.
     Space,
-    /// Set the held-Shift modifier (L2): `true` while the trigger is pulled.
+    /// Set the held-Shift modifier: `true` while the trigger is held.
     Shift(bool),
     /// Submit (load the address bar or send Enter), then hide.
     Enter,
@@ -88,7 +83,6 @@ pub enum Key {
     Lang,
     /// Empty the field being typed into.
     Clear,
-    /// Hides the keyboard.
     Hide,
     /// Swap between the characters and [`NAMED_ROWS`]; labeled with the one it
     /// leads to.
@@ -98,6 +92,22 @@ pub enum Key {
         label: &'static str,
         name: &'static str,
     },
+}
+
+impl Key {
+    /// The gamepad button that directly triggers this key (the router's
+    /// mapping), shown as a corner badge so the shortcuts are discoverable;
+    /// keys without a dedicated button use D-pad + **A**.
+    pub fn button_hint(self) -> Option<&'static str> {
+        match self {
+            Key::Backspace => Some("X"),
+            Key::Space => Some("Y"),
+            Key::Shift => Some("L2"),
+            Key::Enter => Some("R2"),
+            Key::Hide => Some("B"),
+            _ => None,
+        }
+    }
 }
 
 use Key::*;
@@ -458,15 +468,12 @@ impl Osk {
             }
             Space => self.type_space(target, browser),
             Backspace => self.backspace(target, browser),
-            // In an editable field `<`/`>` slide the caret; the egui TextEdit
-            // mirrors it (see `ui::park_caret`). Up/Down do nothing on these
-            // single-line fields.
+            // In an editable field `<`/`>` slide the caret and the egui TextEdit
+            // mirrors it; Up/Down do nothing on a single-line field.
             Left if caret_field(&target) => self.caret = self.caret.saturating_sub(1),
             Right if caret_field(&target) => {
                 self.caret = (self.caret + 1).min(target_char_len(&target, browser))
             }
-            // On the page, the arrow keys (and Tab) are sent to the focused
-            // element as real key events.
             // Picking: the frame keys name themselves, which is how a row gets
             // an arrow or Tab without the grid carrying one.
             Tab | Left | Right | Up | Down if matches!(target, OskTarget::Capture(_)) => {

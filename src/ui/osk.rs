@@ -26,20 +26,6 @@ fn osk_layer() -> egui::LayerId {
     egui::LayerId::new(egui::Order::Foreground, egui::Id::new("osk"))
 }
 
-/// The gamepad button that directly triggers a key, shown as a corner badge so
-/// the shortcuts are discoverable. Mirrors the bindings in [`crate::overlay::osk`]
-/// (and the router); keys without a dedicated button use D-pad + **A**.
-fn button_hint(key: &Key) -> Option<&'static str> {
-    match key {
-        Key::Backspace => Some("X"),
-        Key::Space => Some("Y"),
-        Key::Shift => Some("L2"),
-        Key::Enter => Some("R2"),
-        Key::Hide => Some("B"),
-        _ => None,
-    }
-}
-
 /// An even share of the span, capped so a row of three is not three slabs.
 fn named_width(row_len: usize) -> f32 {
     let share = (ROW_SPAN - KEY_GAP * row_len.saturating_sub(1) as f32) / row_len as f32;
@@ -60,15 +46,9 @@ fn grid_width(osk: &Osk, key_width: &impl Fn(usize, &Key) -> f32) -> f32 {
         .fold(0.0, f32::max)
 }
 
-/// Draw the on-screen keyboard, Steam-Deck style: a dark rounded overlay anchored
-/// to the bottom, with the selected key (and active Shift/Caps) highlighted.
-///
-/// `bottom_inset` lifts the keyboard off the bottom edge by that many points —
-/// used to clear a bottom toolbar so the address bar being typed into stays
-/// visible just below the keys (0 for a top toolbar).
-///
-/// Returns the drawn height (logical px) — what the page has to scroll past to
-/// keep a field it owns visible.
+/// Draw the on-screen keyboard: a dark rounded overlay anchored to the bottom.
+/// `bottom_inset` lifts it off that edge, to clear a bottom toolbar. Returns the
+/// drawn height (logical px), which the page scrolls a field of its own past.
 pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
     let selected = osk.selected();
     let shift = osk.shift();
@@ -140,7 +120,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 
                                 }
                                 // The keys with a direct gamepad shortcut wear it
                                 // as a small badge in the top-left corner.
-                                if let Some(btn) = button_hint(key) {
+                                if let Some(btn) = key.button_hint() {
                                     ui.painter().text(
                                         response.rect.left_top() + egui::vec2(4.0, 2.0),
                                         egui::Align2::LEFT_TOP,

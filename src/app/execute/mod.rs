@@ -16,10 +16,8 @@ use crate::overlay::settings::Task;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
-        // Game Mode shrinks the browser's vocabulary to what the mode itself
-        // needs, so a shortcut resolved under one of its overlays cannot act on
-        // the browser behind it (see [`AppCommand::in_game_mode`]). Its menu
-        // counts either way: it owns the input wherever it was opened.
+        // Game Mode shrinks the vocabulary to its own, so a shortcut resolved
+        // under one of its overlays cannot act on the browser behind it.
         if (self.ui.game_mode() || self.ui.game_screen()) && !command.in_game_mode() {
             return;
         }
@@ -52,11 +50,8 @@ impl App {
             AppCommand::Settings(action) => self.settings_action(action, out),
         };
 
-        // Commands are drained after `ui.update` already built this frame, so a
-        // discrete command that changes UI state needs a follow-up frame to show —
-        // otherwise the loop blocks on input and the change lingers unrendered. The
-        // per-frame analog tick is excluded: it fires every frame and forcing a
-        // repaint from it would spin the idle loop.
+        // Commands drain after `ui.update` built the frame, so a UI change needs
+        // a follow-up one. The analog tick's would spin the idle loop.
         if !matches!(
             command,
             AppCommand::Input(InputCommand::Analog { .. })
@@ -66,7 +61,6 @@ impl App {
             self.ui.request_repaint();
         }
     }
-
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
     fn menu_action(&mut self, action: &MenuAction) {
@@ -116,7 +110,7 @@ impl App {
 
     /// Toggle the current page in saved bookmarks (the bookmark button / Start).
     fn toggle_current_bookmark(&mut self) {
-        let url = self.browser.get_state_mut().page_url().to_string();
+        let url = self.browser.state().page_url().to_string();
         if !url.is_empty() {
             self.ui.menu.toggle_bookmark(&url);
         }
@@ -162,10 +156,8 @@ impl App {
         }
     }
 
-    /// Y in the menu (link-hint toggle elsewhere): the action depends on the
-    /// section. Bookmarks pins/unpins the selected entry on the speed dial;
-    /// History bookmarks (or un-bookmarks) the selected entry; Tabs bookmarks
-    /// the selected tab's URL. Downloads has no Y action.
+    /// Y in the menu: Bookmarks pins the selected entry on the speed dial,
+    /// History and Tabs bookmark it. Downloads has no Y action.
     pub(super) fn menu_y_action(&mut self) {
         match self.ui.menu.section() {
             Section::Bookmarks => {
@@ -196,10 +188,8 @@ impl App {
     /// Apply a settings-overlay action (see [`crate::overlay::settings`]).
     fn settings_action(&mut self, action: &SettingsAction, out: &mut Vec<AppCommand>) {
         match action {
-            // Re-triggering the settings gesture while it's already open is the
-            // two-step quit (open settings, press Select+Start again to confirm):
-            // save the draft like a normal close, then shut down. A first press
-            // just opens, seeding the draft from the live config.
+            // Re-triggering the gesture while it is open is the two-step quit:
+            // save the draft like a normal close, then shut down.
             SettingsAction::Open => {
                 if self.ui.settings.visible() {
                     self.settings_close(out);
@@ -219,17 +209,14 @@ impl App {
                 self.settings_close(out);
                 self.open_url(url.clone());
             }
-            // Binding capture (Controls section): the gesture the user performed
-            // (gamepad gesture or key combo), bound to the listening action. The
-            // raw input comes from the event loop / pad while capturing (see
-            // [`crate::event::handler`] / [`crate::event::gamepad`]).
+            // Binding capture (Controls section): the gesture performed, bound
+            // to the listening action. The raw input comes from the event loop.
             SettingsAction::CaptureBinding { gesture, keyboard } => {
                 self.ui.settings.apply_capture(gesture.clone(), *keyboard);
             }
             SettingsAction::CaptureCancel => self.ui.settings.cancel_capture(),
-            // Self-update (About tab, PortMaster only). Check/Install forward to the
-            // background Updater; Quit reuses the audited two-step-quit path so the
-            // launcher's pm_finish runs and re-execs the freshly swapped binary.
+            // Self-update: Quit reuses the two-step-quit path, so the launcher's
+            // pm_finish runs and re-execs the freshly swapped binary.
             SettingsAction::CheckUpdate => {
                 // A channel edited in this visit is still only in the overlay draft
                 // (`apply_config` runs on close), so adopt it before checking.
@@ -291,7 +278,7 @@ impl App {
         log::info!("restored default settings, bindings and pins");
     }
 
-    /// Close the settings overlay (B / close button): adopt its edited drafts
+    /// Close the settings overlay: adopt its edited drafts
     /// — the config and the gamepad bindings, each saved and re-applied live.
     pub(super) fn settings_close(&mut self, out: &mut Vec<AppCommand>) {
         let (config, bindings) = self.ui.settings_close();
@@ -301,20 +288,18 @@ impl App {
         }
     }
 
-    /// Adopt edited bindings from the settings overlay: persist them, then rebuild
-    /// both devices' tables in the running handler (no restart). Only called when
-    /// the controls changed, so a config-only edit leaves `bindings.toml` — and any
-    /// hand-written comments in it — alone.
+    /// Adopt edited bindings from the settings overlay: persist them, then
+    /// rebuild both devices' tables in the running handler. Only called when the
+    /// controls changed, so a config-only edit leaves `bindings.toml` alone.
     fn apply_bindings(&mut self, store: inputbind::Store, out: &mut Vec<AppCommand>) {
         crate::event::bindings::save(&store);
         // The pad drops what it holds, so a click still open closes here.
         self.event_handler.set_bindings(&store, out);
     }
 
-    /// Adopt an edited config from the settings overlay: persist it to disk, then
+    /// Adopt an edited config from the settings overlay: persist it, then
     /// re-apply the parts the running app can change without a restart. The rest
-    /// (window size, GL backend, engine threads, ad-block lists, persisted site
-    /// data) take effect on the next launch — those rows are flagged with `*`.
+    /// take effect on the next launch, and their rows are flagged with `*`.
     fn apply_config(&mut self, config: AppConfig, out: &mut Vec<AppCommand>) {
         self.config = config;
         self.config.save();
@@ -333,29 +318,17 @@ impl App {
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
-        self.browser.set_haptics(self.config.input.haptics);
         self.ui.menu.history_mut().set_config(&self.config.history);
         self.ui.set_memory_debug(
             self.config.debug.memory_overlay,
             self.config.debug.memory_log,
         );
         self.ui.update.set_config(&self.config.update);
-        // Lightweight-mode block flags take effect on the next subresource load,
-        // no restart needed (unlike the engine-thread counts beside them).
-        self.browser.set_content_filter(
-            crate::browser::content_filter::ContentFilter::from_config(&self.config.data_saving),
-        );
-        // Experimental features apply live too — effective on the next page load.
-        self.browser
-            .set_experimental_prefs(&self.config.experimental);
-        // The page theme needs no reload at all: open tabs restyle in place.
-        self.browser.set_page_theme(self.config.browser.page_theme);
+        self.browser.apply_config(&self.config);
         // Off drops the stored session now, not on the next launch.
         if !self.config.browser.restore_tabs {
             self.session.discard();
         }
-        // Binds later opens; the tabs already open stay.
-        self.browser.set_max_tabs(self.config.browser.max_tabs);
         self.cpu_boost
             .set_enabled(self.config.performance.cpu_boost_on_load);
         // The frame cap takes effect on the very next frame, which is what makes

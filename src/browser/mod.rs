@@ -42,7 +42,7 @@ use servo::profile_traits::mem::MemoryReportResult;
 use servo::{EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
 use std::{
-    cell::{Cell, RefCell, RefMut},
+    cell::{Cell, Ref, RefCell, RefMut},
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -216,9 +216,8 @@ impl AppBrowserInner {
         } else {
             1.0
         };
-        // The download-capture shim must wrap URL.createObjectURL before any
-        // page script runs, so it's a user script (per document, iframes
-        // included), not an evaluate_javascript after load.
+        // The download-capture shim must wrap URL.createObjectURL before any page
+        // script runs, so it is a user script and not an evaluate after load.
         let user_content = Rc::new(servo::UserContentManager::new(&servo));
         user_content.add_script(Rc::new(servo::UserScript::new(
             blob_download::capture_js().to_string(),
@@ -397,6 +396,27 @@ impl AppBrowser {
         })
     }
 
+    /// The same, read-only — so a read site cannot pass for a write.
+    pub fn state(&self) -> Ref<'_, BrowserState> {
+        let active = self.inner.active.get();
+        Ref::map(self.inner.tabs.borrow(), move |tabs| &tabs[active].state)
+    }
+
+    /// Adopt an edited config's live-tunable knobs, mirroring what [`Self::new`]
+    /// read at construction — one list, so a new knob cannot land in only one.
+    pub fn apply_config(&self, config: &AppConfig) {
+        self.set_haptics(config.input.haptics);
+        // Lightweight-mode block flags take effect on the next subresource
+        // load, no restart needed (unlike the engine-thread counts).
+        self.set_content_filter(ContentFilter::from_config(&config.data_saving));
+        // Experimental features apply live too — effective on the next page load.
+        self.set_experimental_prefs(&config.experimental);
+        // The page theme needs no reload at all: open tabs restyle in place.
+        self.set_page_theme(config.browser.page_theme);
+        // Binds later opens; the tabs already open stay.
+        self.set_max_tabs(config.browser.max_tabs);
+    }
+
     /// Whether any tab is fetching, not just the shown one — a background tab's
     /// load competes for the same cores.
     pub fn any_loading(&self) -> bool {
@@ -420,10 +440,9 @@ impl AppBrowser {
         self.inner.download_requests.take()
     }
 
-    /// Ask Servo for a memory report (the data behind `about:memory`), delivered
-    /// asynchronously on an IPC router thread: the callback stashes it and wakes
-    /// the loop, which drains it via [`Self::take_memory_report`]. Not free (it
-    /// walks every reporter), so the loop throttles requests.
+    /// Ask Servo for a memory report, delivered asynchronously on an IPC router
+    /// thread: the callback stashes it and wakes the loop. It walks every
+    /// reporter, so the loop throttles the requests.
     pub fn request_memory_report(&self) {
         let slot = self.inner.mem_report.clone();
         let waker = self.inner.event_sender.clone();
@@ -460,10 +479,9 @@ impl AppBrowser {
         engine::set_experimental_prefs(&self.inner.servo, exp);
     }
 
-    /// Retheme every open tab (a reload: measured on Servo 0.4, notifying a
-    /// loaded page flips `matchMedia` but does not restyle it) and inherit the
-    /// choice into later tabs. Guarded on an actual change so an unrelated
-    /// settings save can't discard scroll and form state.
+    /// Retheme every open tab by reloading it — notifying a loaded page flips
+    /// `matchMedia` without restyling it. Guarded on an actual change, so an
+    /// unrelated settings save cannot discard scroll and form state.
     pub fn set_page_theme(&self, theme: PageTheme) {
         if self.inner.page_theme.replace(theme) == theme {
             return;
@@ -523,5 +541,4 @@ impl AppBrowser {
         // the last owner of the inner state — dropping it drops the `Servo`.
         self.inner.tabs.borrow_mut().clear();
     }
-
 }
