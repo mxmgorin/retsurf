@@ -1,12 +1,13 @@
-use super::{apply_feathering, build_window, set_window_icon, CompositeTiming};
+use super::{apply_feathering, build_window, set_window_icon, CompositeTiming, WindowBackend};
 use crate::config::DisplayConfig;
 use crate::platform::render::{SwglRenderingContext, BYTES_PER_PIXEL};
-use egui_sdl2::{egui, EguiCanvas};
+use egui_sdl2::{egui, EguiCanvas, EventResponse};
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Canvas, Texture, WindowCanvas};
 use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::VideoSubsystem;
+use servo::RenderingContext;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -32,15 +33,18 @@ fn frame_interval(max_fps: u32) -> Option<Duration> {
 /// chrome over it, one texture copy to the panel — the only presentation path
 /// some drivers (the Miyoo Mini's `mmiyoo`) support.
 pub(super) struct SoftwareBackend {
-    pub(super) canvas: WindowCanvas,
+    canvas: WindowCanvas,
     /// Composition target: the page first, then egui over it.
     offscreen: Canvas<Surface<'static>>,
     /// The composed frame, uploaded and copied once per frame.
     present: Texture,
     /// Window size the two above were built for.
     size: (u32, u32),
-    pub(super) egui: EguiCanvas<SurfaceContext<'static>>,
-    pub(super) rendering_ctx: Rc<SwglRenderingContext>,
+    egui: EguiCanvas<SurfaceContext<'static>>,
+    rendering_ctx: Rc<SwglRenderingContext>,
+    /// Styles each fresh [`egui::Context`]; this backend builds a new one per
+    /// resize (rebuilding the painter drops egui's textures).
+    ctx_init: fn(&egui::Context),
     /// Whether the chrome keeps rounded corners (see [`corner_rounding`]).
     rounding: bool,
     /// Shapes the chrome standing in the surface was drawn from; what
@@ -57,13 +61,14 @@ pub(super) struct SoftwareBackend {
     /// Whether to send the panel less than a whole frame (see [`partial_present`]).
     partial: bool,
     /// The frame cap, as a minimum frame time (see [`frame_interval`]).
-    pub(super) frame_interval: Option<Duration>,
+    frame_interval: Option<Duration>,
 }
 
 impl SoftwareBackend {
     pub(super) fn new(
         video_subsystem: &VideoSubsystem,
         config: &DisplayConfig,
+        ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         let mut window = build_window(video_subsystem, config, false)?;
         set_window_icon(&mut window);
@@ -84,13 +89,14 @@ impl SoftwareBackend {
         let rendering_ctx = SwglRenderingContext::new(dpi::PhysicalSize::new(size.0, size.1));
         log::info!("window: swgl rendering context created");
 
-        Ok(Self {
+        let backend = Self {
             canvas,
             offscreen,
             present,
             size,
             egui,
             rendering_ctx,
+            ctx_init,
             rounding: corner_rounding(),
             chrome_shapes: Vec::new(),
             chrome_rects: Vec::new(),
@@ -98,27 +104,19 @@ impl SoftwareBackend {
             last_changed: None,
             partial: partial_present(),
             frame_interval: frame_interval(config.max_fps),
-        })
+        };
+        backend.style_ctx();
+        Ok(backend)
     }
 
-    pub(super) fn set_max_fps(&mut self, max_fps: u32) {
-        self.frame_interval = frame_interval(max_fps);
+    /// Style a (re)built context: the app's theme, then the software profile.
+    fn style_ctx(&self) {
+        (self.ctx_init)(&self.egui.ctx);
+        apply_feathering(&self.egui.ctx, true);
     }
 
-    /// Composition surface, presentation texture, swgl framebuffer.
-    pub(super) fn compose_bytes(&self) -> usize {
-        const FRAMES: usize = 3;
-        let (w, h) = self.size;
-        FRAMES * w as usize * h as usize * BYTES_PER_PIXEL
-    }
-
-    pub(super) fn paint(
-        &mut self,
-        page_at: (i32, i32),
-        page_painted: bool,
-        ctx_init: fn(&egui::Context),
-    ) -> CompositeTiming {
-        self.resize_compose_targets(ctx_init);
+    fn paint_composed(&mut self, page_at: (i32, i32), page_painted: bool) -> CompositeTiming {
+        self.resize_compose_targets();
 
         let Self {
             canvas,
@@ -216,7 +214,7 @@ impl SoftwareBackend {
     /// Keep the composition targets window-sized. Rebuilding the painter drops
     /// egui's textures, uploaded once per [`egui::Context`], so the context is
     /// rebuilt and restyled with it.
-    fn resize_compose_targets(&mut self, ctx_init: fn(&egui::Context)) {
+    fn resize_compose_targets(&mut self) {
         let Ok(size) = self.canvas.output_size() else {
             return;
         };
@@ -230,8 +228,7 @@ impl SoftwareBackend {
         self.egui.destroy();
         self.egui =
             EguiCanvas::for_surface_with_format(self.canvas.window(), &offscreen, COMPOSE_FORMAT);
-        ctx_init(&self.egui.ctx);
-        apply_feathering(&self.egui.ctx, true);
+        self.style_ctx();
         self.offscreen = offscreen;
         // A new surface holds neither the chrome nor the page.
         self.chrome_shapes.clear();
@@ -243,6 +240,64 @@ impl SoftwareBackend {
         let stale = std::mem::replace(&mut self.present, present);
         unsafe { stale.destroy() };
         self.size = size;
+    }
+}
+
+impl WindowBackend for SoftwareBackend {
+    fn window(&self) -> &sdl2::video::Window {
+        self.canvas.window()
+    }
+
+    fn rendering_ctx(&self) -> Rc<dyn RenderingContext> {
+        self.rendering_ctx.clone()
+    }
+
+    fn egui_ctx(&self) -> &egui::Context {
+        &self.egui.ctx
+    }
+
+    fn run_ui(&mut self, run_ui: &mut dyn FnMut(&egui::Context)) {
+        self.egui.run(run_ui);
+    }
+
+    fn repaint_delay(&self) -> Duration {
+        self.egui.repaint_delay()
+    }
+
+    fn on_event(&mut self, event: &sdl2::event::Event) -> EventResponse {
+        self.egui.state.on_event(self.canvas.window(), event)
+    }
+
+    #[cfg(target_os = "android")]
+    fn sync_egui_window_size(&mut self) {
+        self.egui.state.sync_window_size(self.canvas.window());
+    }
+
+    fn pointer_pos_in_points(&self) -> Option<egui::Pos2> {
+        self.egui.state.get_pointer_pos_in_points()
+    }
+
+    fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming> {
+        Some(self.paint_composed(page_at, page_painted))
+    }
+
+    fn frame_interval(&self) -> Option<Duration> {
+        self.frame_interval
+    }
+
+    fn set_max_fps(&mut self, max_fps: u32) {
+        self.frame_interval = frame_interval(max_fps);
+    }
+
+    /// Composition surface, presentation texture, swgl framebuffer.
+    fn compose_bytes(&self) -> usize {
+        const FRAMES: usize = 3;
+        let (w, h) = self.size;
+        FRAMES * w as usize * h as usize * BYTES_PER_PIXEL
+    }
+
+    fn destroy(&mut self) {
+        self.egui.destroy();
     }
 }
 

@@ -1,11 +1,12 @@
-use super::{build_window, set_window_icon};
+use super::{apply_feathering, build_window, set_window_icon, CompositeTiming, WindowBackend};
 use crate::config::DisplayConfig;
 use crate::platform::render::SdlRenderingContext;
-use egui_sdl2::{egui, EguiGlow};
+use egui_sdl2::{egui, EguiGlow, EventResponse};
 use gleam::gl::Gl;
 use sdl2::sys;
 use sdl2::video::GLContext;
 use sdl2::VideoSubsystem;
+use servo::RenderingContext;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -74,18 +75,18 @@ fn prefer_egl_on_x11(video_subsystem: &VideoSubsystem, config: &DisplayConfig) -
 /// FBO, egui draws its colour texture into the window. SDL2 owns the context
 /// because the sdl2 crate hands surfman no window handle for a vendor backend.
 pub(super) struct GlBackend {
-    pub(super) window: sdl2::video::Window,
+    window: sdl2::video::Window,
     // Kept alive for the lifetime of the window; dropping it destroys the context.
     gl_context: GLContext,
     glow_ctx: Arc<glow::Context>,
-    pub(super) egui: EguiGlow,
-    pub(super) rendering_ctx: Rc<SdlRenderingContext>,
+    egui: EguiGlow,
+    rendering_ctx: Rc<SdlRenderingContext>,
     /// egui's handle to the FBO colour texture; the GL name is stable across
     /// resizes, so this stays valid for the program's lifetime.
-    pub(super) browser_tex: egui::TextureId,
+    browser_tex: egui::TextureId,
     /// One panel refresh. A swap that blocks holds the loop on its own, so this
     /// only binds where the driver ignores the interval it accepted.
-    pub(super) frame_interval: Duration,
+    frame_interval: Duration,
     /// See [`DisplayConfig::dark_last_row`].
     dark_last_row: bool,
 }
@@ -94,6 +95,7 @@ impl GlBackend {
     pub(super) fn new(
         video_subsystem: &VideoSubsystem,
         config: &DisplayConfig,
+        ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         // Mali blobs on RK3326/RK3566 expose GLES 3.2; WebRender needs >= 3.0.
         let (profile, minor) = if config.use_gles {
@@ -158,6 +160,8 @@ impl GlBackend {
         let browser_tex = egui
             .painter
             .register_native_texture(rendering_ctx.color_texture());
+        ctx_init(&egui.ctx);
+        apply_feathering(&egui.ctx, false);
 
         Ok(Self {
             window,
@@ -170,8 +174,45 @@ impl GlBackend {
             dark_last_row: config.dark_last_row,
         })
     }
+}
 
-    pub(super) fn paint(&mut self) {
+impl WindowBackend for GlBackend {
+    fn window(&self) -> &sdl2::video::Window {
+        &self.window
+    }
+
+    fn rendering_ctx(&self) -> Rc<dyn RenderingContext> {
+        self.rendering_ctx.clone()
+    }
+
+    fn egui_ctx(&self) -> &egui::Context {
+        &self.egui.ctx
+    }
+
+    fn run_ui(&mut self, run_ui: &mut dyn FnMut(&egui::Context)) {
+        self.egui.run(run_ui);
+    }
+
+    fn repaint_delay(&self) -> Duration {
+        self.egui.repaint_delay()
+    }
+
+    fn on_event(&mut self, event: &sdl2::event::Event) -> EventResponse {
+        self.egui.state.on_event(&self.window, event)
+    }
+
+    #[cfg(target_os = "android")]
+    fn sync_egui_window_size(&mut self) {
+        self.egui.state.sync_window_size(&self.window);
+    }
+
+    fn pointer_pos_in_points(&self) -> Option<egui::Pos2> {
+        self.egui.state.get_pointer_pos_in_points()
+    }
+
+    /// The page is already in the FBO texture egui draws; the blit coordinates
+    /// are the software backend's concern.
+    fn paint(&mut self, _page_at: (i32, i32), _page_painted: bool) -> Option<CompositeTiming> {
         // Servo left its context current and our FBO bound; restore both before
         // egui issues any GL call.
         if let Err(err) = self.window.gl_make_current(&self.gl_context) {
@@ -193,5 +234,18 @@ impl GlBackend {
             }
         }
         self.window.gl_swap_window();
+        None
+    }
+
+    fn frame_interval(&self) -> Option<Duration> {
+        Some(self.frame_interval)
+    }
+
+    fn browser_texture(&self) -> Option<egui::TextureId> {
+        Some(self.browser_tex)
+    }
+
+    fn destroy(&mut self) {
+        self.egui.destroy();
     }
 }

@@ -45,24 +45,41 @@ impl CompositeTiming {
 /// Stands in where the driver reports no refresh rate: every panel here is 60 Hz.
 const ASSUMED_PANEL_INTERVAL: Duration = Duration::from_micros(16_667);
 
+/// What every renderer bundle offers the window — dispatch lives here, so the
+/// rest of the app never spells a backend or a `cfg` again.
+trait WindowBackend {
+    fn window(&self) -> &sdl2::video::Window;
+    fn rendering_ctx(&self) -> Rc<dyn RenderingContext>;
+    fn egui_ctx(&self) -> &egui::Context;
+    fn run_ui(&mut self, run_ui: &mut dyn FnMut(&egui::Context));
+    fn repaint_delay(&self) -> Duration;
+    fn on_event(&mut self, event: &sdl2::event::Event) -> EventResponse;
+    #[cfg(target_os = "android")]
+    fn sync_egui_window_size(&mut self);
+    fn pointer_pos_in_points(&self) -> Option<egui::Pos2>;
+    fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming>;
+    fn frame_interval(&self) -> Option<Duration>;
+    fn destroy(&mut self);
+    /// egui's handle to the page texture; `None` where the backend composites
+    /// the page itself.
+    fn browser_texture(&self) -> Option<egui::TextureId> {
+        None
+    }
+    /// Adopt an edited frame cap; a backend the swap interval paces ignores it.
+    fn set_max_fps(&mut self, _max_fps: u32) {}
+    /// Full-frame buffers kept in RAM; zero where they live in the driver.
+    fn compose_bytes(&self) -> usize {
+        0
+    }
+}
+
 /// The window, its renderer, and the egui drawing the chrome — one bundle,
 /// because which renderer came up decides all three.
 pub struct AppWindow {
     video_subsystem: VideoSubsystem,
-    backend: Backend,
+    backend: Box<dyn WindowBackend>,
     /// The size the window opened at — what [`Self::remembered_size`] measures against.
     initial_size: (u32, u32),
-    /// Applied to every fresh [`egui::Context`]; only the software backend
-    /// builds more than one (a resize rebuilds its painter).
-    #[cfg(feature = "software")]
-    ctx_init: fn(&egui::Context),
-}
-
-/// Boxed: each variant is 700-900 bytes and the enum moves by value.
-enum Backend {
-    Gl(Box<GlBackend>),
-    #[cfg(feature = "software")]
-    Software(Box<SoftwareBackend>),
 }
 
 impl AppWindow {
@@ -74,21 +91,11 @@ impl AppWindow {
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
-        let backend = build_backend(&video_subsystem, config)?;
-        let software = !matches!(backend, Backend::Gl(_));
-        let ctx = match &backend {
-            Backend::Gl(b) => &b.egui.ctx,
-            #[cfg(feature = "software")]
-            Backend::Software(b) => &b.egui.ctx,
-        };
-        ctx_init(ctx);
-        apply_feathering(ctx, software);
+        let backend = build_backend(&video_subsystem, config, ctx_init)?;
         let mut window = Self {
             video_subsystem,
             backend,
             initial_size: (0, 0),
-            #[cfg(feature = "software")]
-            ctx_init,
         };
         // Not the configured size: a driver that owns the screen opens at the panel.
         window.initial_size = window.size();
@@ -96,134 +103,73 @@ impl AppWindow {
     }
 
     pub fn sdl2_window(&self) -> &sdl2::video::Window {
-        match &self.backend {
-            Backend::Gl(b) => &b.window,
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.canvas.window(),
-        }
+        self.backend.window()
     }
 
     /// The context Servo renders into: an FBO in our GL context, or swgl's CPU
     /// framebuffer.
     pub fn rendering_ctx(&self) -> Rc<dyn RenderingContext> {
-        match &self.backend {
-            Backend::Gl(b) => b.rendering_ctx.clone(),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.rendering_ctx.clone(),
-        }
+        self.backend.rendering_ctx()
     }
 
     /// egui's handle to the page texture; `None` on the software backend, which
     /// composites the page itself.
     pub fn browser_texture(&self) -> Option<egui::TextureId> {
-        match &self.backend {
-            Backend::Gl(b) => Some(b.browser_tex),
-            #[cfg(feature = "software")]
-            Backend::Software(_) => None,
-        }
+        self.backend.browser_texture()
     }
 
     pub fn egui_ctx(&self) -> &egui::Context {
-        match &self.backend {
-            Backend::Gl(b) => &b.egui.ctx,
-            #[cfg(feature = "software")]
-            Backend::Software(b) => &b.egui.ctx,
-        }
+        self.backend.egui_ctx()
     }
 
     /// Run the UI; [`Self::paint`] puts the result on screen.
-    pub fn run_ui(&mut self, run_ui: impl FnMut(&egui::Context)) {
-        match &mut self.backend {
-            Backend::Gl(b) => b.egui.run(run_ui),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.run(run_ui),
-        }
+    pub fn run_ui(&mut self, mut run_ui: impl FnMut(&egui::Context)) {
+        self.backend.run_ui(&mut run_ui);
     }
 
     /// How long until egui wants another frame, from the last [`Self::run_ui`].
     pub fn repaint_delay(&self) -> Duration {
-        match &self.backend {
-            Backend::Gl(b) => b.egui.repaint_delay(),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.repaint_delay(),
-        }
+        self.backend.repaint_delay()
     }
 
     /// Feed an SDL event to egui.
     pub fn on_event(&mut self, event: &sdl2::event::Event) -> EventResponse {
-        match &mut self.backend {
-            Backend::Gl(b) => b.egui.state.on_event(&b.window, event),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.state.on_event(b.canvas.window(), event),
-        }
+        self.backend.on_event(event)
     }
 
     /// Refresh egui's cached window size from the live window, for the platforms
     /// where SDL doesn't deliver a size-changed event (see [`crate::ui::AppUi`]).
     #[cfg(target_os = "android")]
     pub fn sync_egui_window_size(&mut self) {
-        match &mut self.backend {
-            Backend::Gl(b) => b.egui.state.sync_window_size(&b.window),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.state.sync_window_size(b.canvas.window()),
-        }
+        self.backend.sync_egui_window_size();
     }
 
     pub fn pointer_pos_in_points(&self) -> Option<egui::Pos2> {
-        match &self.backend {
-            Backend::Gl(b) => b.egui.state.get_pointer_pos_in_points(),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.state.get_pointer_pos_in_points(),
-        }
+        self.backend.pointer_pos_in_points()
     }
 
     /// Paint the last [`Self::run_ui`] and present it. `page_at` is the web
     /// view's top-left in physical pixels; the software backend blits the page
     /// there when `page_painted`. Only the software backend returns timing.
     pub fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming> {
-        // The GL backend draws the page as a texture in the same rect; only the
-        // software one needs to know where that rect is.
-        #[cfg(not(feature = "software"))]
-        let _ = (page_at, page_painted);
-        match &mut self.backend {
-            Backend::Gl(b) => {
-                b.paint();
-                None
-            }
-            #[cfg(feature = "software")]
-            Backend::Software(b) => Some(b.paint(page_at, page_painted, self.ctx_init)),
-        }
+        self.backend.paint(page_at, page_painted)
     }
 
     /// Shortest time between two presents: the panel's period on GL, the frame
     /// cap on software (`None` there means uncapped, which is what `max_fps = 0`
     /// asks for).
     pub fn frame_interval(&self) -> Option<Duration> {
-        match &self.backend {
-            Backend::Gl(b) => Some(b.frame_interval),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.frame_interval,
-        }
+        self.backend.frame_interval()
     }
 
     /// Adopt an edited frame cap (settings overlay). No-op on GL — the swap
     /// interval paces it.
     pub fn set_max_fps(&mut self, max_fps: u32) {
-        match &mut self.backend {
-            Backend::Gl(_) => {}
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.set_max_fps(max_fps),
-        }
-        #[cfg(not(feature = "software"))]
-        let _ = max_fps;
+        self.backend.set_max_fps(max_fps);
     }
 
     pub fn destroy(&mut self) {
-        match &mut self.backend {
-            Backend::Gl(b) => b.egui.destroy(),
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.egui.destroy(),
-        }
+        self.backend.destroy();
     }
 
     /// Logical window size (matches SDL mouse-event coordinates).
@@ -282,11 +228,7 @@ impl AppWindow {
 
     /// Full-frame buffers kept in RAM; zero on GL, where they live in the driver.
     pub fn compose_bytes(&self) -> usize {
-        match &self.backend {
-            Backend::Gl(_) => 0,
-            #[cfg(feature = "software")]
-            Backend::Software(b) => b.compose_bytes(),
-        }
+        self.backend.compose_bytes()
     }
 }
 
@@ -302,22 +244,30 @@ fn apply_feathering(ctx: &egui::Context, software: bool) {
 /// GL unless the config asks for software; a GL failure falls back, so a device
 /// with no driver at all (the Miyoo Mini) lands there without config.
 #[cfg(feature = "software")]
-fn build_backend(video: &VideoSubsystem, config: &DisplayConfig) -> Result<Backend, String> {
+fn build_backend(
+    video: &VideoSubsystem,
+    config: &DisplayConfig,
+    ctx_init: fn(&egui::Context),
+) -> Result<Box<dyn WindowBackend>, String> {
     if config.software_render {
-        return SoftwareBackend::new(video, config).map(|b| Backend::Software(Box::new(b)));
+        return Ok(Box::new(SoftwareBackend::new(video, config, ctx_init)?));
     }
-    match GlBackend::new(video, config) {
-        Ok(backend) => Ok(Backend::Gl(Box::new(backend))),
+    match GlBackend::new(video, config, ctx_init) {
+        Ok(backend) => Ok(Box::new(backend)),
         Err(e) => {
             log::warn!("GL unavailable ({e}); falling back to software rendering");
-            SoftwareBackend::new(video, config).map(|b| Backend::Software(Box::new(b)))
+            Ok(Box::new(SoftwareBackend::new(video, config, ctx_init)?))
         }
     }
 }
 
 #[cfg(not(feature = "software"))]
-fn build_backend(video: &VideoSubsystem, config: &DisplayConfig) -> Result<Backend, String> {
-    GlBackend::new(video, config).map(|b| Backend::Gl(Box::new(b)))
+fn build_backend(
+    video: &VideoSubsystem,
+    config: &DisplayConfig,
+    ctx_init: fn(&egui::Context),
+) -> Result<Box<dyn WindowBackend>, String> {
+    Ok(Box::new(GlBackend::new(video, config, ctx_init)?))
 }
 
 fn build_window(
