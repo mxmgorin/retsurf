@@ -2,13 +2,18 @@
 //! lifecycle in [`tabs`], page input and evaluated scripts in [`input`],
 //! toolbar/router commands in [`command`]. All reactions to Servo (the
 //! `WebViewDelegate` impl, download interception, ad blocking) live in
-//! [`delegate`]; address-bar text interpretation in [`url`].
+//! [`delegate`]; address-bar text interpretation in [`url`]. Around those:
+//! [`engine`] (Servo construction and prefs), [`memory`] (reports and heap
+//! profile), [`pads`] (what the page knows of the gamepads), [`home`] /
+//! [`reader`] (the built-in pages), [`blob_download`] and [`forced_dark`]
+//! (user-content scripts), [`adblock`] and [`content_filter`] (load filtering).
 
 pub mod adblock;
 mod blob_download;
 pub mod content_filter;
 
 mod command;
+mod compositing;
 mod delegate;
 mod engine;
 mod forced_dark;
@@ -418,46 +423,6 @@ impl AppBrowser {
         self.inner.download_requests.take()
     }
 
-    /// Read back entries captured by the injected script (see [`blob_download`]).
-    /// One signalled page yields one entry per call; the read is asynchronous, so
-    /// files land in `blob_downloads` and links in `download_requests`.
-    pub fn poll_blob_downloads(&self) {
-        let pings = self.inner.blob_pings.take();
-        for webview in pings {
-            let inner = self.inner.clone();
-            // Snapshot the linking page now; the callback runs frames later.
-            let referer = self
-                .inner
-                .tab_index(webview.id())
-                .and_then(|i| delegate::referer_for(&self.inner.tabs.borrow()[i].state.page_url));
-            webview.evaluate_javascript(blob_download::TAKE_JS, move |result| {
-                match result {
-                    Ok(servo::JSValue::String(taken)) => match blob_download::parse_taken(&taken) {
-                        Some(blob_download::Captured::File(item)) => {
-                            inner.blob_downloads.push(item);
-                        }
-                        Some(blob_download::Captured::Link { url, name }) => {
-                            inner.download_requests.push(DownloadRequest {
-                                url,
-                                referer,
-                                suggested_name: name,
-                            });
-                        }
-                        None => {}
-                    },
-                    Ok(other) => log::warn!("blob download returned unexpected value: {other:?}"),
-                    Err(e) => log::warn!("blob download read failed: {e:?}"),
-                }
-            });
-        }
-    }
-
-    /// Take and clear the files captured from pages since the last call.
-    #[inline]
-    pub fn take_blob_downloads(&self) -> Vec<BlobDownload> {
-        self.inner.blob_downloads.take()
-    }
-
     /// Ask Servo for a memory report (the data behind `about:memory`), delivered
     /// asynchronously on an IPC router thread: the callback stashes it and wakes
     /// the loop, which drains it via [`Self::take_memory_report`]. Not free (it
@@ -553,98 +518,6 @@ impl AppBrowser {
         log::info!("cleared cookies, cache, storage of {} sites", sites.len());
     }
 
-    /// Spin the Servo event loop once, running delegate callbacks and updating paint output.
-    #[inline]
-    pub fn pump_event_loop(&self) {
-        self.inner.servo.spin_event_loop();
-    }
-
-    /// Paint the contents of the active WebView into its RenderingContext. Returns true if a paint was performed.
-    pub fn paint(&self) -> bool {
-        if !self.inner.repaint_pending.get() {
-            return false;
-        }
-
-        if let Some(tab) = self.inner.active_webview() {
-            self.inner.repaint_pending.set(false);
-            tab.paint();
-            return true;
-        }
-
-        false
-    }
-
-    /// A pad the page should see. Sent now for the document that is loaded, and
-    /// again from [`Self::announce_pads`] for every document that follows.
-    pub fn pad_connected(&self, instance_id: u32, name: String) {
-        let slot = self
-            .inner
-            .pads
-            .borrow_mut()
-            .connect(instance_id, name.clone());
-        self.handle_input(servo::InputEvent::Gamepad(
-            crate::event::gamepad_api::connected(slot, name, self.inner.haptics.get()),
-        ));
-    }
-
-    pub fn pad_disconnected(&self, instance_id: u32) {
-        let Some(slot) = self.inner.pads.borrow_mut().disconnect(instance_id) else {
-            return;
-        };
-        self.handle_input(servo::InputEvent::Gamepad(
-            crate::event::gamepad_api::disconnected(slot),
-        ));
-    }
-
-    /// The slot a pad's input belongs to, or `None` for one never announced.
-    pub fn pad_slot(&self, instance_id: u32) -> Option<usize> {
-        self.inner.pads.borrow().slot_of(instance_id)
-    }
-
-    /// The SDL instance behind a slot, for playing a page's rumble on it.
-    pub fn pad_instance(&self, slot: usize) -> Option<u32> {
-        self.inner.pads.borrow().instance_of(slot)
-    }
-
-    /// Rumble requests queued since the last pass (see the delegate).
-    pub fn take_haptic_requests(&self) -> Vec<servo::GamepadHapticEffectRequest> {
-        self.inner.haptic_requests.take()
-    }
-
-    /// `[input] haptics`, applied live. Documents already loaded keep the
-    /// capability they were told at `Connected`; the gate on requests is here.
-    pub fn set_haptics(&self, on: bool) {
-        self.inner.haptics.set(on);
-    }
-
-    /// Tell the page which panel it is on and where the window sits on it. In
-    /// device pixels; Servo divides by the webview's ratio for the CSS values.
-    pub fn set_screen_geometry(&self, screen: (u32, u32), window: (i32, i32, u32, u32)) {
-        let (width, height) = screen;
-        let (x, y, window_width, window_height) = window;
-        self.inner.screen.set(servo::ScreenGeometry {
-            size: euclid::Size2D::new(width as i32, height as i32),
-            // No docks or system bars on any target we ship to.
-            available_size: euclid::Size2D::new(width as i32, height as i32),
-            window_rect: euclid::Box2D::from_origin_and_size(
-                euclid::Point2D::new(x, y),
-                euclid::Size2D::new(window_width as i32, window_height as i32),
-            ),
-        });
-    }
-
-    /// Follow the chrome's zoom with the page's device pixel ratio. Every open
-    /// tab, not just the active one: a hidden tab would lay out for the old scale.
-    pub fn set_hidpi(&self, scale: f32) {
-        if self.inner.hidpi.replace(scale) == scale {
-            return;
-        }
-        for tab in self.inner.tabs.borrow().iter() {
-            tab.webview
-                .set_hidpi_scale_factor(euclid::Scale::new(scale));
-        }
-    }
-
     /// Shut Servo down cleanly: drop every webview, then the `Servo` handle —
     /// its `Drop` spins the exit pass in which the net/storage threads write the
     /// persisted site data. Skipping it (a bare `process::exit`) loses logins.
@@ -654,21 +527,4 @@ impl AppBrowser {
         self.inner.tabs.borrow_mut().clear();
     }
 
-    pub fn resize(&self, w: u32, h: u32) {
-        if w == 0 || h == 0 {
-            return;
-        }
-        let size = dpi::PhysicalSize::new(w, h);
-        // A full reflow each, so the count is the measurement when chrome
-        // that comes and goes is suspected of resizing the page.
-        log::debug!("viewport resize: {w}x{h}");
-        // Servo's resize reflows *and* resizes the context, but early-returns
-        // when the context size already matches — resizing the context ourselves
-        // first made Servo skip the reflow. Let `WebView::resize` drive both;
-        // with no tab yet, resize the context directly.
-        match self.inner.active_webview() {
-            Some(tab) => tab.resize(size),
-            None => self.inner.rendering_ctx.resize(size),
-        }
-    }
 }

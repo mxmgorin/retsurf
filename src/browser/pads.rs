@@ -6,6 +6,8 @@
 //! only reaches the document that is loaded when it is sent — every fresh
 //! document has to be told again.
 
+use super::AppBrowser;
+
 struct Pad {
     instance_id: u32,
     /// What the page reports as `Gamepad.id`.
@@ -62,6 +64,51 @@ impl PadSlots {
             .iter()
             .enumerate()
             .filter_map(|(slot, pad)| pad.as_ref().map(|p| (slot, p.name.clone())))
+    }
+}
+
+impl AppBrowser {
+    /// A pad the page should see. Sent now for the document that is loaded, and
+    /// again from [`Self::announce_pads`] for every document that follows.
+    pub fn pad_connected(&self, instance_id: u32, name: String) {
+        let slot = self
+            .inner
+            .pads
+            .borrow_mut()
+            .connect(instance_id, name.clone());
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::connected(slot, name, self.inner.haptics.get()),
+        ));
+    }
+
+    pub fn pad_disconnected(&self, instance_id: u32) {
+        let Some(slot) = self.inner.pads.borrow_mut().disconnect(instance_id) else {
+            return;
+        };
+        self.handle_input(servo::InputEvent::Gamepad(
+            crate::event::gamepad_api::disconnected(slot),
+        ));
+    }
+
+    /// The slot a pad's input belongs to, or `None` for one never announced.
+    pub fn pad_slot(&self, instance_id: u32) -> Option<usize> {
+        self.inner.pads.borrow().slot_of(instance_id)
+    }
+
+    /// The SDL instance behind a slot, for playing a page's rumble on it.
+    pub fn pad_instance(&self, slot: usize) -> Option<u32> {
+        self.inner.pads.borrow().instance_of(slot)
+    }
+
+    /// Rumble requests queued since the last pass (see the delegate).
+    pub fn take_haptic_requests(&self) -> Vec<servo::GamepadHapticEffectRequest> {
+        self.inner.haptic_requests.take()
+    }
+
+    /// `[input] haptics`, applied live. Documents already loaded keep the
+    /// capability they were told at `Connected`; the gate on requests is here.
+    pub fn set_haptics(&self, on: bool) {
+        self.inner.haptics.set(on);
     }
 }
 

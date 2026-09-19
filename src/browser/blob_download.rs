@@ -4,7 +4,8 @@
 //! and the entries come back over `evaluate_javascript`: in-page bytes
 //! (`blob:`/`data:`) arrive whole, `a[download]` http(s) links as URLs to fetch.
 
-use crate::data::downloads::BlobDownload;
+use super::{delegate, AppBrowser};
+use crate::data::downloads::{BlobDownload, DownloadRequest};
 use base64::Engine;
 use serde::Deserialize;
 use std::sync::LazyLock;
@@ -95,6 +96,46 @@ fn sanitize(name: &str) -> Option<String> {
         .collect();
     let name = name.trim().trim_start_matches('.').trim();
     (!name.is_empty()).then(|| name.to_string())
+}
+
+impl AppBrowser {
+    /// Read back entries captured by the injected script.
+    /// One signalled page yields one entry per call; the read is asynchronous, so
+    /// files land in `blob_downloads` and links in `download_requests`.
+    pub fn poll_blob_downloads(&self) {
+        let pings = self.inner.blob_pings.take();
+        for webview in pings {
+            let inner = self.inner.clone();
+            // Snapshot the linking page now; the callback runs frames later.
+            let referer = self
+                .inner
+                .tab_index(webview.id())
+                .and_then(|i| delegate::referer_for(&self.inner.tabs.borrow()[i].state.page_url));
+            webview.evaluate_javascript(TAKE_JS, move |result| match result {
+                Ok(servo::JSValue::String(taken)) => match parse_taken(&taken) {
+                    Some(Captured::File(item)) => {
+                        inner.blob_downloads.push(item);
+                    }
+                    Some(Captured::Link { url, name }) => {
+                        inner.download_requests.push(DownloadRequest {
+                            url,
+                            referer,
+                            suggested_name: name,
+                        });
+                    }
+                    None => {}
+                },
+                Ok(other) => log::warn!("blob download returned unexpected value: {other:?}"),
+                Err(e) => log::warn!("blob download read failed: {e:?}"),
+            });
+        }
+    }
+
+    /// Take and clear the files captured from pages since the last call.
+    #[inline]
+    pub fn take_blob_downloads(&self) -> Vec<BlobDownload> {
+        self.inner.blob_downloads.take()
+    }
 }
 
 #[cfg(test)]
