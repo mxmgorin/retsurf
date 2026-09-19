@@ -27,13 +27,11 @@ const BUILD_ID: &str = concat!(
     ")"
 );
 
-/// Shared startup used by both the desktop `main` binary and the Android
-/// `SDL_main` entry point (`android/lib`). Everything platform-specific is
-/// `cfg`-gated here so the two callers stay trivial.
+/// Shared startup for the desktop and Android entry points. Everything
+/// platform-specific is `cfg`-gated here.
 pub fn run_app() {
-    // Capture panics before anything else can panic. On the handheld the launcher
-    // usually discards stderr, so a bare panic leaves no trace beyond exit code 101;
-    // mirroring it to a file is how we recover the message and location.
+    // Before anything else can panic: the handheld launcher discards stderr, so
+    // a bare panic leaves no trace beyond exit code 101.
     install_panic_hook();
 
     init_logging();
@@ -43,60 +41,7 @@ pub fn run_app() {
         .install_default()
         .expect("Error initializing crypto provider");
     let mut app_config = config::AppConfig::load();
-    if let Some(gles) = config::env_flag("RETSURF_GLES") {
-        app_config.display.use_gles = gles;
-    }
-    if let Some(software) = config::env_flag("RETSURF_SOFTWARE") {
-        app_config.display.software_render = software;
-    }
-    // A launcher's way to try a frame cap without editing the config — and the
-    // way to compare two of them in one sitting.
-    if let Some(fps) = std::env::var("RETSURF_MAX_FPS")
-        .ok()
-        .and_then(|v| v.parse::<u32>().ok())
-    {
-        // Lands after `load`'s sanitize pass, so it clamps here.
-        app_config.display.max_fps = fps.min(config::bounds::MAX_FPS.max as u32);
-    }
-    if app_config.display.software_render && !cfg!(feature = "software") {
-        log::warn!(
-            "software rendering asked for, but this build has no `software` feature; using GL"
-        );
-        app_config.display.software_render = false;
-    }
-    // Android GPUs (Mali/Adreno/PowerVR) only expose GLES; desktop GL is never an
-    // option there, so the config/RETSURF_GLES toggle can't select it.
-    #[cfg(target_os = "android")]
-    {
-        app_config.display.use_gles = true;
-        // Don't let SDL synthesize mouse events from touch: we handle finger
-        // events ourselves (drag→scroll, tap→click in `event::touch`), and the
-        // synthesized clicks would otherwise fire at the end of every scroll.
-        std::env::set_var("SDL_TOUCH_MOUSE_EVENTS", "0");
-    }
-
-    if app_config.display.use_gles && !app_config.display.software_render {
-        // SDL creates a GLES context (sets the thread's EGL API to ES). Servo's
-        // surfman context must use the same API or context creation fails, so
-        // force surfman to GLES too. Must be set before any surfman/SDL GL init.
-        std::env::set_var("SURFMAN_FORCE_GLES", "1");
-    }
-
-    // SDL defaults to x11 on a Wayland desktop while surfman reads WAYLAND_DISPLAY,
-    // and two different display servers fail GL context creation.
-    #[cfg(not(target_os = "android"))]
-    if std::env::var_os("SDL_VIDEODRIVER").is_none()
-        && std::env::var_os("WAYLAND_DISPLAY").is_some()
-    {
-        std::env::set_var("SDL_VIDEODRIVER", "wayland");
-    }
-
-    // Android delivers the hardware/gesture Back button to the app as an
-    // AC_BACK key event only when this hint is set; otherwise SDL lets Android
-    // background the activity and the app never sees it. We map AC_BACK to the
-    // Back/Cancel intent in src/event/keyboard.rs.
-    #[cfg(target_os = "android")]
-    std::env::set_var("SDL_ANDROID_TRAP_BACK_BUTTON", "1");
+    platform::startup::prepare(&mut app_config);
 
     // Before SDL and Servo allocate anything: the knobs only bind what comes after.
     platform::heap::tune(browser::memory::resolve(
