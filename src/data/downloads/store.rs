@@ -27,7 +27,7 @@ struct Store {
     entries: Vec<DiskEntry>,
 }
 
-/// Load the saved entries (missing/invalid file → empty).
+/// Load the saved entries; a missing or invalid file yields none.
 pub(super) fn load() -> Vec<Download> {
     crate::data::load_toml::<Store>("downloads.toml")
         .entries
@@ -79,7 +79,7 @@ fn into_download(entry: DiskEntry) -> Download {
 fn entry_filename(entry: &DiskEntry) -> String {
     let from_path = super::file_name_of(&entry.path);
     if from_path.is_empty() {
-        super::worker::filename_from_url(&entry.url)
+        super::naming::filename_from_url(&entry.url)
     } else {
         from_path
     }

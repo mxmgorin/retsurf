@@ -5,6 +5,7 @@
 //! persist to `downloads.toml` (see [`store`]), active ones don't survive a restart. Owns
 //! the entry list and the menu's highlighted row; [`crate::ui`] renders it.
 
+mod naming;
 mod store;
 mod worker;
 
@@ -92,7 +93,7 @@ impl Downloads {
             self.items.insert(
                 0,
                 Download {
-                    filename: worker::filename_from_url(&request.url),
+                    filename: naming::filename_from_url(&request.url),
                     url: request.url,
                     path: String::new(),
                     received: 0,
@@ -112,7 +113,7 @@ impl Downloads {
             Download {
                 filename: request
                     .suggested_name
-                    .unwrap_or_else(|| worker::filename_from_url(&request.url)),
+                    .unwrap_or_else(|| naming::filename_from_url(&request.url)),
                 url: request.url,
                 path: String::new(),
                 received: 0,
@@ -156,7 +157,7 @@ impl Downloads {
     ) -> Result<(String, u64), String> {
         let bytes = bytes?;
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("create dir: {e}"))?;
-        let path = worker::unique_path(&self.dir, filename);
+        let path = naming::unique_path(&self.dir, filename);
         std::fs::write(&path, &bytes).map_err(|e| format!("write: {e}"))?;
         Ok((path, bytes.len() as u64))
     }
