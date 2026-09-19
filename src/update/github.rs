@@ -1,7 +1,7 @@
 //! The GitHub "latest release" query: one blocking `ureq` GET, parsed with
 //! `serde_json`, compared against `CARGO_PKG_VERSION` with `semver`.
 
-use super::{Offer, UpdateState, REPO, USER_AGENT};
+use super::{Offer, UpdateState, REPO};
 use serde::Deserialize;
 
 /// The tag `.github/workflows/nightly.yml` force-moves to the commit it builds.
@@ -36,8 +36,7 @@ struct Asset {
 /// absent resource means for its channel. `Err` only on real network/parse
 /// failures.
 fn fetch<T: serde::de::DeserializeOwned>(url: &str) -> Result<Option<T>, String> {
-    let mut response = match ureq::get(url)
-        .header("User-Agent", USER_AGENT)
+    let mut response = match crate::net::get(url)
         .header("Accept", "application/vnd.github+json")
         .call()
     {
@@ -70,10 +69,9 @@ pub(super) fn latest_release(asset: Option<&str>) -> Result<UpdateState, String>
     classify(&release, asset)
 }
 
-/// Query `.../releases` (which includes pre-releases, unlike `/releases/latest`) and
-/// classify the newest by semver — pre-releases sort below their final version but
-/// above the previous patch, so a beta user gets whichever is highest. Empty (no
-/// releases) is [`UpdateState::UpToDate`]. This is the `beta` channel.
+/// The `beta` channel: `.../releases` includes pre-releases, unlike
+/// `/releases/latest`, and the newest by semver wins — a pre-release sorts below
+/// its final version but above the previous patch.
 pub(super) fn latest_beta(asset: Option<&str>) -> Result<UpdateState, String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=30");
     let releases: Vec<Release> = fetch(&url)?.unwrap_or_default();
@@ -172,8 +170,7 @@ fn current_sha() -> &'static str {
 /// `<hex>  <filename>`. Best-effort: any failure or malformed body yields `None`,
 /// so the install falls back to HTTPS trust alone.
 fn fetch_sha256(url: &str) -> Option<String> {
-    let body = ureq::get(url)
-        .header("User-Agent", USER_AGENT)
+    let body = crate::net::get(url)
         .call()
         .ok()?
         .body_mut()

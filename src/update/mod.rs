@@ -31,8 +31,6 @@ const LAST_CHECK_FILE: &str = "update-check";
 const AUTO_CHECK_INTERVAL: u64 = 24 * 60 * 60;
 /// The PortMaster release asset (see the ARM CI package job).
 const PORTMASTER_ASSET: &str = "retsurf-portmaster.zip";
-/// User-Agent for the GitHub API (it 403s requests without one).
-const USER_AGENT: &str = concat!("retsurf/", env!("CARGO_PKG_VERSION"));
 
 /// The self-update lifecycle. Cloned out through [`Updater::snapshot`] for the UI.
 #[derive(Clone)]
@@ -165,11 +163,9 @@ impl Updater {
         });
     }
 
-    /// Startup hook: kick off a background [`Self::check`] if `auto_check` is on and
-    /// the throttle interval has elapsed since the last one. The timestamp is written
-    /// up front (before the check runs), so a crash-loop or rapid relaunches can't
-    /// hammer the GitHub API. A no-op when disabled or not yet due; the result lands
-    /// in the usual state (the toolbar chip / About tab), never a blocking dialog.
+    /// Startup hook: a background [`Self::check`] if `auto_check` is on and the
+    /// throttle has elapsed. The timestamp is written before the check runs, so
+    /// a crash-loop cannot hammer the GitHub API.
     pub fn auto_check(&self, sender: &UserEventSender) {
         if !self.auto_check {
             return;
@@ -211,7 +207,6 @@ fn publish(state: &Mutex<UpdateState>, next: UpdateState, sender: &UserEventSend
     sender.send(UserEvent::UpdateProgress);
 }
 
-
 /// The auto-check throttle marker's path in the data dir.
 fn last_check_path() -> PathBuf {
     PathBuf::from(crate::config::data_dir()).join(LAST_CHECK_FILE)
@@ -248,11 +243,9 @@ fn resolve_kind() -> Kind {
     Kind::Manual
 }
 
-/// PortMaster gate: Linux (Android's target_os is "android", so a plain linux check
-/// excludes it), the launcher set `RETSURF_DATA_DIR`, and a sibling `Retsurf.sh`
-/// exists — the last part is what tells a real port from a desktop user who set
-/// `RETSURF_DATA_DIR` for a portable profile (see `src/config/paths.rs`). Returns
-/// `(gamedir, launcher)`.
+/// PortMaster gate, returning `(gamedir, launcher)`: Linux, `RETSURF_DATA_DIR`
+/// set, and a sibling `Retsurf.sh`. The last part is what tells a real port from
+/// a desktop user with a portable profile.
 fn portmaster_paths() -> Option<(PathBuf, PathBuf)> {
     if !cfg!(target_os = "linux") {
         return None;

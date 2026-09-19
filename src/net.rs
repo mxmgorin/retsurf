@@ -1,10 +1,40 @@
-//! Shared HTTP download streaming for the download worker
-//! ([`crate::data::downloads`]) and the self-updater ([`crate::update`]):
-//! chunked writes with a throttled progress callback. Per-chunk work (hashing,
-//! cancellation, notifying the main loop) stays with the caller.
+//! Shared HTTP for everything the app fetches on its own behalf — the download
+//! worker ([`crate::data::downloads`]), the self-updater ([`crate::update`]) and
+//! the adblock filter lists: one agent with pre-body deadlines, request
+//! construction, and chunked streaming with a throttled progress callback.
+//! Per-chunk work (hashing, cancellation, notifying the main loop) stays with
+//! the caller.
 
 use std::io::{Read, Write};
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
+
+/// Deadline for each pre-body phase of a request (DNS, connect, headers).
+const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How the app identifies itself when fetching for itself rather than for a
+/// page (the GitHub API 403s a request without one). Fetches on a page's
+/// behalf send the browser's own User-Agent instead.
+pub const USER_AGENT: &str = concat!("retsurf/", env!("CARGO_PKG_VERSION"));
+
+/// The shared agent, with per-phase deadlines so no fetch can hang before its
+/// body; mid-body stalls are each caller's own watchdog's job.
+pub fn agent() -> &'static ureq::Agent {
+    static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
+        ureq::Agent::config_builder()
+            .timeout_resolve(Some(PHASE_TIMEOUT))
+            .timeout_connect(Some(PHASE_TIMEOUT))
+            .timeout_recv_response(Some(PHASE_TIMEOUT))
+            .build()
+            .new_agent()
+    });
+    &AGENT
+}
+
+/// A GET on the shared agent, identified as [`USER_AGENT`].
+pub fn get(url: &str) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
+    agent().get(url).header("User-Agent", USER_AGENT)
+}
 
 /// Throttle for [`stream`]'s progress notifications.
 const NOTIFY_EVERY: Duration = Duration::from_millis(250);

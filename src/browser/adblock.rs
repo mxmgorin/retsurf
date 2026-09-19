@@ -188,7 +188,7 @@ fn build_engine(lists: Vec<String>, cache: String, out: Arc<Mutex<Option<Vec<u8>
 
 fn fetch_list(url: &str) -> Result<String, String> {
     let mut text = String::new();
-    ureq::get(url)
+    crate::net::get(url)
         .call()
         .map_err(|e| e.to_string())?
         .into_body()

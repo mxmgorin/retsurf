@@ -8,11 +8,8 @@ use super::naming::{create_unique, pick_filename};
 use crate::browser::DownloadRequest;
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-
-/// Deadline for each pre-body phase of the request (DNS, connect, headers).
-const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// No received bytes for this long fails the transfer as stalled.
 const STALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -33,19 +30,6 @@ pub(super) struct Shared {
     /// Claimed (exactly once) by whoever stores `result`.
     done: AtomicBool,
     pub result: Mutex<Option<Result<(), String>>>,
-}
-
-/// Shared agent with per-phase deadlines; mid-body stalls are the watchdog's job.
-fn agent() -> &'static ureq::Agent {
-    static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
-        ureq::Agent::config_builder()
-            .timeout_resolve(Some(PHASE_TIMEOUT))
-            .timeout_connect(Some(PHASE_TIMEOUT))
-            .timeout_recv_response(Some(PHASE_TIMEOUT))
-            .build()
-            .new_agent()
-    });
-    &AGENT
 }
 
 /// Everything one worker needs to fetch its file.
@@ -148,7 +132,9 @@ fn watch(shared: Arc<Shared>, sender: UserEventSender) {
 fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), String> {
     use ureq::ResponseExt;
 
-    let mut request = agent().get(&job.url).header("User-Agent", &job.user_agent);
+    let mut request = crate::net::agent()
+        .get(&job.url)
+        .header("User-Agent", &job.user_agent);
     if let Some(referer) = &job.referer {
         request = request.header("Referer", referer);
     }

@@ -11,7 +11,7 @@
 //! crash leaves the install fully-old or fully-new (the current target is moved to a
 //! `.bak-update` we can roll back from).
 
-use super::{publish, Kind, UpdateState, USER_AGENT};
+use super::{publish, Kind, UpdateState};
 use crate::event::user::UserEventSender;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -125,10 +125,7 @@ fn download(
     state: &Mutex<UpdateState>,
     sender: &UserEventSender,
 ) -> Result<String, String> {
-    let response = ureq::get(url)
-        .header("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| e.to_string())?;
+    let response = crate::net::get(url).call().map_err(|e| e.to_string())?;
     let total = crate::net::content_length(response.headers()).unwrap_or(0);
     publish(
         state,
