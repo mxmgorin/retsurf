@@ -1,5 +1,4 @@
-//! The full-screen settings overlay opened with the ⚙ toolbar button (and the
-//! bound `settings` gesture): the config fields that [`crate::config::AppConfig`]
+//! The full-screen settings overlay: the config fields that [`crate::config::AppConfig`]
 //! exposes, editable with the gamepad, grouped into the same kind of tabbed
 //! sections as the menu ([`crate::overlay::menu`]). It owns a *draft* config — a
 //! clone of the live one taken on open — that the rows mutate; closing saves the
@@ -31,9 +30,7 @@ use inputbind::Store;
 
 /// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
-/// bar stays narrow (Content = history + ad-block + data saving, Advanced =
-/// performance + downloads); within those the field's `cat` is shown as a
-/// sub-header.
+/// bar stays narrow; within those the field's `cat` becomes a sub-header.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     Browser,
@@ -81,6 +78,16 @@ impl SettingsSection {
     }
 }
 
+/// The focused row, in the space its section owns — so an About row index can
+/// never reach [`fields::FIELDS`] and switch sections by accident.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Sel {
+    /// A [`fields::FIELDS`] index (the config sections).
+    Field(usize),
+    /// A flat About-tab row: the update block, then the static links.
+    About(usize),
+}
+
 /// Settings overlay state: visibility, the working drafts, the active section,
 /// and the focused row.
 pub struct Settings {
@@ -90,10 +97,10 @@ pub struct Settings {
     draft: AppConfig,
     /// The active section (one tab of the bar).
     section: SettingsSection,
-    /// Focused row in a config section, a [`fields::FIELDS`] index. The Controls
-    /// section keeps its own inside [`Self::controls`], which spans the reset
-    /// rows after the editor's own.
-    selected: usize,
+    /// Focused row, in the space its section owns (see [`Sel`]). The Controls
+    /// section keeps its own cursor inside [`Self::controls`], which spans the
+    /// reset rows after the editor's own.
+    selected: Sel,
     /// The bindings being edited (the Controls section), a clone of the on-disk
     /// store taken on [`Self::open`]. Kept independent of `draft` so a config-only
     /// edit never rewrites `bindings.toml` and vice versa.
@@ -117,7 +124,7 @@ impl Settings {
             visible: false,
             draft: AppConfig::default(),
             section: SettingsSection::Browser,
-            selected: 0,
+            selected: Sel::Field(0),
             bindings_draft: Store::default(),
             bindings_orig: Store::default(),
             armed: None,
@@ -145,7 +152,7 @@ impl Settings {
         self.bindings_orig = self.bindings_draft.clone();
         self.show_controls();
         self.section = SettingsSection::Browser;
-        self.selected = 0;
+        self.selected = Sel::Field(0);
         self.armed = None;
         self.visible = true;
     }
@@ -178,14 +185,15 @@ impl Settings {
         (self.bindings_draft != self.bindings_orig).then(|| self.bindings_draft.clone())
     }
 
-    /// The focused row. In the Controls section the editor owns the cursor, so
-    /// there is only ever one; elsewhere it is a [`fields::FIELDS`] index.
+    /// The focused row, flattened for the renderer: the Controls cursor, a
+    /// [`fields::FIELDS`] index, or an About row — the section says which.
     #[inline]
     pub fn selected(&self) -> usize {
         if self.is_controls_section() {
-            self.controls_cursor()
-        } else {
-            self.selected
+            return self.controls_cursor();
+        }
+        match self.selected {
+            Sel::Field(i) | Sel::About(i) => i,
         }
     }
 
@@ -214,14 +222,13 @@ impl Settings {
     }
 
     /// Number of gamepad-focusable rows on the About tab: the update block's
-    /// `update_rows` (action row, plus a release-notes link when an update is
-    /// available — computed from the live update state by the caller) then the
+    /// `update_rows` (the caller computes it from the live state) then the
     /// static links. Drives [`Self::move_sel`] and the renderer's highlight.
     pub fn about_row_count(&self, update_rows: usize) -> usize {
         update_rows + about_info().links.len()
     }
 
-    /// Focus a row directly (clicking it). In the Controls section `i` indexes
+    /// Focus a row directly. In the Controls section `i` indexes
     /// [`Self::controls_rows`]; otherwise it's a [`fields::FIELDS`] index (and syncs
     /// the active section to it).
     pub fn set_selected(&mut self, i: usize) {
@@ -232,11 +239,11 @@ impl Settings {
             self.controls_set_cursor(i);
         } else if let Some(field) = fields::FIELDS.get(i) {
             self.section = field.section;
-            self.selected = i;
+            self.selected = Sel::Field(i);
         }
     }
 
-    /// Jump straight to a section (clicking its tab), focusing its first row.
+    /// Jump straight to a section, focusing its first row.
     pub fn set_section(&mut self, section: SettingsSection) {
         self.section = section;
         self.armed = None;
@@ -244,13 +251,18 @@ impl Settings {
             self.focus_first_control();
             return;
         }
-        self.selected = fields::FIELDS
+        if section == SettingsSection::About {
+            self.selected = Sel::About(0);
+            return;
+        }
+        let first = fields::FIELDS
             .iter()
             .position(|f| f.section == section)
             .unwrap_or(0);
+        self.selected = Sel::Field(first);
     }
 
-    /// Switch the active section by `delta` (L1/R1; clamped, no wrap).
+    /// Switch the active section by `delta` (clamped, no wrap).
     pub fn switch_section(&mut self, delta: i32) {
         let i = crate::list::step(self.section.index(), delta, SettingsSection::ALL.len());
         self.set_section(SettingsSection::ALL[i]);
@@ -263,19 +275,27 @@ impl Settings {
         self.armed = None;
         if self.is_info_section() {
             // About: a flat list (update rows, then links), all selectable.
-            self.selected = crate::list::step(self.selected, dy, self.about_row_count(update_rows));
+            let at = match self.selected {
+                Sel::About(i) => i,
+                Sel::Field(_) => 0,
+            };
+            let to = crate::list::step(at, dy, self.about_row_count(update_rows));
+            self.selected = Sel::About(to);
             return;
         }
         if self.is_controls_section() {
             self.controls_move(dy);
             return;
         }
+        let Sel::Field(cur) = self.selected else {
+            return;
+        };
         let rows = self.section_indices();
-        let Some(pos) = rows.iter().position(|&g| g == self.selected) else {
+        let Some(pos) = rows.iter().position(|&g| g == cur) else {
             return;
         };
         let np = crate::list::step(pos, dy, rows.len());
-        self.selected = rows[np];
+        self.selected = Sel::Field(rows[np]);
     }
 
     /// Global [`fields::FIELDS`] indices belonging to the active section, in order.
@@ -291,10 +311,13 @@ impl Settings {
     /// Whether the focused row holds free text (A opens the OSK on it). Only ever
     /// true in a config section.
     pub fn selected_is_text(&self) -> bool {
-        self.is_field_section() && matches!(fields::FIELDS[self.selected].kind, Kind::Text { .. })
+        let Sel::Field(i) = self.selected else {
+            return false;
+        };
+        self.is_field_section() && matches!(fields::FIELDS[i].kind, Kind::Text { .. })
     }
 
-    /// Whether row `i` shows ◀▶ step buttons — numbers only (bools/choices toggle
+    /// Whether row `i` shows step buttons — numbers only (bools/choices toggle
     /// on click instead). Config sections only.
     pub fn is_steppable(&self, i: usize) -> bool {
         matches!(
@@ -306,10 +329,13 @@ impl Settings {
     /// The OSK's edit buffer for the focused row — the draft's own `String` for a
     /// `Text` field, so typing lands straight in the draft. `None` otherwise.
     pub fn selected_text_mut(&mut self) -> Option<&mut String> {
+        let Sel::Field(i) = self.selected else {
+            return None;
+        };
         if !self.is_field_section() {
             return None;
         }
-        match &fields::FIELDS[self.selected].kind {
+        match &fields::FIELDS[i].kind {
             Kind::Text { get_mut, .. } => Some(get_mut(&mut self.draft)),
             _ => None,
         }
@@ -319,13 +345,16 @@ impl Settings {
     /// time — the first press only arms it (and [`Self::adjust`], which the
     /// caller falls through to, is a no-op on this kind).
     pub fn confirm_action(&mut self) -> Option<Task> {
+        let Sel::Field(i) = self.selected else {
+            return None;
+        };
         if !self.is_field_section() {
             return None;
         }
-        let Kind::Action { task } = &fields::FIELDS[self.selected].kind else {
+        let Kind::Action { task } = &fields::FIELDS[i].kind else {
             return None;
         };
-        if self.armed.replace(self.selected) == Some(self.selected) {
+        if self.armed.replace(i) == Some(i) {
             self.armed = None;
             return Some(*task);
         }
@@ -340,14 +369,17 @@ impl Settings {
         self.show_controls();
     }
 
-    /// Adjust the focused config field by `dx` (◀ = -1, ▶ = +1): toggle a bool,
+    /// Adjust the focused config field by `dx` (-1 left, +1 right): toggle a bool,
     /// cycle a choice, or step a number within its bounds. No-op outside config
-    /// sections (Controls edits via A; About is read-only).
+    /// sections (Controls edits on activate; About is read-only).
     pub fn adjust(&mut self, dx: i32) {
+        let Sel::Field(i) = self.selected else {
+            return;
+        };
         if !self.is_field_section() {
             return;
         }
-        match &fields::FIELDS[self.selected].kind {
+        match &fields::FIELDS[i].kind {
             Kind::Text { .. } | Kind::Action { .. } => {}
             Kind::Bool { get, set } => {
                 let v = !get(&self.draft);
