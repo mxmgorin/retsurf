@@ -1,4 +1,4 @@
-use super::game::input_map::{self, InputMap};
+use super::game::map_library::MapLibrary;
 use super::game::mode::GameInput;
 use super::gamepad::Gamepad;
 use super::gamepad_api;
@@ -58,8 +58,8 @@ pub struct AppEventHandler {
     capture: Capture,
     /// Game Mode's translator: the pad and the keyboard drive the game.
     game_input: GameInput,
-    /// Every map this run offers, in the order the mode's menu cycles them.
-    input_maps: Vec<InputMap>,
+    /// The maps this run offers; which one runs live is [`Self::game_input`]'s.
+    pub maps: MapLibrary,
     /// Whether the pad routed to the game last pass, to release on a transition.
     game_active: bool,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
@@ -93,8 +93,8 @@ impl AppEventHandler {
 
         let key_names = KeyNames::new();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
-        let input_maps = input_map::load_all(&key_names);
-        let map = input_map::pick(&input_maps, &game_mode.input_map);
+        let maps = MapLibrary::load(&key_names);
+        let map = maps.pick(&game_mode.input_map);
         if map.id != game_mode.input_map {
             log::warn!(
                 "input map: no `{}`; using `{}`",
@@ -116,7 +116,7 @@ impl AppEventHandler {
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             game_input,
-            input_maps,
+            maps,
             game_active: false,
             touch: super::touch::TouchState::new(),
         })
@@ -131,42 +131,22 @@ impl AppEventHandler {
         self.gamepad.set_config(cfg);
     }
 
-    /// Every map this run offers, for the list the mode's menu opens.
-    pub fn input_maps(&self) -> &[InputMap] {
-        &self.input_maps
-    }
-
-    /// The map `id` names, for the rows that show what it sends. `None` for a
-    /// stale id, failing the same way as [`Self::input_map_mut`].
-    pub fn input_map(&self, id: &str) -> Option<&InputMap> {
-        self.input_maps.iter().find(|p| p.id == id)
-    }
-
-    /// The same, to write one row of it (the editor). Held in memory until
-    /// [`Self::save_input_map`] writes it; the live map is re-adopted
-    /// there, so an edit to the running one takes effect on save and not before.
-    pub fn input_map_mut(&mut self, id: &str) -> Option<&mut InputMap> {
-        self.input_maps.iter_mut().find(|p| p.id == id)
-    }
-
-    /// Write an edited map to its file. Returns its name.
+    /// Write an edited map to its file (see [`MapLibrary::save`]) and re-adopt
+    /// it if it is the one running. Returns its name.
     pub fn save_input_map(
         &mut self,
         id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> String {
-        let Some(at) = self.input_maps.iter().position(|p| p.id == id) else {
+        let Some(name) = self.maps.save(id, &self.key_names) else {
             return self.input_map_name().to_string();
         };
-        self.input_maps[at] = self.input_maps[at].save(&self.key_names);
-        let name = self.input_maps[at].name.clone();
-        self.readopt_input_map(at, browser, commands);
+        self.readopt_input_map(id, browser, commands);
         name
     }
 
-    /// Rename what the menu shows and write it. The id stays what it was: it is
-    /// the file's stem, and `[game_mode] input_map` names it.
+    /// Rename what the menu shows and write it.
     pub fn rename_input_map(
         &mut self,
         id: &str,
@@ -174,53 +154,29 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if let Some(map) = self.input_maps.iter_mut().find(|p| p.id == id) {
-            map.set_name(name);
-        }
+        self.maps.set_name(id, name);
         self.save_input_map(id, browser, commands);
     }
 
-    /// Copy a map under a new name, as a file of its own. Returns the id it
-    /// landed under — the name decides it, so a collision cannot shadow one.
     pub fn duplicate_input_map(&mut self, id: &str, name: String) -> String {
-        let taken: Vec<String> = self.input_maps.iter().map(|p| p.id.clone()).collect();
-        let new_id = input_map::new_id(&name, &taken);
-        let copy = input_map::pick(&self.input_maps, id).copy(&new_id, name, &self.key_names);
-        self.input_maps.push(copy.save(&self.key_names));
-        new_id
+        self.maps.duplicate(id, name, &self.key_names)
     }
 
-    /// Add a map that passes the whole pad through, for the editor to bind from
-    /// there. Returns the id it landed under, like a duplicate.
     pub fn new_input_map(&mut self, name: String) -> String {
-        let taken: Vec<String> = self.input_maps.iter().map(|p| p.id.clone()).collect();
-        let new_id = input_map::new_id(&name, &taken);
-        let map = input_map::InputMap::passthrough(&new_id, name, &self.key_names);
-        self.input_maps.push(map.save(&self.key_names));
-        new_id
+        self.maps.add_passthrough(name, &self.key_names)
     }
 
-    /// Delete a map's file: a built-in comes back as the binary carries it,
-    /// anything else is gone. The mode cannot run what is no longer there, so
-    /// it takes the first map instead; returns what it runs now.
+    /// Delete a map (see [`MapLibrary::delete`]). The mode cannot run what is
+    /// no longer there, so it takes the first map instead; returns what it
+    /// runs now.
     pub fn delete_input_map(
         &mut self,
         id: &str,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        let Some(at) = self.input_maps.iter().position(|p| p.id == id) else {
-            return self.live_input_map();
-        };
-        self.input_maps[at].delete();
-        match input_map::built_in(id, &self.key_names) {
-            Some(original) => self.input_maps[at] = original,
-            None => {
-                self.input_maps.remove(at);
-            }
-        }
-        if self.game_input.map_id() == id {
-            let map = input_map::pick(&self.input_maps, id).clone();
+        if self.maps.delete(id, &self.key_names) && self.game_input.map_id() == id {
+            let map = self.maps.pick(id).clone();
             self.game_input.set_map(map, browser, commands);
         }
         self.live_input_map()
@@ -228,7 +184,7 @@ impl AppEventHandler {
 
     /// The map driving the mode right now, as the menu shows it.
     pub fn input_map_name(&self) -> &str {
-        &input_map::pick(&self.input_maps, self.game_input.map_id()).name
+        &self.maps.pick(self.game_input.map_id()).name
     }
 
     pub fn input_map_id(&self) -> &str {
@@ -244,27 +200,22 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        let map = input_map::pick(&self.input_maps, id).clone();
+        let map = self.maps.pick(id).clone();
         let named = (map.id.clone(), map.name.clone());
         self.game_input.set_map(map, browser, commands);
         named
     }
 
     fn live_input_map(&self) -> (String, String) {
-        let map = input_map::pick(&self.input_maps, self.game_input.map_id());
+        let map = self.maps.pick(self.game_input.map_id());
         (map.id.clone(), map.name.clone())
     }
 
-    /// Re-adopt an entry if it is the one the mode is running, so an edit to it
+    /// Re-adopt `id` if it is the one the mode is running, so an edit to it
     /// takes effect without a restart.
-    fn readopt_input_map(
-        &mut self,
-        at: usize,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        if self.input_maps[at].id == self.game_input.map_id() {
-            let map = self.input_maps[at].clone();
+    fn readopt_input_map(&mut self, id: &str, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        if id == self.game_input.map_id() {
+            let map = self.maps.pick(id).clone();
             self.game_input.set_map(map, browser, commands);
         }
     }

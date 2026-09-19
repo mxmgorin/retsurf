@@ -291,7 +291,8 @@ impl App {
         let live = self.event_handler.input_map_id().to_string();
         let rows = self
             .event_handler
-            .input_maps()
+            .maps
+            .all()
             .iter()
             .map(|map| MapRow {
                 id: map.id.clone(),
@@ -374,7 +375,7 @@ impl App {
     fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.map_edit.map_id().to_string();
         let raw = text.map(RawTarget::Short);
-        if let Some(map) = self.event_handler.input_map_mut(&id) {
+        if let Some(map) = self.event_handler.maps.get_mut(&id) {
             match slot {
                 Slot::Button(pad) => map.set_raw_pad(pad, raw),
                 Slot::Stick(side) => map.set_raw_stick(side, raw),
@@ -390,7 +391,7 @@ impl App {
             return;
         };
         let id = self.ui.map_edit.map_id().to_string();
-        if let Some(map) = self.event_handler.input_map_mut(&id) {
+        if let Some(map) = self.event_handler.maps.get_mut(&id) {
             map.set_raw_stick_arrows(side);
         }
         self.edited_input_map();
@@ -404,7 +405,7 @@ impl App {
     /// Re-snapshot the editor's rows from the map it has open. A stale id keeps
     /// the last snapshot: writes to it are already no-ops (see `set_map_target`).
     fn refresh_map_edit(&mut self) {
-        let Some(map) = self.event_handler.input_map(self.ui.map_edit.map_id()) else {
+        let Some(map) = self.event_handler.maps.get(self.ui.map_edit.map_id()) else {
             return;
         };
         let text = |raw: Option<&RawTarget>| match raw {
