@@ -9,7 +9,7 @@
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
 
-retsurf (**ret**ro + **surf**ing) is a web browser built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience on small screens and unusual devices, while staying lightweight and portable. It is **gamepad-first**, with flexible pad and keyboard controls designed to make web browsing and gaming comfortable there.
+retsurf is a web browser written in Rust and built using [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on PCs, with flexible, remappable controls for comfortable web browsing and gaming using only a gamepad or keyboard.
 
 **[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
 
@@ -32,26 +32,22 @@ retsurf (**ret**ro + **surf**ing) is a web browser built with [Servo](https://se
 |:---:|:---:|:---:|:---:|
 | ![The menu's Tabs section: open tabs by title, each with a bookmark and close button](resources/images/retsurf-tabs.png) | ![The Downloads section: one file downloading with percentage and size, one finished](resources/images/retsurf-downloads.png) | ![A Wikipedia article stripped to its text by reader mode](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
 
-## Why?
-
-Handheld Linux devices lack good browser options. Lightweight browsers struggle with modern, JS-heavy sites, while desktop browsers rely on windowing systems, mouse and keyboard input, and more capable hardware. retsurf is an attempt to build a web browser for devices like this, combining a modern web engine with gamepad-first controls and direct rendering that requires no compositor.
-
 ## Features
 
 - **Gamepad-first navigation**<br>
-  Virtual cursor with stick/D-pad control, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
+  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
 
 - **Customizable browser controls**<br>
   Every browser action can be rebound in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with support for taps, holds, and button chords.
 
-- **Game Mode**<br>
-  Hides the browser chrome and hands keyboard and gamepad input to the page. Built-in [input maps](docs/CONFIGURATION.md#game-mode-input-maps-input_mapstoml) cover arrows, WASD, mouse, and raw gamepad, and all are editable, so different games can have different control schemes.
+- **Game mode**<br>
+  Hides the browser chrome and hands keyboard and gamepad input to the page, with an in-app remapper that can rebind any button or stick and save multiple profiles. Built-in input maps cover arrows, WASD, mouse, and raw gamepad input.
 
 - **Tabs, bookmarks, history, and downloads**<br>
   Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation, with a toolbar chip for active downloads.
 
 - **Real page zoom**<br>
-  Reflows the layout rather than magnifying it, following Firefox's 50–300% zoom ladder; zoom is per-tab.
+  Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
 
 - **Reader mode**<br>
   Strips pages down to their articles using Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so it also works with logged-in and dynamically rendered pages.
@@ -62,20 +58,17 @@ Handheld Linux devices lack good browser options. Lightweight browsers struggle 
 - **Ad & tracker blocking**<br>
   Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are cached locally, so blocking works offline.
 
-- **Native start page**<br>
-  A search/URL field over a speed-dial grid of pins (`retsurf:home`), fully controller-navigable like every other overlay.
-
 - **In-app updates**<br>
   Checks GitHub for updates, displays release notes, and installs updates in place on PortMaster handhelds and Linux desktops. Supports stable, beta, and nightly channels.
 
 - **Audio and video**<br>
-  A custom servo-media backend over SDL2 covers Web Audio and the `<audio>` and `<video>` elements: MP3, WAV, FLAC, Ogg/Vorbis, and AAC/M4A stream as they download, and `<video>` decodes H.264-in-MP4 in software. No MSE, so this supports direct files and embeds rather than streaming sites.
+  A custom Servo media backend provides audio and video playback for MP3, WAV, FLAC, Ogg/Vorbis, AAC/M4A, and H.264 video in MP4. Supports direct media files and embedded players, but not streaming sites that require MSE.
 
 - **No display server required**<br>
   SDL2 draws through whatever video backend the firmware ships, including handhelds that run none at all. X11 and Wayland are optional, not required.
 
 - **Hardware or software rendering**<br>
-  A custom Servo rendering context over SDL2 draws pages on the device's OpenGL ES 3.x driver. Where there is no GPU, the `software` build renders on the CPU instead.
+  A custom Servo rendering backend uses OpenGL ES for GPU-accelerated rendering on supported devices, with a CPU-based software renderer for devices without a GPU.
 
 ## Install
 
