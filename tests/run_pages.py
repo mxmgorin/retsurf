@@ -531,6 +531,10 @@ class Harness:
         return found, offset
 
 
+def panic_line(log):
+    return next(l for l in log.splitlines() if "panicked at" in l).strip()
+
+
 def run_case(case, harness, binary, keep):
     profile = os.path.join(harness.out, case.name)
     shutil.rmtree(profile, ignore_errors=True)
@@ -574,6 +578,9 @@ def run_case(case, harness, binary, keep):
                 case.drive.step(driver, beacons)
             time.sleep(0.5)
     finally:
+        # The engine can still panic on the way out, so mark where its own run
+        # ended: only what it printed before we asked it to quit is the page's.
+        live = os.path.getsize(app_log_path)
         if app.poll() is None:
             app.send_signal(signal.SIGTERM)
             try:
@@ -582,8 +589,10 @@ def run_case(case, harness, binary, keep):
                 app.kill()
         app_log.close()
 
-    with open(app_log_path, "r", errors="replace") as log:
-        output = log.read()
+    with open(app_log_path, "rb") as log:
+        raw = log.read()
+    output = raw[:live].decode(errors="replace")
+    exiting = raw[live:].decode(errors="replace")
     saved_to = os.path.join(profile, "downloads")
     saved = len(os.listdir(saved_to)) if os.path.isdir(saved_to) else 0
     if not keep:
@@ -591,9 +600,10 @@ def run_case(case, harness, binary, keep):
 
     for beacon in beacons:
         print(f"    {beacon}")
+    if "panicked at" in exiting:
+        print(f"    note: the engine panicked on the way out ({panic_line(exiting)})")
     if "panicked at" in output:
-        panic = next(l for l in output.splitlines() if "panicked at" in l)
-        return f"the browser panicked: {panic.strip()}"
+        return f"the browser panicked: {panic_line(output)}"
     if died is not None:
         return f"the browser exited ({died}) after {len(beacons)} beacon(s)"
     if not beacons:
