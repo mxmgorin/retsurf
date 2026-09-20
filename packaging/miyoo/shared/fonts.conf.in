@@ -1,13 +1,12 @@
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <!--
-  The whole font world this device has. OnionOS and Allium ship no fontconfig and
-  no fonts, so the package brings both, and this file is the only configuration
-  fontconfig sees: none of the alias rules a desktop keeps in conf.d are there to
-  fall back on, so the ones pages actually ask for are written out below.
+  OnionOS and Allium ship no fontconfig and no fonts, so the package brings both
+  and this is the only configuration fontconfig sees: none of the alias rules a
+  desktop keeps in conf.d, so the families pages ask for are written out below.
 
-  @GAMEDIR@ is substituted by launch.sh, because the app directory is only known
-  once it is installed.
+  @GAMEDIR@ is substituted by launch.sh, since the app path is only known once
+  it is installed.
 -->
 <fontconfig>
   <dir>@GAMEDIR@/fonts</dir>

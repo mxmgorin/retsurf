@@ -11,7 +11,7 @@
         "porter": [
             "mxmgorin"
         ],
-        "desc": "A lightweight, experimental web browser powered by the Servo rendering engine. Native gamepad navigation with a virtual cursor and Vimium-style link hints, an on-screen keyboard, tabs, bookmarks, history, downloads, real page zoom, reader mode, and network-level ad and tracker blocking. Renders modern websites over OpenGL ES with no X11 or Wayland compositor.",
+        "desc": "A lightweight, gamepad-first web browser powered by the Servo rendering engine. It renders modern websites over OpenGL ES with no X11 or Wayland compositor, and is driven entirely from the gamepad: a virtual cursor, Vimium-style link hints, and an on-screen keyboard. Tabs, bookmarks, history, downloads, real page zoom, reader mode, and network-level ad and tracker blocking are all built in.",
         "desc_md": null,
         "inst": "Ready to run",
         "inst_md": null,

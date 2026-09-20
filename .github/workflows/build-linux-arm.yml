@@ -177,32 +177,28 @@ jobs:
           pm=portmaster-dist
           rm -rf "$pm"
           mkdir -p "$pm/retsurf"
-          # Only the launcher sits at the port root (installs to
-          # /roms/ports/Retsurf.sh). Everything else lives in the retsurf/ gamedir
-          # (/roms/ports/retsurf/), matching how installed ports lay out: port.json
-          # + gameinfo.xml + README + screenshot + licenses next to the binaries.
-          # port.json's bare "screenshot.png" and gameinfo's "./retsurf/screenshot.png"
-          # (written relative to the merged system gamelist) both resolve there.
-          cp portmaster/Retsurf.sh "$pm/"
-          cp portmaster/port.json "$pm/retsurf/"
-          cp portmaster/gameinfo.xml "$pm/retsurf/"
-          cp portmaster/README.md "$pm/retsurf/"
-          cp portmaster/screenshot.png "$pm/retsurf/"
+          # Only the launcher at the port root, everything else in the retsurf/
+          # gamedir, as installed ports lay out. Both screenshot paths — port.json's
+          # bare one and gameinfo's, relative to the merged gamelist — resolve there.
+          cp packaging/portmaster/Retsurf.sh "$pm/"
+          cp packaging/portmaster/port.json "$pm/retsurf/"
+          cp packaging/portmaster/gameinfo.xml "$pm/retsurf/"
+          cp packaging/portmaster/README.md "$pm/retsurf/"
+          cp packaging/portmaster/screenshot.png "$pm/retsurf/"
           # Bring over any bundled gamedir assets (licenses/), minus .gitkeep.
-          cp -r portmaster/retsurf/. "$pm/retsurf/"
+          cp -r packaging/portmaster/retsurf/. "$pm/retsurf/"
           rm -f "$pm/retsurf/.gitkeep"
           # All three optimized variants; Retsurf.sh execs the matching one.
           cp bins/retsurf.a35 bins/retsurf.a53 bins/retsurf.a55 "$pm/retsurf/"
           chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
             "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
-          # The fontconfig fallback, reached only where the firmware ships none
-          # (tools/arm64/runtime-libs.sh). Fonts too: such a device may register
-          # none of its own.
+          # Bundled libraries, fontconfig and fonts, reached only where the
+          # firmware carries none of its own (tools/arm64/runtime-libs.sh).
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fonts-dejavu-core
           tools/arm64/runtime-libs.sh "$pm/retsurf/libs"
           mkdir -p "$pm/retsurf/etc/fonts" "$pm/retsurf/fonts"
-          cp resources/portmaster/fonts.conf.in "$pm/retsurf/etc/fonts/"
+          cp packaging/portmaster/fonts.conf.in "$pm/retsurf/etc/fonts/"
           for f in DejaVuSans DejaVuSans-Bold DejaVuSerif DejaVuSerif-Bold \
             DejaVuSansMono DejaVuSansMono-Bold; do
             cp "/usr/share/fonts/truetype/dejavu/$f.ttf" "$pm/retsurf/fonts/"

@@ -5,15 +5,13 @@
 #
 # `-n` skips the build; naming no firmware does both. Produces dist/<firmware>/
 # (the SD-card tree) and dist/retsurf-<firmware>.zip. Only the card layout
-# differs between them, so the payload is collected once and copied into each.
+# differs, so the payload is collected once and copied into each.
 #
-# Three sets of files come from outside this repo, because none of them are ours
-# to keep a second copy of:
+# Three sets of files come from outside this repo, none of them ours to vendor:
 #
 #   RETSURF_SDL_LIB   the Miyoo SDL2 build and its shims, from a sibling port
-#                     (retsend's `onionos/App/Retsend/lib`) — the panel needs the
-#                     `Mini` video driver and no upstream SDL2 has it
-#   the toolchain     libstdc++/libgcc_s, from the build image, so they match the
+#                     (retsend); no upstream SDL2 has the `Mini` video driver
+#   the toolchain     libstdc++/libgcc_s from the build image, so they match the
 #                     compiler that built the binary
 #   Debian buster     fontconfig and its two dependencies, that being the
 #                     glibc-2.28 era; neither firmware ships any of it
@@ -37,7 +35,8 @@ repo=$(cd "$here/../.." && pwd)
 image=retsurf-armhf-cross
 sdl_lib=${RETSURF_SDL_LIB:-$HOME/Repos/retsend/onionos/App/Retsend/lib}
 fonts_dir=${RETSURF_FONTS_DIR:-/usr/share/fonts/TTF}
-shared=$repo/resources/miyoo
+pkg=$repo/packaging/miyoo
+shared=$pkg/shared
 payload=$repo/dist/miyoo-payload
 
 if [ "$build" = yes ]; then
@@ -52,9 +51,8 @@ for f in libSDL2-2.0.so.0 libEGL.so libjson-c.so.5 fallback/libGLESv2.so fallbac
   [ -f "$sdl_lib/$f" ] || { echo "missing $sdl_lib/$f (set RETSURF_SDL_LIB)" >&2; exit 1; }
 done
 
-# The trust store, from wherever this distribution keeps its extracted bundle.
-# Servo's TLS verifier reads the platform store and panics when it finds none,
-# and no Miyoo firmware has one.
+# Servo panics when the platform store holds no CA bundle, which is every Miyoo.
+# Taken from wherever this distribution keeps its extracted one.
 ca=${RETSURF_CA_BUNDLE:-}
 if [ -z "$ca" ]; then
   for p in /etc/ssl/certs/ca-certificates.crt \
@@ -68,10 +66,8 @@ fi
 rm -rf "$payload"
 mkdir -p "$payload/lib/fallback" "$payload/fonts"
 
-# The runtime the toolchain and Debian owe us, collected in the build image so
-# the C++ runtime is the one this compiler pairs with. `RETSURF_NO_DOCKER=1` runs
-# the same script directly, for a machine that already has the toolchain unpacked
-# — which is what CI is.
+# Collected in the build image so the C++ runtime matches the compiler that built
+# the binary. `RETSURF_NO_DOCKER=1` skips it where the toolchain is unpacked (CI).
 if [ "${RETSURF_NO_DOCKER:-0}" = 1 ]; then
   "$here/runtime-libs.sh" "$payload/lib" "$bin"
 else
@@ -84,9 +80,8 @@ cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5"
 cp -a "$sdl_lib/fallback/libGLESv2.so" "$sdl_lib/fallback/libshmvar.so" "$payload/lib/fallback/"
 [ -f "$sdl_lib/README.md" ] && cp -a "$sdl_lib/README.md" "$payload/lib/"
 
-# Sans in three styles, serif in three, one mono: enough for the web's generic
-# families and the ones `fonts.conf.in` maps onto them, and small enough that the
-# cache and the open faces stay cheap on a 128 MB device.
+# The generic families `fonts.conf.in` maps, and no more: on 128 MB the cache and
+# the open faces both cost.
 for f in DejaVuSans DejaVuSans-Bold DejaVuSans-Oblique \
          DejaVuSerif DejaVuSerif-Bold DejaVuSerif-Italic DejaVuSansMono; do
   cp "$fonts_dir/$f.ttf" "$payload/fonts/"
@@ -97,14 +92,14 @@ for fw in "${firmwares[@]}"; do
   case $fw in
     # Allium scales the icon it finds, so that one is the 256px source.
     allium)
-      src=$repo/allium/Apps/Retsurf.pak
+      src=$pkg/allium/Apps/Retsurf.pak
       app=$dist/Apps/Retsurf.pak
       root=Apps
       icon=$repo/resources/icon.png
       ;;
     # Onion's MainUI draws it at native size, hence the package's own downscale.
     onionos)
-      src=$repo/onionos/App/Retsurf
+      src=$pkg/onionos/App/Retsurf
       app=$dist/App/Retsurf
       root=App
       icon=$src/icon.png
@@ -118,7 +113,7 @@ for fw in "${firmwares[@]}"; do
   cp "$shared/config.toml" "$app/etc/"
   cp "$ca" "$app/etc/ssl/cacert.pem"
   cp "$src/config.json" "$src/launch.sh" "$app/"
-  cp "$repo/$fw/README.md" "$icon" "$app/"
+  cp "$pkg/$fw/README.md" "$icon" "$app/"
   install -m 755 "$bin" "$app/retsurf"
   chmod 755 "$app/launch.sh"
   # Allium's Games tab entry, which hands over to the install under `Apps/`.
@@ -132,7 +127,7 @@ for fw in "${firmwares[@]}"; do
   if command -v zip >/dev/null 2>&1; then
     (cd "$dist" && zip -qr "$zip_out" "$root")
   else
-    # Python's writes no permission bits, which costs nothing on a FAT32 card.
+    # Python's writes no permission bits, which costs nothing on FAT32.
     (cd "$dist" && python3 -m zipfile -c "$zip_out" "$root")
   fi
   du -sh "$app" "$zip_out"

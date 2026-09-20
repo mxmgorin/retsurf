@@ -11,7 +11,7 @@
 //! the four D-pad directions; keyboard codes are just uppercase letter pills.
 //! While a code is being typed, the already-pressed leading cells dim and the
 //! hints whose codes no longer match fade out, leaving only the live targets —
-//! the spatial selection frame stays so A / Enter still works.
+//! the spatial selection frame stays so confirm still works.
 
 use super::theme::ACCENT;
 use crate::overlay::hints::{Hints, Label, Sym};
@@ -77,10 +77,9 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect,
     }
 }
 
-/// Draw the hint code as a row of label cells, sitting just above the element's
-/// top-left corner so it doesn't cover the element's own first characters. Falls
-/// back to overlapping when the element is at the top of the view (no room).
-/// `done` is how many leading cells are already typed (drawn muted).
+/// Draw the hint code as a row of label cells just above the element's top-left
+/// corner, overlapping instead when it sits at the top of the view. `done` is how
+/// many leading cells are already typed (drawn muted).
 fn draw_badge(
     painter: &egui::Painter,
     rect: egui::Rect,

@@ -18,14 +18,12 @@ get_controls
 
 GAMEDIR=/$directory/ports/retsurf/
 
-# Pick the build matching this device's CPU. Match only cores we  recognize
-# anything unknown falls through to the v8.0baseline, which runs on every ARMv8.0+ core.
-# All target SoCs are homogeneous, so the first CPU's part id is representative.
+# An unrecognized part falls through to the A53 build, which runs on any ARMv8.0+
+# core. These SoCs are homogeneous, so the first core's part id speaks for all.
 #   0xd05 = Cortex-A55 (RK3566, Allwinner A523)
 #   0xd04 = Cortex-A35 (RK3326)
-#   0xd03 = Cortex-A53 (H700, Allwinner A133 Plus) — and the sane default.
-# ARM "CPU part" id of the first (representative) core, lowercased. Kept as a
-# global so the selection can be logged to log.txt after the redirect below.
+#   0xd03 = Cortex-A53 (H700, Allwinner A133 Plus), the default
+# Global so the pick can still be logged after the redirect below.
 CPU_PART="$(grep -m1 -i 'CPU part' /proc/cpuinfo | grep -oiE '0x[0-9a-f]+' | head -1 | tr 'A-Z' 'a-z')"
 select_binary() {
   case "$CPU_PART" in
@@ -36,8 +34,7 @@ select_binary() {
 }
 
 BINNAME="$(select_binary)"
-# Guard against a missing/non-executable variant: prefer the baseline, and if
-# even that is gone, fail loudly instead of exec-ing nothing.
+# A missing variant falls back to the baseline; with that gone too, fail loudly.
 if [ ! -x "$GAMEDIR/$BINNAME" ]; then
   BINNAME="retsurf.a53"
 fi
@@ -51,8 +48,6 @@ cd "$GAMEDIR"
 
 > "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
 
-# Record which per-CPU build the launcher picked (CPU part -> binary) so log.txt
-# shows it for support/debugging.
 echo "retsurf: CPU part ${CPU_PART:-unknown}, selected $BINNAME"
 
 # Swap tuning, off unless `swap-tuning.on` exists here: it is system-wide and

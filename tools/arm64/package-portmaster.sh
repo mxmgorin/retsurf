@@ -3,10 +3,9 @@
 #
 #   tools/arm64/package-portmaster.sh [-n]   # -n: skip the build, package what is there
 #
-# Produces dist/portmaster/ (the port tree) and dist/retsurf-portmaster.zip,
-# laid out the way the Linux ARM workflow's `package` job does: only the
-# launcher at the port root (it installs to /roms/ports/Retsurf.sh), everything
-# else in the retsurf/ gamedir.
+# Produces dist/portmaster/ (the port tree) and dist/retsurf-portmaster.zip, laid
+# out as the Linux ARM workflow's `package` job does: only the launcher at the
+# port root, everything else in the retsurf/ gamedir.
 set -euo pipefail
 
 build=yes
@@ -15,6 +14,7 @@ build=yes
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 bins=$repo/dist/arm64
+pkg=$repo/packaging/portmaster
 pm=$repo/dist/portmaster
 
 [ "$build" = yes ] && "$here/build.sh" a35 a53 a55
@@ -25,23 +25,23 @@ done
 
 rm -rf "$pm"
 mkdir -p "$pm/retsurf"
-cp "$repo/portmaster/Retsurf.sh" "$pm/"
-cp "$repo/portmaster/port.json" "$pm/retsurf/"
-cp "$repo/portmaster/gameinfo.xml" "$pm/retsurf/"
-cp "$repo/portmaster/README.md" "$pm/retsurf/"
-cp "$repo/portmaster/screenshot.png" "$pm/retsurf/"
+cp "$pkg/Retsurf.sh" "$pm/"
+cp "$pkg/port.json" "$pm/retsurf/"
+cp "$pkg/gameinfo.xml" "$pm/retsurf/"
+cp "$pkg/README.md" "$pm/retsurf/"
+cp "$pkg/screenshot.png" "$pm/retsurf/"
 # Bundled gamedir assets (licenses/), minus the placeholder.
-cp -r "$repo/portmaster/retsurf/." "$pm/retsurf/"
+cp -r "$pkg/retsurf/." "$pm/retsurf/"
 rm -f "$pm/retsurf/.gitkeep"
 cp "$bins"/retsurf.a35 "$bins"/retsurf.a53 "$bins"/retsurf.a55 "$pm/retsurf/"
 chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
   "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
 
-# The fontconfig fallback: `Retsurf.sh` reaches for these only where the firmware
-# has none of its own (see tools/arm64/runtime-libs.sh).
+# Bundled libraries and fontconfig, reached only where the firmware carries none
+# of its own (see tools/arm64/runtime-libs.sh).
 "$here/runtime-libs.sh" "$pm/retsurf/libs" >/dev/null
 mkdir -p "$pm/retsurf/etc/fonts"
-cp "$repo/resources/portmaster/fonts.conf.in" "$pm/retsurf/etc/fonts/"
+cp "$pkg/fonts.conf.in" "$pm/retsurf/etc/fonts/"
 
 # A device without fontconfig may register no fonts either, so the port carries
 # the three families its config names. RETSURF_FONTS_DIR overrides the search.

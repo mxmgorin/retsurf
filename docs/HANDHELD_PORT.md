@@ -168,7 +168,7 @@ jammy sat at 2.35 and locked those devices out for nothing, since the graph's ow
 reference is `gettid@GLIBC_2.30`. CI gets there by running the build in an `ubuntu:20.04`
 container on the arm64 runner (`.github/actions/arm-build-env`) — native, no qemu. Both
 paths check the finished ELF against the floor and fail if it drifted, and `min_glibc` in
-`portmaster/port.json` states the same number to PortMaster.
+`packaging/portmaster/port.json` states the same number to PortMaster.
 
 Three things follow from the old base:
 
@@ -192,8 +192,8 @@ Three things follow from the old base:
 ## Building for armhf (Miyoo Mini)
 
 A different device family — SSD202D, armv7, no GPU at all. The renderer for it is the
-`software` feature below, and `allium/` and `onionos/` are the device-side packages
-(`allium/README.md`, `onionos/README.md`) — one binary, two card layouts.
+`software` feature below, and `packaging/miyoo/allium/` and `packaging/miyoo/onionos/` are
+the device-side packages (each with its own `README.md`) — one binary, two card layouts.
 
 ```sh
 tools/armhf/build.sh              # prints the binary's path
