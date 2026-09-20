@@ -1,9 +1,9 @@
 //! Rendering of the speed-dial editor overlay (state lives in
 //! [`crate::overlay::dial_edit`]): a title, the pins as a deletable tile grid,
-//! and a URL field + "Add" beneath. Tiles reuse the start page's
-//! [`super::home::paint_tile`] look; edits go through [`crate::command::MenuAction`].
+//! and a URL field + "Add" beneath. Tiles reuse the start page's look; edits go
+//! through [`crate::command::MenuAction`].
 
-use super::home::{paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
+use super::home::{paint_action_tile, paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
 use crate::command::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
@@ -93,40 +93,12 @@ fn add_grid(
     });
 }
 
-/// The trailing "Pin settings" tile: an outline action slot (like the start page's
-/// Edit tile), drawn only while `SETTINGS_PIN` is off the dial. Returns whether it
-/// was clicked.
+/// The trailing "Pin settings" tile, drawn only while `SETTINGS_PIN` is off the
+/// dial. Returns whether it was clicked.
 fn add_pin_settings_tile(ui: &mut egui::Ui, selected: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     let active = selected || resp.hovered();
-    let painter = ui.painter();
-    let glyph = egui::Rect::from_center_size(
-        egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
-        egui::vec2(GLYPH, GLYPH),
-    );
-    painter.rect_stroke(
-        glyph,
-        12.0,
-        egui::Stroke::new(
-            if active { 2.0 } else { 1.0 },
-            if active { ACCENT } else { BORDER },
-        ),
-        egui::StrokeKind::Inside,
-    );
-    painter.text(
-        glyph.center(),
-        egui::Align2::CENTER_CENTER,
-        bold::GEAR,
-        egui::FontId::proportional(24.0),
-        if active { ACCENT } else { MUTED },
-    );
-    painter.text(
-        egui::pos2(rect.center().x, glyph.bottom() + 14.0),
-        egui::Align2::CENTER_CENTER,
-        "Pin settings",
-        egui::FontId::proportional(12.0),
-        if active { INK } else { MUTED },
-    );
+    paint_action_tile(ui.painter(), rect, bold::GEAR, "Pin settings", active);
     resp.clicked()
 }
 
@@ -201,8 +173,8 @@ fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Opti
         if resp.gained_focus() {
             edit.focus_field();
         }
-        // Keep egui focus tracking the selection, as the start page's search
-        // field does: held while selected, released once it moves to a tile.
+        // egui focus tracks the selection: held while the field is selected,
+        // released once the selection moves to a tile.
         if edit.field_focused() {
             if !resp.has_focus() {
                 resp.request_focus();

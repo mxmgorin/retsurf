@@ -24,63 +24,115 @@ use inputbind::editor::{Groups, Requirement};
 use inputbind::sdl::KeyNames;
 use inputbind::{Action as Bindable, Bindings, Store};
 
-/// What a gesture does — semantic actions, mapped onto the same commands the
-/// hardcoded layout used to emit (so contextual behavior is unchanged).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Action {
-    /// Confirm: click / select / activate. Needs both press and release edges.
-    Confirm,
-    /// Cancel: close the open overlay, otherwise one step back.
-    Cancel,
-    /// Toggle the on-screen keyboard / backspace while it's open.
-    Osk,
-    /// Reload the page (space while the on-screen keyboard is open).
-    Reload,
-    /// Previous: menu section to the left while the menu is open, otherwise
-    /// history back.
-    Prev,
-    /// Next: menu section to the right while the menu is open, otherwise
-    /// history forward.
-    Next,
-    /// Toggle link-hint navigation.
-    Hints,
-    /// Bookmark the current page.
-    Bookmark,
-    /// Navigate the active tab to the configured home page.
-    Home,
-    /// Toggle reader mode on the current page.
-    Reader,
-    /// Open / close the full-screen menu.
-    Menu,
-    /// Open the settings overlay (see [`crate::overlay::settings`]).
-    Settings,
-    /// Quit immediately. Unbound by default: the stock exit is a second
-    /// Select+Start while settings is open (see [`default_store`]).
-    Quit,
-    /// The Game Mode gesture, resolved against the mode's state: enter it, open
-    /// its menu inside, or close that menu. Leaving is the menu's Exit row, so
-    /// one gesture covers the whole mode (see [`crate::app`]).
-    GameMode,
-    /// Switch to the next open tab (wraps around).
-    TabNext,
-    /// Switch to the previous open tab (wraps around).
-    TabPrev,
-    /// Open a new tab at the home page.
-    NewTab,
-    /// Step the page zoom up / down the ladder, or back to the config default.
-    ZoomIn,
-    ZoomOut,
-    ZoomReset,
-    /// Overlay navigation by one step (arrow keys by default): menu rows /
-    /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
-    /// through to the page when none is.
-    NavUp,
-    NavDown,
-    NavLeft,
-    NavRight,
-    /// Toggle the D-pad / left stick between cursor and page scroll, for devices
-    /// with no right stick. Latched inside the gamepad, never a command.
-    Scroll,
+/// Generate [`Action`], its `bindings.toml` tokens and Controls labels, and
+/// [`GROUPS`] from one table. Listing an action under a group is what makes it
+/// exist: [`ALL`] flattens [`GROUPS`].
+macro_rules! action_table {
+    (
+        $(
+            $group:literal => {
+                $(
+                    $(#[$vmeta:meta])*
+                    $variant:ident => $token:literal, $label:literal,
+                )+
+            }
+        )+
+    ) => {
+        /// What a gesture does — semantic actions, mapped onto the same commands
+        /// the hardcoded layout used to emit (so contextual behavior is unchanged).
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        pub enum Action {
+            $( $( $(#[$vmeta])* $variant, )+ )+
+        }
+
+        impl Action {
+            /// The stable `bindings.toml` token.
+            const fn token(self) -> &'static str {
+                match self { $( $( Action::$variant => $token, )+ )+ }
+            }
+
+            /// Friendly label for the settings UI (the Controls rows).
+            const fn label(self) -> &'static str {
+                match self { $( $( Action::$variant => $label, )+ )+ }
+            }
+        }
+
+        /// The Controls screen's sections, in display order (actions sort by name
+        /// within each). Also the source [`ALL`] flattens; a duplicate listing is
+        /// an unreachable match arm at compile time.
+        pub const GROUPS: Groups<Action> = &[
+            $( ($group, &[ $( Action::$variant, )+ ]), )+
+        ];
+    };
+}
+
+action_table! {
+    "General" => {
+        /// Confirm: click / select / activate. Needs both press and release edges.
+        Confirm => "confirm", "Confirm",
+        /// Cancel: close the open overlay, otherwise one step back.
+        Cancel => "cancel", "Cancel",
+        /// Open / close the full-screen menu.
+        Menu => "menu", "Menu",
+        /// Open the settings overlay (see [`crate::overlay::settings`]).
+        Settings => "settings", "Settings",
+        /// Toggle the on-screen keyboard / backspace while it's open.
+        Osk => "osk", "Keyboard",
+        /// The Game Mode gesture, resolved against the mode's state: enter it, open
+        /// its menu inside, or close that menu. Leaving is the menu's Exit row, so
+        /// one gesture covers the whole mode (see [`crate::app`]).
+        GameMode => "game_mode", "Game Mode",
+        /// Quit immediately. Unbound by default; [`default_store`] carries the
+        /// stock exit.
+        Quit => "quit", "Quit",
+    }
+    "Navigation" => {
+        /// Previous: menu section to the left while the menu is open, otherwise
+        /// history back.
+        Prev => "prev", "Back / prev",
+        /// Next: menu section to the right while the menu is open, otherwise
+        /// history forward.
+        Next => "next", "Forward / next",
+        /// Navigate the active tab to the configured home page.
+        Home => "home", "Home",
+        /// Toggle link-hint navigation.
+        Hints => "hints", "Link hints",
+        /// Toggle the D-pad / left stick between cursor and page scroll, for devices
+        /// with no right stick. Latched inside the gamepad, never a command.
+        Scroll => "scroll", "Scroll toggle",
+        /// Overlay navigation by one step: menu rows /
+        /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
+        /// through to the page when none is.
+        NavUp => "nav_up", "Nav up",
+        /// Overlay navigation one step down; see [`Action::NavUp`].
+        NavDown => "nav_down", "Nav down",
+        /// Overlay navigation one step left; see [`Action::NavUp`].
+        NavLeft => "nav_left", "Nav left",
+        /// Overlay navigation one step right; see [`Action::NavUp`].
+        NavRight => "nav_right", "Nav right",
+    }
+    "Page" => {
+        /// Reload the page (space while the on-screen keyboard is open).
+        Reload => "reload", "Reload",
+        /// Toggle reader mode on the current page.
+        Reader => "reader", "Reader mode",
+        /// Bookmark the current page.
+        Bookmark => "bookmark", "Bookmark",
+        /// Step the page zoom up the ladder.
+        ZoomIn => "zoom_in", "Zoom in",
+        /// Step the page zoom down the ladder.
+        ZoomOut => "zoom_out", "Zoom out",
+        /// Return the page zoom to the config default.
+        ZoomReset => "zoom_reset", "Zoom reset",
+    }
+    "Tabs" => {
+        /// Switch to the next open tab (wraps around).
+        TabNext => "tab_next", "Next tab",
+        /// Switch to the previous open tab (wraps around).
+        TabPrev => "tab_prev", "Previous tab",
+        /// Open a new tab at the home page.
+        NewTab => "new_tab", "New tab",
+    }
 }
 
 /// Every action, flattened from [`GROUPS`] — an action missing there could
@@ -116,33 +168,7 @@ const fn flatten_groups() -> [Action; group_len()] {
 
 impl Bindable for Action {
     fn name(&self) -> &'static str {
-        match self {
-            Action::Confirm => "confirm",
-            Action::Cancel => "cancel",
-            Action::Osk => "osk",
-            Action::Reload => "reload",
-            Action::Prev => "prev",
-            Action::Next => "next",
-            Action::Hints => "hints",
-            Action::Bookmark => "bookmark",
-            Action::Home => "home",
-            Action::Reader => "reader",
-            Action::Menu => "menu",
-            Action::Settings => "settings",
-            Action::Quit => "quit",
-            Action::GameMode => "game_mode",
-            Action::TabNext => "tab_next",
-            Action::TabPrev => "tab_prev",
-            Action::NewTab => "new_tab",
-            Action::ZoomIn => "zoom_in",
-            Action::ZoomOut => "zoom_out",
-            Action::ZoomReset => "zoom_reset",
-            Action::NavUp => "nav_up",
-            Action::NavDown => "nav_down",
-            Action::NavLeft => "nav_left",
-            Action::NavRight => "nav_right",
-            Action::Scroll => "scroll",
-        }
+        self.token()
     }
 
     fn parse(name: &str) -> Option<Action> {
@@ -153,35 +179,8 @@ impl Bindable for Action {
         &ALL
     }
 
-    /// Friendly label for the settings UI (the Controls rows).
     fn display(&self) -> &'static str {
-        match self {
-            Action::Confirm => "Confirm",
-            Action::Cancel => "Cancel",
-            Action::Osk => "Keyboard",
-            Action::Reload => "Reload",
-            Action::Prev => "Back / prev",
-            Action::Next => "Forward / next",
-            Action::Hints => "Link hints",
-            Action::Bookmark => "Bookmark",
-            Action::Home => "Home",
-            Action::Reader => "Reader mode",
-            Action::Menu => "Menu",
-            Action::Settings => "Settings",
-            Action::Quit => "Quit",
-            Action::GameMode => "Game Mode",
-            Action::TabNext => "Next tab",
-            Action::TabPrev => "Previous tab",
-            Action::NewTab => "New tab",
-            Action::ZoomIn => "Zoom in",
-            Action::ZoomOut => "Zoom out",
-            Action::ZoomReset => "Zoom reset",
-            Action::NavUp => "Nav up",
-            Action::NavDown => "Nav down",
-            Action::NavLeft => "Nav left",
-            Action::NavRight => "Nav right",
-            Action::Scroll => "Scroll toggle",
-        }
+        self.label()
     }
 
     fn repeats(&self) -> bool {
@@ -252,50 +251,6 @@ impl Action {
         })
     }
 }
-
-/// The Controls screen's sections, in display order (actions sort by name
-/// within each). Also the source [`ALL`] flattens, so listing an action here is
-/// what makes it exist; a test checks nothing is listed twice.
-pub const GROUPS: Groups<Action> = &[
-    (
-        "General",
-        &[
-            Action::Confirm,
-            Action::Cancel,
-            Action::Menu,
-            Action::Settings,
-            Action::Osk,
-            Action::GameMode,
-            Action::Quit,
-        ],
-    ),
-    (
-        "Navigation",
-        &[
-            Action::Prev,
-            Action::Next,
-            Action::Home,
-            Action::Hints,
-            Action::Scroll,
-            Action::NavUp,
-            Action::NavDown,
-            Action::NavLeft,
-            Action::NavRight,
-        ],
-    ),
-    (
-        "Page",
-        &[
-            Action::Reload,
-            Action::Reader,
-            Action::Bookmark,
-            Action::ZoomIn,
-            Action::ZoomOut,
-            Action::ZoomReset,
-        ],
-    ),
-    ("Tabs", &[Action::TabNext, Action::TabPrev, Action::NewTab]),
-];
 
 /// What the pad must keep, whatever else is rebound: a handheld has no keyboard
 /// or mouse, so losing these strands the user on the screen that took them away.

@@ -406,24 +406,10 @@ fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected
     }
 }
 
-/// Paint a speed-dial tile's visuals into `rect`. Shared by the start page and
-/// the dial editor; the caller owns the click region and any extra overlay.
+/// Paint a speed-dial tile's visuals into `rect`; the caller owns the click
+/// region and any extra overlay.
 pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, active: bool) {
-    // Glyph square, centered near the top of the tile.
-    let glyph = egui::Rect::from_center_size(
-        egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
-        egui::vec2(GLYPH, GLYPH),
-    );
-    painter.rect_filled(glyph, 12.0, SURFACE);
-    painter.rect_stroke(
-        glyph,
-        12.0,
-        egui::Stroke::new(
-            if active { 2.0 } else { 1.0 },
-            if active { ACCENT } else { BORDER },
-        ),
-        egui::StrokeKind::Inside,
-    );
+    let glyph = paint_glyph_square(painter, rect, active, Some(SURFACE));
 
     // The settings sentinel isn't a real address: show a gear glyph and "Settings"
     // rather than the garbage `brand_label` would derive from `retsurf:settings`.
@@ -456,18 +442,21 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
     );
 }
 
-/// The trailing "Edit" tile: a glyph square holding a pencil, unfilled so it
-/// reads as an action slot rather than a real tile. Opens the dial editor.
-fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    keep_visible(ui, &resp, rect, selected);
-    let active = selected || resp.hovered();
-    let painter = ui.painter();
-
+/// The rounded glyph square at a tile's top. `None` leaves it unfilled, for an
+/// action slot's outline.
+fn paint_glyph_square(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    active: bool,
+    fill: Option<egui::Color32>,
+) -> egui::Rect {
     let glyph = egui::Rect::from_center_size(
         egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
         egui::vec2(GLYPH, GLYPH),
     );
+    if let Some(fill) = fill {
+        painter.rect_filled(glyph, 12.0, fill);
+    }
     painter.rect_stroke(
         glyph,
         12.0,
@@ -477,20 +466,40 @@ fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
         ),
         egui::StrokeKind::Inside,
     );
+    glyph
+}
+
+/// An action slot: an unfilled glyph square holding `icon`, captioned `label`.
+pub(super) fn paint_action_tile(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    icon: &str,
+    label: &str,
+    active: bool,
+) {
+    let glyph = paint_glyph_square(painter, rect, active, None);
     painter.text(
         glyph.center(),
         egui::Align2::CENTER_CENTER,
-        bold::PENCIL_SIMPLE,
+        icon,
         font(24.0),
         if active { ACCENT } else { MUTED },
     );
     painter.text(
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
-        "Edit",
+        label,
         font(12.0),
         if active { INK } else { MUTED },
     );
+}
+
+/// The trailing "Edit" tile: an action slot holding a pencil. Opens the editor.
+fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
+    keep_visible(ui, &resp, rect, selected);
+    let active = selected || resp.hovered();
+    paint_action_tile(ui.painter(), rect, bold::PENCIL_SIMPLE, "Edit", active);
     resp
 }
 
