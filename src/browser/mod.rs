@@ -47,6 +47,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+/// WebAudio factory methods Servo lacks (`createScriptProcessor` and etc.);
+/// games die at init without them, so every document gets a facade first.
+const WEBAUDIO_COMPAT_JS: &str = include_str!("assets/webaudio_compat.js");
+
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
 }
@@ -221,6 +225,10 @@ impl AppBrowserInner {
         let user_content = Rc::new(servo::UserContentManager::new(&servo));
         user_content.add_script(Rc::new(servo::UserScript::new(
             blob_download::capture_js().to_string(),
+            None,
+        )));
+        user_content.add_script(Rc::new(servo::UserScript::new(
+            WEBAUDIO_COMPAT_JS.to_string(),
             None,
         )));
         let forced_dark = forced_dark::stylesheet();
