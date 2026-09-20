@@ -407,6 +407,9 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        // The buttons a map sends ride the pad that drove them, so the page
+        // reads a remap as the same device rather than a second one.
+        self.game_input.note_pad_slot(browser.pad_slot(instance_id));
         let withheld = pad_of(button)
             .is_some_and(|pad| self.game_input.on_pad(pad, pressed, browser, commands));
         if !withheld {

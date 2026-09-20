@@ -64,6 +64,9 @@ pub enum Kind {
     Key,
     /// Opens the mouse list — the buttons, and the cursor and scroll steps.
     Mouse,
+    /// Opens the gamepad list — the buttons the page reads through the
+    /// Gamepad API, which is how a keyboard drives a pad-only game.
+    Gamepad,
     /// The page reads the source through the Gamepad API. An unbound one does
     /// the same thing; this is the file saying so out loud, and the two are one
     /// entry here because they are one behaviour.
@@ -80,10 +83,14 @@ impl Kind {
     /// the page would see nothing either way.
     pub fn all(slot: &Slot) -> &'static [Kind] {
         match slot {
-            Slot::Button(_) | Slot::Key(_) => {
-                &[Kind::Key, Kind::Mouse, Kind::Passthrough, Kind::Ignore]
-            }
-            Slot::Direction(..) => &[Kind::Key, Kind::Mouse, Kind::Ignore],
+            Slot::Button(_) | Slot::Key(_) => &[
+                Kind::Key,
+                Kind::Mouse,
+                Kind::Gamepad,
+                Kind::Passthrough,
+                Kind::Ignore,
+            ],
+            Slot::Direction(..) => &[Kind::Key, Kind::Mouse, Kind::Gamepad, Kind::Ignore],
             Slot::Stick(_) => &[
                 Kind::Directions,
                 Kind::Mouse,
@@ -99,6 +106,7 @@ impl Kind {
         match self {
             Kind::Key => "Keyboard",
             Kind::Mouse => "Mouse",
+            Kind::Gamepad => "Gamepad",
             Kind::Passthrough => "Passthrough",
             Kind::Ignore => "Ignore",
             Kind::Directions => "Four directions",
@@ -110,9 +118,27 @@ impl Kind {
         match self {
             Kind::Key => Take::Key,
             Kind::Mouse => Take::Mouse,
+            Kind::Gamepad => Take::Gamepad,
             Kind::Directions => Take::Arrows,
             Kind::Passthrough => Take::Text("passthrough"),
             Kind::Ignore => Take::Text("none"),
+        }
+    }
+}
+
+/// Which device's own list is open over the kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Device {
+    Mouse,
+    Gamepad,
+}
+
+impl Device {
+    /// What the title says after the row's name.
+    pub fn title(self) -> &'static str {
+        match self {
+            Device::Mouse => "MOUSE",
+            Device::Gamepad => "GAMEPAD",
         }
     }
 }
@@ -204,6 +230,8 @@ pub enum Take {
     Key,
     /// Open the mouse list over this row.
     Mouse,
+    /// Open the gamepad list over this row.
+    Gamepad,
     /// Turn the stick into four directions, seeded with the arrows — a stick
     /// with none set reaches the page instead, which the row would not say.
     Arrows,
@@ -221,6 +249,8 @@ pub enum EditPress {
     Take(Kind, Slot),
     /// Take the mouse kind its list is on, for the same row.
     TakeMouse(MouseKind, Slot),
+    /// Take the gamepad button its list is on, for the same row.
+    TakePad(Pad, Slot),
 }
 
 /// The source a captured gesture names, or why the map cannot hold it. The map
@@ -278,8 +308,9 @@ pub struct MapEdit {
     selected: usize,
     /// The kind list over the focused row; `None` while the rows are.
     kind: Option<usize>,
-    /// The mouse list over the kind list, opened by its Mouse row.
-    mouse: Option<usize>,
+    /// The device list over the kind list, opened by its Mouse or Gamepad row:
+    /// which device it is about, and where its highlight sits.
+    device: Option<(Device, usize)>,
     /// Whether the screen is listening for a source to add.
     capturing: bool,
     /// The captured source, while its kind list is up. It has no row until a
@@ -304,7 +335,7 @@ impl MapEdit {
             name: String::new(),
             selected: 0,
             kind: None,
-            mouse: None,
+            device: None,
             capturing: false,
             fresh: None,
             note: None,
@@ -334,7 +365,7 @@ impl MapEdit {
         self.name = name;
         self.selected = 0;
         self.kind = None;
-        self.mouse = None;
+        self.device = None;
         self.capturing = false;
         self.fresh = None;
         self.note = None;
@@ -347,7 +378,7 @@ impl MapEdit {
     pub fn close(&mut self) -> bool {
         self.visible = false;
         self.kind = None;
-        self.mouse = None;
+        self.device = None;
         self.capturing = false;
         self.fresh = None;
         self.note = None;
@@ -358,7 +389,7 @@ impl MapEdit {
     /// Back out one list — the mouse list, then the kinds. `false` leaves the
     /// rows, which is when the editor closes.
     pub fn back(&mut self) -> bool {
-        if self.mouse.take().is_some() {
+        if self.device.take().is_some() {
             return true;
         }
         self.fresh = None;
@@ -378,14 +409,17 @@ impl MapEdit {
 
     /// Where the highlight is on whichever list is up.
     pub fn selected(&self) -> usize {
-        self.mouse.or(self.kind).unwrap_or(self.selected)
+        self.device
+            .map(|(_, at)| at)
+            .or(self.kind)
+            .unwrap_or(self.selected)
     }
 
     /// Move it, clamped to the ends of that list.
     pub fn move_sel(&mut self, dy: i32) {
         let at = crate::list::step(self.selected(), dy, self.row_count());
-        match (&mut self.mouse, &mut self.kind) {
-            (Some(row), _) => *row = at,
+        match (&mut self.device, &mut self.kind) {
+            (Some((_, row)), _) => *row = at,
             (None, Some(row)) => *row = at,
             (None, None) => self.selected = at,
         }
@@ -412,10 +446,11 @@ impl MapEdit {
         let Some(slot) = self.slot() else {
             return self.rows.len() + 1;
         };
-        match (self.mouse.is_some(), self.kind.is_some()) {
-            (true, _) => MouseKind::all(&slot).len(),
-            (false, true) => Kind::all(&slot).len(),
-            (false, false) => self.rows.len() + 1,
+        match (self.device, self.kind.is_some()) {
+            (Some((Device::Mouse, _)), _) => MouseKind::all(&slot).len(),
+            (Some((Device::Gamepad, _)), _) => Pad::ALL.len(),
+            (None, true) => Kind::all(&slot).len(),
+            (None, false) => self.rows.len() + 1,
         }
     }
 
@@ -433,9 +468,9 @@ impl MapEdit {
         self.kind.is_some()
     }
 
-    /// Whether the mouse list is up, which is drawn over the kinds.
-    pub fn mouse_open(&self) -> bool {
-        self.mouse.is_some()
+    /// Which device list is up, if one is — drawn over the kinds.
+    pub fn device_open(&self) -> Option<Device> {
+        self.device.map(|(device, _)| device)
     }
 
     /// What **A** takes, or `None` on a list with nothing in it.
@@ -448,10 +483,16 @@ impl MapEdit {
             };
         };
         let slot = self.slot()?;
-        if let Some(at) = self.mouse {
-            return MouseKind::all(&slot)
-                .get(at)
-                .map(|kind| EditPress::TakeMouse(*kind, slot));
+        match self.device {
+            Some((Device::Mouse, at)) => {
+                return MouseKind::all(&slot)
+                    .get(at)
+                    .map(|kind| EditPress::TakeMouse(*kind, slot))
+            }
+            Some((Device::Gamepad, at)) => {
+                return Pad::ALL.get(at).map(|pad| EditPress::TakePad(*pad, slot))
+            }
+            None => {}
         }
         Kind::all(&slot)
             .get(at)
@@ -462,15 +503,16 @@ impl MapEdit {
         self.kind = Some(0);
     }
 
-    pub fn open_mouse(&mut self) {
-        self.mouse = Some(0);
+    /// Open one device's own list over the kinds.
+    pub fn open_device(&mut self, device: Device) {
+        self.device = Some((device, 0));
     }
 
     /// Close whatever is over the rows — both lists, since taking a target ends
     /// the whole question.
     pub fn close_kinds(&mut self) {
         self.kind = None;
-        self.mouse = None;
+        self.device = None;
         self.fresh = None;
     }
 
@@ -596,6 +638,27 @@ mod tests {
         for kind in [stick_mouse, button_mouse].concat() {
             assert!(!kind.label().is_empty());
             assert!(kind.target().starts_with("mouse."), "{kind:?}");
+        }
+        // Only a source with an edge can stand in for a gamepad button.
+        assert!(button.contains(&Kind::Gamepad) && !stick.contains(&Kind::Gamepad));
+        assert!(dir.contains(&Kind::Gamepad));
+    }
+
+    /// Both device lists open over the kinds, and B takes them off again — the
+    /// row underneath is untouched until one of their rows is taken.
+    #[test]
+    fn a_device_list_opens_over_the_kinds_and_backs_out_of_them() {
+        let mut edit = opened();
+        edit.select(3); // pad.a
+        edit.open_kinds();
+        for device in [Device::Mouse, Device::Gamepad] {
+            edit.open_device(device);
+            assert_eq!(edit.device_open(), Some(device));
+            assert!(!device.title().is_empty());
+            // The row is still the one the kinds were opened over.
+            assert_eq!(edit.slot(), Some(Slot::Button(Pad::A)));
+            assert!(edit.back() && edit.device_open().is_none());
+            assert!(edit.kind_open());
         }
     }
 

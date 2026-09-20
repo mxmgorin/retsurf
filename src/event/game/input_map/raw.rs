@@ -5,6 +5,7 @@
 use super::store::is_built_in;
 use super::{
     ClickButton, Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX,
+    PAD_PREFIX,
 };
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
@@ -131,6 +132,15 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
     }
     if let Some((x, y)) = step_after(text, CURSOR) {
         return Some(Target::CursorBy { x, y, speed });
+    }
+    if let Some(name) = text.strip_prefix(PAD_PREFIX) {
+        return match Pad::parse(name) {
+            Some(pad) => Some(Target::Pad(pad)),
+            None => {
+                log::warn!("input map: `{whose}` names no pad button `{name}`; ignored");
+                None
+            }
+        };
     }
     // Every target names its device, so a key cannot be read as a typo of one
     // of the words above.

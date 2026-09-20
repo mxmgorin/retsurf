@@ -4,9 +4,9 @@
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
 use crate::event::bindings::Action;
-use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX};
+use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
-use crate::overlay::game::map_edit::{self, EditPress, Kind, Row, Slot, Take, UNBOUND};
+use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
 use crate::overlay::game::menu::GameRow;
 use crate::overlay::osk::OskCommand;
 use inputbind::Pad;
@@ -49,6 +49,8 @@ impl App {
     fn leave_game_mode(&mut self) {
         self.ui.leave_game_mode();
         self.ui.game_menu.close();
+        // A pad the map asked for exists only while the map runs.
+        self.browser.drop_mapped_pad();
         log::info!("game mode: false");
     }
 
@@ -319,18 +321,25 @@ impl App {
             Some(EditPress::StartCapture) => self.ui.map_edit.start_capture(),
             // The mouse list is the one question a kind asks of its own; the
             // rows below it write like any other.
-            Some(EditPress::Take(Kind::Mouse, _)) => self.ui.map_edit.open_mouse(),
+            Some(EditPress::Take(Kind::Mouse, _)) => self.ui.map_edit.open_device(Device::Mouse),
+            Some(EditPress::Take(Kind::Gamepad, _)) => {
+                self.ui.map_edit.open_device(Device::Gamepad)
+            }
             Some(EditPress::TakeMouse(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 self.set_map_target(slot, Some(kind.target().to_string()));
+            }
+            Some(EditPress::TakePad(button, slot)) => {
+                self.ui.map_edit.close_kinds();
+                self.set_map_target(slot, Some(format!("{PAD_PREFIX}{}", button.name())));
             }
             Some(EditPress::Take(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 match kind.take() {
                     Take::Text(text) => self.set_map_target(slot, Some(text.to_string())),
                     Take::Arrows => self.set_map_arrows(slot),
-                    // Reached by the arm above, which has the row it is for.
-                    Take::Mouse => {}
+                    // Reached by the arms above, which have the row they are for.
+                    Take::Mouse | Take::Gamepad => {}
                     // The keyboard becomes a key picker; the pick lands in the
                     // editor's slot, which the loop drains.
                     Take::Key => {

@@ -42,6 +42,10 @@ const ANALOG: &str = "analog";
 /// `mouse.left` — the way the editor's rows name their source.
 pub const KEY_PREFIX: &str = "key.";
 
+/// How a gamepad-button target is spelled, under the same table name a pad
+/// source is written in.
+pub const PAD_PREFIX: &str = "pad.";
+
 /// The table a stick is written in.
 pub const STICK_PREFIX: &str = "stick.";
 
@@ -148,13 +152,17 @@ pub enum Target {
         speed: f32,
     },
     /// A held source moving the cursor every frame, spelled
-    /// `mouse.cursor.<direction>` — a D-pad pointing where a stick would, on a
-    /// device that has none to spare.
+    /// `mouse.cursor.<direction>` — a D-pad pointing where a stick would.
     CursorBy {
         x: f32,
         y: f32,
         speed: f32,
     },
+    /// A gamepad button in the page's Gamepad API, spelled `pad.<button>` — a
+    /// keyboard driving a pad-only game, or a pad whose buttons are dealt out
+    /// differently. Sent on the pad that produced the source, or on one the
+    /// browser synthesizes where nothing did.
+    Pad(Pad),
     /// The whole stick moves the cursor (analog sources only).
     Cursor {
         speed: f32,
@@ -569,6 +577,26 @@ mod tests {
             map.stick(Side::Right),
             &StickRole::Analog(Target::Cursor { speed: 2.0 })
         );
+    }
+
+    /// A map may deal the pad's own buttons out again, and give a key one —
+    /// the page reads both through the Gamepad API.
+    #[test]
+    fn a_button_target_resolves_to_the_pad_it_names() {
+        let map = resolve(
+            r#"
+            [pad]
+            a = "pad.b"
+            b = "pad.nosuchbutton"
+
+            [key]
+            w = "pad.l1"
+            "#,
+        );
+        assert_eq!(map.pad(None, Pad::A), Some(&Target::Pad(Pad::B)));
+        assert_eq!(map.pad(None, Pad::B), None);
+        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        assert_eq!(map.key(None, code), Some(&Target::Pad(Pad::L1)));
     }
 
     /// A stick is read whole, so a step in one direction says nothing about it.

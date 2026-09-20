@@ -5,9 +5,10 @@
 //! settings' do.
 
 use crate::command::{AppCommand, GameMapEditAction};
-use crate::overlay::game::map_edit::{Kind, MapEdit, MouseKind, Slot, ADD_ROW};
+use crate::overlay::game::map_edit::{Device, Kind, MapEdit, MouseKind, Slot, ADD_ROW};
 use crate::ui::panel::{self, ListItem};
 use egui_sdl2::egui;
+use inputbind::Pad;
 
 pub(in crate::ui) fn add_map_edit(
     ctx: &egui::Context,
@@ -35,11 +36,10 @@ fn title(edit: &MapEdit) -> String {
     }
     if edit.kind_open() {
         let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
-        let mouse = match edit.mouse_open() {
-            true => " MOUSE",
-            false => "",
+        return match edit.device_open() {
+            Some(device) => format!("{} SENDS {}", slot.to_uppercase(), device.title()),
+            None => format!("{} SENDS", slot.to_uppercase()),
         };
-        return format!("{} SENDS{mouse}", slot.to_uppercase());
     }
     edit.map_name().to_uppercase()
 }
@@ -52,13 +52,22 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
         let Some(slot) = edit.slot() else {
             return vec![];
         };
-        let labels: Vec<&str> = match edit.mouse_open() {
-            true => MouseKind::all(&slot).iter().map(|k| k.label()).collect(),
-            false => Kind::all(&slot).iter().map(|k| k.label()).collect(),
+        let labels: Vec<String> = match edit.device_open() {
+            Some(Device::Mouse) => MouseKind::all(&slot)
+                .iter()
+                .map(|kind| kind.label().to_string())
+                .collect(),
+            // The buttons as the pad's own table names them, so the list and
+            // the file agree on what was picked.
+            Some(Device::Gamepad) => Pad::ALL.iter().map(|pad| pad.name().to_string()).collect(),
+            None => Kind::all(&slot)
+                .iter()
+                .map(|kind| kind.label().to_string())
+                .collect(),
         };
         return labels
             .into_iter()
-            .map(|label| ListItem::Row(label.to_string(), String::new()))
+            .map(|label| ListItem::Row(label, String::new()))
             .collect();
     }
     let mut items = vec![];

@@ -315,11 +315,11 @@ itself is just `a`, `q` or `left.up`. A stick is a source like the rest: a row
 once it is bound, and none before. **A** opens what that source can send, **X**
 unbinds it
 (its row goes, and the source reaches the page as itself again), **B** saves. For
-a button or a key that is *Keyboard*, *Mouse*, *Passthrough* or *Ignore*.
-*Mouse* opens its own list — the three buttons and the four cursor and four
-scroll steps, or *Cursor* and *Scroll* over a stick — and *Keyboard* hands over
-to the on-screen
-keyboard, dimmed behind so it reads as a question rather than a keyboard. Its **Fn** key swaps to the keys no
+a button or a key that is *Keyboard*, *Mouse*, *Gamepad*, *Passthrough* or
+*Ignore*. *Mouse* and *Gamepad* open their own lists — the three buttons and the
+four cursor and four scroll steps (or *Cursor* and *Scroll* over a stick), and
+the pad's sixteen buttons — and *Keyboard* hands over to the on-screen keyboard, dimmed behind so
+it reads as a question rather than a keyboard. Its **Fn** key swaps to the keys no
 character grid carries — Escape, F1-F12, the navigation cluster, and Shift /
 Control / Alt / Meta on their own, which is what a game wanting a run or crouch
 key binds.
@@ -357,6 +357,7 @@ y = "key.Shift"               # a bare modifier: takes the left-hand `code`
 r2 = "mouse.left"             # a mouse button at the cursor; also .right/.middle
 l3 = "mouse.scroll.down"      # scrolls a step per frame while it is held
 down = "mouse.cursor.down"    # moves the cursor a step per frame while it is held
+select = "pad.start"          # a button of the page's own Gamepad API
 l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this map is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
@@ -383,8 +384,12 @@ Sources and targets alike name the device they belong to, and the editor's rows
 are named the same way: a row is `pad.a`, `key.w` or `stick.left.up`, which TOML
 also reads as the line of the file it stands for.
 
-**Targets** are `key.<name>`, one of the mouse's, or `passthrough`, `none`,
-`layer:<name>`. The mouse's are `mouse.left` / `mouse.right` / `mouse.middle` (a
+**Targets** are `key.<name>`, `pad.<button>`, one of the mouse's, or
+`passthrough`, `none`, `layer:<name>`. A `pad.<button>` target is the page's
+Gamepad API rather than a key: it rides the pad the source came from, so a map
+can deal a pad's own buttons out again, and a source that is no pad — a keyboard
+key — gets one the browser announces for the purpose (`retsurf mapped pad`,
+listed only while the mode runs a map that asks for it). The mouse's are `mouse.left` / `mouse.right` / `mouse.middle` (a
 button at the cursor), `mouse.scroll.up` / `.down` / `.left` / `.right` and
 `mouse.cursor.up` / `.down` / `.left` / `.right` (a held source scrolling the
 page or moving the cursor a step per frame, at a fully-deflected stick's rate),

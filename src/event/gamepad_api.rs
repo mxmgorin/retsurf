@@ -52,6 +52,33 @@ pub fn button(slot: usize, button: Button, pressed: bool) -> Option<GamepadEvent
     ))
 }
 
+/// The same edge for a button a map synthesized rather than a device producing
+/// it (`pad.<button>` targets). The triggers are analog in the mapping, and a
+/// press of one is the whole of its travel.
+pub fn mapped_button(slot: usize, pad: inputbind::Pad, pressed: bool) -> GamepadEvent {
+    use inputbind::Pad;
+    let index = match pad {
+        Pad::A => 0,
+        Pad::B => 1,
+        Pad::X => 2,
+        Pad::Y => 3,
+        Pad::L1 => 4,
+        Pad::R1 => 5,
+        Pad::L2 => 6,
+        Pad::R2 => 7,
+        Pad::Select => 8,
+        Pad::Start => 9,
+        Pad::L3 => 10,
+        Pad::R3 => 11,
+        Pad::Up => 12,
+        Pad::Down => 13,
+        Pad::Left => 14,
+        Pad::Right => 15,
+    };
+    let value = if pressed { 1.0 } else { 0.0 };
+    GamepadEvent::Updated(GamepadIndex(slot), GamepadUpdateType::Button(index, value))
+}
+
 /// A stick or trigger. Triggers are buttons 6 and 7 in the standard mapping,
 /// analog rather than an edge, which is why they arrive here.
 pub fn axis(slot: usize, axis: Axis, value: i16) -> Option<GamepadEvent> {

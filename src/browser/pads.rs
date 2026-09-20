@@ -67,7 +67,38 @@ impl PadSlots {
     }
 }
 
+/// The instance a synthesized pad is announced under. SDL counts its own from
+/// zero, so the top of the range is one it will never hand out.
+const VIRTUAL_INSTANCE: u32 = u32::MAX;
+
+/// What the page reports as `Gamepad.id` for it, so a game that names the pad
+/// it is reading says where the input is really from.
+const VIRTUAL_NAME: &str = "retsurf mapped pad";
+
 impl AppBrowser {
+    /// The slot a map's `pad.<button>` targets are sent on when no device
+    /// produced them — a keyboard driving a game that reads only the Gamepad
+    /// API. Announced on first use, so a map that asks for none adds no pad.
+    pub fn mapped_pad_slot(&self) -> usize {
+        if let Some(slot) = self.inner.pads.borrow().slot_of(VIRTUAL_INSTANCE) {
+            return slot;
+        }
+        self.pad_connected(VIRTUAL_INSTANCE, VIRTUAL_NAME.to_string());
+        self.inner
+            .pads
+            .borrow()
+            .slot_of(VIRTUAL_INSTANCE)
+            .expect("just announced")
+    }
+
+    /// Take the synthesized pad away again (leaving Game Mode). A no-op where
+    /// it was never needed.
+    pub fn drop_mapped_pad(&self) {
+        if self.inner.pads.borrow().slot_of(VIRTUAL_INSTANCE).is_some() {
+            self.pad_disconnected(VIRTUAL_INSTANCE);
+        }
+    }
+
     /// A pad the page should see. Sent now for the document that is loaded, and
     /// again from [`Self::announce_pads`] for every document that follows.
     pub fn pad_connected(&self, instance_id: u32, name: String) {

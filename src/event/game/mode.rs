@@ -8,6 +8,7 @@ use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, T
 use crate::browser::AppBrowser;
 use crate::command::{AppCommand, InputCommand};
 use crate::config::InputConfig;
+use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::{axis_value, trigger_of};
 use inputbind::{Pad, Trigger};
@@ -72,12 +73,18 @@ pub struct GameInput {
     vectors: [(f32, f32); 2],
     /// Whether the page holds the left mouse button.
     click: bool,
+    /// The Gamepad API slot the pad driving this belongs to, for the buttons a
+    /// map sends on it. `None` until a pad press arrives — a keyboard never
+    /// sets it, and its buttons go to the synthesized pad instead.
+    slot: Option<usize>,
     /// Scroll steps held right now, and how many sources hold each — summed
     /// into the per-frame scroll beside the sticks'.
     scrolls: Vec<((f32, f32), u32)>,
     /// Cursor steps held right now, counted the same way and summed into the
     /// per-frame aim.
     cursors: Vec<((f32, f32), u32)>,
+    /// Gamepad buttons the page holds through this map, counted the same way.
+    buttons: Vec<(Pad, u32)>,
     triggers: [Trigger; 2],
     /// When Select went down; held past `hold` it opens the Game Mode menu.
     select_at: Option<Instant>,
@@ -97,8 +104,10 @@ impl GameInput {
             engaged: [0; 2],
             vectors: [(0.0, 0.0); 2],
             click: false,
+            slot: None,
             scrolls: Vec::new(),
             cursors: Vec::new(),
+            buttons: Vec::new(),
             triggers: [
                 Trigger::new(Pad::L2, cfg.trigger_threshold),
                 Trigger::new(Pad::R2, cfg.trigger_threshold),
@@ -283,6 +292,7 @@ impl GameInput {
             Target::CursorBy { x, y, speed } => {
                 hold_step(&mut self.cursors, (*x * speed, *y * speed), pressed)
             }
+            Target::Pad(button) => self.hold_pad(*button, pressed, browser),
             // Refused at load for every source that reaches here.
             Target::Cursor { .. } | Target::Scroll { .. } => {}
             // An activator sends nothing of its own, which is what makes a
@@ -292,6 +302,43 @@ impl GameInput {
             Target::None => {}
         }
         true
+    }
+
+    /// Take or release one source's hold on a gamepad button, counted like a
+    /// key so two sources naming one button cannot end each other's press.
+    fn hold_pad(&mut self, button: Pad, pressed: bool, browser: &AppBrowser) {
+        let at = self.buttons.iter().position(|(held, _)| *held == button);
+        match (pressed, at) {
+            (true, Some(i)) => self.buttons[i].1 += 1,
+            (true, None) => {
+                self.buttons.push((button, 1));
+                self.send_pad(button, true, browser);
+            }
+            (false, Some(i)) => {
+                self.buttons[i].1 -= 1;
+                if self.buttons[i].1 == 0 {
+                    self.buttons.remove(i);
+                    self.send_pad(button, false, browser);
+                }
+            }
+            (false, None) => {}
+        }
+    }
+
+    /// Hand the page one gamepad-button edge. It rides the pad the source came
+    /// from where there was one, so a remapped button reads as the same device;
+    /// a key has none, and the browser synthesizes a pad for it.
+    fn send_pad(&self, button: Pad, pressed: bool, browser: &AppBrowser) {
+        let slot = self.slot.unwrap_or_else(|| browser.mapped_pad_slot());
+        let event = gamepad_api::mapped_button(slot, button, pressed);
+        browser.handle_input(servo::InputEvent::Gamepad(event));
+    }
+
+    /// Note which pad is driving, so the buttons a map sends ride it.
+    pub fn note_pad_slot(&mut self, slot: Option<usize>) {
+        if slot.is_some() {
+            self.slot = slot;
+        }
     }
 
     /// Take or release an activator's hold on its layer.
@@ -462,6 +509,9 @@ impl GameInput {
         self.vectors = [(0.0, 0.0); 2];
         self.scrolls.clear();
         self.cursors.clear();
+        for (button, _) in std::mem::take(&mut self.buttons) {
+            self.send_pad(button, false, browser);
+        }
         self.set_click(false, commands);
         self.select_at = None;
     }
