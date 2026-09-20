@@ -1,7 +1,8 @@
 //! Download -> verify -> atomically swap the release in place. Runs on a worker
 //! thread (see [`super::Updater::install`]); drives the shared [`UpdateState`]
 //! through Downloading -> Installing -> Installed / Error, waking the loop after
-//! each transition.
+//! each transition. A stalled body leaves that thread blocked in a read the OS
+//! owns, so a watchdog publishes the failure in its stead and bars the swap.
 //!
 //! Only executables are ever replaced — the three `retsurf.a{35,53,55}` + the
 //! `Retsurf.sh` launcher for a PortMaster port, or the single running binary for a
@@ -16,11 +17,20 @@ use crate::event::user::UserEventSender;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// The per-core binaries a PortMaster release ships, named under the extracted
 /// `retsurf/` subfolder and directly in the gamedir.
 const BINARIES: [&str; 3] = ["retsurf.a35", "retsurf.a53", "retsurf.a55"];
+
+/// No received bytes for this long fails the download as stalled (ureq has no
+/// idle timeout).
+const STALL_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How often the watchdog samples the byte counter.
+const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Drive the whole install, publishing the terminal state. Any error leaves the
 /// live install untouched (see the swap rollback) and surfaces as [`UpdateState::Error`].
@@ -29,10 +39,17 @@ pub(super) fn run(
     version: &str,
     url: &str,
     sha256: Option<&str>,
-    state: &Mutex<UpdateState>,
+    state: &Arc<Mutex<UpdateState>>,
     sender: &UserEventSender,
 ) {
-    match install(kind, url, sha256, state, sender) {
+    let abandoned = Arc::new(AtomicBool::new(false));
+    let result = install(kind, url, sha256, state, sender, &abandoned);
+    // A stalled download is failed by the watchdog, which owns the terminal
+    // state from then on: this thread can still be blocked in the dead read.
+    if abandoned.load(Ordering::Relaxed) {
+        return;
+    }
+    match result {
         Ok(()) => publish(
             state,
             UpdateState::Installed {
@@ -51,8 +68,9 @@ fn install(
     kind: &Kind,
     url: &str,
     sha256: Option<&str>,
-    state: &Mutex<UpdateState>,
+    state: &Arc<Mutex<UpdateState>>,
     sender: &UserEventSender,
+    abandoned: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     // Stage next to the swap targets so the final rename stays on one filesystem.
     let dir = target_dir(kind).ok_or("no in-place install path for this install")?;
@@ -64,7 +82,7 @@ fn install(
     // 1) Stream the zip to staging, hashing as we go (never held whole in memory —
     //    the binaries make this tens-to-hundreds of MB, even on a 1 GB device).
     let zip_path = staging.join("update.zip");
-    let digest = download(url, &zip_path, state, sender).inspect_err(|_| {
+    let digest = download(url, &zip_path, state, sender, abandoned).inspect_err(|_| {
         let _ = fs::remove_dir_all(&staging);
     })?;
 
@@ -122,8 +140,9 @@ fn swap_pairs(kind: &Kind, staging: &Path) -> Vec<(PathBuf, PathBuf)> {
 fn download(
     url: &str,
     dest: &Path,
-    state: &Mutex<UpdateState>,
+    state: &Arc<Mutex<UpdateState>>,
     sender: &UserEventSender,
+    abandoned: &Arc<AtomicBool>,
 ) -> Result<String, String> {
     let response = crate::net::get(url).call().map_err(|e| e.to_string())?;
     let total = crate::net::content_length(response.headers()).unwrap_or(0);
@@ -137,17 +156,63 @@ fn download(
     let reader = response.into_body().into_reader();
     let mut file = fs::File::create(&part).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
-    crate::net::stream(reader, &mut file, |chunk, received, due| {
+    let progress = Arc::new(AtomicU64::new(0));
+    let done = Arc::new(AtomicBool::new(false));
+    watch(
+        progress.clone(),
+        done.clone(),
+        abandoned.clone(),
+        state.clone(),
+        sender.clone(),
+    );
+    let streamed = crate::net::stream(reader, &mut file, |chunk, received, due| {
         hasher.update(chunk);
+        progress.store(received, Ordering::Relaxed);
         if due {
             publish(state, UpdateState::Downloading { received, total }, sender);
         }
-        true
-    })?;
+        !abandoned.load(Ordering::Relaxed)
+    });
+    done.store(true, Ordering::Relaxed);
+    streamed?;
     file.sync_all().map_err(|e| e.to_string())?;
     drop(file);
     fs::rename(&part, dest).map_err(|e| format!("rename: {e}"))?;
     Ok(hex(&hasher.finalize()))
+}
+
+/// Fail a download whose body stops arriving: publish the error the install
+/// thread can no longer reach, and raise `abandoned` so nothing is swapped if
+/// the dead read ever returns. Leaves the blocked read to the OS.
+fn watch(
+    progress: Arc<AtomicU64>,
+    done: Arc<AtomicBool>,
+    abandoned: Arc<AtomicBool>,
+    state: Arc<Mutex<UpdateState>>,
+    sender: UserEventSender,
+) {
+    std::thread::spawn(move || {
+        let mut last_received = 0;
+        let mut last_change = Instant::now();
+        loop {
+            std::thread::sleep(WATCH_INTERVAL);
+            if done.load(Ordering::Relaxed) {
+                return;
+            }
+            let received = progress.load(Ordering::Relaxed);
+            if received != last_received {
+                last_received = received;
+                last_change = Instant::now();
+            } else if last_change.elapsed() >= STALL_TIMEOUT {
+                abandoned.store(true, Ordering::Relaxed);
+                let secs = STALL_TIMEOUT.as_secs();
+                log::warn!("update download stalled: no data for {secs}s");
+                let error = UpdateState::Error(format!("download stalled: no data for {secs}s"));
+                publish(&state, error, &sender);
+                return;
+            }
+        }
+    });
 }
 
 /// Extract the zip into `dest`. `enclosed_name` rejects absolute/`..` paths, so a
