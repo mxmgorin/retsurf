@@ -12,6 +12,12 @@ its counters and this server timestamps them to stdout.
 
 Beacons are a no-op against any other static server (they just 404).
 
+The server keeps its connections alive (HTTP/1.1) and answers on a thread per
+connection. The default of the class it is built on is neither: it closes after
+every response, which races an engine that pools connections — a beacon sent on
+one the server had just closed is lost without an error, and a check that never
+reported reads as one that stopped passing.
+
 /tone.wav is synthesized at startup (441 Hz, 3 s, stereo, peak 0.5) and served
 with Range support, so audio-element.html exercises the seekable-media path the
 way a real server would; SimpleHTTPRequestHandler alone answers 200 and Servo
@@ -30,6 +36,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 
@@ -63,9 +70,22 @@ def tone_wav():
 
 TONE = tone_wav()
 
+# One thread per connection now, so the two things a request can touch outside
+# itself need a lock: the cached clip (built once) and the log (a torn line is
+# a beacon the reader cannot parse).
+MP4_LOCK = threading.Lock()
+LOG_LOCK = threading.Lock()
+
 
 def tone_mp4():
     path = os.path.join(tempfile.gettempdir(), "retsurf-tone.mp4")
+    with MP4_LOCK:
+        build_tone_mp4(path)
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def build_tone_mp4(path):
     if not os.path.exists(path):
         subprocess.run(
             ["ffmpeg", "-y", "-loglevel", "error",
@@ -76,11 +96,14 @@ def tone_mp4():
              "-movflags", "+faststart", path],
             check=True,
         )
-    with open(path, "rb") as f:
-        return f.read()
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    # Keep-alive, so an engine that pools connections never sends a beacon on
+    # one this server has already closed. Every response below carries a length
+    # or is bodiless, which is what makes a kept connection readable.
+    protocol_version = "HTTP/1.1"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
@@ -124,10 +147,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._log("HTTP " + fmt % args)
 
     def _log(self, line):
-        print("[%7.2fs] %s" % (time.time() - START, line), flush=True)
+        with LOG_LOCK:
+            print("[%7.2fs] %s" % (time.time() - START, line), flush=True)
 
 
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer((BIND, PORT), Handler) as httpd:
+class Server(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    # A kept-alive connection holds its thread until the client goes away, so
+    # the threads have to be daemons for Ctrl-C to end the run.
+    daemon_threads = True
+    # The pages beacon in bursts; the default of five leaves the rest to the
+    # kernel's own queue.
+    request_queue_size = 64
+
+
+with Server((BIND, PORT), Handler) as httpd:
     print(f"serving {ROOT} on http://{BIND}:{PORT}", flush=True)
     httpd.serve_forever()
