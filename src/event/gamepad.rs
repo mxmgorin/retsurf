@@ -242,7 +242,7 @@ impl Gamepad {
         commands.push(AppCommand::Input(InputCommand::Analog {
             aim: self.aim(),
             stick: self.left.vector(),
-            scroll: self.right.vector().1,
+            scroll: (0.0, self.right.vector().1),
             scroll_mode: self.scroll_mode,
         }));
     }

@@ -5,7 +5,7 @@
 //! settings' do.
 
 use crate::command::{AppCommand, GameMapEditAction};
-use crate::overlay::game::map_edit::{Kind, MapEdit, Slot, ADD_ROW};
+use crate::overlay::game::map_edit::{Kind, MapEdit, MouseKind, Slot, ADD_ROW};
 use crate::ui::panel::{self, ListItem};
 use egui_sdl2::egui;
 
@@ -35,7 +35,11 @@ fn title(edit: &MapEdit) -> String {
     }
     if edit.kind_open() {
         let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
-        return format!("{} SENDS", slot.to_uppercase());
+        let mouse = match edit.mouse_open() {
+            true => " MOUSE",
+            false => "",
+        };
+        return format!("{} SENDS{mouse}", slot.to_uppercase());
     }
     edit.map_name().to_uppercase()
 }
@@ -45,10 +49,16 @@ fn title(edit: &MapEdit) -> String {
 /// ends the list, carrying whatever the last attempt had to say.
 fn items(edit: &MapEdit) -> Vec<ListItem> {
     if edit.kind_open() {
-        let kinds = edit.slot().map(|slot| Kind::all(&slot)).unwrap_or_default();
-        return kinds
-            .iter()
-            .map(|kind| ListItem::Row(kind.label().to_string(), String::new()))
+        let Some(slot) = edit.slot() else {
+            return vec![];
+        };
+        let labels: Vec<&str> = match edit.mouse_open() {
+            true => MouseKind::all(&slot).iter().map(|k| k.label()).collect(),
+            false => Kind::all(&slot).iter().map(|k| k.label()).collect(),
+        };
+        return labels
+            .into_iter()
+            .map(|label| ListItem::Row(label.to_string(), String::new()))
             .collect();
     }
     let mut items = vec![];
@@ -59,7 +69,7 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
             items.push(ListItem::Heading(heading.to_string()));
             group = Some(heading);
         }
-        items.push(ListItem::Row(row.slot.name(), row.target.clone()));
+        items.push(ListItem::Row(row.slot.label(), row.target.clone()));
     }
     let note = edit.note().unwrap_or_default().to_string();
     items.push(ListItem::Row(ADD_ROW.to_string(), note));
@@ -71,7 +81,7 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
 fn heading_for(slot: &Slot) -> &'static str {
     match slot {
         Slot::Stick(_) | Slot::Direction(..) => "STICKS",
-        Slot::Button(_) => "PAD",
+        Slot::Button(_) => "GAMEPAD",
         Slot::Key(_) => "KEYBOARD",
     }
 }

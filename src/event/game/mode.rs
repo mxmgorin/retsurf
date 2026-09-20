@@ -4,7 +4,7 @@
 //! one press is never seen twice. Select is reserved in every map — held
 //! past the hold it opens the Game Mode menu.
 
-use super::input_map::{Dir, InputMap, KeyTarget, Side, StickRole, Target};
+use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
 use crate::command::{AppCommand, InputCommand};
 use crate::config::InputConfig;
@@ -72,6 +72,12 @@ pub struct GameInput {
     vectors: [(f32, f32); 2],
     /// Whether the page holds the left mouse button.
     click: bool,
+    /// Scroll steps held right now, and how many sources hold each — summed
+    /// into the per-frame scroll beside the sticks'.
+    scrolls: Vec<((f32, f32), u32)>,
+    /// Cursor steps held right now, counted the same way and summed into the
+    /// per-frame aim.
+    cursors: Vec<((f32, f32), u32)>,
     triggers: [Trigger; 2],
     /// When Select went down; held past `hold` it opens the Game Mode menu.
     select_at: Option<Instant>,
@@ -91,6 +97,8 @@ impl GameInput {
             engaged: [0; 2],
             vectors: [(0.0, 0.0); 2],
             click: false,
+            scrolls: Vec::new(),
+            cursors: Vec::new(),
             triggers: [
                 Trigger::new(Pad::L2, cfg.trigger_threshold),
                 Trigger::new(Pad::R2, cfg.trigger_threshold),
@@ -262,7 +270,19 @@ impl GameInput {
     ) -> bool {
         match target {
             Target::Key(key) => self.hold_key(key, pressed, browser),
-            Target::Click => self.set_click(pressed, commands),
+            // The left button also answers the chrome, which knows only "the
+            // pointer"; the other two are the page's alone.
+            Target::Click(ClickButton::Left) => self.set_click(pressed, commands),
+            Target::Click(button) => commands.push(AppCommand::Input(InputCommand::Click {
+                button: *button,
+                pressed,
+            })),
+            Target::ScrollBy { x, y, speed } => {
+                hold_step(&mut self.scrolls, (*x * speed, *y * speed), pressed)
+            }
+            Target::CursorBy { x, y, speed } => {
+                hold_step(&mut self.cursors, (*x * speed, *y * speed), pressed)
+            }
             // Refused at load for every source that reaches here.
             Target::Cursor { .. } | Target::Scroll { .. } => {}
             // An activator sends nothing of its own, which is what makes a
@@ -388,9 +408,9 @@ impl GameInput {
 
     /// The cursor vector and the scroll amount the sticks ask for this frame,
     /// summed so a map may put both on either stick.
-    fn analog(&self) -> ((f32, f32), f32) {
+    fn analog(&self) -> ((f32, f32), (f32, f32)) {
         let mut aim = (0.0, 0.0);
-        let mut scroll = 0.0;
+        let mut scroll = (0.0, 0.0);
         for side in Side::ALL {
             let (speed, to_cursor) = match self.map.stick(side) {
                 StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
@@ -404,12 +424,20 @@ impl GameInput {
             };
             match to_cursor {
                 true => aim = (aim.0 + live(x), aim.1 + live(y)),
-                false => scroll += live(y),
+                false => scroll = (scroll.0 + live(x), scroll.1 + live(y)),
             }
+        }
+        // A held source steps at a fully-deflected stick's rate, and two of them
+        // pulling opposite ways cancel like one stick would.
+        for ((x, y), _) in &self.scrolls {
+            scroll = (scroll.0 + x, scroll.1 + y);
+        }
+        for ((x, y), _) in &self.cursors {
+            aim = (aim.0 + x, aim.1 + y);
         }
         (
             (aim.0.clamp(-1.0, 1.0), aim.1.clamp(-1.0, 1.0)),
-            scroll.clamp(-1.0, 1.0),
+            (scroll.0.clamp(-1.0, 1.0), scroll.1.clamp(-1.0, 1.0)),
         )
     }
 
@@ -417,7 +445,7 @@ impl GameInput {
     /// a hold pending.
     pub fn is_active(&self) -> bool {
         let (aim, scroll) = self.analog();
-        aim != (0.0, 0.0) || scroll != 0.0 || self.select_at.is_some()
+        aim != (0.0, 0.0) || scroll != (0.0, 0.0) || self.select_at.is_some()
     }
 
     /// Release everything the page holds — a mode or focus transition must
@@ -432,6 +460,8 @@ impl GameInput {
         self.digital = [(0, 0); 2];
         self.engaged = [0; 2];
         self.vectors = [(0.0, 0.0); 2];
+        self.scrolls.clear();
+        self.cursors.clear();
         self.set_click(false, commands);
         self.select_at = None;
     }
@@ -440,6 +470,24 @@ impl GameInput {
 /// Whether a target withholds its source from the page's raw input.
 fn bound(target: &Target) -> bool {
     !matches!(target, Target::Passthrough)
+}
+
+/// Take or release one source's hold on a per-frame step. Counted like a key,
+/// since two sources may hold the same step and the first release must not stop
+/// them both.
+fn hold_step(held: &mut Vec<((f32, f32), u32)>, step: (f32, f32), pressed: bool) {
+    let at = held.iter().position(|(step_held, _)| *step_held == step);
+    match (pressed, at) {
+        (true, Some(i)) => held[i].1 += 1,
+        (true, None) => held.push((step, 1)),
+        (false, Some(i)) => {
+            held[i].1 -= 1;
+            if held[i].1 == 0 {
+                held.remove(i);
+            }
+        }
+        (false, None) => {}
+    }
 }
 
 /// One synthesized key edge to the page.

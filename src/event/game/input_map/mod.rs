@@ -89,6 +89,17 @@ impl Dir {
         }
     }
 
+    /// The unit vector a source held this way steps by, in screen axes: y grows
+    /// downward, which is also the sense the page scrolls in.
+    pub fn step(self) -> (f32, f32) {
+        match self {
+            Dir::Up => (0.0, -1.0),
+            Dir::Down => (0.0, 1.0),
+            Dir::Left => (-1.0, 0.0),
+            Dir::Right => (1.0, 0.0),
+        }
+    }
+
     /// The arrow key this direction stands for.
     pub fn arrow(self) -> &'static str {
         match self {
@@ -113,14 +124,37 @@ pub struct KeyTarget {
     pub modifiers: Modifiers,
 }
 
+/// Which mouse button a click target presses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClickButton {
+    Left,
+    Right,
+    Middle,
+}
+
 /// What a source does while the mode is on.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Target {
     Key(KeyTarget),
-    /// The left mouse button at the cursor — the one the router's Confirm
-    /// intent carries, and the path measured on hardware. Spelled `mouse.left`,
-    /// so the other buttons have a name to arrive under.
-    Click,
+    /// A mouse button at the cursor, spelled `mouse.left` and friends. Left is
+    /// the path measured on hardware, and the one the chrome also answers to.
+    Click(ClickButton),
+    /// A held source scrolling the page every frame, spelled
+    /// `mouse.scroll.<direction>`. The vector is a unit step in that direction,
+    /// scaled like a stick's deflection.
+    ScrollBy {
+        x: f32,
+        y: f32,
+        speed: f32,
+    },
+    /// A held source moving the cursor every frame, spelled
+    /// `mouse.cursor.<direction>` — a D-pad pointing where a stick would, on a
+    /// device that has none to spare.
+    CursorBy {
+        x: f32,
+        y: f32,
+        speed: f32,
+    },
     /// The whole stick moves the cursor (analog sources only).
     Cursor {
         speed: f32,
@@ -365,7 +399,7 @@ mod tests {
             // business; that it can click and point at all is not.
             let clicks = Pad::ALL
                 .into_iter()
-                .any(|pad| map.pad(None, pad) == Some(&Target::Click));
+                .any(|pad| matches!(map.pad(None, pad), Some(Target::Click(_))));
             let points = Side::ALL
                 .into_iter()
                 .any(|side| matches!(map.stick(side), StickRole::Analog(Target::Cursor { .. })));
@@ -460,19 +494,93 @@ mod tests {
         );
     }
 
-    /// The namespace is open but the route is not, so the other buttons have to
-    /// be refused out loud rather than resolving to the left one.
+    /// Every mouse button has a route, and a held source steps the page or the
+    /// cursor once per frame in the direction it names — down is positive both
+    /// ways (the page's own `dy` reveals lower content, screen y grows down).
     #[test]
-    fn only_the_left_mouse_button_resolves() {
+    fn the_mouse_targets_resolve_to_buttons_and_steps() {
         let map = resolve(
             r#"
             [pad]
             a = "mouse.left"
             b = "mouse.right"
+            x = "mouse.middle"
+            l1 = "mouse.scroll.down"
+            r1 = "mouse.scroll.left"
+            up = "mouse.cursor.up"
+            right = "mouse.cursor.right"
             "#,
         );
-        assert_eq!(map.pad(None, Pad::A), Some(&Target::Click));
-        assert_eq!(map.pad(None, Pad::B), None);
+        let button = |pad| match map.pad(None, pad) {
+            Some(Target::Click(button)) => *button,
+            other => panic!("{pad:?} resolved to {other:?}"),
+        };
+        assert_eq!(button(Pad::A), ClickButton::Left);
+        assert_eq!(button(Pad::B), ClickButton::Right);
+        assert_eq!(button(Pad::X), ClickButton::Middle);
+        assert_eq!(
+            map.pad(None, Pad::L1),
+            Some(&Target::ScrollBy {
+                x: 0.0,
+                y: 1.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::R1),
+            Some(&Target::ScrollBy {
+                x: -1.0,
+                y: 0.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::Up),
+            Some(&Target::CursorBy {
+                x: 0.0,
+                y: -1.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::Right),
+            Some(&Target::CursorBy {
+                x: 1.0,
+                y: 0.0,
+                speed: 1.0
+            })
+        );
+    }
+
+    /// A step is an edge's target: the whole stick has a vector of its own, and
+    /// taking a step there would throw three of its four quadrants away.
+    #[test]
+    fn a_stick_refuses_a_step_and_keeps_the_whole_vector() {
+        let map = resolve(
+            r#"
+            [stick.left]
+            analog = "mouse.cursor.up"
+            [stick.right]
+            analog = { to = "mouse.cursor", speed = 2.0 }
+            "#,
+        );
+        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(
+            map.stick(Side::Right),
+            &StickRole::Analog(Target::Cursor { speed: 2.0 })
+        );
+    }
+
+    /// A stick is read whole, so a step in one direction says nothing about it.
+    #[test]
+    fn a_scroll_step_is_refused_on_a_whole_stick() {
+        let map = resolve(
+            r#"
+            [stick.left]
+            analog = "mouse.scroll.down"
+            "#,
+        );
+        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
     }
 
     /// `code` is what a game branches on, so the common spellings must derive it

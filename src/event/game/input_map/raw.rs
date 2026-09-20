@@ -3,7 +3,9 @@
 //! the file: a typo should cost one binding, not the map.
 
 use super::store::is_built_in;
-use super::{Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX};
+use super::{
+    ClickButton, Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX,
+};
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
 use keyboard_types::{Code, Key, Modifiers, NamedKey};
@@ -67,6 +69,17 @@ pub(super) struct RawInputMap {
     pub(super) layer: BTreeMap<String, RawLayer>,
 }
 
+/// The two targets a stick drives as a whole, and the base a `.<direction>`
+/// suffix turns into a per-frame step.
+const CURSOR: &str = "mouse.cursor";
+const SCROLL: &str = "mouse.scroll";
+
+/// The unit step `text` names, if it is `base` with a direction after it.
+fn step_after(text: &str, base: &str) -> Option<(f32, f32)> {
+    let dir = text.strip_prefix(base)?.strip_prefix('.')?;
+    Dir::parse(dir).map(Dir::step)
+}
+
 /// Resolve one written target against the layers the file declares. `None` is a
 /// refusal, already logged.
 fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Target> {
@@ -100,20 +113,24 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
     match text {
         "passthrough" => return Some(Target::Passthrough),
         "none" => return Some(Target::None),
-        "mouse.cursor" => return Some(Target::Cursor { speed }),
-        "mouse.scroll" => return Some(Target::Scroll { speed }),
-        "mouse.left" => return Some(Target::Click),
-        // The namespace is open, but only the left button has a route: the
-        // router's Confirm intent carries no button of its own.
-        "mouse.right" | "mouse.middle" => {
-            log::warn!("input map: `{whose}` — only `mouse.left` has a route");
-            return None;
-        }
+        CURSOR => return Some(Target::Cursor { speed }),
+        SCROLL => return Some(Target::Scroll { speed }),
+        "mouse.left" => return Some(Target::Click(ClickButton::Left)),
+        "mouse.right" => return Some(Target::Click(ClickButton::Right)),
+        "mouse.middle" => return Some(Target::Click(ClickButton::Middle)),
         "cursor" | "scroll" => {
             log::warn!("input map: `{whose}` — `{text}` is spelled `mouse.{text}` now");
             return None;
         }
         _ => {}
+    }
+    // Named with a direction, either takes an edge instead of a stick: a step
+    // per frame for as long as the source is held.
+    if let Some((x, y)) = step_after(text, SCROLL) {
+        return Some(Target::ScrollBy { x, y, speed });
+    }
+    if let Some((x, y)) = step_after(text, CURSOR) {
+        return Some(Target::CursorBy { x, y, speed });
     }
     // Every target names its device, so a key cannot be read as a typo of one
     // of the words above.

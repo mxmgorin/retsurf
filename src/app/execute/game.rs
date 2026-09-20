@@ -6,7 +6,7 @@ use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, Game
 use crate::event::bindings::Action;
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX};
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
-use crate::overlay::game::map_edit::{self, EditPress, Row, Slot, Take, UNBOUND};
+use crate::overlay::game::map_edit::{self, EditPress, Kind, Row, Slot, Take, UNBOUND};
 use crate::overlay::game::menu::GameRow;
 use crate::overlay::osk::OskCommand;
 use inputbind::Pad;
@@ -317,11 +317,20 @@ impl App {
         match self.ui.map_edit.press() {
             Some(EditPress::OpenKinds) => self.ui.map_edit.open_kinds(),
             Some(EditPress::StartCapture) => self.ui.map_edit.start_capture(),
+            // The mouse list is the one question a kind asks of its own; the
+            // rows below it write like any other.
+            Some(EditPress::Take(Kind::Mouse, _)) => self.ui.map_edit.open_mouse(),
+            Some(EditPress::TakeMouse(kind, slot)) => {
+                self.ui.map_edit.close_kinds();
+                self.set_map_target(slot, Some(kind.target().to_string()));
+            }
             Some(EditPress::Take(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 match kind.take() {
                     Take::Text(text) => self.set_map_target(slot, Some(text.to_string())),
                     Take::Arrows => self.set_map_arrows(slot),
+                    // Reached by the arm above, which has the row it is for.
+                    Take::Mouse => {}
                     // The keyboard becomes a key picker; the pick lands in the
                     // editor's slot, which the loop drains.
                     Take::Key => {
