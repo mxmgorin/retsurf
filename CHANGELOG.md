@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   roots, so only the event listeners are still ours to release. `patches/` mirrors
   what is left.
 
+### Fixed
+
+- **Link hints could stay invisible until the next button press.** The rects come
+  back from the page asynchronously, on a loop pass no input woke, and nothing
+  marked that frame as changed — so the badges were built and dropped, and the
+  next press was what put them on screen. A collection that lands now asks for the
+  frame it needs.
+
+- **Hint badges no longer mark where the page used to be.** The rects are
+  viewport-relative, so a scroll leaves each badge over whatever moved into its
+  place; from the scroll until the re-collect lands they are drawn no more and
+  take no input, rather than being clickable in the wrong place. Every scroll
+  schedules that re-collect now — a wheel or a touch drag did not.
+
 ## [0.8.0] - 2026-09-08
 
 ### Added
