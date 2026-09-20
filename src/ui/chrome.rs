@@ -25,11 +25,13 @@ impl AppUi {
         }
     }
 
-    /// Scroll the page and feed the toolbar auto-hide in one call — the only
-    /// spelling of the pair, so a scroll cannot silently stop the auto-hide.
+    /// Scroll the page and feed everything a scroll drives in one call — the only
+    /// spelling of the set, so a scroll site cannot silently skip one.
     pub fn scroll_page(&mut self, browser: &AppBrowser, dx: f32, dy: f32, x: f32, y: f32) {
         browser.scroll(dx, dy, x, y);
         self.notify_page_scroll(dy);
+        // Hint rects are viewport-relative, so page movement invalidates them.
+        self.hints.mark_stale();
     }
 
     /// Feed a page-scroll delta (the same `dy` handed to [`AppBrowser::scroll`]:

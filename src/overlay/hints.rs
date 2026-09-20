@@ -4,9 +4,11 @@
 //! hops the selection spatially (nearest element in the pressed direction)
 //! instead of typing hint letters. A clicks the selected element, B exits.
 //! Scrolling keeps working and schedules a re-collect once it settles, since
-//! the rects are viewport-relative and go stale as the page moves. Pushing the
-//! selection past the last hint at a vertical edge scrolls a chunk and
-//! re-collects, so one stick reaches the whole document (see the router).
+//! the rects are viewport-relative and go stale as the page moves; while they
+//! are stale nothing is drawn and nothing can be activated, because a badge
+//! would mark whatever moved into its place. Pushing the selection past the last
+//! hint at a vertical edge scrolls a chunk and re-collects, so one stick reaches
+//! the whole document (see the router).
 
 use std::time::{Duration, Instant};
 
@@ -319,6 +321,13 @@ impl Hints {
         }
     }
 
+    /// Whether the rects no longer describe the page: it has scrolled under them
+    /// and the re-collect they scheduled has yet to land. The renderer draws
+    /// nothing meanwhile, and the router lets no input aim at them.
+    pub fn is_stale(&self) -> bool {
+        self.refresh_at.is_some() || self.collecting
+    }
+
     /// Whether the scheduled re-collect is due; taking it clears the schedule
     /// (the caller starts a new collection round).
     pub fn take_refresh_due(&mut self) -> bool {
@@ -502,6 +511,28 @@ mod tests {
             HintInput::NoMatch
         ));
         assert!(!h.has_typed());
+    }
+
+    #[test]
+    fn rects_are_stale_from_the_scroll_until_the_recollect_lands() {
+        let mut h = shown(&[(10.0, 10.0)], (0.0, 0.0));
+        assert!(!h.is_stale());
+        h.mark_stale();
+        assert!(h.is_stale());
+        // Still stale while the round it scheduled runs: the page has moved and
+        // the fresh rects have not arrived.
+        h.begin_collect(HintLabels::Gamepad);
+        assert!(h.is_stale());
+        h.show(vec![at(10.0, 40.0)], (0.0, 0.0), (0.0, 0.0));
+        assert!(!h.is_stale());
+    }
+
+    #[test]
+    fn an_unfinished_round_leaves_nothing_stale_behind() {
+        let mut h = shown(&[(10.0, 10.0)], (0.0, 0.0));
+        h.mark_stale();
+        h.hide();
+        assert!(!h.is_stale());
     }
 
     #[test]

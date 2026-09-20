@@ -695,7 +695,11 @@ impl AppUi {
                     };
                     self.osk_height = osk::add_osk(ctx, &self.osk, bottom_inset) + bottom_inset;
                 } else if self.hints.visible {
-                    hints::add_hints(ctx, &self.hints, self.webview_rect, self.hint_badges);
+                    // Rects the page has scrolled out from under are left
+                    // undrawn: a badge would mark whatever took that place.
+                    if !self.hints.is_stale() {
+                        hints::add_hints(ctx, &self.hints, self.webview_rect, self.hint_badges);
+                    }
                 } else if cursor_visible.is_some() {
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
                     cursor::paint_cursor(ctx, pos, self.scroll_mode);
