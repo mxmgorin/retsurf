@@ -87,18 +87,31 @@ impl App {
             MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
             MenuAction::DialPinSettings => self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN),
             MenuAction::RemoveAt(index) => self.ui.menu.remove_at(*index),
-            MenuAction::OpenTab(index) => {
-                self.browser.switch_to(*index);
-                self.ui.menu.close();
-            }
-            MenuAction::CloseTab(index) => {
-                self.browser
-                    .close_tab(*index, &self.config.browser.home_page);
-                self.ui.menu.set_tab_count(self.browser.tab_count());
-                self.schedule_heap_trim();
-            }
+            MenuAction::OpenTab(index) => self.open_tab_at(*index),
+            MenuAction::CloseTab(index) => self.close_tab_at(*index),
             MenuAction::NewTab => self.new_tab(),
         }
+    }
+
+    /// The browser tab the Tabs section's highlight points at, or `None` on the
+    /// "+ New tab" row, which occupies index 0 ahead of the tabs.
+    fn selected_tab_index(&self) -> Option<usize> {
+        self.ui.menu.tab_selected().checked_sub(1)
+    }
+
+    /// Focus the tab at `index` and close the menu.
+    fn open_tab_at(&mut self, index: usize) {
+        self.browser.switch_to(index);
+        self.ui.menu.close();
+    }
+
+    /// Close the tab at `index`, resync the menu's row count, and reclaim what
+    /// the torn-down document frees.
+    fn close_tab_at(&mut self, index: usize) {
+        self.browser
+            .close_tab(index, &self.config.browser.home_page);
+        self.ui.menu.set_tab_count(self.browser.tab_count());
+        self.schedule_heap_trim();
     }
 
     /// Open a new tab at the home page and close the menu.
@@ -121,12 +134,9 @@ impl App {
     /// lists it loads the entry. Closes the menu either way.
     pub(super) fn menu_open_selected(&mut self) {
         if self.ui.menu.section() == Section::Tabs {
-            let sel = self.ui.menu.tab_selected();
-            if sel == 0 {
-                self.new_tab(); // the "+ New tab" button (index 0)
-            } else {
-                self.browser.switch_to(sel - 1);
-                self.ui.menu.close();
+            match self.selected_tab_index() {
+                Some(index) => self.open_tab_at(index),
+                None => self.new_tab(),
             }
         } else if self.ui.menu.clear_selected() {
             // The section's clear row (index 0): arms, then wipes; stays open.
@@ -144,12 +154,8 @@ impl App {
     /// closes the tab; in the URL lists it removes the bookmark / history entry.
     pub(super) fn delete_menu_selection(&mut self) {
         if self.ui.menu.section() == Section::Tabs {
-            // Index 0 is the "+ New tab" button (nothing to delete); tabs are 1.. .
-            let sel = self.ui.menu.tab_selected();
-            if sel > 0 {
-                self.browser
-                    .close_tab(sel - 1, &self.config.browser.home_page);
-                self.ui.menu.set_tab_count(self.browser.tab_count());
+            if let Some(index) = self.selected_tab_index() {
+                self.close_tab_at(index);
             }
         } else {
             self.ui.menu.remove_selected();
@@ -171,10 +177,8 @@ impl App {
                 }
             }
             Section::Tabs => {
-                // Index 0 is the "+ New tab" button; the tabs follow at 1..=N.
-                let sel = self.ui.menu.tab_selected();
-                if sel > 0 {
-                    if let Some(info) = self.browser.tabs().get(sel - 1) {
+                if let Some(index) = self.selected_tab_index() {
+                    if let Some(info) = self.browser.tabs().get(index) {
                         if !info.url.is_empty() {
                             self.ui.menu.toggle_bookmark(&info.url);
                         }
