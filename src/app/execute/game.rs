@@ -4,9 +4,9 @@
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
 use crate::event::bindings::Action;
-use crate::event::game::input_map::{Dir, RawTarget, Side};
+use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX};
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
-use crate::overlay::game::map_edit::{EditPress, Slot, StickTargets, Take, Targets, UNBOUND};
+use crate::overlay::game::map_edit::{self, EditPress, Row, Slot, Take, UNBOUND};
 use crate::overlay::game::menu::GameRow;
 use crate::overlay::osk::OskCommand;
 use inputbind::Pad;
@@ -277,16 +277,46 @@ impl App {
                 self.ui.map_edit.select(*index);
                 self.map_edit_activate(out);
             }
+            GameMapEditAction::Capture { gesture, keyboard } => {
+                self.map_edit_capture(gesture, *keyboard);
+            }
+            GameMapEditAction::CaptureCancel => self.ui.map_edit.stop_capture(None),
+            // Only over the rows: inside a kind list the same press is about
+            // to take one, not to undo it.
+            GameMapEditAction::Remove => {
+                if let (false, Some(slot)) = (self.ui.map_edit.kind_open(), self.ui.map_edit.slot())
+                {
+                    self.set_map_target(slot, None);
+                }
+            }
         }
     }
 
-    /// A in the editor: open a stick's rows, open the focused row's list of
-    /// kinds, or take the one it is on — a key defers to the on-screen
-    /// keyboard, the rest are written straight away.
+    /// A captured gesture becomes the source a row is made for; what no row can
+    /// hold is refused where it was asked for (see [`map_edit::source_of`]).
+    fn map_edit_capture(&mut self, gesture: &str, keyboard: bool) {
+        let slot = match map_edit::source_of(gesture, keyboard) {
+            Ok(slot) => slot,
+            Err(note) => return self.ui.map_edit.stop_capture(Some(note.to_string())),
+        };
+        self.ui.map_edit.stop_capture(None);
+        // A source the map already binds has a row; the capture takes you to it
+        // rather than adding a second one.
+        if self.ui.map_edit.rows().iter().any(|row| row.slot == slot) {
+            self.ui.map_edit.select_slot(&slot);
+            self.ui.map_edit.open_kinds();
+        } else {
+            self.ui.map_edit.open_kinds_for(slot);
+        }
+    }
+
+    /// A in the editor: open the focused row's list of kinds, or take the one it
+    /// is on — a key defers to the on-screen keyboard, the rest are written
+    /// straight away.
     fn map_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.map_edit.press() {
-            Some(EditPress::OpenStick(side)) => self.ui.map_edit.open_stick(side),
             Some(EditPress::OpenKinds) => self.ui.map_edit.open_kinds(),
+            Some(EditPress::StartCapture) => self.ui.map_edit.start_capture(),
             Some(EditPress::Take(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 match kind.take() {
@@ -312,21 +342,25 @@ impl App {
         };
         self.ui.map_edit.set_picking(None);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
-        self.set_map_target(slot, Some(text));
+        // The picker names the key; the file wants it as a target.
+        self.set_map_target(slot, Some(format!("{KEY_PREFIX}{text}")));
     }
 
-    /// Write one row into the edited map.
+    /// Write one row into the edited map, and put the highlight where it landed
+    /// — a source bound from the row that captures has no row until now.
     fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.map_edit.map_id().to_string();
         let raw = text.map(RawTarget::Short);
         if let Some(map) = self.event_handler.maps.get_mut(&id) {
-            match slot {
-                Slot::Button(pad) => map.set_raw_pad(pad, raw),
-                Slot::Stick(side) => map.set_raw_stick(side, raw),
-                Slot::Direction(side, dir) => map.set_raw_stick_dir(side, dir, raw),
+            match &slot {
+                Slot::Button(pad) => map.set_raw_pad(*pad, raw),
+                Slot::Key(name) => map.set_raw_key(name, raw),
+                Slot::Stick(side) => map.set_raw_stick(*side, raw),
+                Slot::Direction(side, dir) => map.set_raw_stick_dir(*side, *dir, raw),
             }
         }
         self.edited_input_map();
+        self.ui.map_edit.select_slot(&slot);
     }
 
     /// Hand a stick its four directions (see [`Take::Arrows`]).
@@ -356,24 +390,47 @@ impl App {
             Some(raw) => raw.text().to_string(),
             None => UNBOUND.to_string(),
         };
-        let pads = Pad::ALL
-            .into_iter()
-            .map(|pad| text(map.raw_pad(pad)))
-            .collect();
-        let sticks = Side::ALL.map(|side| {
+        let mut rows = vec![];
+        // The sticks lead, each a row only while the map binds it.
+        for side in Side::ALL {
             let digital = map.raw_stick_is_digital(side);
-            StickTargets {
-                digital,
+            if !digital && map.raw_stick(side).is_none() {
+                continue;
+            }
+            rows.push(Row {
+                slot: Slot::Stick(side),
                 // A stick read as directions has no whole-stick entry to show,
                 // so the row says what it has become instead.
-                role: match digital {
+                target: match digital {
                     true => DIRECTIONS.to_string(),
                     false => text(map.raw_stick(side)),
                 },
-                dirs: Dir::ALL.map(|dir| text(map.raw_stick_dir(side, dir))),
+            });
+            if digital {
+                rows.extend(Dir::ALL.map(|dir| Row {
+                    slot: Slot::Direction(side, dir),
+                    target: text(map.raw_stick_dir(side, dir)),
+                }));
             }
-        });
-        self.ui.map_edit.set_targets(Targets { pads, sticks });
+        }
+        // Then what the map binds: the pad in the pad's own order, the keys in
+        // the file's. Select is not among them — the menu keeps it.
+        rows.extend(
+            Pad::ALL
+                .into_iter()
+                .filter(|pad| *pad != Pad::Select)
+                .filter_map(|pad| {
+                    map.raw_pad(pad).map(|raw| Row {
+                        slot: Slot::Button(pad),
+                        target: raw.text().to_string(),
+                    })
+                }),
+        );
+        rows.extend(map.raw_keys().map(|(name, raw)| Row {
+            slot: Slot::Key(name.to_string()),
+            target: raw.text().to_string(),
+        }));
+        self.ui.map_edit.set_rows(rows);
     }
 
     /// Adopt the map the config names, for a settings restore. The config

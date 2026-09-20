@@ -141,9 +141,11 @@ impl App {
                 // trailing "Pin settings" tile, which adds with A).
                 Focus::DialEdit => self.ui.dial_edit_remove_selected(),
                 // X is unused in settings (rows edit with A and Left/Right) and
-                // on Game Mode's screens (the keyboard has a row of its own).
+                // on Game Mode's menu screens (the keyboard has a row of its own).
                 Focus::Settings => {}
-                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                Focus::GameMenu | Focus::GameInputMaps => {}
+                // X unbinds the focused source, which is what takes its row away.
+                Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),

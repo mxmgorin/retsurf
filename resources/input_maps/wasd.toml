@@ -4,31 +4,31 @@
 name = "Keyboard (WASD)"
 
 [pad]
-a = "Space"
-b = "e"
-x = "r"
-y = "f"
-l1 = "q"
+a = "key.Space"
+b = "key.e"
+x = "key.r"
+y = "key.f"
+l1 = "key.q"
 # Shift and Control are held, and the standard spells their key and their code
 # differently — a game reading `e.code` gets nothing from the bare name.
-r1 = { to = "Shift", code = "ShiftLeft" }
-l2 = { to = "Control", code = "ControlLeft" }
-start = "Enter"
+r1 = { to = "key.Shift", code = "ShiftLeft" }
+l2 = { to = "key.Control", code = "ControlLeft" }
+start = "key.Enter"
 # The D-pad keeps the arrows, which most of these games take as well.
-up = "ArrowUp"
-down = "ArrowDown"
-left = "ArrowLeft"
-right = "ArrowRight"
+up = "key.ArrowUp"
+down = "key.ArrowDown"
+left = "key.ArrowLeft"
+right = "key.ArrowRight"
 # Fire, and the pointer path every built-in keeps.
 r2 = "mouse.left"
 l3 = "passthrough"
 r3 = "passthrough"
 
 [stick.left]
-up = "w"
-down = "s"
-left = "a"
-right = "d"
+up = "key.w"
+down = "key.s"
+left = "key.a"
+right = "key.d"
 
 [stick.right]
 analog = "mouse.cursor"

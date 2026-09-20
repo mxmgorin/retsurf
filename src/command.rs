@@ -83,6 +83,17 @@ pub enum GameMapEditAction {
     Activate,
     /// Focus row `index` and open its list.
     Click(usize),
+    /// A gesture captured for the row that adds a source, as the bindings file
+    /// would spell it; `keyboard` tells the two devices apart, whose spellings
+    /// collide.
+    Capture {
+        gesture: String,
+        keyboard: bool,
+    },
+    /// Stop listening without a source (the idle give-up).
+    CaptureCancel,
+    /// Unbind the focused row, which takes its line out of the file.
+    Remove,
 }
 
 /// Actions on the settings overlay. `Select` carries its target row;

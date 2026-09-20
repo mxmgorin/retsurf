@@ -123,8 +123,8 @@ mod tests {
         assert_ne!(menu.row(), GameRow::Toggle);
     }
 
-    /// One row words itself by state, and it is the one whose action does. No
-    /// row here asks for anything, so none may trail off.
+    /// One row words itself by state, and it is the one whose action does; no
+    /// row on these screens trails off into an ellipsis.
     #[test]
     fn the_labels_follow_the_mode() {
         for row in GameRow::ALL {

@@ -3,7 +3,7 @@
 //! the file: a typo should cost one binding, not the map.
 
 use super::store::is_built_in;
-use super::{Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG};
+use super::{Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX};
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
 use keyboard_types::{Code, Key, Modifiers, NamedKey};
@@ -46,7 +46,7 @@ impl RawTarget {
 #[serde(default)]
 pub(super) struct RawLayer {
     pad: BTreeMap<String, RawTarget>,
-    keyboard: BTreeMap<String, RawTarget>,
+    key: BTreeMap<String, RawTarget>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -59,8 +59,9 @@ pub(super) struct RawInputMap {
     /// Keyed by stick (`left` / `right`), then by direction or `analog`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
+    /// Physical keys, named as the editor's rows name them (`key.w`).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub(super) keyboard: BTreeMap<String, RawTarget>,
+    pub(super) key: BTreeMap<String, RawTarget>,
     /// Alternate sets by name, each held open by whatever names it.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) layer: BTreeMap<String, RawLayer>,
@@ -114,7 +115,13 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         }
         _ => {}
     }
-    let key = parse_key(text, whose)?;
+    // Every target names its device, so a key cannot be read as a typo of one
+    // of the words above.
+    let Some(name) = text.strip_prefix(KEY_PREFIX) else {
+        log::warn!("input map: `{whose}` — a key is spelled `{KEY_PREFIX}{text}`");
+        return None;
+    };
+    let key = parse_key(name, whose)?;
     // An explicit `code` wins; otherwise the standard spells most keys the same
     // in both, and a game reading `e.code` gets nothing from Unidentified.
     let code = match code {
@@ -122,7 +129,7 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
             log::warn!("input map: `{whose}` names no known code `{text}`");
             Code::Unidentified
         }),
-        None => derive_code(text, &key, whose),
+        None => derive_code(name, &key, whose),
     };
     Some(Target::Key(KeyTarget {
         key,
@@ -184,7 +191,7 @@ impl InputMap {
             sticks[side as usize] = resolve_stick(id, name, table, &names);
         }
 
-        let resolved_keys = resolve_keys(id, "keyboard", &raw.keyboard, keys, &names);
+        let resolved_keys = resolve_keys(id, "key", &raw.key, keys, &names);
 
         // A layer's own tables, in the order its names were collected. Layers
         // hold no activators: a set that opens another is a knot to debug.
@@ -194,13 +201,7 @@ impl InputMap {
                 let raw_layer = &raw.layer[name];
                 Layer {
                     pad: resolve_pad_table(id, &format!("layer.{name}.pad"), &raw_layer.pad, &[]),
-                    keys: resolve_keys(
-                        id,
-                        &format!("layer.{name}.keyboard"),
-                        &raw_layer.keyboard,
-                        keys,
-                        &[],
-                    ),
+                    keys: resolve_keys(id, &format!("layer.{name}.key"), &raw_layer.key, keys, &[]),
                 }
             })
             .collect();
@@ -251,7 +252,7 @@ fn resolve_pad_table(
     pad
 }
 
-/// One `[keyboard]` table, base or layer: names resolved through SDL, sorted so
+/// One `[key]` table, base or layer: names resolved through SDL, sorted so
 /// the runtime can binary-search them.
 fn resolve_keys(
     id: &str,

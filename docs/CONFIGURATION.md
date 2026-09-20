@@ -291,7 +291,7 @@ binding and is logged, not the whole map.
 
 **The Game Mode menu's "Input map" row** is all of this without a keyboard or a
 file manager, which is the only way to do it on a handheld. It opens the list of
-maps, marked with the one in use and led by **New map...**; **A** on any map
+maps, marked with the one in use and led by **+ Add**; **A** on any map
 opens its own screen:
 
 | row | what it does |
@@ -303,70 +303,89 @@ opens its own screen:
 | Delete | throws the file away, after a confirmation |
 | Reset to default | the same, on a built-in: the binary's own version comes back |
 
-**New map...** types a name and adds a map that binds nothing, which is
+**+ Add**, the row above them, types a name and adds a map that binds nothing, which is
 passthrough: the whole pad reaches the page raw, with no cursor and no click
 until the editor gives it one. It opens on the new map, since that is what it
 was made for. A built-in the binary carries and no file shadows has nothing to
 remove, so it offers neither of the last two.
 
-**The editor** is a row per source — every button, then `stick.left` and
-`stick.right`. **A** opens what that source can send, **B** saves. For a button
-that is a key, the left mouse button, Passthrough or nothing; choosing *Key...*
-hands over to the on-screen keyboard, dimmed behind so it reads as a question
-rather than a keyboard. Its **Fn** key swaps to the keys no character grid
-carries — Escape, F1-F12, the navigation cluster, and Shift / Control / Alt /
-Meta on their own, which is what a game wanting a run or crouch key binds.
+**The editor** is a row per source the map binds, under a heading per table —
+*Sticks*, *Pad*, *Keyboard*. A stick is a source like the rest: a row once it is
+bound, and none before. **A** opens what that source can send, **X** unbinds it
+(its row goes, and the source reaches the page as itself again), **B** saves. For
+a button or a key that is a key, the left mouse button, Passthrough or nothing;
+choosing *Keyboard* hands over to the on-screen keyboard, dimmed behind so it
+reads as a question rather than a keyboard. Its **Fn** key swaps to the keys no
+character grid carries — Escape, F1-F12, the navigation cluster, and Shift /
+Control / Alt / Meta on their own, which is what a game wanting a run or crouch
+key binds.
 
-**A stick opens rows of its own.** Its `sends` row is the whole stick — *Cursor*,
+**Add button or key**, the last row, listens: press the button or key you
+want to map, or push the stick, and its list opens straight away, so a keyboard
+key is bound the way a pad button is and a pad this build has never heard of
+needs no table of its own. A stick has no gesture of its own, so it is taken
+from a push most of the way over — past any dead zone, since one resting
+off-centre must not bind itself. A map holds one target per source, so
+a hold, a chord or a modified key is refused on the row that asked; Select is
+refused with them, because it opens the Game Mode menu in every map. Nothing
+pressed within six seconds gives up on its own — a handheld has no Esc.
+
+**A stick answers A with its own list**, like every other row — *Cursor*,
 *Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
-and gives the stick a row per direction to edit like a button. The file is one
-form or the other, so picking either takes the other away. A direction is offered
-no Passthrough: a stick read as directions withholds the whole axis, so the page
-would see nothing either way.
+and puts a `stick.<side>.<direction>` row under it for each, edited like a
+button. The file is one form or the other, so picking either takes the other
+away. A direction is offered no Passthrough: a stick read as directions withholds
+the whole axis, so the page would see nothing either way.
 
 Editing a built-in writes the `input_maps/<id>.toml` that replaces it, so deleting
-that file is still how you get the original back. The `[keyboard]` table and the
-layers below are the file's: they need names the screen has no room to pick.
+that file is still how you get the original back. The layers below are the file's:
+they need names the screen has no room to pick.
 
 ```toml
 name = "Vampire Survivors"    # what the menu shows; the file name is the id
 
 [pad]                         # buttons and the D-pad, by the bindings.toml names
-up = "ArrowUp"
-a = "Space"
-b = "z"
-x = { to = "x", code = "KeyY", shift = true }   # when key and code differ
-y = "Shift"                   # a bare modifier: takes the left-hand `code`
+up = "key.ArrowUp"
+a = "key.Space"
+b = "key.z"
+x = { to = "key.x", code = "KeyY", shift = true }   # when key and code differ
+y = "key.Shift"               # a bare modifier: takes the left-hand `code`
 r2 = "mouse.left"             # the left mouse button, at the cursor
 l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this map is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
 
 [stick.left]                  # four directions, through [input] deadzone
-up = "ArrowUp"
-down = "ArrowDown"
-left = "ArrowLeft"
-right = "ArrowRight"
+up = "key.ArrowUp"
+down = "key.ArrowDown"
+left = "key.ArrowLeft"
+right = "key.ArrowRight"
 
 [stick.right]
 analog = "mouse.cursor"       # or mouse.scroll — the whole stick, not a direction
 
-[keyboard]                    # physical keys; unlisted ones reach the game as-is
-w = "ArrowUp"
+[key]                         # physical keys; unlisted ones reach the game as-is
+w = "key.ArrowUp"
 
 [layer.aim.pad]               # while l1 is held
-a = "Shift"
-[layer.aim.keyboard]
-w = "ArrowDown"
+a = "key.Shift"
+[layer.aim.key]
+w = "key.ArrowDown"
 ```
 
-**Targets** are a key name, or one of `mouse.left`, `mouse.cursor`,
-`mouse.scroll`, `passthrough`, `none`, `layer:<name>`. Only the left mouse button has a route
-today; the other two are refused with a line in the log. A key is written as one character (`z`), `Space`, or a
-standard name (`ArrowUp`, `Enter`, `Escape`, `Shift`); the `code` games branch on
-is derived from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
+Sources and targets alike name the device they belong to, and the editor's rows
+are named the same way: a row is `pad.a`, `key.w` or `stick.left.up`, which TOML
+also reads as the line of the file it stands for.
+
+**Targets** are `key.<name>`, or one of `mouse.left`, `mouse.cursor`,
+`mouse.scroll`, `passthrough`, `none`, `layer:<name>`. Only the left mouse button
+has a route today; the other two are refused with a line in the log. A key's name
+is one character (`key.z`), `key.Space`, or a standard spelling (`key.ArrowUp`,
+`key.Enter`, `key.Escape`, `key.Shift`); the `code` games branch on is derived
+from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
 speed = 1.5 }` says it out loud where they differ. `speed` scales `mouse.cursor`
-and `mouse.scroll`.
+and `mouse.scroll`. A target that names no device is refused, so a misspelled
+`passthrough` cannot quietly become a key.
 
 **A bound source is withheld from the page's raw input**, so a button mapped to a
 key is not also delivered as a gamepad button — only `passthrough` is. A stick

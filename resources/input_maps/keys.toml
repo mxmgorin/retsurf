@@ -4,17 +4,17 @@
 name = "Keyboard (arrows and Z/X)"
 
 [pad]
-up = "ArrowUp"
-down = "ArrowDown"
-left = "ArrowLeft"
-right = "ArrowRight"
-a = "Space"
-b = "z"
-x = "x"
-y = "c"
-l1 = "q"
-r1 = "e"
-start = "Enter"
+up = "key.ArrowUp"
+down = "key.ArrowDown"
+left = "key.ArrowLeft"
+right = "key.ArrowRight"
+a = "key.Space"
+b = "key.z"
+x = "key.x"
+y = "key.c"
+l1 = "key.q"
+r1 = "key.e"
+start = "key.Enter"
 # The pointer path is the one measured on hardware, so every built-in keeps it.
 r2 = "mouse.left"
 # Unbound buttons reach the page as themselves; a game reading the Gamepad API
@@ -24,10 +24,10 @@ l3 = "passthrough"
 r3 = "passthrough"
 
 [stick.left]
-up = "ArrowUp"
-down = "ArrowDown"
-left = "ArrowLeft"
-right = "ArrowRight"
+up = "key.ArrowUp"
+down = "key.ArrowDown"
+left = "key.ArrowLeft"
+right = "key.ArrowRight"
 
 [stick.right]
 analog = "mouse.cursor"

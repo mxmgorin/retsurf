@@ -1,3 +1,4 @@
+use super::game::input_map::{Side, STICK_PREFIX};
 use super::game::map_library::MapLibrary;
 use super::game::mode::GameInput;
 use super::gamepad::Gamepad;
@@ -6,20 +7,27 @@ use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
-    command::{AppCommand, SettingsAction},
+    command::{AppCommand, GameMapEditAction, SettingsAction},
     config::{GameModeConfig, InputConfig},
     event::window::handle_window,
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
-use inputbind::sdl::{is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap};
+use inputbind::sdl::{
+    axis_value, is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap,
+};
 use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
+use sdl2::controller::Axis;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
 
 /// Give up on an idle capture: a handheld has no Esc to cancel with.
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
+
+/// How far a stick must be pushed to be captured: past any dead zone, so one
+/// resting off-centre cannot bind itself.
+const CAPTURE_DEFLECTION: f32 = 0.7;
 
 /// Longest an animating page's pass waits on the queue. Only a wake Servo failed
 /// to send is paid at this rate; a delivered frame returns the wait at once.
@@ -60,6 +68,9 @@ pub struct AppEventHandler {
     menu_quits: bool,
     /// Takes input from both devices, so it lives here rather than in either.
     capture: Capture,
+    /// Whether a stick was already reported this capture. [`Capture`] speaks
+    /// for pads and keys, so the source it does not know needs its own latch.
+    stick_captured: bool,
     /// Game Mode's translator: the pad and the keyboard drive the game.
     game_input: GameInput,
     /// The maps this run offers; which one runs live is [`Self::game_input`]'s.
@@ -118,6 +129,7 @@ impl AppEventHandler {
             keymap,
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
+            stick_captured: false,
             game_input,
             maps,
             game_active: false,
@@ -264,10 +276,13 @@ impl AppEventHandler {
     ) -> bool {
         // The pad drops what it holds either way, so a button held across the
         // transition cannot resolve as both a gesture to bind and a bound action.
-        let capturing = ui.settings.capturing();
+        // Two screens bind by listening — the settings' Controls rows and the
+        // Game Mode map editor — and one machine serves both.
+        let capturing = ui.settings.capturing() || ui.map_edit.capturing();
         if capturing != self.capture.is_on() {
             self.capture
                 .set(capturing, &self.gamepad.held(), Instant::now());
+            self.stick_captured = false;
             self.gamepad.reset(commands);
         }
 
@@ -313,9 +328,10 @@ impl AppEventHandler {
 
         // Capture owns the pad, so no analog state is emitted while it is open.
         if self.capture.is_on() {
+            let for_map = ui.map_edit.capturing();
             match self.capture.tick(Instant::now()) {
-                Tick::Got(captured) => push_capture(commands, captured),
-                Tick::GaveUp => commands.push(AppCommand::Settings(SettingsAction::CaptureCancel)),
+                Tick::Got(captured) => push_capture(commands, captured, for_map),
+                Tick::GaveUp => push_capture_cancel(commands, for_map),
                 Tick::Waiting => {}
             }
             return waited;
@@ -417,8 +433,14 @@ impl AppEventHandler {
     }
 
     /// A raw event taken before egui sees it, which would eat Tab/arrows/Enter/Esc
-    /// and leave them unbindable. Returns whether capture consumed it.
-    fn on_capture_event(&mut self, event: &Event, commands: &mut Vec<AppCommand>) -> bool {
+    /// and leave them unbindable. Returns whether capture consumed it. `for_map`
+    /// is which screen asked to listen, since the answer goes back to it.
+    fn on_capture_event(
+        &mut self,
+        event: &Event,
+        for_map: bool,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
         let now = Instant::now();
         let captured = match event {
             Event::KeyDown {
@@ -429,7 +451,7 @@ impl AppEventHandler {
             } => {
                 // Esc cancels rather than binds: the desktop's way out.
                 if *kc == Keycode::Escape {
-                    commands.push(AppCommand::Settings(SettingsAction::CaptureCancel));
+                    push_capture_cancel(commands, for_map);
                     return true;
                 }
                 // Where the pad arrives as keys, it binds as the pad it is.
@@ -458,19 +480,28 @@ impl AppEventHandler {
             Event::ControllerButtonUp { button, .. } => {
                 pad_of(*button).and_then(|pad| self.capture.on_release(pad, now))
             }
-            // Triggers are the one bindable axis; the sticks freeze, consumed so
-            // no cursor moves under the listening screen.
+            // A trigger binds as the button it is, a stick only where a map is
+            // listening; both are consumed, so nothing moves underneath.
             Event::ControllerAxisMotion { axis, value, .. } => {
                 match self.gamepad.trigger_edges(*axis, *value) {
                     (_, Some(pad)) => self.capture.on_press(pad, now),
                     (Some(pad), None) => self.capture.on_release(pad, now),
-                    (None, None) => None,
+                    (None, None) => {
+                        let listening = for_map && self.capture.is_armed();
+                        if listening && !self.stick_captured {
+                            if let Some(side) = pushed_stick(*axis, *value) {
+                                self.stick_captured = true;
+                                push_capture_stick(commands, side);
+                            }
+                        }
+                        None
+                    }
                 }
             }
             _ => return false,
         };
         if let Some(captured) = captured {
-            push_capture(commands, captured);
+            push_capture(commands, captured, for_map);
         }
         true
     }
@@ -584,7 +615,8 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if self.capture.is_on() && self.on_capture_event(&event, commands) {
+        if self.capture.is_on() && self.on_capture_event(&event, ui.map_edit.capturing(), commands)
+        {
             return;
         }
 
@@ -766,13 +798,57 @@ fn is_shortcut_key(event: &Event) -> bool {
     keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD)
 }
 
-fn push_capture(commands: &mut Vec<AppCommand>, captured: Captured) {
+/// Hand a captured gesture to whichever screen is listening.
+fn push_capture(commands: &mut Vec<AppCommand>, captured: Captured, for_map: bool) {
     let (gesture, keyboard) = match captured {
         Captured::Pad(gesture) => (gesture.to_text(), false),
         Captured::Key(gesture) => (gesture.to_text(), true),
     };
-    commands.push(AppCommand::Settings(SettingsAction::CaptureBinding {
-        gesture,
-        keyboard,
+    commands.push(match for_map {
+        true => AppCommand::GameMapEdit(GameMapEditAction::Capture { gesture, keyboard }),
+        false => AppCommand::Settings(SettingsAction::CaptureBinding { gesture, keyboard }),
+    });
+}
+
+/// Which stick an axis belongs to, once pushed past [`CAPTURE_DEFLECTION`].
+fn pushed_stick(axis: Axis, value: i16) -> Option<Side> {
+    let side = match axis {
+        Axis::LeftX | Axis::LeftY => Side::Left,
+        Axis::RightX | Axis::RightY => Side::Right,
+        _ => return None,
+    };
+    (axis_value(value).abs() >= CAPTURE_DEFLECTION).then_some(side)
+}
+
+/// Hand a pushed stick to the map editor, the one screen that binds one.
+fn push_capture_stick(commands: &mut Vec<AppCommand>, side: Side) {
+    commands.push(AppCommand::GameMapEdit(GameMapEditAction::Capture {
+        gesture: format!("{STICK_PREFIX}{}", side.name()),
+        keyboard: false,
     }));
+}
+
+/// Tell it nothing was captured, so it stops listening (Esc / the give-up).
+fn push_capture_cancel(commands: &mut Vec<AppCommand>, for_map: bool) {
+    commands.push(match for_map {
+        true => AppCommand::GameMapEdit(GameMapEditAction::CaptureCancel),
+        false => AppCommand::Settings(SettingsAction::CaptureCancel),
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stick is captured only once pushed, and either axis names the whole
+    /// stick.
+    #[test]
+    fn a_stick_is_captured_only_once_it_is_pushed() {
+        let drift = (f32::from(i16::MAX) * CAPTURE_DEFLECTION / 2.0) as i16;
+        assert_eq!(pushed_stick(Axis::LeftY, -i16::MAX), Some(Side::Left));
+        assert_eq!(pushed_stick(Axis::RightX, i16::MAX), Some(Side::Right));
+        assert_eq!(pushed_stick(Axis::LeftX, drift), None);
+        // A trigger is a button, and capture takes it as one.
+        assert_eq!(pushed_stick(Axis::TriggerLeft, i16::MAX), None);
+    }
 }

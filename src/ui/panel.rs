@@ -1,7 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE, PANEL_FILL, ROW_FONT};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
 
 /// Shared row metrics so every overlay's list reads alike.
@@ -17,6 +17,9 @@ pub(super) const SIDES: f32 = PAD_X * 2.0;
 
 /// Section-bar tab height.
 const TAB_H: f32 = 28.0;
+
+/// Group headings sit under the rows they name, in size as in weight.
+const HEADING_FONT: f32 = ROW_FONT - 3.0;
 
 /// The full-screen panel shell. `constrain(false)`: the frame fills the screen
 /// exactly, so an egui "fit" shift would cancel the left padding. The close
@@ -70,6 +73,14 @@ pub(super) fn row(
     )
 }
 
+/// One entry of a [`row_list`]: a row to select, or a heading over the rows
+/// that follow it. A heading is not selectable, so the index the list is given
+/// and the one it reports both count rows alone.
+pub(super) enum ListItem {
+    Heading(String),
+    Row(String, String),
+}
+
 /// A titled full-screen panel over one scrolling list of `(label, value)` rows;
 /// `on_click` gets the index of a clicked row. Returns whether it was closed.
 pub(super) fn row_list(
@@ -77,6 +88,23 @@ pub(super) fn row_list(
     id: &str,
     title: &str,
     rows: Vec<(String, String)>,
+    selected: usize,
+    on_click: impl FnMut(usize),
+) -> bool {
+    let items = rows
+        .into_iter()
+        .map(|(label, value)| ListItem::Row(label, value))
+        .collect();
+    grouped_row_list(ctx, id, title, items, selected, on_click)
+}
+
+/// [`row_list`] over items that may carry headings — a long list reads as its
+/// groups rather than as one run of rows.
+pub(super) fn grouped_row_list(
+    ctx: &egui::Context,
+    id: &str,
+    title: &str,
+    items: Vec<ListItem>,
     selected: usize,
     mut on_click: impl FnMut(usize),
 ) -> bool {
@@ -92,7 +120,15 @@ pub(super) fn row_list(
         ui.add_space(ROW_GAP * 3.0);
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         section_scroll(ui, screen).show(ui, |ui| {
-            for (index, (label, value)) in rows.into_iter().enumerate() {
+            let mut index = 0;
+            for item in items {
+                let (label, value) = match item {
+                    ListItem::Heading(text) => {
+                        heading(ui, &text);
+                        continue;
+                    }
+                    ListItem::Row(label, value) => (label, value),
+                };
                 let is_selected = index == selected;
                 let resp = row(ui, width, is_selected, &label, &value);
                 if is_selected {
@@ -101,9 +137,26 @@ pub(super) fn row_list(
                 if resp.clicked() {
                     on_click(index);
                 }
+                index += 1;
             }
         });
     })
+}
+
+/// A heading over the rows that follow it: dim and small, and indented to the
+/// text of a row rather than to the panel's edge.
+fn heading(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(ROW_GAP * 2.0);
+    let indent = ui.spacing().button_padding.x;
+    ui.horizontal(|ui| {
+        ui.add_space(indent);
+        ui.label(
+            egui::RichText::new(text)
+                .color(DIM)
+                .size(HEADING_FONT)
+                .strong(),
+        );
+    });
 }
 
 /// The top section bar: a selectable tab per section, with `trailing` laid out

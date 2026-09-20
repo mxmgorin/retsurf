@@ -1,11 +1,12 @@
 //! Rendering of the Game Mode map editor (state in
-//! [`crate::overlay::game::map_edit`]): one row per source, one stick's own rows, and
-//! the list of what the focused row can send — each over the shared panel
-//! chrome, so a long list scrolls the way the menu's and settings' do.
+//! [`crate::overlay::game::map_edit`]): a row per bound source with the row that
+//! adds one after them, and the list of what the focused row can send — both
+//! over the shared panel chrome, so a long list scrolls the way the menu's and
+//! settings' do.
 
 use crate::command::{AppCommand, GameMapEditAction};
-use crate::overlay::game::map_edit::{sources, Kind, MapEdit, Slot, StickRow, UNBOUND};
-use crate::ui::panel;
+use crate::overlay::game::map_edit::{Kind, MapEdit, Slot, ADD_ROW};
+use crate::ui::panel::{self, ListItem};
 use egui_sdl2::egui;
 
 pub(in crate::ui) fn add_map_edit(
@@ -13,11 +14,11 @@ pub(in crate::ui) fn add_map_edit(
     edit: &MapEdit,
     commands: &mut Vec<AppCommand>,
 ) {
-    let closed = panel::row_list(
+    let closed = panel::grouped_row_list(
         ctx,
         "map_edit",
         &title(edit),
-        rows(edit),
+        items(edit),
         edit.selected(),
         |index| commands.push(AppCommand::GameMapEdit(GameMapEditAction::Click(index))),
     );
@@ -26,52 +27,51 @@ pub(in crate::ui) fn add_map_edit(
     }
 }
 
-/// The panel's title, worded for the list that is up. Nothing under it — every
-/// verb here is a row, so a hint could only name them a second time.
+/// The panel's title, worded for what the screen is doing. Nothing under it —
+/// every verb here is a row, so a hint could only name them a second time.
 fn title(edit: &MapEdit) -> String {
+    if edit.capturing() {
+        return "PRESS A BUTTON OR KEY, OR PUSH A STICK".to_string();
+    }
     if edit.kind_open() {
         let slot = edit.slot().map(|slot| slot.name()).unwrap_or_default();
         return format!("{} SENDS", slot.to_uppercase());
     }
-    match edit.stick_open() {
-        Some(side) => format!("STICK.{} - {}", side.name(), edit.map_name()).to_uppercase(),
-        None => format!("BUTTONS AND STICKS - {}", edit.map_name().to_uppercase()),
-    }
+    edit.map_name().to_uppercase()
 }
 
-/// The rows of whichever list is up.
-fn rows(edit: &MapEdit) -> Vec<(String, String)> {
+/// Whichever list is up. The sources arrive grouped by the table that holds
+/// them, so a heading goes in wherever the group changes; the row that listens
+/// ends the list, carrying whatever the last attempt had to say.
+fn items(edit: &MapEdit) -> Vec<ListItem> {
     if edit.kind_open() {
-        let kinds = edit.slot().map(Kind::all).unwrap_or_default();
+        let kinds = edit.slot().map(|slot| Kind::all(&slot)).unwrap_or_default();
         return kinds
             .iter()
-            .map(|kind| (kind.label().to_string(), String::new()))
+            .map(|kind| ListItem::Row(kind.label().to_string(), String::new()))
             .collect();
     }
-    let targets = edit.targets();
-    let Some(side) = edit.stick_open() else {
-        return sources()
-            .into_iter()
-            .map(|source| {
-                let value = match source {
-                    Slot::Button(pad) => targets
-                        .pads
-                        .get(pad as usize)
-                        .cloned()
-                        .unwrap_or_else(|| UNBOUND.to_string()),
-                    Slot::Stick(side) => targets.sticks[side as usize].role.clone(),
-                    Slot::Direction(..) => unreachable!("sources() holds no direction rows"),
-                };
-                (source.name(), value)
-            })
-            .collect();
-    };
-    let stick = &targets.sticks[side as usize];
-    edit.stick_rows()
-        .into_iter()
-        .map(|row| match row {
-            StickRow::Sends => ("sends".to_string(), stick.role.clone()),
-            StickRow::Direction(dir) => (dir.name().to_string(), stick.dirs[dir as usize].clone()),
-        })
-        .collect()
+    let mut items = vec![];
+    let mut group = None;
+    for row in edit.rows() {
+        let heading = heading_for(&row.slot);
+        if group != Some(heading) {
+            items.push(ListItem::Heading(heading.to_string()));
+            group = Some(heading);
+        }
+        items.push(ListItem::Row(row.slot.name(), row.target.clone()));
+    }
+    let note = edit.note().unwrap_or_default().to_string();
+    items.push(ListItem::Row(ADD_ROW.to_string(), note));
+    items
+}
+
+/// The heading a source sits under — the table it is written in, said as the
+/// screen says things.
+fn heading_for(slot: &Slot) -> &'static str {
+    match slot {
+        Slot::Stick(_) | Slot::Direction(..) => "STICKS",
+        Slot::Button(_) => "PAD",
+        Slot::Key(_) => "KEYBOARD",
+    }
 }

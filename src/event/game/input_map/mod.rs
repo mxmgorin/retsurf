@@ -7,21 +7,21 @@
 //! name = "My game"
 //!
 //! [pad]                  # buttons and the D-pad, by inputbind's names
-//! a = "Space"
-//! b = "z"
+//! a = "key.Space"
+//! b = "key.z"
 //! r2 = "mouse.left"
 //! l2 = "passthrough"     # reaches the page as the gamepad button it is
 //!
 //! [stick.left]           # four directions, through the dead zone
-//! up = "ArrowUp"
+//! up = "key.ArrowUp"
 //! [stick.right]
 //! analog = "mouse.cursor"   # or mouse.scroll — the whole stick, not a direction
 //!
-//! [keyboard]             # physical keys, resolved after the pad keymap
-//! w = "ArrowUp"
+//! [key]                  # physical keys, resolved after the pad keymap
+//! w = "key.ArrowUp"
 //!
 //! [layer.aim.pad]        # while `l2 = "layer:aim"` is held
-//! a = "Shift"
+//! a = "key.Shift"
 //! ```
 
 mod raw;
@@ -37,6 +37,13 @@ use raw::RawInputMap;
 
 /// The key a stick's whole-vector target is written under.
 const ANALOG: &str = "analog";
+
+/// How a key target is spelled. Every target names its device — `key.Space`,
+/// `mouse.left` — the way the editor's rows name their source.
+pub const KEY_PREFIX: &str = "key.";
+
+/// The table a stick is written in.
+pub const STICK_PREFIX: &str = "stick.";
 
 /// Which stick, as the file spells it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -55,7 +62,7 @@ impl Side {
         }
     }
 
-    fn parse(name: &str) -> Option<Side> {
+    pub fn parse(name: &str) -> Option<Side> {
         Side::ALL.into_iter().find(|side| side.name() == name)
     }
 }
@@ -236,6 +243,25 @@ impl InputMap {
         };
     }
 
+    /// The keys the file binds, by the name it spells them with — the editor
+    /// has a row per entry, since which keys exist is the keyboard's business
+    /// rather than a set the screen could list.
+    pub fn raw_keys(&self) -> impl Iterator<Item = (&str, &RawTarget)> {
+        self.raw
+            .key
+            .iter()
+            .map(|(name, target)| (name.as_str(), target))
+    }
+
+    /// Rewrite one key's entry; `None` takes the line out of the file, which
+    /// leaves the key reaching the page as itself.
+    pub fn set_raw_key(&mut self, name: &str, target: Option<RawTarget>) {
+        match target {
+            Some(target) => self.raw.key.insert(name.to_string(), target),
+            None => self.raw.key.remove(name),
+        };
+    }
+
     /// What the file says the whole stick does.
     pub fn raw_stick(&self, side: Side) -> Option<&RawTarget> {
         self.raw.stick.get(side.name())?.get(ANALOG)
@@ -283,7 +309,7 @@ impl InputMap {
     /// unbound, which reaches the page instead.
     pub fn set_raw_stick_arrows(&mut self, side: Side) {
         for dir in Dir::ALL {
-            let arrow = RawTarget::Short(dir.arrow().to_string());
+            let arrow = RawTarget::Short(format!("{KEY_PREFIX}{}", dir.arrow()));
             self.set_raw_stick_dir(side, dir, Some(arrow));
         }
     }
@@ -363,6 +389,30 @@ mod tests {
         }
     }
 
+    /// A key the file binds reaches the runtime under the code SDL gives it,
+    /// which is what the editor's rows are written against.
+    #[test]
+    fn the_key_table_resolves_to_sdl_codes() {
+        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        let map = resolve("[key]\nw = \"key.ArrowUp\"\n");
+        assert!(matches!(map.key(None, code), Some(Target::Key(_))));
+    }
+
+    /// A key that names no device is a typo waiting to read as one of the
+    /// words the format keeps for itself, so it is refused rather than guessed.
+    #[test]
+    fn a_target_that_names_no_device_is_refused() {
+        let map = resolve(
+            r#"
+            [pad]
+            a = "Space"
+            b = "key.Space"
+            "#,
+        );
+        assert_eq!(map.pad(None, Pad::A), None);
+        assert!(map.pad(None, Pad::B).is_some());
+    }
+
     /// A game branching on `e.code` gets nothing from `Unidentified`, and the
     /// name that derives a code is not every key's — Shift and Control need
     /// theirs said out loud, which is the trap a stock map must not ship.
@@ -398,7 +448,7 @@ mod tests {
         let map = resolve(
             r#"
             [stick.left]
-            analog = "cursor"
+            analog = "key.cursor"
             [stick.right]
             analog = "mouse.scroll"
             "#,
@@ -432,9 +482,9 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            a = "Space"
-            b = "z"
-            start = "Enter"
+            a = "key.Space"
+            b = "key.z"
+            start = "key.Enter"
             "#,
         );
         let key = |pad| match map.pad(None, pad) {
@@ -453,7 +503,7 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            x = { to = "x", code = "KeyY", shift = true }
+            x = { to = "key.x", code = "KeyY", shift = true }
             "#,
         );
         let Some(Target::Key(key)) = map.pad(None, Pad::X) else {
@@ -470,8 +520,8 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            select = "Escape"
-            a = "Space"
+            select = "key.Escape"
+            a = "key.Space"
             "#,
         );
         assert_eq!(map.pad(None, Pad::Select), None);
@@ -483,7 +533,7 @@ mod tests {
         let map = resolve(
             r#"
             [stick.left]
-            up = "ArrowUp"
+            up = "key.ArrowUp"
             [stick.right]
             analog = "mouse.cursor"
             "#,
@@ -504,9 +554,9 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            elbow = "Space"
-            a = "NoSuchKey"
-            b = "z"
+            elbow = "key.Space"
+            a = "key.NoSuchKey"
+            b = "key.z"
             "#,
         );
         assert_eq!(map.pad(None, Pad::A), None);
@@ -521,11 +571,11 @@ mod tests {
             r#"
             [pad]
             l2 = "layer:aim"
-            a = "Space"
-            b = "z"
+            a = "key.Space"
+            b = "key.z"
 
             [layer.aim.pad]
-            a = "Shift"
+            a = "key.Shift"
             "#,
         );
         assert_eq!(map.pad(None, Pad::L2), Some(&Target::Layer(0)));
@@ -556,7 +606,7 @@ mod tests {
         assert!(map.raw_stick_is_digital(Side::Left));
         assert_eq!(
             map.raw_stick_dir(Side::Left, Dir::Up).map(RawTarget::text),
-            Some("ArrowUp")
+            Some("key.ArrowUp")
         );
         // And back: the directions go when the whole stick is given a target.
         let scroll = RawTarget::Short("scroll".to_string());
@@ -595,7 +645,7 @@ mod tests {
             r#"
             name = "Original"
             [pad]
-            a = "Space"
+            a = "key.Space"
             [stick.right]
             analog = "mouse.cursor"
             "#,
