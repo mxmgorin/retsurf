@@ -625,14 +625,11 @@ impl AppEventHandler {
                 let (x, y) = ui.to_browser_rel_pos(x as f32, y as f32);
                 browser.mouse_move(x, y);
             }
-            Event::MouseWheel {
-                x,
-                y,
-                mouse_x,
-                mouse_y,
-                ..
-            } => {
-                let (mx, my) = ui.to_browser_rel_pos(mouse_x as f32, mouse_y as f32);
+            Event::MouseWheel { x, y, .. } => {
+                // The event carries the pointer only from SDL 2.26, and the Linux
+                // builds link whatever SDL2 the system has; ask for it instead.
+                let pointer = self.event_pump.mouse_state();
+                let (mx, my) = ui.to_browser_rel_pos(pointer.x() as f32, pointer.y() as f32);
                 // Fire the DOM `wheel` event (for pages with JS handlers)...
                 browser.wheel(x, y, mx, my);
                 // ...then perform the actual native scroll. SDL `y` is positive
