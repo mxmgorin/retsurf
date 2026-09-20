@@ -21,6 +21,7 @@ use servo_media::player::video::{Buffer, VideoFrame, VideoFrameData, VideoFrameR
 use servo_media::player::PlayerEvent;
 use yuv::{yuv420_to_bgra, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
+use super::shared::POSITION_EVENT_SECONDS;
 use super::Shared;
 
 /// Compressed packets buffered ahead of the decoder; the demux thread's send
@@ -379,7 +380,7 @@ impl Presenter {
             self.presented_any = true;
             self.shared.send_event(PlayerEvent::VideoFrameUpdated);
             // Position events come from audio when there is any.
-            if !self.shared.has_audio() && pts - self.last_position >= 0.25 {
+            if !self.shared.has_audio() && pts - self.last_position >= POSITION_EVENT_SECONDS {
                 self.last_position = pts;
                 self.shared.send_event(PlayerEvent::PositionChanged(pts));
             }

@@ -19,7 +19,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{MetadataOptions, StandardTag};
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
-use super::shared::{lock, player_callback, wait, Pcm, Shared};
+use super::shared::{lock, player_callback, wait, Pcm, Shared, POSITION_EVENT_SECONDS};
 use super::source::ByteReader;
 use super::video::VideoPipeline;
 use crate::media::device::{Device, CHANNELS};
@@ -27,9 +27,6 @@ use crate::media::{triage_decode, DecodeFailure};
 
 /// Decoded PCM buffered ahead of the device; rides out refetch latency.
 const PCM_TARGET_SECONDS: f64 = 1.0;
-
-/// Minimum advance between `PositionChanged` events.
-const POSITION_EVENT_SECONDS: f64 = 0.25;
 
 pub(super) fn spawn_decoder(
     shared: Arc<Shared>,

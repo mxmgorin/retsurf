@@ -22,6 +22,10 @@ const KEEP_BACK_BYTES: usize = 4 * 1024 * 1024;
 /// the element clamps it into the seekable ranges first.
 const NO_SEEK: u64 = u64::MAX;
 
+/// Minimum advance between `PositionChanged` events. Audio and video each emit
+/// them (whichever is driving), so both must throttle alike.
+pub(super) const POSITION_EVENT_SECONDS: f64 = 0.25;
+
 pub(super) use crate::media::device::lock;
 
 pub(super) fn wait<'a, T>(cv: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
