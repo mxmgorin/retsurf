@@ -584,7 +584,8 @@ def run_case(case, harness, binary, keep):
 
     with open(app_log_path, "r", errors="replace") as log:
         output = log.read()
-    saved = len(os.listdir(os.path.join(profile, "downloads"))) if case.downloads else 0
+    saved_to = os.path.join(profile, "downloads")
+    saved = len(os.listdir(saved_to)) if os.path.isdir(saved_to) else 0
     if not keep:
         shutil.rmtree(profile, ignore_errors=True)
 
@@ -629,7 +630,10 @@ def main():
         for case in cases:
             print(f"== {case.name}")
             started = time.time()
-            failure = run_case(case, harness, args.binary, args.keep)
+            try:
+                failure = run_case(case, harness, args.binary, args.keep)
+            except Exception as error:  # one broken case must not hide the rest
+                failure = f"the runner itself failed: {error!r}"
             status = "FAIL" if failure else "ok"
             print(f"   {status} ({time.time() - started:.0f}s)" + (f": {failure}" if failure else ""))
             if failure:
