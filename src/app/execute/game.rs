@@ -5,6 +5,7 @@
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
+use crate::event::game::GameMode;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
 use crate::overlay::game::menu::GameRow;
@@ -15,19 +16,34 @@ use inputbind::Pad;
 const DIRECTIONS: &str = "directions";
 
 impl App {
+    /// Game Mode, loaded on demand with the map the config asks for.
+    fn game_mode(&mut self) -> &mut GameMode {
+        self.event_handler
+            .game_mut(&self.config.game_mode.input_map)
+    }
+
     /// The Game Mode gesture: the menu, always. One gesture means one screen in
     /// either state, entering and leaving are its one row, and the map can
     /// be set before a game rather than only under a running one.
     pub(super) fn game_mode_gesture(&mut self) {
         match self.ui.game_menu.visible {
             true => self.ui.game_menu.close(),
-            false => self.ui.game_menu.open(self.ui.game_mode()),
+            false => {
+                // Read here rather than at startup: this is the first screen
+                // that names the live map, and loading one is what it costs.
+                let (_, name) = self.game_mode().live();
+                self.ui.set_input_map_name(name);
+                self.ui.game_menu.open(self.ui.game_mode());
+            }
         }
     }
 
     /// Enter Game Mode, closing whatever overlay is up: the point is that the
     /// page owns the input, and an overlay would still hold it.
     fn enter_game_mode(&mut self, out: &mut Vec<AppCommand>) {
+        // The mode has nothing to route through without its maps, and this is
+        // the one path in.
+        self.game_mode();
         // Read at entry, not at startup: a pad can be plugged in later, and the
         // gestures named have to be the ones the tables actually hold.
         let toast = crate::ui::game_mode_toast_text(
@@ -182,18 +198,26 @@ impl App {
         let open = self.ui.input_maps.open_id_str().map(str::to_string);
         match (naming.what, open) {
             (NameFor::New, _) => {
-                let new_id = self.event_handler.new_input_map(text);
+                let new_id = self
+                    .event_handler
+                    .game_mut(&self.config.game_mode.input_map)
+                    .add(text);
                 self.refresh_input_maps();
                 self.ui.input_maps.open_id(&new_id);
             }
             (NameFor::Duplicate, Some(id)) => {
-                let new_id = self.event_handler.duplicate_input_map(&id, text);
+                let new_id = self
+                    .event_handler
+                    .game_mut(&self.config.game_mode.input_map)
+                    .duplicate(&id, text);
                 self.refresh_input_maps();
                 self.ui.input_maps.open_id(&new_id);
             }
             (NameFor::Rename, Some(id)) => {
-                self.event_handler
-                    .rename_input_map(&id, text, &self.browser, out);
+                let game = self
+                    .event_handler
+                    .game_mut(&self.config.game_mode.input_map);
+                game.rename(&id, text, &self.browser, out);
                 self.refresh_input_maps();
             }
             // The map went away while the keyboard was up.
@@ -207,7 +231,10 @@ impl App {
         let Some(id) = self.ui.input_maps.open_id_str().map(str::to_string) else {
             return;
         };
-        let (live, _) = self.event_handler.delete_input_map(&id, &self.browser, out);
+        let game = self
+            .event_handler
+            .game_mut(&self.config.game_mode.input_map);
+        let (live, _) = game.delete(&id, &self.browser, out);
         if self.config.game_mode.input_map != live {
             self.config.game_mode.input_map = live;
             self.config.save();
@@ -219,7 +246,10 @@ impl App {
 
     /// Make a map the one Game Mode runs, and the one it starts with.
     fn use_input_map(&mut self, id: &str, out: &mut Vec<AppCommand>) {
-        let (id, _) = self.event_handler.use_input_map(id, &self.browser, out);
+        let game = self
+            .event_handler
+            .game_mut(&self.config.game_mode.input_map);
+        let (id, _) = game.use_map(id, &self.browser, out);
         self.config.game_mode.input_map = id;
         self.config.save();
         self.refresh_input_maps();
@@ -229,11 +259,10 @@ impl App {
     /// Re-snapshot the map list, and the live name the menu shows with it —
     /// every change to a map goes through here.
     fn refresh_input_maps(&mut self) {
-        let name = self.event_handler.input_map_name().to_string();
+        let (live, name) = self.game_mode().live();
         self.ui.set_input_map_name(name);
-        let live = self.event_handler.input_map_id().to_string();
         let rows = self
-            .event_handler
+            .game_mode()
             .maps
             .all()
             .iter()
@@ -268,7 +297,10 @@ impl App {
                 }
                 let id = self.ui.map_edit.map_id().to_string();
                 if self.ui.map_edit.close() {
-                    self.event_handler.save_input_map(&id, &self.browser, out);
+                    let game = self
+                        .event_handler
+                        .game_mut(&self.config.game_mode.input_map);
+                    game.save(&id, &self.browser, out);
                 }
                 self.refresh_input_maps();
                 self.ui.input_maps.open_id(&id);
@@ -368,7 +400,7 @@ impl App {
     fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.map_edit.map_id().to_string();
         let raw = text.map(RawTarget::Short);
-        if let Some(map) = self.event_handler.maps.get_mut(&id) {
+        if let Some(map) = self.game_mode().maps.get_mut(&id) {
             match &slot {
                 Slot::Button(pad) => map.set_raw_pad(*pad, raw),
                 Slot::Key(name) => map.set_raw_key(name, raw),
@@ -386,7 +418,7 @@ impl App {
             return;
         };
         let id = self.ui.map_edit.map_id().to_string();
-        if let Some(map) = self.event_handler.maps.get_mut(&id) {
+        if let Some(map) = self.game_mode().maps.get_mut(&id) {
             map.set_raw_stick_arrows(side);
         }
         self.edited_input_map();
@@ -400,7 +432,8 @@ impl App {
     /// Re-snapshot the editor's rows from the map it has open. A stale id keeps
     /// the last snapshot: writes to it are already no-ops (see `set_map_target`).
     fn refresh_map_edit(&mut self) {
-        let Some(map) = self.event_handler.maps.get(self.ui.map_edit.map_id()) else {
+        let id = self.ui.map_edit.map_id().to_string();
+        let Some(map) = self.game_mode().maps.get(&id) else {
             return;
         };
         let text = |raw: Option<&RawTarget>| match raw {
@@ -454,7 +487,12 @@ impl App {
     /// is the source of truth here, so nothing is written back.
     pub(super) fn adopt_input_map(&mut self, out: &mut Vec<AppCommand>) {
         let id = self.config.game_mode.input_map.clone();
-        self.event_handler.use_input_map(&id, &self.browser, out);
+        // Every settings save comes through here, and a mode that has not loaded
+        // takes the config's map when it does: this must not be what loads it.
+        let Some(game) = self.event_handler.game() else {
+            return;
+        };
+        game.use_map(&id, &self.browser, out);
         self.refresh_input_maps();
     }
 }

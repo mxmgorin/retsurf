@@ -134,10 +134,6 @@ impl GameInput {
         self.map = map;
     }
 
-    pub fn map_id(&self) -> &str {
-        &self.map.id
-    }
-
     /// The layer held right now, if any: the most recent activator wins, and a
     /// button it leaves alone still falls through to the base.
     fn layer(&self) -> Option<usize> {

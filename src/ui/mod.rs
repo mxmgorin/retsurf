@@ -190,8 +190,8 @@ pub struct AppUi {
     pub input_maps: InputMaps,
     /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
-    /// The live map's name, mirrored for the menu's row; the maps
-    /// themselves live in the event handler, which resolved them.
+    /// The live map's name, for the menu's row. Empty until that menu opens:
+    /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
@@ -261,7 +261,6 @@ impl AppUi {
         input: &InputConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
-        input_map_name: String,
         user_agent: String,
     ) -> Self {
         Self {
@@ -282,7 +281,7 @@ impl AppUi {
             game_menu: GameMenu::new(),
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
-            input_map_name,
+            input_map_name: String::new(),
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();

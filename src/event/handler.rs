@@ -1,21 +1,20 @@
 use super::game::input_map::{Side, STICK_PREFIX};
-use super::game::map_library::MapLibrary;
 use super::game::mode::GameInput;
+use super::game::GameMode;
 use super::gamepad::Gamepad;
 use super::gamepad_api;
+use super::key_names;
 use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, GameMapEditAction, SettingsAction},
-    config::{GameModeConfig, InputConfig},
+    config::InputConfig,
     event::window::handle_window,
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
-use inputbind::sdl::{
-    axis_value, is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap,
-};
+use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, pad_of, Keymap};
 use inputbind::{Bindings, Capture, Captured, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
@@ -45,12 +44,6 @@ fn rumble_magnitude(magnitude: f64) -> u16 {
     (magnitude.clamp(0.0, 1.0) * f64::from(u16::MAX)).round() as u16
 }
 
-/// SDL's key names, built per use rather than held: 22 KB resident for a table
-/// only the cold paths read — building the bindings tables, and writing a map.
-fn key_names() -> KeyNames {
-    KeyNames::new()
-}
-
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
@@ -72,22 +65,15 @@ pub struct AppEventHandler {
     /// Whether a stick was already reported this capture. [`Capture`] speaks
     /// for pads and keys, so the source it does not know needs its own latch.
     stick_captured: bool,
-    /// Game Mode's translator: the pad and the keyboard drive the game.
-    game_input: GameInput,
-    /// The maps this run offers; which one runs live is [`Self::game_input`]'s.
-    pub maps: MapLibrary,
-    /// Whether the pad routed to the game last pass, to release on a transition.
-    game_active: bool,
+    /// Game Mode, for as long as the mode or one of its screens is up (see
+    /// [`Self::wait`]).
+    game: Option<GameMode>,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
     touch: super::touch::TouchState,
 }
 
 impl AppEventHandler {
-    pub fn new(
-        sdl: &sdl2::Sdl,
-        gamepad_cfg: InputConfig,
-        game_mode: &GameModeConfig,
-    ) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
         // `RETSURF_KEYMAP` wins over the driver name, and has to: the bundled
@@ -106,31 +92,18 @@ impl AppEventHandler {
             }
         }
 
-        let key_names = key_names();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
-        let maps = MapLibrary::load(&key_names);
-        let map = maps.pick(&game_mode.input_map);
-        if map.id != game_mode.input_map {
-            log::warn!(
-                "input map: no `{}`; using `{}`",
-                game_mode.input_map,
-                map.id
-            );
-        }
-        let game_input = GameInput::new(map.clone(), &gamepad_cfg);
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            bindings: bindings::build(&bindings::load_store(), &key_names),
+            bindings: bindings::build(&bindings::load_store(), &key_names()),
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
             menu_quits,
             capture: Capture::new(hold, CAPTURE_TIMEOUT),
             stick_captured: false,
-            game_input,
-            maps,
-            game_active: false,
+            game: None,
             touch: super::touch::TouchState::new(),
         })
     }
@@ -140,102 +113,33 @@ impl AppEventHandler {
     /// live (see [`crate::app::App::apply_config`]).
     pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
         self.capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
-        self.game_input.set_config(&cfg);
+        if let Some(game) = &mut self.game {
+            game.set_config(&cfg);
+        }
         self.gamepad.set_config(cfg);
     }
 
-    /// Write an edited map to its file (see [`MapLibrary::save`]) and re-adopt
-    /// it if it is the one running. Returns its name.
-    pub fn save_input_map(
-        &mut self,
-        id: &str,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) -> String {
-        let Some(name) = self.maps.save(id, &key_names()) else {
-            return self.input_map_name().to_string();
-        };
-        self.readopt_input_map(id, browser, commands);
-        name
+    /// Game Mode, loaded on demand. `start` is the map to run then, which only
+    /// the caller has: the config is not the handler's.
+    pub fn game_mut(&mut self, start: &str) -> &mut GameMode {
+        self.game.get_or_insert_with(|| GameMode::load(start))
     }
 
-    /// Rename what the menu shows and write it.
-    pub fn rename_input_map(
-        &mut self,
-        id: &str,
-        name: String,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        self.maps.set_name(id, name);
-        self.save_input_map(id, browser, commands);
+    /// Game Mode where it has already loaded, for the paths that must not be
+    /// what loads it.
+    pub fn game(&mut self) -> Option<&mut GameMode> {
+        self.game.as_mut()
     }
 
-    pub fn duplicate_input_map(&mut self, id: &str, name: String) -> String {
-        self.maps.duplicate(id, name, &key_names())
+    /// The translator while Game Mode holds the pad, and `None` while the
+    /// chrome does.
+    fn routing_input(&mut self) -> Option<&mut GameInput> {
+        self.game.as_mut().and_then(GameMode::routing)
     }
 
-    pub fn new_input_map(&mut self, name: String) -> String {
-        self.maps.add_passthrough(name, &key_names())
-    }
-
-    /// Delete a map (see [`MapLibrary::delete`]). The mode cannot run what is
-    /// no longer there, so it takes the first map instead; returns what it
-    /// runs now.
-    pub fn delete_input_map(
-        &mut self,
-        id: &str,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) -> (String, String) {
-        if self.maps.delete(id, &key_names()) && self.game_input.map_id() == id {
-            let map = self.maps.pick(id).clone();
-            self.game_input.set_map(map, browser, commands);
-        }
-        self.live_input_map()
-    }
-
-    /// The map driving the mode right now, as the menu shows it.
-    pub fn input_map_name(&self) -> &str {
-        &self.maps.pick(self.game_input.map_id()).name
-    }
-
-    pub fn input_map_id(&self) -> &str {
-        self.game_input.map_id()
-    }
-
-    /// Hand Game Mode the map `id` names, live: what the page holds under
-    /// the old one is released first. An id nothing answers to falls back to
-    /// the first, so an edited config is never a dead mode.
-    pub fn use_input_map(
-        &mut self,
-        id: &str,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) -> (String, String) {
-        let map = self.maps.pick(id).clone();
-        let named = (map.id.clone(), map.name.clone());
-        self.game_input.set_map(map, browser, commands);
-        named
-    }
-
-    fn live_input_map(&self) -> (String, String) {
-        let map = self.maps.pick(self.game_input.map_id());
-        (map.id.clone(), map.name.clone())
-    }
-
-    /// Re-adopt `id` if it is the one the mode is running, so an edit to it
-    /// takes effect without a restart.
-    fn readopt_input_map(
-        &mut self,
-        id: &str,
-        browser: &AppBrowser,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        if id == self.game_input.map_id() {
-            let map = self.maps.pick(id).clone();
-            self.game_input.set_map(map, browser, commands);
-        }
+    /// Whether the pad routed to the game last pass.
+    fn routing(&self) -> bool {
+        self.game.as_ref().is_some_and(GameMode::is_routing)
     }
 
     /// Rebuild both devices' tables from an edited store. The pad forgets what it
@@ -275,20 +179,33 @@ impl AppEventHandler {
         // Game Mode routes the pad to the game while the page owns the focus; on
         // the way out everything the page holds is released, so no key sticks.
         let game_on = ui.game_mode() && ui.focus() == Focus::Page && !self.capture.is_on();
-        if game_on != self.game_active {
-            self.game_active = game_on;
-            if game_on {
-                self.gamepad.reset(commands);
-            } else {
-                self.game_input.release(browser, commands);
+        if game_on != self.routing() {
+            // Nothing to route through until a map screen has loaded one, and
+            // entering the mode goes through its menu.
+            if let Some(game) = &mut self.game {
+                match game_on {
+                    true => {
+                        game.start_routing(&self.gamepad.cfg);
+                        self.gamepad.reset(commands);
+                    }
+                    false => game.stop_routing(browser, commands),
+                }
+            }
+        }
+
+        // Nothing is holding the maps: the mode is off and none of its screens is
+        // up. Released on the way out, so dropping them can strand no key.
+        if !ui.game_mode() && !ui.game_screen() {
+            if let Some(mut game) = self.game.take() {
+                game.stop_routing(browser, commands);
             }
         }
 
         // An active pad returns promptly: it drives the cursor from a held stick,
         // which produces no event to wake on, so blocking would stall the motion.
-        let device_active = match self.game_active {
-            true => self.game_input.is_active(),
-            false => self.gamepad.is_active(),
+        let device_active = match self.routing_input() {
+            Some(input) => input.is_active(),
+            None => self.gamepad.is_active(),
         };
         let waited = !device_active && !self.capture.is_on();
         if waited {
@@ -324,10 +241,9 @@ impl AppEventHandler {
         }
         // Emit this frame's analog state as a command for the router to apply,
         // and fire any hold or repeat whose deadline just passed.
-        if self.game_active {
-            self.game_input.tick(commands);
-        } else {
-            self.gamepad.tick(commands);
+        match self.routing_input() {
+            Some(input) => input.tick(commands),
+            None => self.gamepad.tick(commands),
         }
         waited
     }
@@ -395,9 +311,10 @@ impl AppEventHandler {
     ) {
         // The buttons a map sends ride the pad that drove them, so the page
         // reads a remap as the same device rather than a second one.
-        self.game_input.note_pad_slot(browser.pad_slot(instance_id));
-        let withheld = pad_of(button)
-            .is_some_and(|pad| self.game_input.on_pad(pad, pressed, browser, commands));
+        let withheld = self.routing_input().is_some_and(|input| {
+            input.note_pad_slot(browser.pad_slot(instance_id));
+            pad_of(button).is_some_and(|pad| input.on_pad(pad, pressed, browser, commands))
+        });
         if !withheld {
             self.to_page(browser, instance_id, |slot| {
                 gamepad_api::button(slot, button, pressed)
@@ -526,10 +443,10 @@ impl AppEventHandler {
             }
             return;
         }
-        if self
-            .game_input
-            .on_key(code, key.pressed, key.repeat, browser, commands)
-        {
+        let taken = self
+            .routing_input()
+            .is_some_and(|input| input.on_key(code, key.pressed, key.repeat, browser, commands));
+        if taken {
             return;
         }
         let event = super::keyboard::into_servo(key);
@@ -546,8 +463,8 @@ impl AppEventHandler {
         commands: &mut Vec<AppCommand>,
     ) {
         if let Some(pad) = self.keymap.pad(key.kc) {
-            if self.game_active {
-                self.game_input.on_pad(pad, key.pressed, browser, commands);
+            if let Some(input) = self.routing_input() {
+                input.on_pad(pad, key.pressed, browser, commands);
                 return;
             }
             // A pad press reclaims hint badges as button combos.
@@ -563,7 +480,7 @@ impl AppEventHandler {
         if key.pressed {
             ui.note_input_keyboard(true);
         }
-        if self.game_active {
+        if self.routing() {
             self.game_key(&key, browser, commands);
             return;
         }
@@ -581,7 +498,7 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if self.game_active {
+        if self.routing() {
             self.game_button(which, button, pressed, browser, commands);
             return;
         }
@@ -611,7 +528,7 @@ impl AppEventHandler {
 
         // A modified key stays ours: egui reports *every* key consumed while a
         // text field has focus. Game Mode's keys belong to the page, not egui.
-        let egui_first = !self.is_pad_as_keys(&event) && !(self.game_active && is_key(&event));
+        let egui_first = !self.is_pad_as_keys(&event) && !(self.routing() && is_key(&event));
         if egui_first && ui.handle_event(window, &event) && !is_shortcut_key(&event) {
             return;
         }
@@ -736,8 +653,11 @@ impl AppEventHandler {
             } => {
                 // In Game Mode a bound source is withheld from the Gamepad API,
                 // so a press the translator turned into a key is never seen twice.
-                if self.game_active {
-                    if !self.game_input.on_axis(axis, value, browser, commands) {
+                if self.routing() {
+                    let taken = self
+                        .routing_input()
+                        .is_some_and(|input| input.on_axis(axis, value, browser, commands));
+                    if !taken {
                         self.to_page(browser, which, |slot| gamepad_api::axis(slot, axis, value));
                     }
                     return;

@@ -25,7 +25,7 @@ pub struct Gamepad {
     /// Digital -1/0/1, merged with the left stick into the aim vector.
     dpad: (f32, f32),
     /// Tunables (dead zones, trigger threshold, hold) from the config file.
-    cfg: InputConfig,
+    pub cfg: InputConfig,
     pads: PadState<Action>,
     left_trigger: Trigger,
     right_trigger: Trigger,
