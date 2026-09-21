@@ -16,7 +16,7 @@ use crate::{
 use inputbind::sdl::{
     axis_value, is_modifier, key_code, key_name, mods_for, pad_of, KeyNames, Keymap,
 };
-use inputbind::{Action as _, Bindings, Capture, Captured, Store, Tick};
+use inputbind::{Bindings, Capture, Captured, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -45,17 +45,18 @@ fn rumble_magnitude(magnitude: f64) -> u16 {
     (magnitude.clamp(0.0, 1.0) * f64::from(u16::MAX)).round() as u16
 }
 
+/// SDL's key names, built per use rather than held: 22 KB resident for a table
+/// only the cold paths read — building the bindings tables, and writing a map.
+fn key_names() -> KeyNames {
+    KeyNames::new()
+}
+
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
     game_controller_subsystem: sdl2::GameControllerSubsystem,
     /// Gesture-to-action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
-    /// The text the tables were built from, so the chrome can name a gesture
-    /// the way the file spells it (see [`Self::key_gestures`]).
-    store: Store,
-    /// Derived once, so the `[keyboard]` table resolves its names at load.
-    key_names: KeyNames,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
     /// Whether the keys arriving from this device *are* the pad. The Miyoo's
@@ -105,7 +106,7 @@ impl AppEventHandler {
             }
         }
 
-        let key_names = KeyNames::new();
+        let key_names = key_names();
         let hold = Duration::from_millis(gamepad_cfg.hold_ms);
         let maps = MapLibrary::load(&key_names);
         let map = maps.pick(&game_mode.input_map);
@@ -117,14 +118,11 @@ impl AppEventHandler {
             );
         }
         let game_input = GameInput::new(map.clone(), &gamepad_cfg);
-        let store = bindings::load_store();
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            bindings: bindings::build(&store, &key_names),
-            store,
-            key_names,
+            bindings: bindings::build(&bindings::load_store(), &key_names),
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
             menu_quits,
@@ -154,7 +152,7 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> String {
-        let Some(name) = self.maps.save(id, &self.key_names) else {
+        let Some(name) = self.maps.save(id, &key_names()) else {
             return self.input_map_name().to_string();
         };
         self.readopt_input_map(id, browser, commands);
@@ -174,11 +172,11 @@ impl AppEventHandler {
     }
 
     pub fn duplicate_input_map(&mut self, id: &str, name: String) -> String {
-        self.maps.duplicate(id, name, &self.key_names)
+        self.maps.duplicate(id, name, &key_names())
     }
 
     pub fn new_input_map(&mut self, name: String) -> String {
-        self.maps.add_passthrough(name, &self.key_names)
+        self.maps.add_passthrough(name, &key_names())
     }
 
     /// Delete a map (see [`MapLibrary::delete`]). The mode cannot run what is
@@ -190,7 +188,7 @@ impl AppEventHandler {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> (String, String) {
-        if self.maps.delete(id, &self.key_names) && self.game_input.map_id() == id {
+        if self.maps.delete(id, &key_names()) && self.game_input.map_id() == id {
             let map = self.maps.pick(id).clone();
             self.game_input.set_map(map, browser, commands);
         }
@@ -243,20 +241,8 @@ impl AppEventHandler {
     /// Rebuild both devices' tables from an edited store. The pad forgets what it
     /// holds, so a press begun under the old table cannot resolve against the new.
     pub fn set_bindings(&mut self, store: &Store, commands: &mut Vec<AppCommand>) {
-        self.bindings = bindings::build(store, &self.key_names);
-        self.store = store.clone();
+        self.bindings = bindings::build(store, &key_names());
         self.gamepad.reset(commands);
-    }
-
-    /// The gestures `action` answers to on the keyboard, as `bindings.toml`
-    /// spells them — for naming a way out on screen rather than assuming one.
-    pub fn key_gestures(&self, action: Action) -> Vec<String> {
-        self.store
-            .keyboard
-            .iter()
-            .filter(|(_, name)| name.as_str() == action.name())
-            .map(|(gesture, _)| gesture.clone())
-            .collect()
     }
 
     /// Whether this device has a pad at all — a controller, or a panel that

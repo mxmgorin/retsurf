@@ -3,7 +3,7 @@
 //! [`crate::overlay::game`]. Split from the dispatcher for size alone.
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
-use crate::event::bindings::Action;
+use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
@@ -30,10 +30,9 @@ impl App {
     fn enter_game_mode(&mut self, out: &mut Vec<AppCommand>) {
         // Read at entry, not at startup: a pad can be plugged in later, and the
         // gestures named have to be the ones the tables actually hold.
-        let handler = &self.event_handler;
         let toast = crate::ui::game_mode_toast_text(
-            handler.has_pad(),
-            &handler.key_gestures(Action::GameMode),
+            self.event_handler.has_pad(),
+            &bindings::key_gestures(Action::GameMode),
         );
         self.ui.enter_game_mode(toast);
         self.ui.osk(OskCommand::Hide, &self.browser, out);

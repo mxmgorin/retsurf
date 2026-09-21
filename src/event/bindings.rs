@@ -392,9 +392,22 @@ pub fn save(store: &Store) {
     store.save(bindings_path());
 }
 
-/// Parse a store into the runtime tables; `keys` comes from SDL once at startup.
+/// Parse a store into the runtime tables; `keys` resolves the `[keyboard]`
+/// table's names to codes.
 pub fn build(store: &Store, keys: &KeyNames) -> Bindings<Action> {
     Bindings::new(store, SURFACES, |name| keys.code(name))
+}
+
+/// The gestures `action` answers to on the keyboard, as the file spells them —
+/// for naming a way out on screen rather than assuming one. Read on demand:
+/// [`Bindings`] holds no text, and the file is 7 KB for a handful of words.
+pub fn key_gestures(action: Action) -> Vec<String> {
+    load_store()
+        .keyboard
+        .into_iter()
+        .filter(|(_, name)| name.as_str() == action.name())
+        .map(|(gesture, _)| gesture)
+        .collect()
 }
 
 #[cfg(test)]
