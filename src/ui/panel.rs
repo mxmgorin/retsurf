@@ -31,10 +31,17 @@ pub(super) fn panel(
     add_contents: impl FnOnce(&mut egui::Ui),
 ) -> bool {
     let mut closed = false;
+    // An area's first show is an invisible sizing pass, which would leave the
+    // page on screen for that frame; a painted layer needs no such pass.
+    ctx.layer_painter(egui::LayerId::background())
+        .rect_filled(screen, 0.0, PANEL_FILL);
     egui::Area::new(egui::Id::new(id))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
         .constrain(false)
+        // egui fades a freshly shown area in, which over a full-screen panel is
+        // the page showing through it for the length of the fade.
+        .fade_in(false)
         .show(ctx, |ui| {
             egui::Frame::default()
                 .fill(PANEL_FILL)
