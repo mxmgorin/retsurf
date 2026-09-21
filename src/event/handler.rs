@@ -15,7 +15,7 @@ use crate::{
     ui::{AppUi, Focus},
 };
 use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, pad_of, Keymap};
-use inputbind::{Bindings, Capture, Captured, Store, Tick};
+use inputbind::{Bindings, Capture, Captured, Pad, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -44,6 +44,28 @@ fn rumble_magnitude(magnitude: f64) -> u16 {
     (magnitude.clamp(0.0, 1.0) * f64::from(u16::MAX)).round() as u16
 }
 
+/// A screen listening for a gesture to bind: the machine both devices feed, and
+/// the latch for the one source it does not speak for.
+struct Listening {
+    capture: Capture,
+    /// Whether a stick was already reported this round. [`Capture`] speaks for
+    /// pads and keys, so the source it does not know needs its own latch.
+    stick: bool,
+}
+
+impl Listening {
+    /// Start listening. `held` is the pads down right now — the press that
+    /// activated the row, which must not be taken as the binding.
+    fn new(cfg: &InputConfig, held: &[Pad], now: Instant) -> Self {
+        let mut capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
+        capture.set(true, held, now);
+        Self {
+            capture,
+            stick: false,
+        }
+    }
+}
+
 pub struct AppEventHandler {
     event_pump: sdl2::EventPump,
     game_controllers: Vec<sdl2::controller::GameController>,
@@ -60,11 +82,9 @@ pub struct AppEventHandler {
     /// where the launcher hands it over (`RETSURF_MENU_QUIT`, set by both Miyoo
     /// packages: a firmware kill helper writes no session on the way out).
     menu_quits: bool,
-    /// Takes input from both devices, so it lives here rather than in either.
-    capture: Capture,
-    /// Whether a stick was already reported this capture. [`Capture`] speaks
-    /// for pads and keys, so the source it does not know needs its own latch.
-    stick_captured: bool,
+    /// The binding screen listening for a gesture, if one is. Takes input from
+    /// both devices, so it lives here rather than in either.
+    listening: Option<Listening>,
     /// Game Mode, for as long as the mode or one of its screens is up (see
     /// [`Self::wait`]).
     game: Option<GameMode>,
@@ -92,7 +112,6 @@ impl AppEventHandler {
             }
         }
 
-        let hold = Duration::from_millis(gamepad_cfg.hold_ms);
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
@@ -101,8 +120,7 @@ impl AppEventHandler {
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
             menu_quits,
-            capture: Capture::new(hold, CAPTURE_TIMEOUT),
-            stick_captured: false,
+            listening: None,
             game: None,
             touch: super::touch::TouchState::new(),
         })
@@ -112,7 +130,6 @@ impl AppEventHandler {
     /// the controller state machine — used when the settings overlay changes them
     /// live (see [`crate::app::App::apply_config`]).
     pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
-        self.capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
         if let Some(game) = &mut self.game {
             game.set_config(&cfg);
         }
@@ -169,16 +186,16 @@ impl AppEventHandler {
         // Two screens bind by listening — the settings' Controls rows and the
         // Game Mode map editor — and one machine serves both.
         let capturing = ui.settings.capturing() || ui.map_edit.capturing();
-        if capturing != self.capture.is_on() {
-            self.capture
-                .set(capturing, &self.gamepad.held(), Instant::now());
-            self.stick_captured = false;
+        if capturing != self.listening.is_some() {
+            let held = self.gamepad.held();
+            self.listening =
+                capturing.then(|| Listening::new(&self.gamepad.cfg, &held, Instant::now()));
             self.gamepad.reset(commands);
         }
 
         // Game Mode routes the pad to the game while the page owns the focus; on
         // the way out everything the page holds is released, so no key sticks.
-        let game_on = ui.game_mode() && ui.focus() == Focus::Page && !self.capture.is_on();
+        let game_on = ui.game_mode() && ui.focus() == Focus::Page && self.listening.is_none();
         if game_on != self.routing() {
             // Nothing to route through until a map screen has loaded one, and
             // entering the mode goes through its menu.
@@ -207,7 +224,7 @@ impl AppEventHandler {
             Some(input) => input.is_active(),
             None => self.gamepad.is_active(),
         };
-        let waited = !device_active && !self.capture.is_on();
+        let waited = !device_active && self.listening.is_none();
         if waited {
             // An animating page waits too: Servo rings the queue through its
             // event-loop waker on every paint message, so this wakes on the frame.
@@ -230,9 +247,9 @@ impl AppEventHandler {
         }
 
         // Capture owns the pad, so no analog state is emitted while it is open.
-        if self.capture.is_on() {
+        if let Some(listening) = &mut self.listening {
             let for_map = ui.map_edit.capturing();
-            match self.capture.tick(Instant::now()) {
+            match listening.capture.tick(Instant::now()) {
                 Tick::Got(captured) => push_capture(commands, captured, for_map),
                 Tick::GaveUp => push_capture_cancel(commands, for_map),
                 Tick::Waiting => {}
@@ -348,6 +365,9 @@ impl AppEventHandler {
         commands: &mut Vec<AppCommand>,
     ) -> bool {
         let now = Instant::now();
+        let Some(listening) = self.listening.as_mut() else {
+            return false;
+        };
         let captured = match event {
             Event::KeyDown {
                 keycode: Some(kc),
@@ -362,9 +382,9 @@ impl AppEventHandler {
                 }
                 // Where the pad arrives as keys, it binds as the pad it is.
                 if let Some(pad) = self.keymap.pad(*kc) {
-                    self.capture.on_press(pad, now)
+                    listening.capture.on_press(pad, now)
                 } else {
-                    self.capture.on_key(
+                    listening.capture.on_key(
                         &key_name(*kc),
                         mods_for(*kc, *keymod),
                         is_modifier(*kc),
@@ -375,28 +395,28 @@ impl AppEventHandler {
             Event::KeyUp {
                 keycode: Some(kc), ..
             } => match self.keymap.pad(*kc) {
-                Some(pad) => self.capture.on_release(pad, now),
-                None => self.capture.on_key_release(&key_name(*kc)),
+                Some(pad) => listening.capture.on_release(pad, now),
+                None => listening.capture.on_key_release(&key_name(*kc)),
             },
             // Autorepeat and the text edge are swallowed, never bound.
             Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return true,
             Event::ControllerButtonDown { button, .. } => {
-                pad_of(*button).and_then(|pad| self.capture.on_press(pad, now))
+                pad_of(*button).and_then(|pad| listening.capture.on_press(pad, now))
             }
             Event::ControllerButtonUp { button, .. } => {
-                pad_of(*button).and_then(|pad| self.capture.on_release(pad, now))
+                pad_of(*button).and_then(|pad| listening.capture.on_release(pad, now))
             }
             // A trigger binds as the button it is, a stick only where a map is
             // listening; both are consumed, so nothing moves underneath.
             Event::ControllerAxisMotion { axis, value, .. } => {
                 match self.gamepad.trigger_edges(*axis, *value) {
-                    (_, Some(pad)) => self.capture.on_press(pad, now),
-                    (Some(pad), None) => self.capture.on_release(pad, now),
+                    (_, Some(pad)) => listening.capture.on_press(pad, now),
+                    (Some(pad), None) => listening.capture.on_release(pad, now),
                     (None, None) => {
-                        let listening = for_map && self.capture.is_armed();
-                        if listening && !self.stick_captured {
+                        let armed = for_map && listening.capture.is_armed();
+                        if armed && !listening.stick {
                             if let Some(side) = pushed_stick(*axis, *value) {
-                                self.stick_captured = true;
+                                listening.stick = true;
                                 push_capture_stick(commands, side);
                             }
                         }
@@ -521,7 +541,8 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        if self.capture.is_on() && self.on_capture_event(&event, ui.map_edit.capturing(), commands)
+        if self.listening.is_some()
+            && self.on_capture_event(&event, ui.map_edit.capturing(), commands)
         {
             return;
         }
