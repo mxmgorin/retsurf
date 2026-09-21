@@ -204,7 +204,7 @@ impl AppUi {
     /// overlays close — input focus and draw order can never disagree.
     #[inline]
     pub fn menu_open(&mut self) {
-        self.osk.visible = false;
+        self.osk.hide();
         self.hints.hide();
         self.menu.open();
     }
@@ -213,7 +213,7 @@ impl AppUi {
     /// the menu it takes over the stick and A, so the other user overlays close.
     #[inline]
     pub fn settings_open(&mut self, config: &AppConfig) {
-        self.osk.visible = false;
+        self.osk.hide();
         self.hints.hide();
         self.menu.close();
         self.settings.open(config);
