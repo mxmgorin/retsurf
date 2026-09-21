@@ -285,7 +285,9 @@ impl App {
     /// Close the settings overlay: adopt its edited drafts
     /// — the config and the gamepad bindings, each saved and re-applied live.
     pub(super) fn settings_close(&mut self, out: &mut Vec<AppCommand>) {
-        let (config, bindings) = self.ui.settings_close();
+        let Some((config, bindings)) = self.ui.settings_close() else {
+            return;
+        };
         self.apply_config(config, out);
         if let Some(store) = bindings {
             self.apply_bindings(store, out);

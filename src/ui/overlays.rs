@@ -220,12 +220,11 @@ impl AppUi {
     }
 
     /// Close the settings overlay, handing back its edited config and bindings
-    /// drafts so the app can save them and re-apply what changes live.
+    /// drafts so the app can save them and re-apply what changes live. `None`
+    /// when it was not open.
     #[inline]
-    pub fn settings_close(&mut self) -> (AppConfig, Option<inputbind::Store>) {
-        let drafts = (self.settings.draft(), self.settings.changed_bindings());
-        self.settings.close();
-        drafts
+    pub fn settings_close(&mut self) -> Option<(AppConfig, Option<inputbind::Store>)> {
+        self.settings.close()
     }
 
     /// Move the settings selection by `dy` rows. On the About tab the update block's
