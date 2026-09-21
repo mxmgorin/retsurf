@@ -8,6 +8,7 @@ use super::{
     PromptAction,
 };
 use crate::browser::BrowserCommand;
+use crate::event::game::input_map::ClickButton;
 use crate::overlay::hints::{HintInput, Sym};
 use crate::overlay::osk::OskCommand;
 use crate::ui::Focus;
@@ -16,6 +17,15 @@ use std::time::{Duration, Instant};
 /// How much of the viewport a hint-mode edge auto-scroll covers — a chunk shy of
 /// a full screen, so a strip of the old hints stays on-screen for continuity.
 const HINT_EDGE_SCROLL_FRACTION: f32 = 0.8;
+
+/// The button as SDL spells it, which is what the page is told.
+fn sdl_button(button: ClickButton) -> sdl2::mouse::MouseButton {
+    match button {
+        ClickButton::Left => sdl2::mouse::MouseButton::Left,
+        ClickButton::Right => sdl2::mouse::MouseButton::Right,
+        ClickButton::Middle => sdl2::mouse::MouseButton::Middle,
+    }
+}
 
 impl App {
     /// Route one contextual input intent against the current input owner — see
@@ -145,9 +155,11 @@ impl App {
                 // trailing "Pin settings" tile, which adds with A).
                 Focus::DialEdit => self.ui.dial_edit_remove_selected(),
                 // X is unused in settings (rows edit with A and Left/Right) and
-                // on Game Mode's screens (the keyboard has a row of its own).
+                // on Game Mode's menu screens (the keyboard has a row of its own).
                 Focus::Settings => {}
-                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                Focus::GameMenu | Focus::GameInputMaps => {}
+                // X unbinds the focused source, which is what takes its row away.
+                Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
@@ -287,6 +299,16 @@ impl App {
                         .execute_command(&BrowserCommand::Reload, &self.config.browser);
                 }
             }
+            // A game's own click with a button Confirm cannot carry: the page
+            // only, since the chrome has no second button to press.
+            InputCommand::Click { button, pressed } => {
+                if self.ui.cursor_over_browser() {
+                    let (x, y) = self.ui.cursor_browser_rel();
+                    self.browser.mouse_move(x, y);
+                    self.browser
+                        .mouse_button(sdl_button(*button), x, y, *pressed);
+                }
+            }
             InputCommand::Analog {
                 aim,
                 stick,
@@ -388,7 +410,7 @@ impl App {
         &mut self,
         aim: (f32, f32),
         stick: (f32, f32),
-        scroll: f32,
+        scroll: (f32, f32),
         scroll_mode: bool,
         out: &mut Vec<AppCommand>,
     ) {
@@ -427,14 +449,14 @@ impl App {
             }
             // In hint mode the right stick still scrolls the page; the scroll
             // itself schedules the re-collect its movement calls for.
-            if self.ui.hints.visible && scroll != 0.0 {
-                let dy = scroll * scroll_speed * dt;
+            if self.ui.hints.visible && scroll != (0.0, 0.0) {
+                let (dx, dy) = (scroll.0 * scroll_speed * dt, scroll.1 * scroll_speed * dt);
                 let (x, y) = self
                     .ui
                     .hints
                     .selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
-                self.ui.scroll_page(&self.browser, 0.0, dy, x, y);
+                self.ui.scroll_page(&self.browser, dx, dy, x, y);
             }
             return;
         }
@@ -442,12 +464,13 @@ impl App {
         // Scroll mode: the aim vector scrolls the page (combined with the right
         // stick) and the cursor stays parked.
         if scroll_mode {
-            let dy = (scroll + aim.1).clamp(-1.0, 1.0) * scroll_speed * dt;
-            if dy != 0.0 {
+            let dx = scroll.0 * scroll_speed * dt;
+            let dy = (scroll.1 + aim.1).clamp(-1.0, 1.0) * scroll_speed * dt;
+            if (dx, dy) != (0.0, 0.0) {
                 // The parked cursor may sit over the toolbar; scroll the page
                 // from its top edge in that case.
                 let (x, y) = self.ui.cursor_browser_rel();
-                self.ui.scroll_page(&self.browser, 0.0, dy, x, y.max(1.0));
+                self.ui.scroll_page(&self.browser, dx, dy, x, y.max(1.0));
                 // Keep the scroll-mode indicator alive while actively scrolling;
                 // it lingers and auto-hides like the cursor once scrolling stops.
                 self.ui.mark_cursor_active();
@@ -469,11 +492,11 @@ impl App {
             }
         }
 
-        if scroll != 0.0 && self.ui.cursor_over_browser() {
+        if scroll != (0.0, 0.0) && self.ui.cursor_over_browser() {
             // Stick down (+1) reveals lower content (positive Servo dy).
-            let dy = scroll * scroll_speed * dt;
+            let (dx, dy) = (scroll.0 * scroll_speed * dt, scroll.1 * scroll_speed * dt);
             let (x, y) = self.ui.cursor_browser_rel();
-            self.ui.scroll_page(&self.browser, 0.0, dy, x, y);
+            self.ui.scroll_page(&self.browser, dx, dy, x, y);
         }
     }
 

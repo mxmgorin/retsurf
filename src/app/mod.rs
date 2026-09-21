@@ -101,7 +101,7 @@ impl App {
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.
         crate::platform::priority::prioritize_main();
-        let event_handler = AppEventHandler::new(sdl, config.input.clone(), &config.game_mode)?;
+        let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
         let ui = AppUi::new(
             &window,
             &config.display,
@@ -111,7 +111,6 @@ impl App {
             &config.input,
             &config.debug,
             &config.update,
-            event_handler.input_map_name().to_string(),
             crate::browser::effective_user_agent(&config.browser),
         );
         log::info!("init: app constructed");

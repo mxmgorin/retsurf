@@ -1,18 +1,27 @@
-//! The Game Mode map editor: one row per source, showing what it sends and
-//! letting the pad itself change it. The device this is for has no keyboard and
-//! no file manager, so a map it cannot edit here is a map it cannot edit
-//! at all; the file stays the fuller interface ([`crate::event::game::input_map`]).
+//! The Game Mode map editor: a row per source the map binds, showing what it
+//! sends and letting the pad itself change it. The device this is for has no
+//! keyboard and no file manager, so a map it cannot edit here is a map it cannot
+//! edit at all; the file stays the fuller interface
+//! ([`crate::event::game::input_map`]).
 //!
-//! Physical keys and layers are the file's — they need names this screen has no
-//! room to pick, which is also why it is titled for the two kinds it does list.
+//! Every row answers A the same way, with the list of what it can send. A
+//! source is a row only once the map binds it, and a stick read as four
+//! directions grows its four rows under itself. The trailing row listens for
+//! the source to add — a button, a key, or a stick pushed over — which covers a
+//! pad this build has never heard of and a keyboard whose keys no screen could
+//! list.
+//!
+//! Layers are still the file's — they need names this screen has no room to pick.
 
-use crate::event::game::input_map::{Dir, Side};
-use inputbind::Pad;
+use crate::event::game::input_map::{Dir, Side, STICK_PREFIX};
+use inputbind::{KeyGesture, Mods, Pad, PadGesture};
 
 /// What one row writes to.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Slot {
     Button(Pad),
+    /// A physical key, by the name the file spells it with.
+    Key(String),
     /// The stick as one vector.
     Stick(Side),
     /// One of its four directions.
@@ -20,24 +29,31 @@ pub enum Slot {
 }
 
 impl Slot {
-    /// How the file spells it: the row's label, and the title of the list
-    /// opened over it. A stick carries its table's name because the D-pad
-    /// already holds `left` and `right`.
-    pub fn name(self) -> String {
+    /// The path the file holds it under, table included — what the list opened
+    /// over a row is titled, since nothing else there says which source it is
+    /// about. TOML reads `pad.a = "key.Space"` as the `[pad]` table's `a`, so
+    /// this is a line of the file as much as a name for one.
+    pub fn name(&self) -> String {
         match self {
-            Slot::Button(pad) => pad.name().to_string(),
-            Slot::Stick(side) => format!("stick.{}", side.name()),
-            Slot::Direction(side, dir) => format!("stick.{}.{}", side.name(), dir.name()),
+            Slot::Button(pad) => format!("pad.{}", pad.name()),
+            Slot::Key(key) => format!("key.{key}"),
+            Slot::Stick(side) => format!("{STICK_PREFIX}{}", side.name()),
+            Slot::Direction(side, dir) => {
+                format!("{STICK_PREFIX}{}.{}", side.name(), dir.name())
+            }
         }
     }
-}
 
-/// A row of one stick's own screen.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum StickRow {
-    /// What the whole stick does — the row that decides whether the rest exist.
-    Sends,
-    Direction(Dir),
+    /// The row's own label: the name inside its table, since the heading over
+    /// the row already says which table that is.
+    pub fn label(&self) -> String {
+        match self {
+            Slot::Button(pad) => pad.name().to_string(),
+            Slot::Key(key) => key.clone(),
+            Slot::Stick(side) => side.name().to_string(),
+            Slot::Direction(side, dir) => format!("{}.{}", side.name(), dir.name()),
+        }
+    }
 }
 
 /// What a row can be set to. One list per slot, so nothing about a row is
@@ -46,7 +62,11 @@ pub enum StickRow {
 pub enum Kind {
     /// Hands over to the on-screen keyboard, which picks the key itself.
     Key,
-    Click,
+    /// Opens the mouse list — the buttons, and the cursor and scroll steps.
+    Mouse,
+    /// Opens the gamepad list — the buttons the page reads through the
+    /// Gamepad API, which is how a keyboard drives a pad-only game.
+    Gamepad,
     /// The page reads the source through the Gamepad API. An unbound one does
     /// the same thing; this is the file saying so out loud, and the two are one
     /// entry here because they are one behaviour.
@@ -55,39 +75,41 @@ pub enum Kind {
     Ignore,
     /// Read the whole stick as four directions instead of one vector.
     Directions,
-    Cursor,
-    Scroll,
 }
 
 impl Kind {
     /// What this slot can be told to send. A direction is offered no
     /// Passthrough: a stick read as directions withholds the whole axis, so
     /// the page would see nothing either way.
-    pub fn all(slot: Slot) -> &'static [Kind] {
+    pub fn all(slot: &Slot) -> &'static [Kind] {
         match slot {
-            Slot::Button(_) => &[Kind::Key, Kind::Click, Kind::Passthrough, Kind::Ignore],
-            Slot::Direction(..) => &[Kind::Key, Kind::Click, Kind::Ignore],
+            Slot::Button(_) | Slot::Key(_) => &[
+                Kind::Key,
+                Kind::Mouse,
+                Kind::Gamepad,
+                Kind::Passthrough,
+                Kind::Ignore,
+            ],
+            Slot::Direction(..) => &[Kind::Key, Kind::Mouse, Kind::Gamepad, Kind::Ignore],
             Slot::Stick(_) => &[
                 Kind::Directions,
-                Kind::Cursor,
-                Kind::Scroll,
+                Kind::Mouse,
                 Kind::Passthrough,
                 Kind::Ignore,
             ],
         }
     }
 
-    /// The ellipsis is the promise of a further question, which only the key
-    /// picker makes (see [`super::input_maps::MapAction::label`]).
+    /// What the row says the source will send. The two that open another list
+    /// name the device it is about, since that is the next thing seen.
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Key => "Key...",
-            Kind::Click => "Left mouse button",
+            Kind::Key => "Keyboard",
+            Kind::Mouse => "Mouse",
+            Kind::Gamepad => "Gamepad",
             Kind::Passthrough => "Passthrough",
             Kind::Ignore => "Ignore",
             Kind::Directions => "Four directions",
-            Kind::Cursor => "Cursor",
-            Kind::Scroll => "Scroll",
         }
     }
 
@@ -95,75 +117,183 @@ impl Kind {
     pub fn take(self) -> Take {
         match self {
             Kind::Key => Take::Key,
+            Kind::Mouse => Take::Mouse,
+            Kind::Gamepad => Take::Gamepad,
             Kind::Directions => Take::Arrows,
-            Kind::Click => Take::Text("mouse.left"),
             Kind::Passthrough => Take::Text("passthrough"),
             Kind::Ignore => Take::Text("none"),
-            Kind::Cursor => Take::Text("mouse.cursor"),
-            Kind::Scroll => Take::Text("mouse.scroll"),
         }
     }
 }
 
-/// What taking a kind does — most write a target, two do something else.
+/// Which device's own list is open over the kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Device {
+    Mouse,
+    Gamepad,
+}
+
+impl Device {
+    /// What the title says after the row's name.
+    pub fn title(self) -> &'static str {
+        match self {
+            Device::Mouse => "MOUSE",
+            Device::Gamepad => "GAMEPAD",
+        }
+    }
+}
+
+/// What the mouse list offers. A stick points or scrolls as a whole; a source
+/// with an edge presses a button, or steps the cursor or the page for as long
+/// as it is held.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MouseKind {
+    ButtonLeft,
+    ButtonRight,
+    ButtonMiddle,
+    CursorUp,
+    CursorDown,
+    CursorLeft,
+    CursorRight,
+    ScrollUp,
+    ScrollDown,
+    ScrollLeft,
+    ScrollRight,
+    Cursor,
+    Scroll,
+}
+
+impl MouseKind {
+    pub fn all(slot: &Slot) -> &'static [MouseKind] {
+        match slot {
+            Slot::Stick(_) => &[MouseKind::Cursor, MouseKind::Scroll],
+            _ => &[
+                MouseKind::ButtonLeft,
+                MouseKind::ButtonRight,
+                MouseKind::ButtonMiddle,
+                MouseKind::CursorUp,
+                MouseKind::CursorDown,
+                MouseKind::CursorLeft,
+                MouseKind::CursorRight,
+                MouseKind::ScrollUp,
+                MouseKind::ScrollDown,
+                MouseKind::ScrollLeft,
+                MouseKind::ScrollRight,
+            ],
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MouseKind::ButtonLeft => "Button left",
+            MouseKind::ButtonRight => "Button right",
+            MouseKind::ButtonMiddle => "Button middle",
+            MouseKind::CursorUp => "Cursor up",
+            MouseKind::CursorDown => "Cursor down",
+            MouseKind::CursorLeft => "Cursor left",
+            MouseKind::CursorRight => "Cursor right",
+            MouseKind::ScrollUp => "Scroll up",
+            MouseKind::ScrollDown => "Scroll down",
+            MouseKind::ScrollLeft => "Scroll left",
+            MouseKind::ScrollRight => "Scroll right",
+            MouseKind::Cursor => "Cursor",
+            MouseKind::Scroll => "Scroll",
+        }
+    }
+
+    /// The target it writes, as the file spells it.
+    pub fn target(self) -> &'static str {
+        match self {
+            MouseKind::ButtonLeft => "mouse.left",
+            MouseKind::ButtonRight => "mouse.right",
+            MouseKind::ButtonMiddle => "mouse.middle",
+            MouseKind::CursorUp => "mouse.cursor.up",
+            MouseKind::CursorDown => "mouse.cursor.down",
+            MouseKind::CursorLeft => "mouse.cursor.left",
+            MouseKind::CursorRight => "mouse.cursor.right",
+            MouseKind::ScrollUp => "mouse.scroll.up",
+            MouseKind::ScrollDown => "mouse.scroll.down",
+            MouseKind::ScrollLeft => "mouse.scroll.left",
+            MouseKind::ScrollRight => "mouse.scroll.right",
+            MouseKind::Cursor => "mouse.cursor",
+            MouseKind::Scroll => "mouse.scroll",
+        }
+    }
+}
+
+/// What taking a kind does — most write a target, the rest ask another question.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Take {
     /// Write this as the target, the way the file spells it.
     Text(&'static str),
     /// Summon the on-screen keyboard to pick the key.
     Key,
+    /// Open the mouse list over this row.
+    Mouse,
+    /// Open the gamepad list over this row.
+    Gamepad,
     /// Turn the stick into four directions, seeded with the arrows — a stick
     /// with none set reaches the page instead, which the row would not say.
     Arrows,
 }
 
-/// What **A** does, given which of the three lists is up. Qualified because
-/// the map screens have one of these too.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// What **A** does, given which of the two lists is up and which row it is on.
+/// Qualified because the map screens have one of these too.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EditPress {
-    /// Open the focused stick's own rows.
-    OpenStick(Side),
     /// Open the list of what the focused row can send.
     OpenKinds,
+    /// Listen for the source to give a row (the trailing row).
+    StartCapture,
     /// Take the kind the list is on, for the row it was opened over.
     Take(Kind, Slot),
+    /// Take the mouse kind its list is on, for the same row.
+    TakeMouse(MouseKind, Slot),
+    /// Take the gamepad button its list is on, for the same row.
+    TakePad(Pad, Slot),
+}
+
+/// The source a captured gesture names, or why the map cannot hold it. The map
+/// gives one target per source, so it has no room for what a bindings file can
+/// still say: a hold, a chord, a modified key.
+pub fn source_of(gesture: &str, keyboard: bool) -> Result<Slot, &'static str> {
+    if keyboard {
+        return match KeyGesture::parse(gesture) {
+            Some(key) if key.mods == Mods::NONE => Ok(Slot::Key(key.name)),
+            _ => Err("one key at a time, without modifiers"),
+        };
+    }
+    // A stick arrives named: a deflection is neither a tap nor a hold.
+    if let Some(name) = gesture.strip_prefix(STICK_PREFIX) {
+        return match Side::parse(name) {
+            Some(side) => Ok(Slot::Stick(side)),
+            None => Err("that stick is not one this map knows"),
+        };
+    }
+    match PadGesture::parse(gesture) {
+        // Select opens the Game Mode menu in every map, so the game never gets
+        // it — the file's own refusal, said here in time to be read.
+        Some(PadGesture::Tap(Pad::Select)) => Err("select opens the Game Mode menu"),
+        Some(PadGesture::Tap(pad)) => Ok(Slot::Button(pad)),
+        _ => Err("one button at a time, tapped"),
+    }
 }
 
 /// What an unbound source reads as in the editor's rows — the one spelling,
 /// shared by the snapshot builder and the renderer's fallback.
 pub const UNBOUND: &str = "-";
 
-/// What the map says, as the rows show it — a snapshot, since the map
+/// The trailing row, which listens for a source rather than editing one. It
+/// names no device: the headings do that, and the screen says what to press
+/// once it is listening.
+pub const ADD_ROW: &str = "+ Add";
+
+/// One source the map binds, as its row shows it — a snapshot, since the map
 /// lives in the event handler that resolved it.
-#[derive(Default)]
-pub struct Targets {
-    /// By [`Pad`] index; an unbound button reads as the dash its row shows.
-    pub pads: Vec<String>,
-    /// Left, then right.
-    pub sticks: [StickTargets; 2],
-}
-
-#[derive(Default)]
-pub struct StickTargets {
-    /// Whether the file reads this stick as four directions rather than one
-    /// vector — which is what decides whether it has direction rows at all.
-    pub digital: bool,
-    /// What the whole stick does, as the row shows it.
-    pub role: String,
-    /// Its four directions, in [`Dir::ALL`] order.
-    pub dirs: [String; 4],
-}
-
-/// Every source the editor lists — buttons, then the two whole sticks (never a
-/// [`Slot::Direction`]; those live on a stick's own screen). Select carries the
-/// Game Mode menu in every map, so it is not one of them.
-pub fn sources() -> Vec<Slot> {
-    Pad::ALL
-        .into_iter()
-        .filter(|pad| *pad != Pad::Select)
-        .map(Slot::Button)
-        .chain(Side::ALL.into_iter().map(Slot::Stick))
-        .collect()
+pub struct Row {
+    pub slot: Slot,
+    /// What it sends, as the file spells it.
+    pub target: String,
 }
 
 pub struct MapEdit {
@@ -173,19 +303,28 @@ pub struct MapEdit {
     map: String,
     /// Its name, for the panel's title.
     name: String,
-    /// The top list's highlight.
+    /// The source list's highlight, which runs one past the rows: the last row
+    /// is the one that adds.
     selected: usize,
-    /// The stick whose own rows are up, and where its highlight is.
-    stick: Option<(Side, usize)>,
     /// The kind list over the focused row; `None` while the rows are.
     kind: Option<usize>,
+    /// The device list over the kind list, opened by its Mouse or Gamepad row:
+    /// which device it is about, and where its highlight sits.
+    device: Option<(Device, usize)>,
+    /// Whether the screen is listening for a source to add.
+    capturing: bool,
+    /// The captured source, while its kind list is up. It has no row until a
+    /// kind is taken, so backing out of that list writes nothing.
+    fresh: Option<Slot>,
+    /// Why the last capture gave no row, shown on the row that listened.
+    note: Option<String>,
     /// The row the on-screen keyboard is picking a key for.
     picking: Option<Slot>,
     /// What it picked, as the file spells it — read and cleared by the app.
     picked: Option<String>,
     /// Whether anything changed, so an untouched visit writes no file.
     dirty: bool,
-    targets: Targets,
+    rows: Vec<Row>,
 }
 
 impl MapEdit {
@@ -195,12 +334,15 @@ impl MapEdit {
             map: String::new(),
             name: String::new(),
             selected: 0,
-            stick: None,
             kind: None,
+            device: None,
+            capturing: false,
+            fresh: None,
+            note: None,
             picking: None,
             picked: None,
             dirty: false,
-            targets: Targets::default(),
+            rows: vec![],
         }
     }
 
@@ -222,8 +364,11 @@ impl MapEdit {
         self.map = map;
         self.name = name;
         self.selected = 0;
-        self.stick = None;
         self.kind = None;
+        self.device = None;
+        self.capturing = false;
+        self.fresh = None;
+        self.note = None;
         self.picking = None;
         self.picked = None;
         self.dirty = false;
@@ -232,98 +377,90 @@ impl MapEdit {
     /// Close it, reporting whether the map needs writing.
     pub fn close(&mut self) -> bool {
         self.visible = false;
-        self.stick = None;
         self.kind = None;
+        self.device = None;
+        self.capturing = false;
+        self.fresh = None;
+        self.note = None;
         self.picking = None;
         std::mem::take(&mut self.dirty)
     }
 
-    /// Back out one list — the kinds, then a stick's rows, then the editor
-    /// itself. `false` once nothing is left, which is when it closes.
+    /// Back out one list — the mouse list, then the kinds. `false` leaves the
+    /// rows, which is when the editor closes.
     pub fn back(&mut self) -> bool {
-        if self.kind.take().is_some() {
+        if self.device.take().is_some() {
             return true;
         }
-        self.stick.take().is_some()
+        self.fresh = None;
+        self.kind.take().is_some()
     }
 
-    /// Adopt a fresh snapshot of the map (after anything changed it).
-    pub fn set_targets(&mut self, targets: Targets) {
-        self.targets = targets;
-        let last = self.rows().saturating_sub(1);
-        match &mut self.stick {
-            Some((_, at)) => *at = (*at).min(last),
-            None => self.selected = self.selected.min(last),
-        }
+    /// Adopt a fresh snapshot of the map. Rows come and go as bindings are made
+    /// and dropped, so the highlight can be left past the end.
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.rows = rows;
+        self.selected = self.selected.min(self.rows.len());
     }
 
-    pub fn targets(&self) -> &Targets {
-        &self.targets
-    }
-
-    /// The stick whose rows are up, if one is.
-    pub fn stick_open(&self) -> Option<Side> {
-        self.stick.map(|(side, _)| side)
-    }
-
-    /// That stick's rows: what the whole stick does, and its four directions
-    /// where it has any — a row that could not be read is a row that is not
-    /// there.
-    pub fn stick_rows(&self) -> Vec<StickRow> {
-        let mut rows = vec![StickRow::Sends];
-        if let Some(side) = self.stick_open() {
-            if self.targets.sticks[side as usize].digital {
-                rows.extend(Dir::ALL.map(StickRow::Direction));
-            }
-        }
-        rows
+    pub fn rows(&self) -> &[Row] {
+        &self.rows
     }
 
     /// Where the highlight is on whichever list is up.
     pub fn selected(&self) -> usize {
-        match (self.kind, self.stick) {
-            (Some(at), _) => at,
-            (None, Some((_, at))) => at,
-            (None, None) => self.selected,
-        }
+        self.device
+            .map(|(_, at)| at)
+            .or(self.kind)
+            .unwrap_or(self.selected)
     }
 
     /// Move it, clamped to the ends of that list.
     pub fn move_sel(&mut self, dy: i32) {
-        let at = crate::list::step(self.selected(), dy, self.rows());
-        match (&mut self.kind, &mut self.stick) {
-            (Some(slot), _) => *slot = at,
-            (None, Some((_, slot))) => *slot = at,
+        let at = crate::list::step(self.selected(), dy, self.row_count());
+        match (&mut self.device, &mut self.kind) {
+            (Some((_, row)), _) => *row = at,
+            (None, Some(row)) => *row = at,
             (None, None) => self.selected = at,
         }
     }
 
     /// Focus a row by index.
     pub fn select(&mut self, index: usize) {
-        if index < self.rows() {
+        if index < self.row_count() {
             self.move_sel(index as i32 - self.selected() as i32);
         }
     }
 
-    /// How many rows whichever list is up has.
-    fn rows(&self) -> usize {
-        match (self.kind, self.stick) {
-            (Some(_), _) => self.slot().map_or(0, |slot| Kind::all(slot).len()),
-            (None, Some(_)) => self.stick_rows().len(),
-            (None, None) => sources().len(),
+    /// Put the highlight on `slot`'s row, where the map has one — how a source
+    /// just bound is shown to have landed.
+    pub fn select_slot(&mut self, slot: &Slot) {
+        if let Some(at) = self.rows.iter().position(|row| row.slot == *slot) {
+            self.selected = at;
         }
     }
 
-    /// The row the kind list writes to, which is the focused one unless a stick
-    /// is open, when it is that stick's.
-    pub fn slot(&self) -> Option<Slot> {
-        let Some((side, at)) = self.stick else {
-            return sources().get(self.selected).copied();
+    /// How many rows whichever list is up has. The source list carries the row
+    /// that adds past the ones the map binds.
+    fn row_count(&self) -> usize {
+        let Some(slot) = self.slot() else {
+            return self.rows.len() + 1;
         };
-        match self.stick_rows().get(at)? {
-            StickRow::Sends => Some(Slot::Stick(side)),
-            StickRow::Direction(dir) => Some(Slot::Direction(side, *dir)),
+        match (self.device, self.kind.is_some()) {
+            (Some((Device::Mouse, _)), _) => MouseKind::all(&slot).len(),
+            (Some((Device::Gamepad, _)), _) => Pad::ALL.len(),
+            (None, true) => Kind::all(&slot).len(),
+            (None, false) => self.rows.len() + 1,
         }
+    }
+
+    /// The row the kind list writes to — a captured source on its way in, or
+    /// the focused row, which the kind list leaves where it was.
+    pub fn slot(&self) -> Option<Slot> {
+        if self.fresh.is_some() {
+            return self.fresh.clone();
+        }
+        self.rows.get(self.selected).map(|row| row.slot.clone())
     }
 
     /// Whether the kind list is up, for the screen that draws it.
@@ -331,31 +468,83 @@ impl MapEdit {
         self.kind.is_some()
     }
 
-    /// What **A** takes, or `None` on a list with nothing in it.
-    pub fn press(&self) -> Option<EditPress> {
-        let slot = self.slot()?;
-        if let Some(at) = self.kind {
-            let kinds = Kind::all(slot);
-            return kinds.get(at).map(|kind| EditPress::Take(*kind, slot));
-        }
-        // A stick at the top level opens its own rows; from inside them the
-        // same row opens what the whole stick can send.
-        match (slot, self.stick.is_none()) {
-            (Slot::Stick(side), true) => Some(EditPress::OpenStick(side)),
-            _ => Some(EditPress::OpenKinds),
-        }
+    /// Which device list is up, if one is — drawn over the kinds.
+    pub fn device_open(&self) -> Option<Device> {
+        self.device.map(|(device, _)| device)
     }
 
-    pub fn open_stick(&mut self, side: Side) {
-        self.stick = Some((side, 0));
+    /// What **A** takes, or `None` on a list with nothing in it.
+    pub fn press(&self) -> Option<EditPress> {
+        let Some(at) = self.kind else {
+            // The row past the bound ones has no slot: it is the one listening.
+            return match self.slot() {
+                Some(_) => Some(EditPress::OpenKinds),
+                None => Some(EditPress::StartCapture),
+            };
+        };
+        let slot = self.slot()?;
+        match self.device {
+            Some((Device::Mouse, at)) => {
+                return MouseKind::all(&slot)
+                    .get(at)
+                    .map(|kind| EditPress::TakeMouse(*kind, slot))
+            }
+            Some((Device::Gamepad, at)) => {
+                return Pad::ALL.get(at).map(|pad| EditPress::TakePad(*pad, slot))
+            }
+            None => {}
+        }
+        Kind::all(&slot)
+            .get(at)
+            .map(|kind| EditPress::Take(*kind, slot))
     }
 
     pub fn open_kinds(&mut self) {
         self.kind = Some(0);
     }
 
+    /// Open one device's own list over the kinds.
+    pub fn open_device(&mut self, device: Device) {
+        self.device = Some((device, 0));
+    }
+
+    /// Close whatever is over the rows — both lists, since taking a target ends
+    /// the whole question.
     pub fn close_kinds(&mut self) {
         self.kind = None;
+        self.device = None;
+        self.fresh = None;
+    }
+
+    /// Listen for the source a new row will be for. Whatever the last attempt
+    /// had to say is cleared: the row is being asked again.
+    pub fn start_capture(&mut self) {
+        self.capturing = true;
+        self.note = None;
+    }
+
+    /// Whether the screen is listening, which is what routes raw input here.
+    pub fn capturing(&self) -> bool {
+        self.capturing
+    }
+
+    /// Stop listening, saying why where the caller has something to say (a
+    /// gesture the map cannot hold); a timeout passes `None` and shows nothing.
+    pub fn stop_capture(&mut self, note: Option<String>) {
+        self.capturing = false;
+        self.note = note;
+    }
+
+    /// What the row that listens has to say, if the last attempt gave no row.
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+
+    /// A captured source: its kind list opens over the rows, and only taking a
+    /// kind gives it one of its own.
+    pub fn open_kinds_for(&mut self, slot: Slot) {
+        self.fresh = Some(slot);
+        self.open_kinds();
     }
 
     pub fn mark_dirty(&mut self) {
@@ -364,7 +553,7 @@ impl MapEdit {
 
     /// The row the keyboard is picking a key for, if it is up.
     pub fn picking(&self) -> Option<Slot> {
-        self.picking
+        self.picking.clone()
     }
 
     pub fn set_picking(&mut self, slot: Option<Slot>) {
@@ -386,84 +575,205 @@ impl MapEdit {
 mod tests {
     use super::*;
 
+    /// An editor on a map that binds A and one key, with a digital left stick
+    /// and an analog right one — every shape a row has.
     fn opened() -> MapEdit {
         let mut edit = MapEdit::new();
         edit.open("keys".to_string(), "Keyboard keys".to_string());
-        let mut targets = Targets {
-            pads: vec!["-".to_string(); Pad::COUNT],
-            ..Targets::default()
-        };
-        targets.sticks[Side::Left as usize].digital = true;
-        edit.set_targets(targets);
+        edit.set_rows(rows());
         edit
     }
 
-    /// Select is the one pad no map may name, so the editor must not offer
-    /// a row that would be refused on save. The sticks follow the buttons.
-    #[test]
-    fn the_reserved_pad_is_not_a_row_and_the_sticks_are() {
-        let sources = sources();
-        assert!(!sources.contains(&Slot::Button(Pad::Select)));
-        assert_eq!(sources.len(), Pad::COUNT - 1 + Side::ALL.len());
-        assert_eq!(sources.last(), Some(&Slot::Stick(Side::Right)));
+    fn rows() -> Vec<Row> {
+        let mut rows = vec![
+            row(Slot::Stick(Side::Left), "directions"),
+            row(Slot::Direction(Side::Left, Dir::Up), "ArrowUp"),
+            row(Slot::Stick(Side::Right), "mouse.cursor"),
+            row(Slot::Button(Pad::A), "Space"),
+        ];
+        rows.push(row(Slot::Key("w".to_string()), "ArrowUp"));
+        rows
     }
 
-    /// Every kind is on screen, and only the key one defers to the keyboard.
-    /// What a slot is offered follows what the engine can actually do with it.
+    fn row(slot: Slot, target: &str) -> Row {
+        Row {
+            slot,
+            target: target.to_string(),
+        }
+    }
+
+    /// Every kind is on screen, and only the two that ask another question
+    /// defer instead of writing. What a slot is offered follows what the engine
+    /// can do with it.
     #[test]
     fn a_row_can_be_set_to_anything_its_list_shows() {
-        let button = Kind::all(Slot::Button(Pad::A));
-        let dir = Kind::all(Slot::Direction(Side::Left, Dir::Up));
-        let stick = Kind::all(Slot::Stick(Side::Left));
+        let button = Kind::all(&Slot::Button(Pad::A));
+        let key = Kind::all(&Slot::Key("w".to_string()));
+        let dir = Kind::all(&Slot::Direction(Side::Left, Dir::Up));
+        let stick = Kind::all(&Slot::Stick(Side::Left));
         for kind in [button, dir, stick].concat() {
             assert!(!kind.label().is_empty());
-            assert_eq!(kind.take() == Take::Key, kind == Kind::Key);
+            let asks = matches!(kind.take(), Take::Key | Take::Mouse);
+            assert_eq!(asks, matches!(kind, Kind::Key | Kind::Mouse), "{kind:?}");
         }
+        // A key is a source like a button, and answers with the same list.
+        assert_eq!(button, key);
         // A direction's axis is withheld wholesale, so passthrough there would
         // send the page nothing while claiming otherwise.
         assert!(!dir.contains(&Kind::Passthrough));
         assert!(button.contains(&Kind::Passthrough));
-        // Only a whole stick can be a vector, and only it can be split up.
-        for kind in [Kind::Cursor, Kind::Scroll, Kind::Directions] {
-            assert!(stick.contains(&kind) && !button.contains(&kind));
+        // Only a whole stick can be split into directions, and only a source
+        // with an edge can press a button or scroll a step.
+        assert!(stick.contains(&Kind::Directions) && !button.contains(&Kind::Directions));
+        let stick_mouse = MouseKind::all(&Slot::Stick(Side::Left));
+        let button_mouse = MouseKind::all(&Slot::Button(Pad::A));
+        assert_eq!(stick_mouse, [MouseKind::Cursor, MouseKind::Scroll]);
+        assert!(button_mouse.contains(&MouseKind::ButtonRight));
+        // An edge steps the cursor where a stick aims it, and cannot do the
+        // whole-vector job the other way round.
+        assert!(button_mouse.contains(&MouseKind::CursorUp));
+        assert!(!button_mouse.contains(&MouseKind::Cursor));
+        assert!(!stick_mouse.contains(&MouseKind::CursorUp));
+        // Every mouse row writes a target under the one prefix.
+        for kind in [stick_mouse, button_mouse].concat() {
+            assert!(!kind.label().is_empty());
+            assert!(kind.target().starts_with("mouse."), "{kind:?}");
+        }
+        // Only a source with an edge can stand in for a gamepad button.
+        assert!(button.contains(&Kind::Gamepad) && !stick.contains(&Kind::Gamepad));
+        assert!(dir.contains(&Kind::Gamepad));
+    }
+
+    /// Both device lists open over the kinds, and B takes them off again — the
+    /// row underneath is untouched until one of their rows is taken.
+    #[test]
+    fn a_device_list_opens_over_the_kinds_and_backs_out_of_them() {
+        let mut edit = opened();
+        edit.select(3); // pad.a
+        edit.open_kinds();
+        for device in [Device::Mouse, Device::Gamepad] {
+            edit.open_device(device);
+            assert_eq!(edit.device_open(), Some(device));
+            assert!(!device.title().is_empty());
+            // The row is still the one the kinds were opened over.
+            assert_eq!(edit.slot(), Some(Slot::Button(Pad::A)));
+            assert!(edit.back() && edit.device_open().is_none());
+            assert!(edit.kind_open());
         }
     }
 
-    /// A stick is a row until it is opened, and then it is its own list.
+    /// What a capture may name: one source, which is all a map row holds.
     #[test]
-    fn a_stick_opens_its_own_rows_and_a_button_opens_its_kinds() {
-        let mut edit = opened();
-        assert_eq!(edit.press(), Some(EditPress::OpenKinds));
-        edit.select(sources().len() - 2);
-        assert_eq!(edit.press(), Some(EditPress::OpenStick(Side::Left)));
-        edit.open_stick(Side::Left);
-        // Its first row is the whole stick; the four directions follow because
-        // this one is digital.
-        assert_eq!(edit.slot(), Some(Slot::Stick(Side::Left)));
-        assert_eq!(edit.stick_rows().len(), 1 + Dir::ALL.len());
-        edit.move_sel(1);
-        assert_eq!(edit.slot(), Some(Slot::Direction(Side::Left, Dir::Up)));
-        assert_eq!(edit.press(), Some(EditPress::OpenKinds));
+    fn a_capture_names_one_source_or_says_why_not() {
+        assert_eq!(source_of("a", false), Ok(Slot::Button(Pad::A)));
+        assert_eq!(source_of("w", true), Ok(Slot::Key("w".to_string())));
+        assert_eq!(
+            source_of("stick.right", false),
+            Ok(Slot::Stick(Side::Right))
+        );
+        assert!(source_of("stick.middle", false).is_err());
+        // A modifier on its own is a key like any other.
+        assert_eq!(
+            source_of("leftshift", true),
+            Ok(Slot::Key("leftshift".to_string()))
+        );
+        // The file can spell these; a map row cannot hold them.
+        for (gesture, keyboard) in [("hold:b", false), ("l1+r1", false), ("ctrl+w", true)] {
+            assert!(source_of(gesture, keyboard).is_err());
+        }
+        // Select carries the Game Mode menu in every map.
+        assert!(source_of("select", false).is_err());
     }
 
-    /// A stick read as one vector has nothing to show per direction.
+    /// A row is named inside its table and spelled out in full wherever no
+    /// heading says which table that is — the three `up`s a map can hold are
+    /// one name on screen and three paths in the file.
     #[test]
-    fn an_analog_stick_has_no_direction_rows() {
+    fn a_row_is_named_inside_its_table_and_its_path_outside() {
+        let slots = [
+            Slot::Button(Pad::Up),
+            Slot::Key("up".to_string()),
+            Slot::Direction(Side::Left, Dir::Up),
+        ];
+        let labels: Vec<String> = slots.iter().map(Slot::label).collect();
+        let names: Vec<String> = slots.iter().map(Slot::name).collect();
+        assert_eq!(labels, ["up", "up", "left.up"]);
+        assert_eq!(names, ["pad.up", "key.up", "stick.left.up"]);
+    }
+
+    /// The row past the ones the map binds is what listens for a new source.
+    #[test]
+    fn the_trailing_row_captures_and_the_rest_open_their_kinds() {
         let mut edit = opened();
-        edit.open_stick(Side::Right);
-        assert_eq!(edit.stick_rows(), [StickRow::Sends]);
+        assert_eq!(edit.press(), Some(EditPress::OpenKinds));
         edit.move_sel(99);
-        assert_eq!(edit.slot(), Some(Slot::Stick(Side::Right)));
+        assert_eq!(edit.selected(), rows().len());
+        assert_eq!(edit.slot(), None);
+        assert_eq!(edit.press(), Some(EditPress::StartCapture));
     }
 
-    /// B walks back out one list at a time, and says when there is none left.
+    /// A captured source has no row until its kind is taken, so backing out of
+    /// the list it opens leaves the map as it was.
     #[test]
-    fn back_pops_one_list_at_a_time() {
+    fn a_captured_source_writes_nothing_until_its_kind_is_taken() {
         let mut edit = opened();
-        edit.open_stick(Side::Left);
+        edit.start_capture();
+        assert!(edit.capturing());
+        edit.stop_capture(None);
+        let slot = Slot::Key("q".to_string());
+        edit.open_kinds_for(slot.clone());
+        assert!(!edit.capturing());
+        assert_eq!(edit.slot(), Some(slot.clone()));
+        assert_eq!(edit.press(), Some(EditPress::Take(Kind::Key, slot.clone())));
+        // B: the list goes, and with it the source that had no row.
+        assert!(edit.back());
+        assert_eq!(edit.slot(), edit.rows().first().map(|row| row.slot.clone()));
+    }
+
+    /// A gesture the map cannot hold leaves its reason on the row that asked.
+    #[test]
+    fn a_refused_capture_says_so_where_it_was_asked() {
+        let mut edit = opened();
+        edit.start_capture();
+        edit.stop_capture(Some("one source at a time".to_string()));
+        assert!(!edit.capturing());
+        assert_eq!(edit.note(), Some("one source at a time"));
+        // Asking again drops what the last answer had to say.
+        edit.start_capture();
+        assert_eq!(edit.note(), None);
+    }
+
+    /// A source just bound is shown to have landed, wherever its row sorted.
+    #[test]
+    fn the_highlight_follows_a_source_to_its_row() {
+        let mut edit = opened();
+        let slot = Slot::Key("w".to_string());
+        edit.select_slot(&slot);
+        assert_eq!(edit.slot(), Some(slot));
+        // A slot with no row leaves the highlight where it was.
+        let at = edit.selected();
+        edit.select_slot(&Slot::Button(Pad::B));
+        assert_eq!(edit.selected(), at);
+    }
+
+    /// The rows a map loses cannot be left highlighted: the highlight would
+    /// point past the end of the list.
+    #[test]
+    fn the_highlight_survives_the_rows_going_away() {
+        let mut edit = opened();
+        edit.move_sel(99);
+        edit.set_rows(vec![]);
+        assert_eq!(edit.selected(), 0);
+        assert_eq!(edit.press(), Some(EditPress::StartCapture));
+    }
+
+    /// B leaves the kind list, and then has nothing left to pop — which is when
+    /// the editor closes.
+    #[test]
+    fn back_pops_the_kind_list_and_then_nothing() {
+        let mut edit = opened();
         edit.open_kinds();
         assert!(edit.back() && !edit.kind_open());
-        assert!(edit.back() && edit.stick_open().is_none());
         assert!(!edit.back());
     }
 
@@ -473,9 +783,9 @@ mod tests {
         edit.move_sel(-1);
         assert_eq!(edit.selected(), 0);
         edit.move_sel(99);
-        assert_eq!(edit.selected(), sources().len() - 1);
+        assert_eq!(edit.selected(), rows().len());
         // The kind list moves instead while it is open, and the row stays put.
-        edit.select(0);
+        edit.select(3);
         let row = edit.selected();
         edit.open_kinds();
         edit.move_sel(99);

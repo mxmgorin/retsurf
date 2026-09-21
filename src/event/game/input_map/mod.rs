@@ -7,21 +7,21 @@
 //! name = "My game"
 //!
 //! [pad]                  # buttons and the D-pad, by inputbind's names
-//! a = "Space"
-//! b = "z"
+//! a = "key.Space"
+//! b = "key.z"
 //! r2 = "mouse.left"
 //! l2 = "passthrough"     # reaches the page as the gamepad button it is
 //!
 //! [stick.left]           # four directions, through the dead zone
-//! up = "ArrowUp"
+//! up = "key.ArrowUp"
 //! [stick.right]
 //! analog = "mouse.cursor"   # or mouse.scroll — the whole stick, not a direction
 //!
-//! [keyboard]             # physical keys, resolved after the pad keymap
-//! w = "ArrowUp"
+//! [key]                  # physical keys, resolved after the pad keymap
+//! w = "key.ArrowUp"
 //!
 //! [layer.aim.pad]        # while `l2 = "layer:aim"` is held
-//! a = "Shift"
+//! a = "key.Shift"
 //! ```
 
 mod raw;
@@ -37,6 +37,17 @@ use raw::RawInputMap;
 
 /// The key a stick's whole-vector target is written under.
 const ANALOG: &str = "analog";
+
+/// How a key target is spelled. Every target names its device — `key.Space`,
+/// `mouse.left` — the way the editor's rows name their source.
+pub const KEY_PREFIX: &str = "key.";
+
+/// How a gamepad-button target is spelled, under the same table name a pad
+/// source is written in.
+pub const PAD_PREFIX: &str = "pad.";
+
+/// The table a stick is written in.
+pub const STICK_PREFIX: &str = "stick.";
 
 /// Which stick, as the file spells it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -55,7 +66,7 @@ impl Side {
         }
     }
 
-    fn parse(name: &str) -> Option<Side> {
+    pub fn parse(name: &str) -> Option<Side> {
         Side::ALL.into_iter().find(|side| side.name() == name)
     }
 }
@@ -79,6 +90,17 @@ impl Dir {
             Dir::Down => "down",
             Dir::Left => "left",
             Dir::Right => "right",
+        }
+    }
+
+    /// The unit vector a source held this way steps by, in screen axes: y grows
+    /// downward, which is also the sense the page scrolls in.
+    pub fn step(self) -> (f32, f32) {
+        match self {
+            Dir::Up => (0.0, -1.0),
+            Dir::Down => (0.0, 1.0),
+            Dir::Left => (-1.0, 0.0),
+            Dir::Right => (1.0, 0.0),
         }
     }
 
@@ -106,14 +128,41 @@ pub struct KeyTarget {
     pub modifiers: Modifiers,
 }
 
+/// Which mouse button a click target presses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClickButton {
+    Left,
+    Right,
+    Middle,
+}
+
 /// What a source does while the mode is on.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Target {
     Key(KeyTarget),
-    /// The left mouse button at the cursor — the one the router's Confirm
-    /// intent carries, and the path measured on hardware. Spelled `mouse.left`,
-    /// so the other buttons have a name to arrive under.
-    Click,
+    /// A mouse button at the cursor, spelled `mouse.left` and friends. Left is
+    /// the path measured on hardware, and the one the chrome also answers to.
+    Click(ClickButton),
+    /// A held source scrolling the page every frame, spelled
+    /// `mouse.scroll.<direction>`. The vector is a unit step in that direction,
+    /// scaled like a stick's deflection.
+    ScrollBy {
+        x: f32,
+        y: f32,
+        speed: f32,
+    },
+    /// A held source moving the cursor every frame, spelled
+    /// `mouse.cursor.<direction>` — a D-pad pointing where a stick would.
+    CursorBy {
+        x: f32,
+        y: f32,
+        speed: f32,
+    },
+    /// A gamepad button in the page's Gamepad API, spelled `pad.<button>` — a
+    /// keyboard driving a pad-only game, or a pad whose buttons are dealt out
+    /// differently. Sent on the pad that produced the source, or on one the
+    /// browser synthesizes where nothing did.
+    Pad(Pad),
     /// The whole stick moves the cursor (analog sources only).
     Cursor {
         speed: f32,
@@ -236,6 +285,25 @@ impl InputMap {
         };
     }
 
+    /// The keys the file binds, by the name it spells them with — the editor
+    /// has a row per entry, since which keys exist is the keyboard's business
+    /// rather than a set the screen could list.
+    pub fn raw_keys(&self) -> impl Iterator<Item = (&str, &RawTarget)> {
+        self.raw
+            .key
+            .iter()
+            .map(|(name, target)| (name.as_str(), target))
+    }
+
+    /// Rewrite one key's entry; `None` takes the line out of the file, which
+    /// leaves the key reaching the page as itself.
+    pub fn set_raw_key(&mut self, name: &str, target: Option<RawTarget>) {
+        match target {
+            Some(target) => self.raw.key.insert(name.to_string(), target),
+            None => self.raw.key.remove(name),
+        };
+    }
+
     /// What the file says the whole stick does.
     pub fn raw_stick(&self, side: Side) -> Option<&RawTarget> {
         self.raw.stick.get(side.name())?.get(ANALOG)
@@ -283,7 +351,7 @@ impl InputMap {
     /// unbound, which reaches the page instead.
     pub fn set_raw_stick_arrows(&mut self, side: Side) {
         for dir in Dir::ALL {
-            let arrow = RawTarget::Short(dir.arrow().to_string());
+            let arrow = RawTarget::Short(format!("{KEY_PREFIX}{}", dir.arrow()));
             self.set_raw_stick_dir(side, dir, Some(arrow));
         }
     }
@@ -339,7 +407,7 @@ mod tests {
             // business; that it can click and point at all is not.
             let clicks = Pad::ALL
                 .into_iter()
-                .any(|pad| map.pad(None, pad) == Some(&Target::Click));
+                .any(|pad| matches!(map.pad(None, pad), Some(Target::Click(_))));
             let points = Side::ALL
                 .into_iter()
                 .any(|side| matches!(map.stick(side), StickRole::Analog(Target::Cursor { .. })));
@@ -361,6 +429,30 @@ mod tests {
                 "`{id}` binds sources but cannot point and click"
             );
         }
+    }
+
+    /// A key the file binds reaches the runtime under the code SDL gives it,
+    /// which is what the editor's rows are written against.
+    #[test]
+    fn the_key_table_resolves_to_sdl_codes() {
+        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        let map = resolve("[key]\nw = \"key.ArrowUp\"\n");
+        assert!(matches!(map.key(None, code), Some(Target::Key(_))));
+    }
+
+    /// A key that names no device is a typo waiting to read as one of the
+    /// words the format keeps for itself, so it is refused rather than guessed.
+    #[test]
+    fn a_target_that_names_no_device_is_refused() {
+        let map = resolve(
+            r#"
+            [pad]
+            a = "Space"
+            b = "key.Space"
+            "#,
+        );
+        assert_eq!(map.pad(None, Pad::A), None);
+        assert!(map.pad(None, Pad::B).is_some());
     }
 
     /// A game branching on `e.code` gets nothing from `Unidentified`, and the
@@ -398,7 +490,7 @@ mod tests {
         let map = resolve(
             r#"
             [stick.left]
-            analog = "cursor"
+            analog = "key.cursor"
             [stick.right]
             analog = "mouse.scroll"
             "#,
@@ -410,19 +502,113 @@ mod tests {
         );
     }
 
-    /// The namespace is open but the route is not, so the other buttons have to
-    /// be refused out loud rather than resolving to the left one.
+    /// Every mouse button has a route, and a held source steps the page or the
+    /// cursor once per frame in the direction it names — down is positive both
+    /// ways (the page's own `dy` reveals lower content, screen y grows down).
     #[test]
-    fn only_the_left_mouse_button_resolves() {
+    fn the_mouse_targets_resolve_to_buttons_and_steps() {
         let map = resolve(
             r#"
             [pad]
             a = "mouse.left"
             b = "mouse.right"
+            x = "mouse.middle"
+            l1 = "mouse.scroll.down"
+            r1 = "mouse.scroll.left"
+            up = "mouse.cursor.up"
+            right = "mouse.cursor.right"
             "#,
         );
-        assert_eq!(map.pad(None, Pad::A), Some(&Target::Click));
+        let button = |pad| match map.pad(None, pad) {
+            Some(Target::Click(button)) => *button,
+            other => panic!("{pad:?} resolved to {other:?}"),
+        };
+        assert_eq!(button(Pad::A), ClickButton::Left);
+        assert_eq!(button(Pad::B), ClickButton::Right);
+        assert_eq!(button(Pad::X), ClickButton::Middle);
+        assert_eq!(
+            map.pad(None, Pad::L1),
+            Some(&Target::ScrollBy {
+                x: 0.0,
+                y: 1.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::R1),
+            Some(&Target::ScrollBy {
+                x: -1.0,
+                y: 0.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::Up),
+            Some(&Target::CursorBy {
+                x: 0.0,
+                y: -1.0,
+                speed: 1.0
+            })
+        );
+        assert_eq!(
+            map.pad(None, Pad::Right),
+            Some(&Target::CursorBy {
+                x: 1.0,
+                y: 0.0,
+                speed: 1.0
+            })
+        );
+    }
+
+    /// A step is an edge's target: the whole stick has a vector of its own, and
+    /// taking a step there would throw three of its four quadrants away.
+    #[test]
+    fn a_stick_refuses_a_step_and_keeps_the_whole_vector() {
+        let map = resolve(
+            r#"
+            [stick.left]
+            analog = "mouse.cursor.up"
+            [stick.right]
+            analog = { to = "mouse.cursor", speed = 2.0 }
+            "#,
+        );
+        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(
+            map.stick(Side::Right),
+            &StickRole::Analog(Target::Cursor { speed: 2.0 })
+        );
+    }
+
+    /// A map may deal the pad's own buttons out again, and give a key one —
+    /// the page reads both through the Gamepad API.
+    #[test]
+    fn a_button_target_resolves_to_the_pad_it_names() {
+        let map = resolve(
+            r#"
+            [pad]
+            a = "pad.b"
+            b = "pad.nosuchbutton"
+
+            [key]
+            w = "pad.l1"
+            "#,
+        );
+        assert_eq!(map.pad(None, Pad::A), Some(&Target::Pad(Pad::B)));
         assert_eq!(map.pad(None, Pad::B), None);
+        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        assert_eq!(map.key(None, code), Some(&Target::Pad(Pad::L1)));
+    }
+
+    /// A stick is read whole, so a step in one direction says nothing about it.
+    #[test]
+    fn a_scroll_step_is_refused_on_a_whole_stick() {
+        let map = resolve(
+            r#"
+            [stick.left]
+            analog = "mouse.scroll.down"
+            "#,
+        );
+        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
     }
 
     /// `code` is what a game branches on, so the common spellings must derive it
@@ -432,9 +618,9 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            a = "Space"
-            b = "z"
-            start = "Enter"
+            a = "key.Space"
+            b = "key.z"
+            start = "key.Enter"
             "#,
         );
         let key = |pad| match map.pad(None, pad) {
@@ -453,7 +639,7 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            x = { to = "x", code = "KeyY", shift = true }
+            x = { to = "key.x", code = "KeyY", shift = true }
             "#,
         );
         let Some(Target::Key(key)) = map.pad(None, Pad::X) else {
@@ -470,8 +656,8 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            select = "Escape"
-            a = "Space"
+            select = "key.Escape"
+            a = "key.Space"
             "#,
         );
         assert_eq!(map.pad(None, Pad::Select), None);
@@ -483,7 +669,7 @@ mod tests {
         let map = resolve(
             r#"
             [stick.left]
-            up = "ArrowUp"
+            up = "key.ArrowUp"
             [stick.right]
             analog = "mouse.cursor"
             "#,
@@ -504,9 +690,9 @@ mod tests {
         let map = resolve(
             r#"
             [pad]
-            elbow = "Space"
-            a = "NoSuchKey"
-            b = "z"
+            elbow = "key.Space"
+            a = "key.NoSuchKey"
+            b = "key.z"
             "#,
         );
         assert_eq!(map.pad(None, Pad::A), None);
@@ -521,11 +707,11 @@ mod tests {
             r#"
             [pad]
             l2 = "layer:aim"
-            a = "Space"
-            b = "z"
+            a = "key.Space"
+            b = "key.z"
 
             [layer.aim.pad]
-            a = "Shift"
+            a = "key.Shift"
             "#,
         );
         assert_eq!(map.pad(None, Pad::L2), Some(&Target::Layer(0)));
@@ -556,7 +742,7 @@ mod tests {
         assert!(map.raw_stick_is_digital(Side::Left));
         assert_eq!(
             map.raw_stick_dir(Side::Left, Dir::Up).map(RawTarget::text),
-            Some("ArrowUp")
+            Some("key.ArrowUp")
         );
         // And back: the directions go when the whole stick is given a target.
         let scroll = RawTarget::Short("scroll".to_string());
@@ -595,7 +781,7 @@ mod tests {
             r#"
             name = "Original"
             [pad]
-            a = "Space"
+            a = "key.Space"
             [stick.right]
             analog = "mouse.cursor"
             "#,

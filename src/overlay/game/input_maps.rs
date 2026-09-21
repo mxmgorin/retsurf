@@ -36,15 +36,14 @@ pub enum MapAction {
 }
 
 impl MapAction {
-    /// A trailing ellipsis means the row asks for something before it does
-    /// anything — the two that summon the keyboard for a name. A row that only
-    /// opens another screen does not get one.
+    /// What the row says it does, in as many words as it takes — the screens
+    /// spell their rows out rather than trailing off into an ellipsis.
     pub fn label(self) -> &'static str {
         match self {
             MapAction::Use => "Use this map",
             MapAction::Edit => "Edit",
-            MapAction::Rename => "Rename...",
-            MapAction::Duplicate => "Duplicate...",
+            MapAction::Rename => "Rename",
+            MapAction::Duplicate => "Duplicate",
             MapAction::Delete => "Delete",
             MapAction::Reset => "Reset to default",
         }
@@ -68,12 +67,13 @@ pub struct Naming {
     pub text: String,
 }
 
-/// The list's first row, which makes a map. The ellipsis promises the keyboard,
-/// like the two [`MapAction`] rows that ask for a name.
-pub const NEW_MAP_LABEL: &str = "New map...";
-
-/// What that keyboard starts from, so a press through it still names something.
+/// What the keyboard a new map starts from holds, so a press through it still
+/// names something.
 pub const NEW_MAP_NAME: &str = "New map";
+
+/// The list's first row, which makes a map. Spelled like the row that adds a
+/// mapping inside one: each adds what its own screen lists.
+pub const NEW_MAP_LABEL: &str = "+ Add";
 
 /// What **A** does, given which of the three lists the highlight is in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -372,10 +372,10 @@ mod tests {
         );
     }
 
-    /// The ellipsis is a promise that the row will ask for something before it
-    /// acts, so only the two that summon the keyboard may make it.
+    /// Every row says what it does in words; none of these screens trails off
+    /// into an ellipsis.
     #[test]
-    fn only_a_row_that_asks_for_a_name_trails_off() {
+    fn no_row_trails_off() {
         let all = [
             MapAction::Use,
             MapAction::Edit,
@@ -385,11 +385,9 @@ mod tests {
             MapAction::Reset,
         ];
         for action in all {
-            let asks = matches!(action, MapAction::Rename | MapAction::Duplicate);
-            assert_eq!(action.label().ends_with("..."), asks, "{action:?}");
+            assert!(!action.label().ends_with('.'), "{action:?}");
         }
-        // The list's own row makes the same promise, and keeps it.
-        assert!(NEW_MAP_LABEL.ends_with("..."));
+        assert!(!NEW_MAP_LABEL.ends_with('.'));
     }
 
     /// The list leads with the row that makes a map, so it is what a press

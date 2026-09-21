@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Game Mode map editor binds keyboard keys too, by listening for them.**
+  Its last row, *Add button or key...*, captures whatever is pressed and opens
+  that source's list, so a key is bound exactly the way a pad button is — the
+  `[keyboard]` table was a file-only affair before, unreachable on a device with
+  no file manager. The screen follows: rows are the sources the map binds (the
+  two sticks aside, which are always rows), **X** unbinds the focused one, and
+  every row is named for the path the file holds it under — `pad.a`, `key.w`,
+  `stick.left.up` — so the three `up`s a map can hold cannot be read for one
+  another, in the map file as much as on screen: its key table is `[key]` now,
+  and TOML reads `pad.a = "Space"` as the `[pad]` table's `a`. What a row cannot
+  hold — a hold, a chord, a modified key, and Select, which the Game Mode menu
+  keeps — is refused on the row that asked.
+
+- **A stick in the Game Mode map editor opens what it sends straight from its
+  row**, the way every other source does. It used to open a screen of its own
+  whose first row was the question the row itself could have asked; the four
+  directions a stick read as directions has are now rows under it in the one
+  list, named as the file names them.
+
 - **The engine moved up to Servo `main` as of 2026-09-18** (178 upstream
   commits), pinned by the tag `retsurf-main-0.9.0-2`. The bump cost one
   dependency line: Servo took `content-security-policy` to 0.9, and two copies of

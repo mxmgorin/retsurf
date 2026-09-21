@@ -17,6 +17,7 @@ use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
 use crate::config::OskConfig;
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -276,9 +277,12 @@ pub struct Osk {
     row: usize,
     col: usize,
     /// The enabled layouts in Lang-cycle order; never empty.
-    layouts: Vec<Layout>,
-    /// Index of the active layout.
+    langs: Vec<&'static LayoutDef>,
+    /// Index of the active one in [`Self::langs`].
     lang: usize,
+    /// Its grid, built on demand and dropped when the keyboard hides: 4 KB of
+    /// keys and a shift map for a screen that is usually not up.
+    grid: OnceCell<Layout>,
     /// Whether the keyboard is a key picker rather than a keyboard.
     picking: bool,
     /// Whether the picker is on [`NAMED_ROWS`] rather than the characters.
@@ -287,7 +291,7 @@ pub struct Osk {
 
 impl Osk {
     pub fn new(cfg: &OskConfig) -> Self {
-        let mut layouts: Vec<Layout> = cfg
+        let mut langs: Vec<&'static LayoutDef> = cfg
             .layouts
             .iter()
             .filter_map(|id| {
@@ -296,13 +300,13 @@ impl Osk {
                     let known: Vec<_> = LAYOUTS.iter().map(|d| d.name).collect();
                     log::warn!("osk: unknown layout `{id}` (available: {known:?}); skipping");
                 }
-                def.map(Layout::build)
+                def
             })
             .collect();
         // The keyboard is the only text input on a handheld — never come up
         // without one.
-        if layouts.is_empty() {
-            layouts.push(Layout::build(&LAYOUTS[0]));
+        if langs.is_empty() {
+            langs.push(&LAYOUTS[0]);
         }
 
         Self {
@@ -315,16 +319,25 @@ impl Osk {
             // backtick; the cell then persists across hide/show.
             row: 2,
             col: 1,
-            layouts,
+            langs,
             lang: 0,
+            grid: OnceCell::new(),
             picking: false,
             named: false,
         }
     }
 
-    /// The active layout.
+    /// The active layout, built on demand rather than held: the grid is wanted
+    /// only while the keyboard is drawn, and [`Self::hide`] drops it again.
     pub fn layout(&self) -> &Layout {
-        &self.layouts[self.lang]
+        self.grid
+            .get_or_init(|| Layout::build(self.langs[self.lang]))
+    }
+
+    /// Take the keyboard down, dropping the grid with it.
+    pub fn hide(&mut self) {
+        self.visible = false;
+        self.grid.take();
     }
 
     /// The grid on screen: the layout's characters, or the named keys the
@@ -413,7 +426,7 @@ impl Osk {
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
             }
-            OskCommand::Hide => self.visible = false,
+            OskCommand::Hide => self.hide(),
             OskCommand::Activate => self.activate(target, browser, commands),
             OskCommand::Backspace => self.backspace(target, browser),
             OskCommand::Space => self.type_space(target, browser),
@@ -507,14 +520,15 @@ impl Osk {
             Tab | Left | Right | Up | Down => {}
             Enter => self.enter(target, browser, commands),
             Lang => {
-                self.lang = (self.lang + 1) % self.layouts.len();
+                self.lang = (self.lang + 1) % self.langs.len();
+                self.grid.take();
                 // The frame is fixed but rows differ in length across layouts.
                 self.clamp_cell();
             }
             Fn => self.toggle_named(),
             Named { name, .. } => self.input_named(target, name, browser),
             Clear => self.clear_field(target, browser),
-            Hide => self.visible = false,
+            Hide => self.hide(),
         }
     }
 
@@ -716,9 +730,10 @@ mod tests {
     #[test]
     fn every_layout_carries_the_fn_key() {
         let mut osk = osk();
-        for _ in 0..osk.layouts.len() {
+        for _ in 0..osk.langs.len() {
             assert!(osk.keys().iter().flatten().any(|key| *key == Fn));
-            osk.lang = (osk.lang + 1) % osk.layouts.len();
+            osk.lang = (osk.lang + 1) % osk.langs.len();
+            osk.grid.take();
         }
         osk.set_picking(true);
         assert!(osk.keys().iter().flatten().any(|key| *key == Fn));

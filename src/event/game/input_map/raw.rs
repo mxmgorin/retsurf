@@ -3,7 +3,10 @@
 //! the file: a typo should cost one binding, not the map.
 
 use super::store::is_built_in;
-use super::{Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG};
+use super::{
+    ClickButton, Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX,
+    PAD_PREFIX,
+};
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
 use keyboard_types::{Code, Key, Modifiers, NamedKey};
@@ -46,7 +49,7 @@ impl RawTarget {
 #[serde(default)]
 pub(super) struct RawLayer {
     pad: BTreeMap<String, RawTarget>,
-    keyboard: BTreeMap<String, RawTarget>,
+    key: BTreeMap<String, RawTarget>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -59,11 +62,23 @@ pub(super) struct RawInputMap {
     /// Keyed by stick (`left` / `right`), then by direction or `analog`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
+    /// Physical keys, named as the editor's rows name them (`key.w`).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub(super) keyboard: BTreeMap<String, RawTarget>,
+    pub(super) key: BTreeMap<String, RawTarget>,
     /// Alternate sets by name, each held open by whatever names it.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) layer: BTreeMap<String, RawLayer>,
+}
+
+/// The two targets a stick drives as a whole, and the base a `.<direction>`
+/// suffix turns into a per-frame step.
+const CURSOR: &str = "mouse.cursor";
+const SCROLL: &str = "mouse.scroll";
+
+/// The unit step `text` names, if it is `base` with a direction after it.
+fn step_after(text: &str, base: &str) -> Option<(f32, f32)> {
+    let dir = text.strip_prefix(base)?.strip_prefix('.')?;
+    Dir::parse(dir).map(Dir::step)
 }
 
 /// Resolve one written target against the layers the file declares. `None` is a
@@ -99,22 +114,41 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
     match text {
         "passthrough" => return Some(Target::Passthrough),
         "none" => return Some(Target::None),
-        "mouse.cursor" => return Some(Target::Cursor { speed }),
-        "mouse.scroll" => return Some(Target::Scroll { speed }),
-        "mouse.left" => return Some(Target::Click),
-        // The namespace is open, but only the left button has a route: the
-        // router's Confirm intent carries no button of its own.
-        "mouse.right" | "mouse.middle" => {
-            log::warn!("input map: `{whose}` — only `mouse.left` has a route");
-            return None;
-        }
+        CURSOR => return Some(Target::Cursor { speed }),
+        SCROLL => return Some(Target::Scroll { speed }),
+        "mouse.left" => return Some(Target::Click(ClickButton::Left)),
+        "mouse.right" => return Some(Target::Click(ClickButton::Right)),
+        "mouse.middle" => return Some(Target::Click(ClickButton::Middle)),
         "cursor" | "scroll" => {
             log::warn!("input map: `{whose}` — `{text}` is spelled `mouse.{text}` now");
             return None;
         }
         _ => {}
     }
-    let key = parse_key(text, whose)?;
+    // Named with a direction, either takes an edge instead of a stick: a step
+    // per frame for as long as the source is held.
+    if let Some((x, y)) = step_after(text, SCROLL) {
+        return Some(Target::ScrollBy { x, y, speed });
+    }
+    if let Some((x, y)) = step_after(text, CURSOR) {
+        return Some(Target::CursorBy { x, y, speed });
+    }
+    if let Some(name) = text.strip_prefix(PAD_PREFIX) {
+        return match Pad::parse(name) {
+            Some(pad) => Some(Target::Pad(pad)),
+            None => {
+                log::warn!("input map: `{whose}` names no pad button `{name}`; ignored");
+                None
+            }
+        };
+    }
+    // Every target names its device, so a key cannot be read as a typo of one
+    // of the words above.
+    let Some(name) = text.strip_prefix(KEY_PREFIX) else {
+        log::warn!("input map: `{whose}` — a key is spelled `{KEY_PREFIX}{text}`");
+        return None;
+    };
+    let key = parse_key(name, whose)?;
     // An explicit `code` wins; otherwise the standard spells most keys the same
     // in both, and a game reading `e.code` gets nothing from Unidentified.
     let code = match code {
@@ -122,7 +156,7 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
             log::warn!("input map: `{whose}` names no known code `{text}`");
             Code::Unidentified
         }),
-        None => derive_code(text, &key, whose),
+        None => derive_code(name, &key, whose),
     };
     Some(Target::Key(KeyTarget {
         key,
@@ -184,7 +218,7 @@ impl InputMap {
             sticks[side as usize] = resolve_stick(id, name, table, &names);
         }
 
-        let resolved_keys = resolve_keys(id, "keyboard", &raw.keyboard, keys, &names);
+        let resolved_keys = resolve_keys(id, "key", &raw.key, keys, &names);
 
         // A layer's own tables, in the order its names were collected. Layers
         // hold no activators: a set that opens another is a knot to debug.
@@ -194,13 +228,7 @@ impl InputMap {
                 let raw_layer = &raw.layer[name];
                 Layer {
                     pad: resolve_pad_table(id, &format!("layer.{name}.pad"), &raw_layer.pad, &[]),
-                    keys: resolve_keys(
-                        id,
-                        &format!("layer.{name}.keyboard"),
-                        &raw_layer.keyboard,
-                        keys,
-                        &[],
-                    ),
+                    keys: resolve_keys(id, &format!("layer.{name}.key"), &raw_layer.key, keys, &[]),
                 }
             })
             .collect();
@@ -251,7 +279,7 @@ fn resolve_pad_table(
     pad
 }
 
-/// One `[keyboard]` table, base or layer: names resolved through SDL, sorted so
+/// One `[key]` table, base or layer: names resolved through SDL, sorted so
 /// the runtime can binary-search them.
 fn resolve_keys(
     id: &str,

@@ -83,6 +83,17 @@ pub enum GameMapEditAction {
     Activate,
     /// Focus row `index` and open its list.
     Click(usize),
+    /// A gesture captured for the row that adds a source, as the bindings file
+    /// would spell it; `keyboard` tells the two devices apart, whose spellings
+    /// collide.
+    Capture {
+        gesture: String,
+        keyboard: bool,
+    },
+    /// Stop listening without a source (the idle give-up).
+    CaptureCancel,
+    /// Unbind the focused row, which takes its line out of the file.
+    Remove,
 }
 
 /// Actions on the settings overlay. `Select` carries its target row;
@@ -205,13 +216,20 @@ pub enum InputCommand {
     /// A typed letter for a keyboard-driven hint round, the counterpart of the
     /// gamepad's combo symbols. Emitted only while such a round is open.
     HintKey(char),
+    /// A page click with a button the Confirm intent cannot carry: that one
+    /// also activates the chrome, which knows only "the pointer".
+    Click {
+        button: crate::event::game::input_map::ClickButton,
+        pressed: bool,
+    },
     /// Per-frame analog state, all normalized to -1..=1. `aim` merges the left
     /// stick and D-pad, `stick` is the stick alone (hint mode hops on it while
-    /// the D-pad types combos), and `scroll_mode` makes the aim scroll the page.
+    /// the D-pad types combos), `scroll` is the page-scroll vector, and
+    /// `scroll_mode` makes the aim scroll the page.
     Analog {
         aim: (f32, f32),
         stick: (f32, f32),
-        scroll: f32,
+        scroll: (f32, f32),
         scroll_mode: bool,
     },
 }
