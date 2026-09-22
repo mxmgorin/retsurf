@@ -1,6 +1,6 @@
 use super::game::input_map::{Side, STICK_PREFIX};
 use super::game::mode::GameInput;
-use super::game::GameMode;
+use super::game::{GameMode, DEFAULT_EXIT};
 use super::gamepad::Gamepad;
 use super::gamepad_api;
 use super::key_names;
@@ -15,11 +15,17 @@ use crate::{
     ui::{AppUi, Focus},
 };
 use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, pad_of, Keymap};
-use inputbind::{Bindings, Capture, Captured, Pad, Store, Tick};
+use inputbind::{Bindings, Capture, Captured, Pad, PadGesture, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
+
+/// The gesture Game Mode reserves against every map. Falls back where the file
+/// binds `game_mode` to nothing on the pad, so a session always has a way out.
+fn game_exit_gesture(store: &Store) -> PadGesture {
+    bindings::pad_gesture(store, Action::GameMode).unwrap_or(DEFAULT_EXIT)
+}
 
 /// Give up on an idle capture: a handheld has no Esc to cancel with.
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(6);
@@ -72,6 +78,9 @@ pub struct AppEventHandler {
     game_controller_subsystem: sdl2::GameControllerSubsystem,
     /// Gesture-to-action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
+    /// The pad gesture `game_mode` answers to. Held apart from the tables because
+    /// Game Mode bypasses them and matches this one gesture on its own.
+    game_exit: PadGesture,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
     /// Whether the keys arriving from this device *are* the pad. The Miyoo's
@@ -112,11 +121,13 @@ impl AppEventHandler {
             }
         }
 
+        let store = bindings::load_store();
         Ok(Self {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            bindings: bindings::build(&bindings::load_store(), &key_names()),
+            game_exit: game_exit_gesture(&store),
+            bindings: bindings::build(&store, &key_names()),
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
             menu_quits,
@@ -139,7 +150,10 @@ impl AppEventHandler {
     /// Game Mode, loaded on demand. `start` is the map to run then, which only
     /// the caller has: the config is not the handler's.
     pub fn game_mut(&mut self, start: &str) -> &mut GameMode {
-        self.game.get_or_insert_with(|| GameMode::load(start))
+        let exit = self.game_exit;
+        let game = self.game.get_or_insert_with(|| GameMode::load(start));
+        game.set_exit(exit);
+        game
     }
 
     /// Game Mode where it has already loaded, for the paths that must not be
@@ -163,7 +177,17 @@ impl AppEventHandler {
     /// holds, so a press begun under the old table cannot resolve against the new.
     pub fn set_bindings(&mut self, store: &Store, commands: &mut Vec<AppCommand>) {
         self.bindings = bindings::build(store, &key_names());
+        self.game_exit = game_exit_gesture(store);
+        if let Some(game) = &mut self.game {
+            game.set_exit(self.game_exit);
+        }
         self.gamepad.reset(commands);
+    }
+
+    /// How the pad reaches the Game Mode menu, or `None` where this device has no
+    /// pad to name.
+    pub fn game_exit_text(&self) -> Option<String> {
+        self.has_pad().then(|| self.game_exit.to_text())
     }
 
     /// Whether this device has a pad at all — a controller, or a panel that

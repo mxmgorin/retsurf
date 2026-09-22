@@ -6,8 +6,8 @@
 //! ```toml
 //! [gamepad]
 //! a = "confirm"             # tap
-//! "hold:start" = "reload"   # hold past [input] hold_ms
-//! "l1+r1" = "zoom_reset"    # chord: press R1 while holding L1
+//! "hold:r1" = "reload"      # hold past [input] hold_ms
+//! "l2+r2" = "zoom_reset"    # chord: press R2 while holding L2
 //!
 //! [keyboard]
 //! "ctrl+r" = "reload"
@@ -22,7 +22,7 @@ use crate::config;
 use crate::overlay::osk::OskCommand;
 use inputbind::editor::{Groups, Requirement};
 use inputbind::sdl::KeyNames;
-use inputbind::{Action as Bindable, Bindings, Store};
+use inputbind::{Action as Bindable, Bindings, PadGesture, Store};
 
 /// Generate [`Action`], its `bindings.toml` tokens and Controls labels, and
 /// [`GROUPS`] from one table. Listing an action under a group is what makes it
@@ -78,9 +78,9 @@ action_table! {
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.
         Osk => "osk", "Keyboard",
-        /// The Game Mode gesture, resolved against the mode's state: enter it, open
-        /// its menu inside, or close that menu. Leaving is the menu's Exit row, so
-        /// one gesture covers the whole mode (see [`crate::app`]).
+        /// Opens the Game Mode menu, and closes it again; the mode is entered and
+        /// left by a row there, not by this. Mirrored inside the mode, where the
+        /// tables are bypassed, so the way in and the way out are one gesture.
         GameMode => "game_mode", "Game Mode",
         /// Quit immediately. Unbound by default; [`default_store`] carries the
         /// stock exit.
@@ -132,6 +132,8 @@ action_table! {
         TabPrev => "tab_prev", "Previous tab",
         /// Open a new tab at the home page.
         NewTab => "new_tab", "New tab",
+        /// Close the focused tab; closing the last one leaves a fresh one open.
+        CloseTab => "close_tab", "Close tab",
     }
 }
 
@@ -239,6 +241,7 @@ impl Action {
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
+            Action::CloseTab => AppCommand::CloseTab,
             Action::ZoomIn => AppCommand::Browser(BrowserCommand::Zoom(1)),
             Action::ZoomOut => AppCommand::Browser(BrowserCommand::Zoom(-1)),
             Action::ZoomReset => AppCommand::Browser(BrowserCommand::Zoom(0)),
@@ -270,35 +273,37 @@ fn default_gamepad_bindings() -> inputbind::Table {
     [
         ("a", Action::Confirm),
         ("b", Action::Cancel),
-        // The only free hold slot that isn't a stickless-unfriendly stick click.
-        ("hold:b", Action::Home),
         ("x", Action::Osk),
         ("y", Action::Hints),
         ("l1", Action::Prev),
         ("r1", Action::Next),
         // These defer their taps to release; back/forward survive that fine.
-        ("hold:l1", Action::ZoomOut),
-        ("hold:r1", Action::ZoomIn),
-        // Completes the zoom set; otherwise gamepad-unreachable (ctrl+0 only).
-        ("l1+r1", Action::ZoomReset),
-        ("r1+l1", Action::ZoomReset),
+        ("hold:l1", Action::Home),
+        ("hold:r1", Action::Reload),
+        // Zoom is stepped several times in a row, so it wants a tap rather than a
+        // hold; the triggers are the pair free of a navigation meaning.
+        ("l2", Action::ZoomOut),
+        ("r2", Action::ZoomIn),
+        // A two-trigger squeeze is not ordered, so both orders are bound.
+        ("l2+r2", Action::ZoomReset),
+        ("r2+l2", Action::ZoomReset),
         ("l3", Action::Hints),
-        ("r3", Action::Settings),
         // Scroll mode is how stickless devices scroll; both gestures defer.
         ("start", Action::Scroll),
-        ("hold:start", Action::Reload),
+        // Matched on its own inside the mode, where these tables are bypassed, so
+        // rebinding it moves the way out with it.
+        ("hold:start", Action::GameMode),
         // On a hold so stickless devices (no R3) have reader out of the box.
         ("hold:x", Action::Reader),
         ("hold:y", Action::Bookmark),
         ("select", Action::Menu),
+        // Pressed again while settings is open this quits — the only gamepad exit
+        // on a handheld. Bind `quit` directly for a one-press exit.
         ("hold:select", Action::Settings),
-        // The pad's way in; the way out inside is hold:select, hardcoded there
-        // because Game Mode bypasses these tables (see `event::game_mode`).
-        ("select+y", Action::GameMode),
-        // Pressed again while settings is open this quits — the only gamepad
-        // exit on a handheld. Bind `quit` directly for a one-press exit.
-        ("select+start", Action::Settings),
-        ("start+select", Action::Settings),
+        ("select+l1", Action::TabPrev),
+        ("select+r1", Action::TabNext),
+        ("start+l1", Action::CloseTab),
+        ("start+r1", Action::NewTab),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -408,6 +413,17 @@ pub fn key_gestures(action: Action) -> Vec<String> {
         .filter(|(_, name)| name.as_str() == action.name())
         .map(|(gesture, _)| gesture)
         .collect()
+}
+
+/// The pad gesture `action` answers to, parsed from the file. `None` where
+/// nothing binds it; the first wins where two do, and a spelling the pad machine
+/// cannot parse is skipped rather than taken as the answer.
+pub fn pad_gesture(store: &Store, action: Action) -> Option<PadGesture> {
+    store
+        .gamepad
+        .iter()
+        .filter(|(_, name)| name.as_str() == action.name())
+        .find_map(|(gesture, _)| PadGesture::parse(gesture))
 }
 
 #[cfg(test)]
@@ -530,7 +546,7 @@ mod tests {
         );
         assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
         assert_eq!(
-            store.gamepad.get("select+y").map(String::as_str),
+            store.gamepad.get("hold:start").map(String::as_str),
             Some("game_mode")
         );
     }
@@ -541,10 +557,10 @@ mod tests {
     fn a_taken_gesture_is_never_reclaimed() {
         let mut store = default_store();
         store.gamepad.retain(|_, name| name != "game_mode");
-        store.gamepad.insert("select+y".into(), "reader".into());
+        store.gamepad.insert("hold:start".into(), "reader".into());
         merge_missing_defaults(&mut store);
         assert_eq!(
-            store.gamepad.get("select+y").map(String::as_str),
+            store.gamepad.get("hold:start").map(String::as_str),
             Some("reader")
         );
     }

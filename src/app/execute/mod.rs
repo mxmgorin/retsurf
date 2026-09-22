@@ -35,6 +35,7 @@ impl App {
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
+            AppCommand::CloseTab => self.close_tab_at(self.browser.active_tab()),
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
             AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),

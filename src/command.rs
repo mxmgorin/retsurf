@@ -19,6 +19,8 @@ pub enum AppCommand {
     Input(InputCommand),
     Menu(MenuAction),
     ToggleBookmark,
+    /// Close the focused tab. Closing the last one leaves a fresh tab open.
+    CloseTab,
     GameMode,
     /// An action on Game Mode's own menu (see [`crate::overlay::game::menu`]).
     GameMenu(GameMenuAction),
@@ -49,6 +51,7 @@ impl AppCommand {
             AppCommand::Browser(_)
             | AppCommand::Menu(_)
             | AppCommand::ToggleBookmark
+            | AppCommand::CloseTab
             | AppCommand::Settings(_) => false,
         }
     }

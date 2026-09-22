@@ -426,8 +426,8 @@ entry maps a *gesture* to an *action*:
 ```toml
 [gamepad]
 a = "confirm"              # tap: fires on press
-"hold:start" = "bookmark"  # hold the button for hold_ms
-"l1+r1" = "reload"         # chord: press one while holding the other
+"hold:r1" = "reload"       # hold the button for hold_ms
+"l2+r2" = "zoom_reset"     # chord: press one while holding the other
 y = "none"                 # explicitly unbind
 
 [keyboard]
@@ -437,8 +437,9 @@ k = "nav_up"               # overlay navigation can move to vim-style keys
 ```
 
 **Gamepad gestures**: a tap (`a`), a hold (`"hold:a"`), or a button chord
-(`"a+b"`). Buttons: `a b x y l1 r1 l3 r3 start select` (the D-pad aims the
-cursor and L2/R2 cycle tabs / drive the keyboard — they're not bindable). A
+(`"a+b"`). Buttons: `a b x y l1 r1 l2 r2 l3 r3 start select` (the D-pad aims
+the cursor and is not bindable; L2/R2 double as Shift and Enter, but only while
+the on-screen keyboard is open). A
 button with a hold or chord gesture fires its tap on release instead of press
 (the gesture is ambiguous until then); `confirm` needs the press edge for
 clicks and drags, so hold/chord gestures on its button are rejected.
@@ -455,7 +456,8 @@ zoom in/out/reset · arrows = overlay navigation.
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
 `hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
 `settings` (settings overlay; pressed again while it's open, quits) · `home`
-(go to the home page) · `quit` (quit the app) · `tab_next` / `tab_prev` ·
+(go to the home page) · `quit` (quit the app) · `tab_next` / `tab_prev` /
+`new_tab` / `close_tab` ·
 `zoom_in` / `zoom_out` / `zoom_reset` (page zoom along a Firefox-style 50–300%
 ladder / back to the config default) ·
 `nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay

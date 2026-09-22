@@ -13,6 +13,13 @@ impl AppBrowser {
         self.inner.tabs.borrow().len()
     }
 
+    /// Index of the tab currently shown. Always in range: closing the last tab
+    /// replaces it rather than leaving none.
+    #[inline]
+    pub fn active_tab(&self) -> usize {
+        self.inner.active.get()
+    }
+
     /// A snapshot of the open tabs for the menu's Tabs section.
     pub fn tabs(&self) -> Vec<TabInfo> {
         let active = self.inner.active.get();

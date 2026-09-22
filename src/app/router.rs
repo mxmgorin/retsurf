@@ -274,9 +274,10 @@ impl App {
                     }
                 }
             },
+            // Only while the keyboard is up: L2 is a held Shift, R2 is Enter on
+            // the press edge. Elsewhere the triggers are ordinary bindable pads.
             InputCommand::Trigger { right, pressed } => {
                 if focus == Focus::Osk {
-                    // Keyboard: L2 is a held Shift, R2 is Enter on the press edge.
                     if *right {
                         if *pressed {
                             self.ui.osk(OskCommand::Enter, &self.browser, out);
@@ -284,9 +285,6 @@ impl App {
                     } else {
                         self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
-                } else if *pressed && !self.ui.prompt.visible() && !focus.takes_over() {
-                    // Quick tab switch: L2 previous, R2 next (wraps).
-                    self.browser.cycle_tab(if *right { 1 } else { -1 });
                 }
             }
             // Dedicated keyboard keys act only while the keyboard is open. The one

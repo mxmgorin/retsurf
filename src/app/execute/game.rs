@@ -47,7 +47,7 @@ impl App {
         // Read at entry, not at startup: a pad can be plugged in later, and the
         // gestures named have to be the ones the tables actually hold.
         let toast = crate::ui::game_mode_toast_text(
-            self.event_handler.has_pad(),
+            self.event_handler.game_exit_text(),
             &bindings::key_gestures(Action::GameMode),
         );
         self.ui.enter_game_mode(toast);

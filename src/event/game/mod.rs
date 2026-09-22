@@ -11,8 +11,13 @@ use crate::browser::AppBrowser;
 use crate::command::AppCommand;
 use crate::config::InputConfig;
 use crate::event::key_names;
+use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
 use mode::GameInput;
+
+/// What the mode reserves while `game_mode` is bound to nothing on the pad: the
+/// one button no map may take, so a session is never entered without a way out.
+pub const DEFAULT_EXIT: PadGesture = PadGesture::Hold(Pad::Select);
 
 /// Everything Game Mode owns. Loaded when a screen or the mode itself asks for
 /// a map and dropped once none of them is up, so a run that stays in the browser
@@ -26,6 +31,9 @@ pub struct GameMode {
     /// being `Some` *is* the mode routing, and dropping it is what guarantees
     /// the page is left holding nothing.
     input: Option<GameInput>,
+    /// The gesture a running translator reserves for the menu, mirrored from
+    /// what `game_mode` is bound to on the pad.
+    exit: PadGesture,
 }
 
 impl GameMode {
@@ -41,6 +49,16 @@ impl GameMode {
             maps,
             live,
             input: None,
+            exit: DEFAULT_EXIT,
+        }
+    }
+
+    /// Set the gesture a translator reserves for the menu. One already running
+    /// takes it at once, so the way out can change mid-session.
+    pub fn set_exit(&mut self, exit: PadGesture) {
+        self.exit = exit;
+        if let Some(input) = &mut self.input {
+            input.set_exit(exit);
         }
     }
 
@@ -61,7 +79,11 @@ impl GameMode {
 
     /// Start routing: the live map becomes a translator.
     pub fn start_routing(&mut self, cfg: &InputConfig) {
-        self.input = Some(GameInput::new(self.maps.pick(&self.live).clone(), cfg));
+        self.input = Some(GameInput::new(
+            self.maps.pick(&self.live).clone(),
+            cfg,
+            self.exit,
+        ));
     }
 
     /// Stop, releasing what the page holds on the way out — a transition must

@@ -1,8 +1,8 @@
 //! Game Mode's translator: the pad and the keyboard drive the game, not the
 //! chrome. What each source sends is the active [`InputMap`]; a source with a
 //! target is withheld from the page's raw input (the `bool` returns here), so
-//! one press is never seen twice. Select is reserved in every map — held
-//! past the hold it opens the Game Mode menu.
+//! one press is never seen twice. Whatever gesture `game_mode` is bound to is
+//! mirrored here and reserved against every map, so the way out is the way in.
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
@@ -11,7 +11,7 @@ use crate::config::InputConfig;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::{axis_value, trigger_of};
-use inputbind::{Pad, Trigger};
+use inputbind::{Pad, PadGesture, Trigger};
 use sdl2::controller::Axis;
 use std::time::{Duration, Instant};
 
@@ -86,14 +86,21 @@ pub struct GameInput {
     /// Gamepad buttons the page holds through this map, counted the same way.
     buttons: Vec<(Pad, u32)>,
     triggers: [Trigger; 2],
-    /// When Select went down; held past `hold` it opens the Game Mode menu.
-    select_at: Option<Instant>,
+    /// The gesture that opens the Game Mode menu.
+    exit: PadGesture,
+    /// When the exit gesture's pad went down, while that gesture is a hold.
+    exit_at: Option<Instant>,
+    /// Whether the exit chord's leader is down.
+    exit_leader: bool,
+    /// Whether the exit chord's second pad had its press taken. Its release must
+    /// be taken too, or the game sees a release for a press it never got.
+    exit_second: bool,
     deadzone: f32,
     hold: Duration,
 }
 
 impl GameInput {
-    pub fn new(map: InputMap, cfg: &InputConfig) -> Self {
+    pub fn new(map: InputMap, cfg: &InputConfig, exit: PadGesture) -> Self {
         Self {
             map,
             held: Vec::new(),
@@ -112,10 +119,22 @@ impl GameInput {
                 Trigger::new(Pad::L2, cfg.trigger_threshold),
                 Trigger::new(Pad::R2, cfg.trigger_threshold),
             ],
-            select_at: None,
+            exit,
+            exit_at: None,
+            exit_leader: false,
+            exit_second: false,
             deadzone: cfg.deadzone,
             hold: Duration::from_millis(cfg.hold_ms),
         }
+    }
+
+    /// Replace the reserved gesture. Whatever the old one had part-way down is
+    /// forgotten, so a press begun under it cannot complete against the new one.
+    pub fn set_exit(&mut self, exit: PadGesture) {
+        self.exit = exit;
+        self.exit_at = None;
+        self.exit_leader = false;
+        self.exit_second = false;
     }
 
     /// Retuned in place, like [`super::gamepad::Gamepad::set_config`].
@@ -140,6 +159,50 @@ impl GameInput {
         self.active.last().copied()
     }
 
+    /// One edge of the gesture that opens the Game Mode menu; returns whether the
+    /// pad belongs to it, i.e. is withheld from the game. A pad carrying a tap or
+    /// a hold is spent: deciding one needs a buffered press, and this buffers none.
+    fn on_exit_pad(&mut self, pad: Pad, pressed: bool, commands: &mut Vec<AppCommand>) -> bool {
+        match self.exit {
+            PadGesture::Tap(on) if on == pad => {
+                if pressed {
+                    commands.push(AppCommand::GameMode);
+                }
+                true
+            }
+            PadGesture::Hold(on) if on == pad => {
+                self.exit_at = match pressed {
+                    true => self.exit_at.or_else(|| Some(Instant::now())),
+                    false => None,
+                };
+                true
+            }
+            // Only the leader is spent outright: the second pad reaches the game
+            // unless the leader is already down, so a chord costs one button.
+            PadGesture::Chord(leader, _) if leader == pad => {
+                self.exit_leader = pressed;
+                true
+            }
+            PadGesture::Chord(_, second) if second == pad => {
+                match (pressed, self.exit_leader, self.exit_second) {
+                    (true, true, _) => {
+                        self.exit_second = true;
+                        commands.push(AppCommand::GameMode);
+                        true
+                    }
+                    // Whatever the leader did since, the game must not see a
+                    // release for a press it never got.
+                    (false, _, true) => {
+                        self.exit_second = false;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
     /// Returns whether the source is bound here, i.e. withheld from the page.
     pub fn on_pad(
@@ -149,12 +212,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        // Select is reserved in every map: the hold that opens the menu.
-        if pad == Pad::Select {
-            self.select_at = match pressed {
-                true => self.select_at.or_else(|| Some(Instant::now())),
-                false => None,
-            };
+        if self.on_exit_pad(pad, pressed, commands) {
             return true;
         }
         let slot = pad as usize;
@@ -431,12 +489,12 @@ impl GameInput {
         }
     }
 
-    /// Per-frame: fire a due Select hold, and emit whatever the sticks are
-    /// bound to (the router moves the cursor and scrolls the page from it).
+    /// Per-frame: fire a due exit hold, and emit whatever the sticks are bound
+    /// to (the router moves the cursor and scrolls the page from it).
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
-        if let Some(at) = self.select_at {
+        if let Some(at) = self.exit_at {
             if at.elapsed() >= self.hold {
-                self.select_at = None;
+                self.exit_at = None;
                 commands.push(AppCommand::GameMode);
             }
         }
@@ -488,7 +546,7 @@ impl GameInput {
     /// a hold pending.
     pub fn is_active(&self) -> bool {
         let (aim, scroll) = self.analog();
-        aim != (0.0, 0.0) || scroll != (0.0, 0.0) || self.select_at.is_some()
+        aim != (0.0, 0.0) || scroll != (0.0, 0.0) || self.exit_at.is_some()
     }
 
     /// Release everything the page holds — a mode or focus transition must
@@ -509,7 +567,9 @@ impl GameInput {
             self.send_pad(button, false, browser);
         }
         self.set_click(false, commands);
-        self.select_at = None;
+        self.exit_at = None;
+        self.exit_leader = false;
+        self.exit_second = false;
     }
 }
 
