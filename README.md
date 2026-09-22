@@ -9,7 +9,7 @@
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
 
-retsurf is a web browser written in Rust and built using [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on PCs, with flexible, remappable controls for comfortable web browsing and gaming using only a gamepad or keyboard.
+retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on PCs, offering flexible, remappable controls for comfortable web browsing and gaming using only a gamepad or keyboard.
 
 **[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
 
@@ -38,13 +38,13 @@ retsurf is a web browser written in Rust and built using [Servo](https://servo.o
   The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
 
 - **Customizable browser controls**<br>
-  Every browser action can be rebound in-app or in [`bindings.toml`](docs/CONFIGURATION.md#bindings-bindingstoml), with support for taps, holds, and button chords.
+  Every browser action can be rebound in-app, with support for tap, hold, and chord.
 
 - **Game mode**<br>
-  Hides the browser chrome and hands keyboard and gamepad input to the page, with an in-app remapper that can rebind any button or stick and save multiple profiles. Built-in input maps cover arrows, WASD, mouse, and raw gamepad input.
+  Hides the browser chrome and routes input to the page, with an in-app remapper that can rebind any button with multiple profiles.
 
 - **Tabs, bookmarks, history, and downloads**<br>
-  Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation, with a toolbar chip for active downloads.
+  Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation and a toolbar chip for active downloads.
 
 - **Real page zoom**<br>
   Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
@@ -62,7 +62,7 @@ retsurf is a web browser written in Rust and built using [Servo](https://servo.o
   Checks GitHub for updates, displays release notes, and installs updates in place on PortMaster handhelds and Linux desktops. Supports stable, beta, and nightly channels.
 
 - **Audio and video**<br>
-  A custom Servo media backend provides audio and video playback for MP3, WAV, FLAC, Ogg/Vorbis, AAC/M4A, and H.264 video in MP4. Supports direct media files and embedded players, but not streaming sites that require MSE.
+  A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players, but not streaming sites that require MSE.
 
 - **No display server required**<br>
   SDL2 draws through whatever video backend the firmware ships, including handhelds that run none at all. X11 and Wayland are optional, not required.
