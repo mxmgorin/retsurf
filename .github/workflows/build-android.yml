@@ -3,6 +3,17 @@ name: Android
 on:
   workflow_dispatch:
   workflow_call:
+    # A called workflow inherits no secrets: a caller that passes none signs with
+    # an ephemeral key, and those APKs cannot update an installed one.
+    secrets:
+      RETSURF_KEYSTORE_BASE64:
+        required: false
+      RETSURF_KEYSTORE_PASS:
+        required: false
+      RETSURF_KEY_ALIAS:
+        required: false
+      RETSURF_KEY_PASS:
+        required: false
   release:
     types: [published]
 
