@@ -300,6 +300,9 @@ impl AppBrowserInner {
             webview.set_page_zoom(self.default_zoom);
         }
         webview.notify_theme_change(engine::theme(self.page_theme.get()));
+        // Servo builds a webview shown, and every shown webview on the shared
+        // context is composited, in map order: a tab stays hidden until shown.
+        webview.hide();
         webview
     }
 
