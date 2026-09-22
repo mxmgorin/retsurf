@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the fresh rects land they are neither drawn nor clickable, and every way of
   scrolling schedules that re-collect — a wheel or a touch drag did not.
 
+- **A restored session shows the tab the toolbar names.** Servo builds a webview
+  shown, and every shown webview on the shared rendering context is composited,
+  in the order of a hash map — so reopening several tabs painted whichever of
+  them came last over the one that was active, or blended the two where a page
+  had yet to paint its background. A webview is hidden as it is built now, and
+  only the tab switched to is shown; a link opened in a background tab could
+  cover the page the same way.
+
 ## [0.8.0] - 2026-09-08
 
 ### Added
