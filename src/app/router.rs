@@ -78,6 +78,10 @@ impl App {
                     // clock, and a hold opens the link in a background tab.
                     if *pressed {
                         self.hint_press_at = Some(Instant::now());
+                    } else if self.ui.hints.is_stale() {
+                        // Nothing is on screen to have aimed at, and the
+                        // selection no longer sits where the page does.
+                        self.hint_press_at = None;
                     } else {
                         let hold = Duration::from_millis(self.config.input.hold_ms);
                         let held_long = self
@@ -347,6 +351,11 @@ impl App {
     /// it. A dead end clears the buffer inside `push_sym`, where the faded badges
     /// already show it went nowhere; a `Pending` combo waits for more.
     fn hint_sym(&mut self, sym: Sym) {
+        // Stale rects carry no badges to read a code off, so a press types
+        // nothing.
+        if self.ui.hints.is_stale() {
+            return;
+        }
         if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
             self.ui.hints.select(idx);
             self.activate_hint();
@@ -356,6 +365,9 @@ impl App {
     /// Feed a typed letter to a keyboard hint round; on a resolved code, click the
     /// matched hint (shares `hint_sym`'s activation path — see [`HintInput`]).
     fn hint_key(&mut self, c: char) {
+        if self.ui.hints.is_stale() {
+            return;
+        }
         if let HintInput::Activate(idx) = self.ui.hints_push_key(c) {
             self.ui.hints.select(idx);
             self.activate_hint();
@@ -435,8 +447,8 @@ impl App {
             if self.nav_repeat(dir, now) && dir != (0, 0) {
                 out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));
             }
-            // In hint mode the right stick still scrolls the page (the badges
-            // go stale as it moves — schedule a re-collect).
+            // In hint mode the right stick still scrolls the page; the scroll
+            // itself schedules the re-collect its movement calls for.
             if self.ui.hints.visible && scroll != (0.0, 0.0) {
                 let (dx, dy) = (scroll.0 * scroll_speed * dt, scroll.1 * scroll_speed * dt);
                 let (x, y) = self
@@ -445,7 +457,6 @@ impl App {
                     .selected_center()
                     .unwrap_or_else(|| self.ui.cursor_browser_rel());
                 self.ui.scroll_page(&self.browser, dx, dy, x, y);
-                self.ui.hints.mark_stale();
             }
             return;
         }

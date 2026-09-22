@@ -43,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   roots, so only the event listeners are still ours to release. `patches/` mirrors
   what is left.
 
+### Fixed
+
+- **Link hints could stay invisible until the next button press.** The badges are
+  on screen the frame the page's rects land on.
+
+- **Hint badges no longer mark where the page used to be.** From a scroll until
+  the fresh rects land they are neither drawn nor clickable, and every way of
+  scrolling schedules that re-collect — a wheel or a touch drag did not.
+
 ## [0.8.0] - 2026-09-08
 
 ### Added

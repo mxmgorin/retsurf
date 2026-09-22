@@ -98,6 +98,10 @@ impl AppBrowser {
     /// error yields an empty list, which exits hint mode.
     pub fn collect_hints(&self) {
         let Some(webview) = self.inner.active_webview() else {
+            // A round that began has to end, or hint mode waits on rects that
+            // are never coming; an empty list exits it.
+            *self.inner.hint_rects.borrow_mut() = Some(vec![]);
+            self.inner.event_sender.send(UserEvent::HintsReady);
             return;
         };
         let inner = self.inner.clone();

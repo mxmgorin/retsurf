@@ -272,11 +272,14 @@ impl App {
 
             // Hint mode: hand freshly collected clickable rects to the UI, and
             // start a re-collect once a post-scroll refresh comes due.
+            let mut hints_changed = false;
             if let Some(rects) = self.browser.take_hint_rects() {
                 self.ui.hints_apply(rects);
+                hints_changed = true;
             }
             if self.ui.hints.take_refresh_due() {
                 self.browser.collect_hints();
+                hints_changed = true;
             }
 
             // Render the page: into our FBO on GL, into swgl's CPU buffer
@@ -301,6 +304,13 @@ impl App {
             // egui sizes a fresh overlay invisibly on its first pass, so a change
             // needs a follow-up frame; requested after `update` rebuilt the wait.
             if prompt_changed || home_changed {
+                self.ui.request_repaint();
+            }
+
+            // Collected rects arrive on a pass no input woke, so nothing else
+            // marks the frame dirty and the badges would sit unpainted until the
+            // next press.
+            if hints_changed {
                 self.ui.request_repaint();
             }
 
