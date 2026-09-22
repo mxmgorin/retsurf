@@ -1,4 +1,4 @@
-From 4979b8f1357aa7e296c614991180c9746c487579 Mon Sep 17 00:00:00 2001
+From dacd609fb730470e3e443c4ee67c0664d72a3168 Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Fri, 11 Sep 2026 12:26:09 +0300
 Subject: [PATCH 4/5] retsurf: hand the front buffer back when it cannot be
@@ -34,10 +34,10 @@ index 66ad1994df9..345acc6ecbb 100644
  
          Some((gl_texture, size))
 diff --git a/components/shared/paint/rendering_context.rs b/components/shared/paint/rendering_context.rs
-index 6eda5da3941..4be60968e02 100644
+index 7cfa16ec58a..bc12a876790 100644
 --- a/components/shared/paint/rendering_context.rs
 +++ b/components/shared/paint/rendering_context.rs
-@@ -65,12 +65,13 @@ pub trait RenderingContext {
+@@ -64,12 +64,13 @@ pub trait RenderingContext {
      /// Returns the OpenGL or GLES API.
      fn glow_gl_api(&self) -> Arc<glow::Context>;
      /// Creates a texture from a given surface and returns the surface texture,
@@ -55,7 +55,7 @@ index 6eda5da3941..4be60968e02 100644
      }
      /// Destroys the texture and returns the surface. Default to `None`.
      fn destroy_texture(&self, _surface_texture: SurfaceTexture) -> Option<Surface> {
-@@ -246,7 +247,7 @@ impl SurfmanRenderingContext {
+@@ -238,7 +239,7 @@ impl SurfmanRenderingContext {
      fn create_texture(
          &self,
          surface: Surface,
@@ -64,7 +64,7 @@ index 6eda5da3941..4be60968e02 100644
          let device = &self.device.borrow();
          let context = &mut self.context.borrow_mut();
          let SurfaceInfo {
-@@ -255,12 +256,18 @@ impl SurfmanRenderingContext {
+@@ -247,12 +248,18 @@ impl SurfmanRenderingContext {
              ..
          } = device.surface_info(&surface);
          debug!("... getting texture for surface {:?}", front_buffer_id);
@@ -85,7 +85,7 @@ index 6eda5da3941..4be60968e02 100644
      }
  
      fn destroy_texture(&self, surface_texture: SurfaceTexture) -> Option<Surface> {
-@@ -383,7 +390,7 @@ impl RenderingContext for SoftwareRenderingContext {
+@@ -375,7 +382,7 @@ impl RenderingContext for SoftwareRenderingContext {
      fn create_texture(
          &self,
          surface: Surface,
@@ -94,7 +94,7 @@ index 6eda5da3941..4be60968e02 100644
          self.surfman_rendering_info.create_texture(surface)
      }
  
-@@ -570,7 +577,7 @@ impl RenderingContext for WindowRenderingContext {
+@@ -562,7 +569,7 @@ impl RenderingContext for WindowRenderingContext {
      fn create_texture(
          &self,
          surface: Surface,
@@ -103,7 +103,7 @@ index 6eda5da3941..4be60968e02 100644
          self.surfman_context.create_texture(surface)
      }
  
-@@ -882,7 +889,7 @@ impl RenderingContext for OffscreenRenderingContext {
+@@ -874,7 +881,7 @@ impl RenderingContext for OffscreenRenderingContext {
      fn create_texture(
          &self,
          surface: Surface,

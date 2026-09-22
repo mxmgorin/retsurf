@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-09-22
 
 ### Changed
 
@@ -28,11 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directions a stick read as directions has are now rows under it in the one
   list, named as the file names them.
 
-- **The engine moved up to Servo `main` as of 2026-09-18** (178 upstream
-  commits), pinned by the tag `retsurf-main-0.9.0-2`. The bump cost one
+- **The engine moved up to Servo `main` as of 2026-09-22** (244 upstream
+  commits), pinned by the tag `retsurf-main-0.9.0-3`. The bump cost one
   dependency line: Servo took `content-security-policy` to 0.9, and two copies of
   its `Destination` do not interoperate, so the crate we read that enum from moved
   with it.
+
+- **Servo took surfman to 0.14, and our fork of it moved with them.** The fork is
+  still needed: the `eglChooseConfig` call that asks for a desktop-GL config, and
+  so finds none on a Mali blob, is unchanged there. 0.14 drops the multi-device
+  wrapper for adopting an existing context, so the WebGL composite path builds
+  that context through the backend device and nests the result itself.
 
 - The engine's patch set is down from eight to five. Three landed upstream: the
   optional surfman connection together with its painter-removal half
@@ -683,6 +689,7 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
+[0.9.0]: https://github.com/mxmgorin/retsurf/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mxmgorin/retsurf/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mxmgorin/retsurf/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mxmgorin/retsurf/compare/v0.5.1...v0.6.0

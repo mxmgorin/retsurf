@@ -1,4 +1,4 @@
-From f75d1c0b604a5a4687b72a0e3653fe30f1d601fd Mon Sep 17 00:00:00 2001
+From 48699d901589ce3e280cf0e485e6c8342351285a Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Sun, 6 Sep 2026 15:32:10 +0300
 Subject: [PATCH 3/5] retsurf: drop a removed webview's display lists from the
@@ -9,10 +9,10 @@ Subject: [PATCH 3/5] retsurf: drop a removed webview's display lists from the
  1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/components/paint/painter.rs b/components/paint/painter.rs
-index 031d32ab5f8..583daa87073 100644
+index cf67aa5b9a4..6ca5d4b5fe2 100644
 --- a/components/paint/painter.rs
 +++ b/components/paint/painter.rs
-@@ -1241,11 +1241,19 @@ impl Painter {
+@@ -1272,11 +1272,19 @@ impl Painter {
      }
  
      pub(crate) fn remove_webview(&mut self, webview_id: WebViewId) {

@@ -31,7 +31,9 @@ commit messages carry the reasoning, with the diffs in `patches/`:
 
 - **`components/script`: drop a dying document's rooted callbacks.** Event
   listeners are Rust-owned GC roots and kept a navigated-away document's JS heap
-  alive.
+  alive. Upstream holds them as a `TracedCallback` since servo/servo#48058, but
+  the `CallbackObject` underneath still takes a permanent root and releases it
+  only on `Drop`, so the patch leaves the set when #48057 lands, not before.
 - **`components/paint`: drop a removed webview's display lists.** Upstream
   takes a pipeline's scene state out on its final exit, but a WebView removed
   while pipelines are still on it gets no such message, so those display lists

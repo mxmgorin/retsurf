@@ -56,7 +56,7 @@ impl FrontBuffers {
                 return None;
             }
         };
-        let context = match unsafe { device.create_context_from_native_context(egl.native()) } {
+        let context = match unsafe { wrap_native_context(&device, egl.native()) } {
             Ok(context) => context,
             Err(err) => {
                 log::warn!("SDL's GL context is not wrappable ({err:?}); WebGL disabled");
@@ -200,15 +200,12 @@ impl EglState {
 
     /// The surfaces are read once: SDL creates its window surface with the
     /// window and never replaces it on the platforms this path compiles for.
-    fn native(&self) -> surfman::NativeContext {
-        use surfman::multi::context::NativeContext as MultiNativeContext;
-        use surfman::wayland::context::NativeContext;
-
-        MultiNativeContext::Default(MultiNativeContext::Default(NativeContext {
+    fn native(&self) -> surfman::wayland::context::NativeContext {
+        surfman::wayland::context::NativeContext {
             egl_context: self.context,
             egl_draw_surface: self.draw_surface,
             egl_read_surface: self.read_surface,
-        }))
+        }
     }
 }
 
@@ -228,6 +225,23 @@ fn connection(egl: &EglState) -> Option<Connection> {
             None
         }
     }
+}
+
+/// Wraps SDL's EGL context as a surfman one. surfman 0.14 dropped the
+/// multi-device wrapper for this, so the backend device builds the context and
+/// the nesting the connection already carries is rebuilt by hand.
+unsafe fn wrap_native_context(
+    device: &Device,
+    native: surfman::wayland::context::NativeContext,
+) -> Result<Context, surfman::Error> {
+    use surfman::multi::context::Context as MultiContext;
+    use surfman::multi::device::Device as MultiDevice;
+
+    let MultiDevice::Default(MultiDevice::Default(device)) = device else {
+        return Err(surfman::Error::IncompatibleNativeContext);
+    };
+    unsafe { device.create_context_from_native_context(native) }
+        .map(|context| MultiContext::Default(MultiContext::Default(context)))
 }
 
 fn non_null(ptr: *const c_void) -> Option<*const c_void> {

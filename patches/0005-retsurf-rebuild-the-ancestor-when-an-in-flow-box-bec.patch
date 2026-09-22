@@ -1,4 +1,4 @@
-From 41bcc95a128531d99e23a2361bd40c5e0849d6d2 Mon Sep 17 00:00:00 2001
+From 86dc0df588e1ed6e308b1b1cad462e23ec407f8f Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Mon, 14 Sep 2026 22:03:17 +0300
 Subject: [PATCH 5/5] retsurf: rebuild the ancestor when an in-flow box becomes
@@ -9,10 +9,10 @@ Subject: [PATCH 5/5] retsurf: rebuild the ancestor when an in-flow box becomes
  1 file changed, 5 insertions(+)
 
 diff --git a/components/layout/dom.rs b/components/layout/dom.rs
-index d4eaec0fb19..e11c219a22f 100644
+index 1ae78e05ffe..3742f011b54 100644
 --- a/components/layout/dom.rs
 +++ b/components/layout/dom.rs
-@@ -721,6 +721,11 @@ impl<'dom> NodeExt<'dom> for ServoLayoutNode<'dom> {
+@@ -763,6 +763,11 @@ impl<'dom> NodeExt<'dom> for ServoLayoutNode<'dom> {
                  let mut block_level = block_level.borrow_mut();
                  match &mut *block_level {
                      BlockLevelBox::Independent(independent_formatting_context) => {

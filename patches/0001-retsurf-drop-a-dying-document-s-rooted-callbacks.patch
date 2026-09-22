@@ -1,4 +1,4 @@
-From 4018b427960e27aa4be6d12e29707c77068c7d43 Mon Sep 17 00:00:00 2001
+From 915ae02071a48937cc11aa763085184b458d5f7c Mon Sep 17 00:00:00 2001
 From: mxmgorin <102797145+mxmgorin@users.noreply.github.com>
 Date: Fri, 18 Sep 2026 12:59:46 +0300
 Subject: [PATCH 1/5] retsurf: drop a dying document's rooted callbacks
@@ -28,40 +28,40 @@ which is traced rather than rooted.
  2 files changed, 16 insertions(+)
 
 diff --git a/components/script/dom/document/document.rs b/components/script/dom/document/document.rs
-index 355000d0980..df077d407ad 100644
+index 6c5c3e846d3..a354c443944 100644
 --- a/components/script/dom/document/document.rs
 +++ b/components/script/dom/document/document.rs
-@@ -1028,6 +1028,21 @@ impl Document {
+@@ -1033,6 +1033,21 @@ impl Document {
          &self.window
      }
  
 +    /// Drop the GC roots Rust holds into this document's realm: a callback left
 +    /// behind keeps the whole document alive for the life of the process.
-+    pub(crate) fn release_rooted_handles(&self) {
++    pub(crate) fn release_rooted_handles(&self, cx: &JSContext) {
 +        for node in self
 +            .upcast::<Node>()
 +            .traverse_preorder(ShadowIncluding::Yes)
 +        {
-+            node.upcast::<EventTarget>().remove_all_listeners();
++            node.upcast::<EventTarget>().remove_all_listeners(cx);
 +        }
 +        if let Some(fonts) = self.fonts.get() {
-+            fonts.upcast::<EventTarget>().remove_all_listeners();
++            fonts.upcast::<EventTarget>().remove_all_listeners(cx);
 +        }
-+        self.window.upcast::<EventTarget>().remove_all_listeners();
++        self.window.upcast::<EventTarget>().remove_all_listeners(cx);
 +    }
 +
      #[inline]
      pub(crate) fn is_html_document(&self) -> bool {
          self.is_html_document
 diff --git a/components/script/event_loop/script_thread.rs b/components/script/event_loop/script_thread.rs
-index fea38d51b3d..7f4f1bbdabf 100644
+index 2a28da194df..73e59bf6c59 100644
 --- a/components/script/event_loop/script_thread.rs
 +++ b/components/script/event_loop/script_thread.rs
-@@ -3169,6 +3169,7 @@ impl ScriptThread {
+@@ -3170,6 +3170,7 @@ impl ScriptThread {
  
                  debug!("{pipeline_id}: Clearing JavaScript runtime");
                  window.clear_js_runtime();
-+                document.release_rooted_handles();
++                document.release_rooted_handles(cx);
              }
          }
  

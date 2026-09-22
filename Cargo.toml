@@ -1,6 +1,6 @@
 [package]
 name = "retsurf"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 license = "GPL-3.0"
 
@@ -54,7 +54,7 @@ toml = "1.1"
 sdl2 = { version = "0.38.0", default-features = false }
 gleam = "0.15"
 glow = "0.17"
-surfman = "0.13"
+surfman = "0.14"
 # WebRender's own software rasterizer (the `software` feature). Same 0.70 as the
 # `webrender` already in the graph — WR switches to its software paths on the
 # renderer name alone, so the two must be one release.
@@ -64,14 +64,14 @@ env_logger = "0.11.8"
 # Named off the fork rather than a version plus a patch: no such version is on
 # crates.io, and deps.rs reads that as unresolvable. bundled_freetype, since
 # freetype-sys otherwise outgrows CI's system FreeType; webcrypto gates `window.crypto`.
-servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2", default-features = false, features = ["bundled_freetype", "clipboard", "gamepad", "js_jit", "webcrypto"] }
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3", default-features = false, features = ["bundled_freetype", "clipboard", "gamepad", "js_jit", "webcrypto"] }
 # Servo hands us its memory report (profile_traits::mem::MemoryReportResult) through
 # servo_base's GenericCallback. Same version as `servo`, so Cargo unifies on one copy.
-servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
 # WebAudio (src/media): our SDL2 backend in place of Servo's silent dummy. Must resolve
 # to the fork like `servo` does, or it registers into a second copy of these crates.
-servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
 # `decodeAudioData` (src/media/decoder.rs). Pure Rust, so it cross-compiles to the
 # handhelds; the enabled containers/codecs are what pages actually hand us. `opt-simd` is
 # left off: it pulls rustfft in for a decode that runs once per file, off the render thread.
@@ -138,11 +138,11 @@ android_logger = "0.15"
 [patch.crates-io]
 # Every entry names the same source: the Servo crates depend on each other by path,
 # so a mixed graph ends up with two of every crate. Catches transitive refs only.
-servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
-servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
-servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
-servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-2" }
+servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
+servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
+servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
+servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.9.0-3" }
 # Our surfman: upstream asks eglChooseConfig for a desktop-GL config unconditionally,
 # which no Mali blob has, so every WebGL context failed on the handhelds. Graph-wide,
 # so Servo resolves to the same copy.
-surfman = { git = "https://github.com/mxmgorin/surfman", tag = "retsurf-main-0.9.0" }
+surfman = { git = "https://github.com/mxmgorin/surfman", tag = "retsurf-main-0.9.0-2" }
