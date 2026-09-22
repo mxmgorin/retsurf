@@ -56,33 +56,36 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
   Uses sites' own dark themes through `prefers-color-scheme`, or forces a dark appearance by inverting pages that don't provide one.
 
 - **Ad & tracker blocking**<br>
-  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy. Filters are cached locally, so blocking works offline.
+  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy.
 
 - **In-app updates**<br>
-  Checks GitHub for updates, displays release notes, and installs updates in place on PortMaster handhelds and Linux desktops. Supports stable, beta, and nightly channels.
+  Checks GitHub for updates, displays release notes, and installs updates in place on Linux. Supports stable, beta, and nightly channels.
 
 - **Audio and video**<br>
   A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players, but not streaming sites that require MSE.
 
 - **No display server required**<br>
-  SDL2 draws through whatever video backend the firmware ships, including handhelds that run none at all. X11 and Wayland are optional, not required.
+  SDL2 draws through whatever video backend the firmware ships. X11 and Wayland are optional, not required.
 
 - **Hardware or software rendering**<br>
   A custom Servo rendering backend uses OpenGL ES for GPU-accelerated rendering on supported devices, with a CPU-based software renderer for devices without a GPU.
 
 ## Install
 
-Download from [Releases](https://github.com/mxmgorin/retsurf/releases), then:
+Download the latest release for your platform below. All builds are available on
+[Releases](https://github.com/mxmgorin/retsurf/releases). Nightly builds from `main` use
+the same file names under the rolling
+[`nightly`](https://github.com/mxmgorin/retsurf/releases/tag/nightly) tag.
 
-| Device                                                                                                                  | Package                                                 | Where it goes                      |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------- |
-| [PortMaster handhelds](https://portmaster.games/supported-devices.html) (ArkOS, dArkOS, EmuELEC, Knulli, muOS, ROCKNIX) | `retsurf-portmaster.zip`                                | ports folder, e.g. `/roms/ports/`  |
-| Miyoo Mini Flip and Plus on [OnionOS](https://onionui.github.io/)                                                       | `retsurf-onionos.zip`                                   | `App/Retsurf/` on the SD card      |
-| Miyoo Mini Flip and Plus on [Allium](https://github.com/goweiwen/Allium)                                                | `retsurf-allium.zip`                                    | `Apps/Retsurf.pak/` on the SD card |
-| Android                                                                                                                 | `retsurf-android-arm64.apk`                             | sideload it                        |
-| Linux                                                                                                                   | `retsurf-linux-x86_64.zip`, `retsurf-linux-aarch64.zip` | unpack and run                     |
-| Windows                                                                                                                 | `retsurf-windows-x86_64.zip`                            | unpack and run                     |
-| macOS                                                                                                                   | `retsurf-macos-aarch64.dmg`                             | open it and run `Retsurf.app`      |
+| Device | Package | Where it goes |
+| --- | --- | --- |
+| [PortMaster handhelds](https://portmaster.games/supported-devices.html) (ArkOS, dArkOS, EmuELEC, Knulli, muOS, ROCKNIX) | [`retsurf-portmaster.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-portmaster.zip) | ports folder, e.g. `/roms/ports/` |
+| Miyoo Mini Flip and Plus on [OnionOS](https://onionui.github.io/) | [`retsurf-onionos.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-onionos.zip) | `App/Retsurf/` on the SD card |
+| Miyoo Mini Flip and Plus on [Allium](https://github.com/goweiwen/Allium) | [`retsurf-allium.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-allium.zip) | `Apps/Retsurf.pak/` on the SD card |
+| Android | [`retsurf-android-arm64.apk`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-android-arm64.apk) | sideload it |
+| Linux | [`retsurf-linux-x86_64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-x86_64.zip), [`retsurf-linux-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-aarch64.zip) | unpack and run |
+| Windows | [`retsurf-windows-x86_64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-windows-x86_64.zip) | unpack and run |
+| macOS | [`retsurf-macos-aarch64.dmg`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-macos-aarch64.dmg) | open it and run `Retsurf.app` |
 
 On both Miyoo firmwares the app shows up in the Apps menu, and **MENU quits** it.
 
@@ -94,11 +97,8 @@ Android, and the handheld cross-builds.
 
 ## Configuration
 
-`config.toml` (settings) and `bindings.toml` (gamepad/keyboard mappings) live in the
-user data dir (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
-Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for every option and the
-full bindings reference.
-
+Files are stored in the user data directory (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
+Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for all options and the bindings reference.
 ## How to help
 
 If you find the project useful, here is how you can help:
