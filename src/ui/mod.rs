@@ -507,6 +507,10 @@ impl AppUi {
         self.schedule_idle_repaints(cursor_visible);
 
         let snapshot = self.frame_snapshot(browser);
+        // Android's system bars follow the chrome: whatever hides the toolbar
+        // wants the whole panel.
+        #[cfg(target_os = "android")]
+        window.set_system_fullscreen(snapshot.chrome_hidden.any());
         self.clamp_overlay_selections();
 
         {

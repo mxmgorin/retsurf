@@ -206,6 +206,11 @@ impl WindowBackend for GlBackend {
         self.egui.state.sync_window_size(&self.window);
     }
 
+    #[cfg(target_os = "android")]
+    fn window_mut(&mut self) -> &mut sdl2::video::Window {
+        &mut self.window
+    }
+
     fn pointer_pos_in_points(&self) -> Option<egui::Pos2> {
         self.egui.state.get_pointer_pos_in_points()
     }

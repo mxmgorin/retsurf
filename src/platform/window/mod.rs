@@ -56,6 +56,8 @@ trait WindowBackend {
     fn on_event(&mut self, event: &sdl2::event::Event) -> EventResponse;
     #[cfg(target_os = "android")]
     fn sync_egui_window_size(&mut self);
+    #[cfg(target_os = "android")]
+    fn window_mut(&mut self) -> &mut sdl2::video::Window;
     fn pointer_pos_in_points(&self) -> Option<egui::Pos2>;
     fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming>;
     fn frame_interval(&self) -> Option<Duration>;
@@ -142,6 +144,25 @@ impl AppWindow {
     #[cfg(target_os = "android")]
     pub fn sync_egui_window_size(&mut self) {
         self.backend.sync_egui_window_size();
+    }
+
+    /// Match the system bars to `on`, idempotently: SDL gives a fullscreen
+    /// window immersive-sticky decor, hiding the status and navigation bars.
+    /// The change blocks this thread until the surface resizes (up to 500 ms).
+    #[cfg(target_os = "android")]
+    pub fn set_system_fullscreen(&mut self, on: bool) {
+        use sdl2::video::FullscreenType;
+        let want = match on {
+            true => FullscreenType::Desktop,
+            false => FullscreenType::Off,
+        };
+        let window = self.backend.window_mut();
+        if window.fullscreen_state() == want {
+            return;
+        }
+        if let Err(e) = window.set_fullscreen(want) {
+            log::warn!("system fullscreen {on}: {e}");
+        }
     }
 
     pub fn pointer_pos_in_points(&self) -> Option<egui::Pos2> {
