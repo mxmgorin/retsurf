@@ -415,6 +415,7 @@ impl App {
         // Keep the UI's scroll-mode indicator in sync (drawn in place of the
         // cursor while the mode is latched).
         self.ui.set_scroll_mode(scroll_mode);
+        self.ui.set_edge_scroll((0, 0));
         let now = Instant::now();
         let dt = (now - self.last_tick).as_secs_f32();
         self.last_tick = now;
@@ -424,11 +425,12 @@ impl App {
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
         let cfg = &self.config.input;
-        let (cursor_speed, scroll_speed, nav_threshold, hint_badges) = (
+        let (cursor_speed, scroll_speed, nav_threshold, hint_badges, edge_scroll) = (
             cfg.cursor_speed,
             cfg.scroll_speed,
             cfg.osk_nav_threshold,
             cfg.hint_badges,
+            cfg.edge_scroll,
         );
 
         // Over an overlay the stick becomes the same discrete `Nav` steps the
@@ -477,11 +479,14 @@ impl App {
         }
 
         if aim != (0.0, 0.0) {
-            self.ui.move_cursor(
+            let clipped = self.ui.move_cursor(
                 aim.0 * cursor_speed * dt,
                 aim.1 * cursor_speed * dt,
                 &self.window,
             );
+            if edge_scroll && !self.ui.game_mode() {
+                self.edge_scroll(aim, clipped, scroll_speed * dt);
+            }
             // Only hover the page while the cursor is over it; over the toolbar
             // there's nothing in Servo to point at.
             if self.ui.cursor_over_browser() {
@@ -496,6 +501,30 @@ impl App {
             let (x, y) = self.ui.cursor_browser_rel();
             self.ui.scroll_page(&self.browser, dx, dy, x, y);
         }
+    }
+
+    /// Scroll the page along each axis where the window edge clipped the cursor,
+    /// at the scroll stick's rate (`step` is px per unit of deflection this frame).
+    fn edge_scroll(&mut self, aim: (f32, f32), clipped: (f32, f32), step: f32) {
+        // Clipped against the push, not by a window that shrank under the cursor.
+        let dir = |aim: f32, clip: f32| {
+            if aim * clip > 0.0 {
+                aim.signum() as i8
+            } else {
+                0
+            }
+        };
+        let dir = (dir(aim.0, clipped.0), dir(aim.1, clipped.1));
+        let (width, height) = (self.ui.browser_area_width(), self.ui.browser_area_height());
+        if dir == (0, 0) || width <= 0.0 || height <= 0.0 {
+            return;
+        }
+        let along = |dir: i8, aim: f32| if dir != 0 { aim * step } else { 0.0 };
+        let (dx, dy) = (along(dir.0, aim.0), along(dir.1, aim.1));
+        // Hit-tested at mid-viewport: an edge usually sits in a sticky header or bar.
+        self.ui
+            .scroll_page(&self.browser, dx, dy, width / 2.0, height / 2.0);
+        self.ui.set_edge_scroll(dir);
     }
 
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction

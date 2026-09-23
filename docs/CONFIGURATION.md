@@ -251,6 +251,7 @@ osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held na
 osk_nav_repeat_ms = 140          # interval between auto-repeats
 hold_ms = 400              # holding a button this long fires its "hold:" gesture
 cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
+edge_scroll = true         # pushing the cursor against a window edge scrolls that way (never in Game Mode)
 haptics = true             # let a page rumble the pad (the Gamepad vibration API)
 
 [game_mode]

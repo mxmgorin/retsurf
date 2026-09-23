@@ -15,17 +15,26 @@ const CURSOR_STROKE: f32 = 1.5;
 const CURSOR_EXTENT: f32 = CURSOR_RADIUS + CURSOR_STROKE / 2.0;
 
 impl AppUi {
-    /// Move the gamepad cursor by a logical-px delta and mark it visible. Clamped
-    /// to the window (inset by the cursor's painted extent so the whole circle
-    /// stays on screen); it may roam over the toolbar so its buttons are clickable.
+    /// Move the gamepad cursor by a logical-px delta and mark it visible, returning
+    /// the part of the delta the window edge clipped. Clamped inset by the painted
+    /// extent; it may roam over the toolbar so its buttons are clickable.
     #[inline]
-    pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) {
+    pub fn move_cursor(&mut self, dx: f32, dy: f32, window: &AppWindow) -> (f32, f32) {
         let (w, h) = window.size();
         // The window in points: the cursor is drawn in them, the window is pixels.
         let (w, h) = self.to_points(w as f32, h as f32);
-        self.cursor.0 = (self.cursor.0 + dx).clamp(CURSOR_EXTENT, w - CURSOR_EXTENT);
-        self.cursor.1 = (self.cursor.1 + dy).clamp(CURSOR_EXTENT, h - CURSOR_EXTENT);
+        let want = (self.cursor.0 + dx, self.cursor.1 + dy);
+        self.cursor.0 = want.0.clamp(CURSOR_EXTENT, w - CURSOR_EXTENT);
+        self.cursor.1 = want.1.clamp(CURSOR_EXTENT, h - CURSOR_EXTENT);
         self.cursor_last_move = Some(Instant::now());
+        (want.0 - self.cursor.0, want.1 - self.cursor.1)
+    }
+
+    /// Set the direction the cursor is edge-scrolling the page, per axis in
+    /// -1..=1, or `(0, 0)` when it is not; drawn as arrows in place of the cursor.
+    #[inline]
+    pub fn set_edge_scroll(&mut self, dir: (i8, i8)) {
+        self.edge_scroll = dir;
     }
 
     /// Whether the cursor is over the web view (below the toolbar). Clicks there
@@ -105,15 +114,22 @@ impl AppUi {
     }
 }
 
-/// Gamepad cursor overlay, always on top: the circle, or the scroll-mode
-/// indicator while D-pad scroll is latched. `pos` is in logical px, which equals
-/// egui points at the handheld's 1.0 scale factor.
-pub(super) fn paint_cursor(ctx: &egui::Context, pos: egui::Pos2, scroll_mode: bool) {
+/// Gamepad cursor overlay, always on top: the circle, the scroll-mode indicator
+/// while D-pad scroll is latched, or edge-scroll arrows toward `edge_scroll`.
+/// `pos` is in logical px, which equals egui points at the handheld's 1.0 scale.
+pub(super) fn paint_cursor(
+    ctx: &egui::Context,
+    pos: egui::Pos2,
+    scroll_mode: bool,
+    edge_scroll: (i8, i8),
+) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("gamepad_cursor"),
     ));
-    if scroll_mode {
+    if edge_scroll != (0, 0) {
+        add_edge_arrows(&painter, pos, edge_scroll);
+    } else if scroll_mode {
         // Same linger/auto-hide as the cursor: shown while scrolling, then fades.
         add_scroll_indicator(&painter, pos);
     } else {
@@ -141,6 +157,23 @@ fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
             egui::pos2(pos.x - 4.5, base),
             egui::pos2(pos.x + 4.5, base),
         ];
+        painter.add(egui::Shape::convex_polygon(points, fill, stroke));
+    }
+}
+
+/// Edge-scroll arrows: one arrowhead per scrolling axis, pointing the way the
+/// page moves. Sized to the circle's extent, which the edge clamp keeps on screen.
+fn add_edge_arrows(painter: &egui::Painter, pos: egui::Pos2, (dx, dy): (i8, i8)) {
+    let fill = egui::Color32::from_white_alpha(235);
+    let stroke = egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK);
+    let reach = CURSOR_EXTENT - CURSOR_STROKE;
+    for dir in [egui::vec2(dx as f32, 0.0), egui::vec2(0.0, dy as f32)] {
+        if dir == egui::Vec2::ZERO {
+            continue;
+        }
+        let side = dir.rot90() * reach;
+        let base = pos - dir * reach;
+        let points = vec![pos + dir * reach, base + side, base - side];
         painter.add(egui::Shape::convex_polygon(points, fill, stroke));
     }
 }

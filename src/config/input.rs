@@ -33,6 +33,9 @@ pub struct InputConfig {
     /// (and stick) hop the selection again and the buttons keep their normal
     /// meaning. See [`crate::overlay::hints`].
     pub hint_badges: bool,
+    /// Whether pushing the cursor against a window edge scrolls the page that
+    /// way. Never in Game Mode, where the cursor belongs to the game.
+    pub edge_scroll: bool,
     /// Whether a page may rumble the pad (the Gamepad API's `playEffect`). Off
     /// also stops advertising the capability to newly loaded documents.
     pub haptics: bool,
@@ -51,6 +54,7 @@ impl Default for InputConfig {
             hold_ms: 400,
             cursor_mode: CursorMode::Mouse,
             hint_badges: true,
+            edge_scroll: true,
             haptics: true,
         }
     }
