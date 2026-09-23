@@ -256,13 +256,15 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 [game_mode]
 # Game Mode hands the input to the page and hides the chrome, so a web game gets
 # the keys and buttons the browser would otherwise take. The `game_mode` binding
-# (Ctrl+Alt+G, or Select+Y on the pad) opens the Game Mode menu, in or out of the
-# mode; inside, a held Select does the same, reserved and never the game's. That
+# (Ctrl+Alt+G, or a held Start on the pad) opens the Game Mode menu, in or out of
+# the mode; inside, the pad gesture it is bound to is mirrored and withheld from
+# the game, so rebinding it moves the way out with it. That
 # menu is the only way in and out — it leads with Enable or Disable — and its
 # Input map row is where this one is picked (written back here), which is
 # why it opens outside the mode too; it also summons the on-screen keyboard over
 # the game. Which input map drives the pad and the keyboard while the mode is on: a
-# built-in ("keys" or "pad") or the stem of an input_maps/<id>.toml of your own.
+# built-in ("keys", "wasd", "mouse" or "pad") or the stem of an
+# input_maps/<id>.toml of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
 ```

@@ -5,9 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2026-09-22
+## [0.9.0] - 2026-09-23
+
+### Added
+
+- **Game Mode: a web game gets the pad and the keyboard, and the browser keeps
+  out of the way.** The chrome hides, the keys it would have consumed reach the
+  page, and what each button, stick direction and key sends is an *input map*.
+  Four ship built in — `keys` (arrows and Z/X, the convention PICO-8 exports and
+  js13k entries share), `wasd`, `mouse` (the stick points, A presses) and `pad`
+  (the whole pad raw, for a game that reads the Gamepad API itself) — and an
+  `input_maps/<id>.toml` in the data dir adds one or replaces a built-in of that
+  name. A map sends keys, the mouse buttons at the cursor, a cursor or scroll
+  step per frame, a button of the page's own pad, or nothing at all; a held
+  button opens a layer that rebinds the rest while it is down. A bound source is
+  withheld from the page's raw input, so a button mapped to a key never arrives
+  as both.
+
+- **The Game Mode menu is all of that without a keyboard or a file manager**,
+  which is the only way to have it on a handheld. `hold:start` on the pad or
+  `Ctrl+Alt+G` opens it in or out of the mode, and it leads with Enable or
+  Disable, so one gesture is the way in and the way out. The Input map row lists
+  every map, marked with the one in use; a map's own screen uses, renames,
+  duplicates, deletes or resets it. The editor under that is a row per source the
+  map binds — press the button or key you mean, or push the stick, and the list
+  of what it can send opens straight away. The on-screen keyboard is a row too,
+  for a game that wants text, and its Fn page carries the keys no character grid
+  has: Escape, F1-F12, the navigation cluster and the bare modifiers.
+
+- **WebGL and WebGPU in every GPU build, the handhelds included.** The per-core
+  aarch64 binaries used to leave the engine's WebGL out altogether: surfman
+  opened a second `EGLDisplay` and asked it for a desktop-GL config, which no
+  Mali blob offers, so shipping WebGL there would have meant shipping one that
+  could never get a connection. The composite path wraps SDL's own EGL display
+  and context instead — an `EGLImageKHR` cannot cross displays anyway — and our
+  surfman fork asks for a GLES config, so `webgl` is on everywhere but the
+  EGL-less `software` build. WebGL 2 is near-complete in the engine: three.js,
+  PixiJS, Phaser and published PlayCanvas titles all run.
+
+- **Android gets WebGL too, and loses the system bars.** Its composite path is
+  surfman's `hardware_buffer` backend (an `AHardwareBuffer` behind
+  `EGL_NATIVE_BUFFER_ANDROID`) over SDL's display, since the free-unix shape does
+  not typecheck there — the build carried the `webgl` feature with no path behind
+  it, so a page was told there was no context at all. The status and navigation
+  bars now hide with the chrome, in Game Mode and while a page holds fullscreen.
+
+- **A page can read the pad** — `navigator.getGamepads()`, `mapping="standard"`,
+  17 buttons and 4 axes. The API is polled, so a button drives its binding and
+  reaches the page in the same press. Every pad is announced again when a
+  document finishes loading: a `gamepadconnected` only reaches the document open
+  when it was sent, and on a handheld the pad is plugged in long before the page.
+
+- **A page can rumble the pad**, behind `[input] haptics` (Settings, "Gamepad
+  rumble"). The strong magnitude drives the low-frequency motor and a duration is
+  capped at 5 s, as Chrome does. With the toggle off the effect list a page sees
+  is empty, so `playEffect` rejects cleanly rather than waiting on a motor that
+  will never answer.
+
+- **The chrome hides while a page holds the Fullscreen API**, which is what a
+  game that fullscreens its canvas expects.
+
+- **IndexedDB and `navigator.storage`** (`[experimental] indexeddb` and
+  `storage_manager`, on in every preset). The engine ships the pref off and it
+  gates the whole WebIDL surface, so `window.indexedDB` was *absent* rather than
+  failing and an app that stores anything died at startup. The backend is real —
+  SQLite under `servo/clientstorage/`, surviving a restart — with one gap stated
+  in the docs: Clear browsing data has no category to name it by, so a site's
+  databases outlive a clear.
+
+- **A nightly channel in the updater** (`[update] channel = "nightly"`): the
+  rolling `nightly` pre-release, rebuilt from main once a day and carrying every
+  platform's binaries. Its tag holds no version, so that channel compares the
+  commit the build records instead. A push now only runs the checks.
+
+- **The PortMaster port carries a fontconfig of its own** — `libfontconfig.so.1`
+  with expat and uuid, and a `fonts.conf` naming the fonts it brings — reached by
+  the launcher only on a firmware that ships none, which is also a firmware with
+  no `/etc/fonts` for fontconfig to read.
 
 ### Changed
+
+- **The gamepad layout was reworked, and Game Mode took a gesture with it.** Zoom
+  moved off the L1/R1 holds onto the trigger taps (`l2` / `r2`, and `l2+r2` in
+  either order resets), which frees `hold:l1` for home and `hold:r1` for reload;
+  tabs went onto chords — `select+l1` / `select+r1` step them, `start+l1` closes
+  one and `start+r1` opens one, through a new `close_tab` action. `hold:start`
+  opens the Game Mode menu, Settings keeps `hold:select` to itself, and `r3`,
+  `hold:b`, `select+y` and `select+start` are free. A `bindings.toml` written
+  before this release keeps every gesture it spells; the new actions still arrive
+  bound, since an action with nothing on a device gets its defaults back at
+  startup.
 
 - **The Game Mode map editor binds keyboard keys too, by listening for them.**
   Its last row, *Add button or key...*, captures whatever is pressed and opens
@@ -19,8 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `stick.left.up` — so the three `up`s a map can hold cannot be read for one
   another, in the map file as much as on screen: its key table is `[key]` now,
   and TOML reads `pad.a = "Space"` as the `[pad]` table's `a`. What a row cannot
-  hold — a hold, a chord, a modified key, and Select, which the Game Mode menu
-  keeps — is refused on the row that asked.
+  hold — a hold, a chord, a modified key, and Select — is refused on the row that
+  asked.
 
 - **A stick in the Game Mode map editor opens what it sends straight from its
   row**, the way every other source does. It used to open a screen of its own
@@ -49,6 +136,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   roots, so only the event listeners are still ours to release. `patches/` mirrors
   what is left.
 
+- **A screen holds its state only while it is up.** The settings draft, the
+  on-screen keyboard's grid, the input-map library and the capture a rebinding
+  screen listens with are built when the screen opens and dropped when it closes,
+  rather than sitting in memory a 128 MB device needs for the page.
+
+- Bumped rustls past RUSTSEC-2026-0285.
+
 ### Fixed
 
 - **Link hints could stay invisible until the next button press.** The badges are
@@ -65,6 +159,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   had yet to paint its background. A webview is hidden as it is built now, and
   only the tab switched to is shown; a link opened in a background tab could
   cover the page the same way.
+
+- **Any Android page with sound killed the app within a frame or two.** SDL's
+  AAudio backend publishes the device before the builder has returned a stream
+  and then dereferences that stream on every event pump, and we open a device per
+  `AudioContext` from the engine's media threads — so the two raced immediately,
+  a SIGSEGV in `libaaudio`. SDL is patched from `android/patches/` at build time
+  now; switching to its OpenSL backend was not an option, since that one keeps a
+  single player in file-static globals and a second device would clobber the
+  first.
+
+- **A game that fullscreens a flex wrapper or its canvas no longer blanks the
+  page.** The engine's fullscreen rule restyles the element to `position: fixed`,
+  and rebuilding a block-level independent formatting context did not check
+  whether the box had just gone out of flow: it was rebuilt in place as an
+  in-flow one, its fragment disappeared, and where the lost box was
+  viewport-sized everything painted after it stopped reaching the screen as well.
+  Ours is patch `0005`, filed upstream as servo/servo#48081.
+
+- **Wheel scrolling missed the page on the Linux builds.** `SDL_MouseWheelEvent`
+  has carried the pointer only since SDL 2.26, and those builds link the system
+  libsdl2 — 2.0.20 on the distribution the release is built against — so the hit
+  test ran against uninitialized coordinates and every wheel event was dropped.
+  The position comes from `SDL_GetMouseState` now, which has been there since
+  2.0.0.
+
+- **An animating page ran behind the panel.** The loop did not block while a page
+  animated, so the pass that found no new frame slept a flat 16 ms and overshot
+  the vblank it was aiming at. The wait blocks on an animating page too now — the
+  engine rings the event-loop waker on every paint message, so the queue already
+  knew — and a present is paced against the panel period read from SDL, which
+  also caps the GL path under a driver that accepts the swap interval and ignores
+  it. Measured here: 53 to 60 fps at the same CPU.
+
+- **`screen.width`, `screen.height` and their siblings read 0**, and
+  `devicePixelRatio` arrived after the page had parsed, so an engine that calls
+  `setPixelRatio(devicePixelRatio)` once at startup kept the wrong number for the
+  session. The screen is answered from SDL's display bounds, and the ratio is
+  seeded from the window before the first tab opens.
+
+- **Games on itch.io could die before drawing anything.** The engine implements
+  none of `createScriptProcessor`, `createDynamicsCompressor`, `createDelay`,
+  `createWaveShaper` and `createConvolver`, and a PICO-8 export throws on the
+  first of them inside its init — the exception kills `callMain`, so the game
+  never starts. A user script polyfills the script processor for real (a pump
+  that fires `onaudioprocess` ahead of the clock and plays each filled buffer)
+  and hands back a pass-through `GainNode` for the rest. It feature-detects, so
+  an engine that grows the real nodes turns it into a no-op.
+
+- **An action added in a later release was unreachable** to anyone whose
+  `bindings.toml` predated it, because that file is written only when it is
+  missing. Any action with nothing bound on a device gets its default gestures
+  back at startup, one log line each; a gesture the file already spells is never
+  taken back, so a layout you rebound stands.
+
+- **The gamepad cursor pressed where it was drawn** — the press was sent in
+  window pixels while the cursor was drawn in page ones, so at any zoom but 1 it
+  landed somewhere else.
+
+- **An update download that stalls fails** instead of waiting on a connection
+  that has stopped sending.
+
+- **Closing a tab with the X button trims the heap**, as closing it from the menu
+  already did.
+
+- **The page no longer shows through a panel for the frame it opens in.**
 
 ## [0.8.0] - 2026-09-08
 

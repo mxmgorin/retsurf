@@ -18,7 +18,8 @@ entries, so the Linux, macOS, Windows, and handheld builds are unchanged.
 | Storage paths (internal data + external Download via env) | done |
 | Gradle/SDL APK shell (`android/`) | done |
 | CI (`.github/workflows/build-android.yml`) | done |
-| WebGL (composite path over surfman's `hardware_buffer` backend) | built, needs on-device verify |
+| WebGL (composite path over surfman's `hardware_buffer` backend) | done, verified on device (get.webgl.org and its WebGL 2 page render) |
+| System bars hidden with the chrome (`SDL_SetWindowFullscreen`) | done, verified on device |
 | HiDPI scaling (egui zoom + Servo hidpi from `RETSURF_SCALE`) | done, verified (see screen_rect fix below) |
 | Touch drag-to-scroll + tap-to-click (`src/event/touch.rs`) | done, verified on device |
 | System soft keyboard for the address bar (`SDL_StartTextInput`) | done, verified; home search no longer auto-pops the IME |
@@ -76,7 +77,8 @@ build. What was fixed (2026-06-14):
   Android destroys the EGLSurface; on resume the FBO, color texture, and egui
   texture-registration GL names are stale and must be regenerated and re-registered, or the
   page goes black. You hit this the moment you switch apps and return.
-- On-device WebGL verification (a shader demo) plus a background and resume cycle.
+- A background and resume cycle on device. WebGL itself is verified there; what is not is
+  the wrapped context's SDL draw/read surfaces, which Android replaces across a resume.
 
 ## Toolchain
 
