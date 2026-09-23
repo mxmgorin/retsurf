@@ -1,6 +1,6 @@
 use super::game::input_map::{Side, STICK_PREFIX};
 use super::game::mode::GameInput;
-use super::game::{GameMode, DEFAULT_EXIT};
+use super::game::{self, GameMode, DEFAULT_EXIT};
 use super::gamepad::Gamepad;
 use super::gamepad_api;
 use super::key_names;
@@ -184,6 +184,11 @@ impl AppEventHandler {
         self.gamepad.reset(commands);
     }
 
+    /// The button the Game Mode gesture takes outright, which no map may bind.
+    pub fn game_spent_pad(&self) -> Option<Pad> {
+        game::spent_pad(self.game_exit)
+    }
+
     /// How the pad reaches the Game Mode menu, or `None` where this device has no
     /// pad to name.
     pub fn game_exit_text(&self) -> Option<String> {
@@ -283,7 +288,7 @@ impl AppEventHandler {
         // Emit this frame's analog state as a command for the router to apply,
         // and fire any hold or repeat whose deadline just passed.
         match self.routing_input() {
-            Some(input) => input.tick(commands),
+            Some(input) => input.tick(browser, commands),
             None => self.gamepad.tick(commands),
         }
         waited

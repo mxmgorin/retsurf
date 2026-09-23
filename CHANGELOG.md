@@ -94,7 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hold:b`, `select+y` and `select+start` are free. A `bindings.toml` written
   before this release keeps every gesture it spells; the new actions still arrive
   bound, since an action with nothing on a device gets its defaults back at
-  startup.
+  startup. The game keeps the button the gesture sits on: a hold and a chord are
+  undecided until release, so a short press is handed over then — only a gesture
+  that is a bare tap costs the game its button.
 
 - **The Game Mode map editor binds keyboard keys too, by listening for them.**
   Its last row, *Add button or key...*, captures whatever is pressed and opens
@@ -106,8 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `stick.left.up` — so the three `up`s a map can hold cannot be read for one
   another, in the map file as much as on screen: its key table is `[key]` now,
   and TOML reads `pad.a = "Space"` as the `[pad]` table's `a`. What a row cannot
-  hold — a hold, a chord, a modified key, and Select — is refused on the row that
-  asked.
+  hold — a hold, a chord, a modified key, and the button a tapped `game_mode`
+  gesture opens the menu with — is refused on the row that asked.
 
 - **A stick in the Game Mode map editor opens what it sends straight from its
   row**, the way every other source does. It used to open a screen of its own

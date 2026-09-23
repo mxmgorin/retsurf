@@ -649,19 +649,19 @@ mod tests {
         assert!(key.modifiers.contains(Modifiers::SHIFT));
     }
 
-    /// Select carries the menu in every map — the one refusal that has to be
-    /// loud, since a silent drop looks like a typo.
+    /// No button is reserved here: which one the gesture spends is the bindings
+    /// file's business, and that file outlives this read.
     #[test]
-    fn select_is_refused_and_everything_else_survives_it() {
+    fn every_button_is_the_map_s_to_bind() {
         let map = resolve(
             r#"
             [pad]
             select = "key.Escape"
-            a = "key.Space"
+            start = "key.Enter"
             "#,
         );
-        assert_eq!(map.pad(None, Pad::Select), None);
-        assert!(map.pad(None, Pad::A).is_some());
+        assert!(map.pad(None, Pad::Select).is_some());
+        assert!(map.pad(None, Pad::Start).is_some());
     }
 
     #[test]

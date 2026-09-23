@@ -332,9 +332,9 @@ bound the way a pad button is and a pad this build has never heard of needs no
 table of its own. A stick has no gesture of its own, so it is taken from a push
 most of the way over — past any dead zone, since one resting off-centre must not
 bind itself. A map holds one target per source, so
-a hold, a chord or a modified key is refused on the row that asked; Select is
-refused with them, because it opens the Game Mode menu in every map. Nothing
-pressed within six seconds gives up on its own — a handheld has no Esc.
+a hold, a chord or a modified key is refused on the row that asked; so is the
+button the `game_mode` gesture resolves on the press, where it is a bare tap.
+Nothing pressed within six seconds gives up on its own — a handheld has no Esc.
 
 **A stick answers A with its own list**, like every other row — *Cursor*,
 *Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
@@ -410,8 +410,12 @@ read as directions keeps its whole axis, since half an axis cannot be withheld �
 which also makes `passthrough` on one direction meaningless. `analog = "none"`
 keeps the axis and sends nothing, which is how a stick is made inert.
 
-**Select is reserved** in every map and every layer: holding it opens the Game
-Mode menu. A binding on it is refused with a line in the log.
+**The `game_mode` gesture's button is the map's to bind, but its press arrives
+late.** A hold and a chord are undecided until the button is let go, so a map's
+target for it is sent on release and ended a frame later, and an unbound one
+reaches the page as the button it is. Only a bare tap resolves on the press
+itself: that button opens the menu and never reaches the game, in any map or
+layer, and the editor refuses a row for it.
 
 **Layers** are held, not toggled: the activator sends nothing of its own, and a
 button the layer leaves alone still means what `[pad]` says. What a source sends

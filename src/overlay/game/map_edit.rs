@@ -253,10 +253,10 @@ pub enum EditPress {
     TakePad(Pad, Slot),
 }
 
-/// The source a captured gesture names, or why the map cannot hold it. The map
-/// gives one target per source, so it has no room for what a bindings file can
-/// still say: a hold, a chord, a modified key.
-pub fn source_of(gesture: &str, keyboard: bool) -> Result<Slot, &'static str> {
+/// The source a captured gesture names, or why the map cannot hold it: one
+/// target per source, so no hold, chord or modified key — and not `spent`, the
+/// button the Game Mode gesture takes on the press.
+pub fn source_of(gesture: &str, keyboard: bool, spent: Option<Pad>) -> Result<Slot, &'static str> {
     if keyboard {
         return match KeyGesture::parse(gesture) {
             Some(key) if key.mods == Mods::NONE => Ok(Slot::Key(key.name)),
@@ -271,9 +271,10 @@ pub fn source_of(gesture: &str, keyboard: bool) -> Result<Slot, &'static str> {
         };
     }
     match PadGesture::parse(gesture) {
-        // Select opens the Game Mode menu in every map, so the game never gets
-        // it — the file's own refusal, said here in time to be read.
-        Some(PadGesture::Tap(Pad::Select)) => Err("select opens the Game Mode menu"),
+        // A row for it would never fire: the menu takes that press.
+        Some(PadGesture::Tap(pad)) if Some(pad) == spent => {
+            Err("that button opens the Game Mode menu")
+        }
         Some(PadGesture::Tap(pad)) => Ok(Slot::Button(pad)),
         _ => Err("one button at a time, tapped"),
     }
@@ -665,24 +666,36 @@ mod tests {
     /// What a capture may name: one source, which is all a map row holds.
     #[test]
     fn a_capture_names_one_source_or_says_why_not() {
-        assert_eq!(source_of("a", false), Ok(Slot::Button(Pad::A)));
-        assert_eq!(source_of("w", true), Ok(Slot::Key("w".to_string())));
+        assert_eq!(source_of("a", false, None), Ok(Slot::Button(Pad::A)));
+        assert_eq!(source_of("w", true, None), Ok(Slot::Key("w".to_string())));
         assert_eq!(
-            source_of("stick.right", false),
+            source_of("stick.right", false, None),
             Ok(Slot::Stick(Side::Right))
         );
-        assert!(source_of("stick.middle", false).is_err());
+        assert!(source_of("stick.middle", false, None).is_err());
         // A modifier on its own is a key like any other.
         assert_eq!(
-            source_of("leftshift", true),
+            source_of("leftshift", true, None),
             Ok(Slot::Key("leftshift".to_string()))
         );
         // The file can spell these; a map row cannot hold them.
         for (gesture, keyboard) in [("hold:b", false), ("l1+r1", false), ("ctrl+w", true)] {
-            assert!(source_of(gesture, keyboard).is_err());
+            assert!(source_of(gesture, keyboard, None).is_err());
         }
-        // Select carries the Game Mode menu in every map.
-        assert!(source_of("select", false).is_err());
+    }
+
+    /// Refused for being the gesture's button, not for being Select.
+    #[test]
+    fn the_gesture_s_own_button_is_the_only_one_refused() {
+        assert!(source_of("select", false, Some(Pad::Select)).is_err());
+        assert_eq!(
+            source_of("select", false, Some(Pad::Start)),
+            Ok(Slot::Button(Pad::Select))
+        );
+        assert_eq!(
+            source_of("select", false, None),
+            Ok(Slot::Button(Pad::Select))
+        );
     }
 
     /// A row is named inside its table and spelled out in full wherever no

@@ -328,7 +328,8 @@ impl App {
     /// A captured gesture becomes the source a row is made for; what no row can
     /// hold is refused where it was asked for (see [`map_edit::source_of`]).
     fn map_edit_capture(&mut self, gesture: &str, keyboard: bool) {
-        let slot = match map_edit::source_of(gesture, keyboard) {
+        let spent = self.event_handler.game_spent_pad();
+        let slot = match map_edit::source_of(gesture, keyboard, spent) {
             Ok(slot) => slot,
             Err(note) => return self.ui.map_edit.stop_capture(Some(note.to_string())),
         };
@@ -464,18 +465,14 @@ impl App {
             }
         }
         // Then what the map binds: the pad in the pad's own order, the keys in
-        // the file's. Select is not among them — the menu keeps it.
-        rows.extend(
-            Pad::ALL
-                .into_iter()
-                .filter(|pad| *pad != Pad::Select)
-                .filter_map(|pad| {
-                    map.raw_pad(pad).map(|raw| Row {
-                        slot: Slot::Button(pad),
-                        target: raw.text().to_string(),
-                    })
-                }),
-        );
+        // the file's. No button is held back, or one the file spells could not
+        // be taken back out.
+        rows.extend(Pad::ALL.into_iter().filter_map(|pad| {
+            map.raw_pad(pad).map(|raw| Row {
+                slot: Slot::Button(pad),
+                target: raw.text().to_string(),
+            })
+        }));
         rows.extend(map.raw_keys().map(|(name, raw)| Row {
             slot: Slot::Key(name.to_string()),
             target: raw.text().to_string(),

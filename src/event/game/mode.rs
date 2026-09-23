@@ -2,7 +2,8 @@
 //! chrome. What each source sends is the active [`InputMap`]; a source with a
 //! target is withheld from the page's raw input (the `bool` returns here), so
 //! one press is never seen twice. Whatever gesture `game_mode` is bound to is
-//! mirrored here and reserved against every map, so the way out is the way in.
+//! mirrored here, so the way out is the way in; its button is the game's again
+//! once the gesture has not happened.
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
@@ -90,11 +91,16 @@ pub struct GameInput {
     exit: PadGesture,
     /// When the exit gesture's pad went down, while that gesture is a hold.
     exit_at: Option<Instant>,
+    /// Set when the gesture fires, so its release does not also hand over a tap.
+    exit_fired: bool,
     /// Whether the exit chord's leader is down.
     exit_leader: bool,
     /// Whether the exit chord's second pad had its press taken. Its release must
     /// be taken too, or the game sees a release for a press it never got.
     exit_second: bool,
+    /// The release owed for a tap handed over late, sent a frame after its
+    /// press: a game polling once a frame would miss the two in one.
+    deferred: Option<Target>,
     deadzone: f32,
     hold: Duration,
 }
@@ -121,8 +127,10 @@ impl GameInput {
             ],
             exit,
             exit_at: None,
+            exit_fired: false,
             exit_leader: false,
             exit_second: false,
+            deferred: None,
             deadzone: cfg.deadzone,
             hold: Duration::from_millis(cfg.hold_ms),
         }
@@ -130,9 +138,11 @@ impl GameInput {
 
     /// Replace the reserved gesture. Whatever the old one had part-way down is
     /// forgotten, so a press begun under it cannot complete against the new one.
+    /// A tap already handed over keeps its release.
     pub fn set_exit(&mut self, exit: PadGesture) {
         self.exit = exit;
         self.exit_at = None;
+        self.exit_fired = false;
         self.exit_leader = false;
         self.exit_second = false;
     }
@@ -160,9 +170,15 @@ impl GameInput {
     }
 
     /// One edge of the gesture that opens the Game Mode menu; returns whether the
-    /// pad belongs to it, i.e. is withheld from the game. A pad carrying a tap or
-    /// a hold is spent: deciding one needs a buffered press, and this buffers none.
-    fn on_exit_pad(&mut self, pad: Pad, pressed: bool, commands: &mut Vec<AppCommand>) -> bool {
+    /// pad belongs to it, i.e. is withheld from the game. Only a tap costs the
+    /// game its button: the other shapes hand the press over on release.
+    fn on_exit_pad(
+        &mut self,
+        pad: Pad,
+        pressed: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
         match self.exit {
             PadGesture::Tap(on) if on == pad => {
                 if pressed {
@@ -171,22 +187,41 @@ impl GameInput {
                 true
             }
             PadGesture::Hold(on) if on == pad => {
-                self.exit_at = match pressed {
-                    true => self.exit_at.or_else(|| Some(Instant::now())),
-                    false => None,
-                };
+                match pressed {
+                    // A key-wired pad repeats the press it is already holding:
+                    // that is neither a new gesture nor a second firing.
+                    true if self.exit_at.is_none() && !self.exit_fired => {
+                        self.exit_at = Some(Instant::now());
+                    }
+                    true => {}
+                    false => {
+                        self.exit_at = None;
+                        self.defer_tap(pad, browser, commands);
+                    }
+                }
                 true
             }
-            // Only the leader is spent outright: the second pad reaches the game
-            // unless the leader is already down, so a chord costs one button.
+            // Only the leader is spent while it is down: the second pad reaches
+            // the game unless the leader is already there.
             PadGesture::Chord(leader, _) if leader == pad => {
-                self.exit_leader = pressed;
+                match pressed {
+                    true if !self.exit_leader => {
+                        self.exit_leader = true;
+                        self.exit_fired = false;
+                    }
+                    true => {}
+                    false => {
+                        self.exit_leader = false;
+                        self.defer_tap(pad, browser, commands);
+                    }
+                }
                 true
             }
             PadGesture::Chord(_, second) if second == pad => {
                 match (pressed, self.exit_leader, self.exit_second) {
                     (true, true, _) => {
                         self.exit_second = true;
+                        self.exit_fired = true;
                         commands.push(AppCommand::GameMode);
                         true
                     }
@@ -203,6 +238,20 @@ impl GameInput {
         }
     }
 
+    /// Hand over the press the gesture was holding, the gesture having not
+    /// happened. An unbound source sends the button it is, as passthrough would.
+    fn defer_tap(&mut self, pad: Pad, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        if std::mem::take(&mut self.exit_fired) || self.deferred.is_some() {
+            return;
+        }
+        let target = match self.map.pad(self.layer(), pad) {
+            Some(Target::Passthrough) | None => Target::Pad(pad),
+            Some(target) => target.clone(),
+        };
+        self.fire(&target, true, browser, commands);
+        self.deferred = Some(target);
+    }
+
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
     /// Returns whether the source is bound here, i.e. withheld from the page.
     pub fn on_pad(
@@ -212,7 +261,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        if self.on_exit_pad(pad, pressed, commands) {
+        if self.on_exit_pad(pad, pressed, browser, commands) {
             return true;
         }
         let slot = pad as usize;
@@ -489,12 +538,16 @@ impl GameInput {
         }
     }
 
-    /// Per-frame: fire a due exit hold, and emit whatever the sticks are bound
-    /// to (the router moves the cursor and scrolls the page from it).
-    pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
+    /// Per-frame: end a tap handed over late, fire a due exit hold, and emit
+    /// whatever the sticks are bound to (the router moves the cursor from it).
+    pub fn tick(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
+        if let Some(target) = self.deferred.take() {
+            self.fire(&target, false, browser, commands);
+        }
         if let Some(at) = self.exit_at {
             if at.elapsed() >= self.hold {
                 self.exit_at = None;
+                self.exit_fired = true;
                 commands.push(AppCommand::GameMode);
             }
         }
@@ -542,11 +595,14 @@ impl GameInput {
         )
     }
 
-    /// Whether the loop must keep ticking: a stick still driving something, or
-    /// a hold pending.
+    /// Whether the loop must keep ticking: a stick still driving something, a
+    /// hold pending, or a handed-over tap still owing its release.
     pub fn is_active(&self) -> bool {
         let (aim, scroll) = self.analog();
-        aim != (0.0, 0.0) || scroll != (0.0, 0.0) || self.exit_at.is_some()
+        aim != (0.0, 0.0)
+            || scroll != (0.0, 0.0)
+            || self.exit_at.is_some()
+            || self.deferred.is_some()
     }
 
     /// Release everything the page holds — a mode or focus transition must
@@ -568,8 +624,11 @@ impl GameInput {
         }
         self.set_click(false, commands);
         self.exit_at = None;
+        self.exit_fired = false;
         self.exit_leader = false;
         self.exit_second = false;
+        // The drains above already ended whatever it was holding.
+        self.deferred = None;
     }
 }
 

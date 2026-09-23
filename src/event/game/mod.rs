@@ -15,9 +15,18 @@ use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
 use mode::GameInput;
 
-/// What the mode reserves while `game_mode` is bound to nothing on the pad: the
-/// one button no map may take, so a session is never entered without a way out.
+/// What the mode reserves while `game_mode` is bound to nothing on the pad, so
+/// a session is never entered without a way out.
 pub const DEFAULT_EXIT: PadGesture = PadGesture::Hold(Pad::Select);
+
+/// The button a gesture takes outright, which no map may bind. Only a tap does:
+/// the rest are undecided until release, and hand the press over then.
+pub fn spent_pad(exit: PadGesture) -> Option<Pad> {
+    match exit {
+        PadGesture::Tap(pad) => Some(pad),
+        PadGesture::Hold(_) | PadGesture::Chord(_, _) => None,
+    }
+}
 
 /// Everything Game Mode owns. Loaded when a screen or the mode itself asks for
 /// a map and dropped once none of them is up, so a run that stays in the browser

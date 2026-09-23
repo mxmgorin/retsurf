@@ -247,8 +247,8 @@ impl InputMap {
     }
 }
 
-/// One `[pad]` table, base or layer — the one spelling of its rules, so a
-/// refusal added here cannot miss a copy.
+/// One `[pad]` table, base or layer — the one spelling of its rules, so a rule
+/// added here cannot miss a copy.
 fn resolve_pad_table(
     id: &str,
     scope: &str,
@@ -262,12 +262,6 @@ fn resolve_pad_table(
             log::warn!("input map: `{whose}` is not a pad; ignored");
             continue;
         };
-        // Select carries the menu in every map, so it is never the game's —
-        // refused out loud rather than dropped silently.
-        if slot == Pad::Select {
-            log::warn!("input map: `{whose}` is reserved for the Game Mode menu");
-            continue;
-        }
         match parse_target(raw, &whose, layers) {
             Some(target) if target.is_analog() => {
                 log::warn!("input map: `{whose}` is a button, not a stick");
