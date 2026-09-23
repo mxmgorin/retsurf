@@ -288,18 +288,15 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("l2+r2", Action::ZoomReset),
         ("r2+l2", Action::ZoomReset),
         ("l3", Action::Hints),
-        // Scroll mode is how stickless devices scroll; both gestures defer.
-        ("start", Action::Scroll),
+        // Both gestures defer: the menu opens on release.
+        ("start", Action::Menu),
         // Matched on its own inside the mode, where these tables are bypassed, so
         // rebinding it moves the way out with it.
         ("hold:start", Action::GameMode),
         // On a hold so stickless devices (no R3) have reader out of the box.
         ("hold:x", Action::Reader),
         ("hold:y", Action::Bookmark),
-        ("select", Action::Menu),
-        // Pressed again while settings is open this quits — the only gamepad exit
-        // on a handheld. Bind `quit` directly for a one-press exit.
-        ("hold:select", Action::Settings),
+        ("select", Action::Settings),
         ("select+l1", Action::TabPrev),
         ("select+r1", Action::TabNext),
         ("start+l1", Action::CloseTab),

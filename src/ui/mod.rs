@@ -184,7 +184,7 @@ pub struct AppUi {
     game_mode_toast: Option<Instant>,
     /// Worded at entry from the ways out this device has.
     game_mode_toast_text: String,
-    /// Game Mode's own menu (the reserved Select hold).
+    /// Game Mode's own menu (the `game_mode` gesture).
     pub game_menu: GameMenu,
     /// Its map list and one map's rows, opened from that menu.
     pub input_maps: InputMaps,

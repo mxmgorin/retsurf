@@ -462,7 +462,7 @@ zoom in/out/reset · arrows = overlay navigation.
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
 `hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
-`settings` (settings overlay; pressed again while it's open, quits) · `home`
+`settings` (settings overlay; pressed again while it's open, closes it) · `home`
 (go to the home page) · `quit` (quit the app) · `tab_next` / `tab_prev` /
 `new_tab` / `close_tab` ·
 `zoom_in` / `zoom_out` / `zoom_reset` (page zoom along a Firefox-style 50–300%
@@ -470,8 +470,8 @@ ladder / back to the config default) ·
 `nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay
 is open — menu, on-screen keyboard, or link hints; with none open the key goes
 to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
-cursor and page scroll — the scroll fallback for devices without a right
-analog stick) · `none`.
+cursor and page scroll; unbound by default, since pushing the cursor against
+an edge scrolls too) · `none`.
 
 Also `game_mode` (hand the input to the page for a web game — see `[game_mode]`
 above — the gesture opens that mode's menu, which carries the way in and out).

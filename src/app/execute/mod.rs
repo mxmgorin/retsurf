@@ -66,8 +66,8 @@ impl App {
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
     fn menu_action(&mut self, action: &MenuAction) {
         match action {
-            // Select toggles the menu; the menu button only ever opens it (it's hidden
-            // behind the menu once shown).
+            // The gesture toggles the menu; the menu button only ever opens it (it's
+            // hidden behind the menu once shown).
             MenuAction::Open => {
                 if self.ui.menu.visible {
                     self.ui.menu.close();
@@ -193,12 +193,10 @@ impl App {
     /// Apply a settings-overlay action (see [`crate::overlay::settings`]).
     fn settings_action(&mut self, action: &SettingsAction, out: &mut Vec<AppCommand>) {
         match action {
-            // Re-triggering the gesture while it is open is the two-step quit:
-            // save the draft like a normal close, then shut down.
+            // Re-triggering the gesture while it is open closes it, like the menu.
             SettingsAction::Open => {
                 if self.ui.settings.visible() {
                     self.settings_close(out);
-                    self.shutdown();
                 } else {
                     self.ui.settings_open(&self.config);
                 }
@@ -220,8 +218,8 @@ impl App {
                 self.ui.settings.apply_capture(gesture.clone(), *keyboard);
             }
             SettingsAction::CaptureCancel => self.ui.settings.cancel_capture(),
-            // Self-update: Quit reuses the two-step-quit path, so the launcher's
-            // pm_finish runs and re-execs the freshly swapped binary.
+            // Self-update: a graceful shutdown, so the launcher's pm_finish runs
+            // and re-execs the freshly swapped binary.
             SettingsAction::CheckUpdate => {
                 // A channel edited in this visit is still only in the overlay draft
                 // (`apply_config` runs on close), so adopt it before checking.
