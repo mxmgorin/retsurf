@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for a game that wants text, and its Fn page carries the keys no character grid
   has: Escape, F1-F12, the navigation cluster and the bare modifiers.
 
-- **WebGL and WebGPU in every GPU build, the handhelds included.** The per-core
+- **WebGL in every GPU build, the handhelds included.** The per-core
   aarch64 binaries used to leave the engine's WebGL out altogether: surfman
   opened a second `EGLDisplay` and asked it for a desktop-GL config, which no
   Mali blob offers, so shipping WebGL there would have meant shipping one that

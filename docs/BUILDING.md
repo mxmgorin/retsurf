@@ -41,7 +41,7 @@ If CMake 4.x refuses the bundled SDL2 (`cmake_minimum_required` below 3.5), set
 
 | Feature | Default | What it does |
 | --- | --- | --- |
-| `webgl` | on | WebGL/WebGPU through surfman over SDL's EGL display. Off only where there is no EGL to compose over, which in practice means a `software` build. |
+| `webgl` | on | WebGL through surfman over SDL's EGL display. Off only where there is no EGL to compose over, which in practice means a `software` build. WebGPU is a Servo feature of its own and is not enabled. |
 | `software` | off | CPU rendering end to end for GPU-less devices — swgl rasterizes the page, SDL's renderer paints the chrome. |
 | `sdl2-bundled` | off | Build SDL2 from source instead of using the system one. |
 | `sdl2-static-link` | off | Link SDL2 statically. |

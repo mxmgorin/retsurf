@@ -16,8 +16,9 @@ crate-type = ["lib"]
 
 [features]
 default = ["webgl"]
-# WebGL/WebGPU through a surfman connection over SDL's own EGL display. Off, it
-# leaves the engine's WebGL thread out — what the EGL-less software build wants.
+# WebGL through a surfman connection over SDL's own EGL display. Off, it leaves
+# the engine's WebGL thread out — what the EGL-less software build wants. WebGPU
+# is a feature of its own upstream and is not enabled here.
 webgl = ["servo/webgl"]
 # Software rendering end to end, for devices with no GPU at all (Miyoo Mini):
 # swgl rasterizes the page, SDL's own renderer paints the chrome. Opt-in because
