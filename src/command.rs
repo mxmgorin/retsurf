@@ -201,6 +201,9 @@ pub enum InputCommand {
     Shoulder(i32),
     /// Trigger (L2 = left, R2 = right) with its press state.
     Trigger { right: bool, pressed: bool },
+    /// Page zoom by ladder step (0 resets): parked while the keyboard owns
+    /// the triggers, like other browser shortcuts under a takeover overlay.
+    Zoom(i32),
     /// A dedicated keyboard key. Applied only while the keyboard is open.
     Osk(OskCommand),
     /// Link-hint mode: enter it (collecting the page's clickable elements)

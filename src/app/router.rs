@@ -287,6 +287,13 @@ impl App {
                     }
                 }
             }
+            // The stock zoom pads are the keyboard's Shift and Enter.
+            InputCommand::Zoom(delta) => {
+                if focus != Focus::Osk && !focus.takes_over() {
+                    let cmd = BrowserCommand::Zoom(*delta);
+                    self.browser.execute_command(&cmd, &self.config.browser);
+                }
+            }
             // Dedicated keyboard keys act only while the keyboard is open. The one
             // exception is Y (Space): outside the keyboard it reloads the page.
             InputCommand::Osk(cmd) => {
