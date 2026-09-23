@@ -4,7 +4,8 @@
 #
 #   1. Java glue   -> app/src/main/java/org/libsdl/app/*.java
 #   2. Gradle wrapper jar + gradlew (so ./gradlew works without a system Gradle)
-#   3. libSDL2.so (built from SDL source for arm64-v8a via the NDK + CMake)
+#   3. libSDL2.so (built from a patched copy of the SDL source for arm64-v8a via
+#      the NDK + CMake; see android/patches)
 #   4. libc++_shared.so (from the NDK sysroot)
 #
 # Run `cargo fetch` first so the sdl2-sys source is present. Requires
@@ -69,11 +70,21 @@ cp "$sdl_proj/gradle/wrapper/gradle-wrapper.jar" "$here/gradle/wrapper/"
 cp "$sdl_proj/gradlew" "$sdl_proj/gradlew.bat" "$here/"
 chmod +x "$here/gradlew"
 
-# 3. libSDL2.so for arm64-v8a
+# 3. libSDL2.so for arm64-v8a, from a patched copy of the registry source (the
+#    registry is shared and cargo wipes it, so it is never edited in place).
+src="$repo/target/sdl-android-src"
+rm -rf "$src"
+cp -r "$sdl_src" "$src"
+for p in "$here"/patches/*.patch; do
+    [ -e "$p" ] || continue
+    echo "applying $(basename "$p")"
+    patch -p1 -d "$src" -i "$p"
+done
+
 jnilibs="$here/app/src/main/jniLibs/$abi"
 mkdir -p "$jnilibs"
 build="$repo/target/sdl-android-$abi"
-"$cmake_bin" -S "$sdl_src" -B "$build" \
+"$cmake_bin" -S "$src" -B "$build" \
     -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI="$abi" -DANDROID_PLATFORM="android-$api" \
     -DSDL_STATIC=OFF -DSDL_SHARED=ON \
