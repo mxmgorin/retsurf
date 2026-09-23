@@ -5,10 +5,14 @@
 mod sdl;
 #[cfg(feature = "software")]
 mod swgl;
-/// The composite path is EGL-only, and surfman's EGL backends are unix-only.
-#[cfg_attr(all(feature = "webgl", target_os = "linux"), path = "webgl.rs")]
+/// The composite path is EGL-only: free unix and Android have an EGL backend in
+/// surfman, the rest do not.
 #[cfg_attr(
-    not(all(feature = "webgl", target_os = "linux")),
+    all(feature = "webgl", any(target_os = "linux", target_os = "android")),
+    path = "webgl.rs"
+)]
+#[cfg_attr(
+    not(all(feature = "webgl", any(target_os = "linux", target_os = "android"))),
     path = "webgl_off.rs"
 )]
 mod webgl;

@@ -7,11 +7,21 @@
 //! only offers it through `create_surface_texture`, which makes *its own* context
 //! current first — so the texture would land where WebRender cannot sample it.
 //! Wrapping SDL's context in a surfman `Context` makes that make-current a no-op.
+//!
+//! surfman's EGL backends differ by target, and the connection, device and
+//! context-wrapping functions at the end of the file carry a variant each: on
+//! free unix the wayland backend sits under two `multi` wrappers and takes a bare
+//! `EGLDisplay`, while Android's `AHardwareBuffer` backend is unwrapped and has
+//! only the default display.
 
 use euclid::default::Size2D;
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CStr};
 use std::mem;
+#[cfg(target_os = "android")]
+use surfman::hardware_buffer::context::NativeContext;
+#[cfg(target_os = "linux")]
+use surfman::wayland::context::NativeContext;
 use surfman::{Connection, Context, Device, Surface, SurfaceTexture};
 
 /// `eglGetCurrentSurface` selectors. retsurf links no EGL headers.
@@ -47,15 +57,15 @@ impl FrontBuffers {
     pub fn new(get_proc: impl Fn(&str) -> *const c_void) -> Option<Self> {
         let egl = EglState::current(&get_proc)?;
         egl.log_image_extensions(&get_proc);
+        // surfman panics rather than fails when Android's buffer import is
+        // missing, and a panic on the WebGL thread ends the process.
+        #[cfg(target_os = "android")]
+        if non_null(get_proc("eglGetNativeClientBufferANDROID")).is_none() {
+            log::warn!("gl: no EGL_ANDROID_get_native_client_buffer; WebGL disabled");
+            return None;
+        }
         let connection = connection(&egl)?;
-        let adapter = connection.create_adapter().ok()?;
-        let device = match connection.create_device(&adapter) {
-            Ok(device) => device,
-            Err(err) => {
-                log::warn!("surfman device unavailable ({err:?}); WebGL disabled");
-                return None;
-            }
-        };
+        let device = device(&connection, &egl)?;
         let context = match unsafe { wrap_native_context(&device, egl.native()) } {
             Ok(context) => context,
             Err(err) => {
@@ -118,9 +128,6 @@ impl Drop for FrontBuffers {
 }
 
 impl EglState {
-    /// `None` when SDL is not on EGL (desktop GLX). Goes through SDL's loader
-    /// because it falls back to `dlsym`: EGL 1.4 promises `eglGetProcAddress`
-    /// for extensions only.
     /// The extensions the composite path is built on. A blob without them cannot
     /// wrap a surface in an `EGLImageKHR`, and no amount of embedder work helps.
     fn log_image_extensions(&self, get_proc: &dyn Fn(&str) -> *const c_void) {
@@ -175,6 +182,9 @@ impl EglState {
         }
     }
 
+    /// `None` when SDL is not on EGL (desktop GLX). Goes through SDL's loader
+    /// because it falls back to `dlsym`: EGL 1.4 promises `eglGetProcAddress`
+    /// for extensions only.
     fn current(get_proc: &dyn Fn(&str) -> *const c_void) -> Option<Self> {
         let display: EglGetCurrent =
             unsafe { mem::transmute(non_null(get_proc("eglGetCurrentDisplay"))?) };
@@ -198,10 +208,10 @@ impl EglState {
         Some(state)
     }
 
-    /// The surfaces are read once: SDL creates its window surface with the
-    /// window and never replaces it on the platforms this path compiles for.
-    fn native(&self) -> surfman::wayland::context::NativeContext {
-        surfman::wayland::context::NativeContext {
+    /// Read once: SDL keeps one window surface for the window's life, bar an
+    /// Android background/resume, across which these go stale.
+    fn native(&self) -> NativeContext {
+        NativeContext {
             egl_context: self.context,
             egl_draw_surface: self.draw_surface,
             egl_read_surface: self.read_surface,
@@ -212,6 +222,7 @@ impl EglState {
 /// A surfman connection on SDL's own EGL display: `Connection::new()` opens a
 /// second one, and an `EGLImageKHR` is not importable across displays. Only the
 /// wayland backend takes a bare `EGLDisplay`, and makes no wayland call for it.
+#[cfg(target_os = "linux")]
 fn connection(egl: &EglState) -> Option<Connection> {
     use surfman::multi::connection::Connection as MultiConnection;
     use surfman::wayland::connection::{Connection as EglConnection, NativeConnection};
@@ -227,12 +238,43 @@ fn connection(egl: &EglState) -> Option<Connection> {
     }
 }
 
+/// Android has one EGL display, the default one SDL already opened, so the
+/// connection carries no handle at all.
+#[cfg(target_os = "android")]
+fn connection(_egl: &EglState) -> Option<Connection> {
+    Connection::new()
+        .map_err(|err| log::warn!("surfman connection unavailable ({err:?}); WebGL off"))
+        .ok()
+}
+
+/// The device the front buffers are imported through.
+#[cfg(target_os = "linux")]
+fn device(connection: &Connection, _egl: &EglState) -> Option<Device> {
+    let adapter = connection.create_adapter().ok()?;
+    connection
+        .create_device(&adapter)
+        .map_err(|err| log::warn!("surfman device unavailable ({err:?}); WebGL disabled"))
+        .ok()
+}
+
+/// Built on SDL's display rather than opening one: a device that owns its
+/// display terminates it on drop.
+#[cfg(target_os = "android")]
+fn device(connection: &Connection, egl: &EglState) -> Option<Device> {
+    use surfman::hardware_buffer::device::NativeDevice;
+
+    unsafe { connection.create_device_from_native_device(NativeDevice(egl.display)) }
+        .map_err(|err| log::warn!("surfman device unavailable ({err:?}); WebGL disabled"))
+        .ok()
+}
+
 /// Wraps SDL's EGL context as a surfman one. surfman 0.14 dropped the
 /// multi-device wrapper for this, so the backend device builds the context and
 /// the nesting the connection already carries is rebuilt by hand.
+#[cfg(target_os = "linux")]
 unsafe fn wrap_native_context(
     device: &Device,
-    native: surfman::wayland::context::NativeContext,
+    native: NativeContext,
 ) -> Result<Context, surfman::Error> {
     use surfman::multi::context::Context as MultiContext;
     use surfman::multi::device::Device as MultiDevice;
@@ -242,6 +284,16 @@ unsafe fn wrap_native_context(
     };
     unsafe { device.create_context_from_native_context(native) }
         .map(|context| MultiContext::Default(MultiContext::Default(context)))
+}
+
+/// Android's backend is not a `multi` one, so the device wraps the context
+/// directly.
+#[cfg(target_os = "android")]
+unsafe fn wrap_native_context(
+    device: &Device,
+    native: NativeContext,
+) -> Result<Context, surfman::Error> {
+    unsafe { device.create_context_from_native_context(native) }
 }
 
 fn non_null(ptr: *const c_void) -> Option<*const c_void> {

@@ -18,7 +18,7 @@ entries, so the Linux, macOS, Windows, and handheld builds are unchanged.
 | Storage paths (internal data + external Download via env) | done |
 | Gradle/SDL APK shell (`android/`) | done |
 | CI (`.github/workflows/build-android.yml`) | done |
-| WebGL (feature on; surfman `hardware_buffer` backend) | enabled, needs on-device verify |
+| WebGL (composite path over surfman's `hardware_buffer` backend) | built, needs on-device verify |
 | HiDPI scaling (egui zoom + Servo hidpi from `RETSURF_SCALE`) | done, verified (see screen_rect fix below) |
 | Touch drag-to-scroll + tap-to-click (`src/event/touch.rs`) | done, verified on device |
 | System soft keyboard for the address bar (`SDL_StartTextInput`) | done, verified; home search no longer auto-pops the IME |
@@ -196,8 +196,8 @@ jar, `jniLibs/`, mipmaps) are git-ignored and regenerated.
    re-registered, or the page goes black. See Phase 5 of the plan.
 4. WebGL surfman context survival across background. Its context lives in Servo's WebGL
    thread with no embedder handle, so we rely on lazy recreation and, worst case, recreate
-   the WebView. Moot until the composite path is ported off linux — see
-   `src/platform/render/webgl.rs` — since Android has no connection at all today.
+   the WebView. The composite path also wraps SDL's EGL draw/read surfaces once
+   (`src/platform/render/webgl.rs`), and Android replaces those on resume.
 5. Signing. Both build types sign with one keystore (`app/debug.keystore` locally) so
    `adb install -r` updates in place instead of forcing a reinstall. CI restores a stable
    key from the `RETSURF_KEYSTORE_BASE64` secret (decoded to `app/release.keystore`, passed

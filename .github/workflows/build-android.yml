@@ -125,8 +125,6 @@ jobs:
           # of Cargo.toml so local release builds stay fast.
           export CARGO_PROFILE_RELEASE_LTO="fat"
           export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
-          # The `webgl` feature stays on, but the composite path is linux-only,
-          # so a page gets no WebGL context here until that is ported.
           # `-p`: the cdylib is its own crate (android/lib), so a plain build in
           # the workspace root would produce the desktop binary instead.
           cargo ndk -t "${ABI}" -P "${ANDROID_API}" \
