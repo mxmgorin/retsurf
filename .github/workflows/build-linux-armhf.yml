@@ -50,6 +50,8 @@ env:
 
 jobs:
   build:
+    # Nightly builds its own release; publishing it must not start a second build.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'nightly'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7

@@ -19,6 +19,8 @@ permissions:
 
 jobs:
   build-windows:
+    # Nightly builds its own release; publishing it must not start a second build.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'nightly'
     runs-on: windows-latest
     steps:
       # Servo's dependency tree nests deep enough to blow past MAX_PATH.

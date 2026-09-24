@@ -19,6 +19,8 @@ permissions:
 
 jobs:
   build-macos:
+    # Nightly builds its own release; publishing it must not start a second build.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'nightly'
     # arm64 (Apple silicon) runner.
     runs-on: macos-latest
     steps:

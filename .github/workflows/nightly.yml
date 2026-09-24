@@ -126,12 +126,21 @@ jobs:
           git tag -f nightly "${{ needs.changed.outputs.sha }}"
           git push origin nightly --force
 
+      # The releases page orders by when a release was created, which neither an
+      # edit nor a republish changes; a fresh release keeps the nightly on top.
+      - name: Drop the previous nightly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete nightly --yes || true
+
       # prerelease + make_latest keep this out of the way of the stable channel,
       # which picks the highest semver tag and cannot parse `nightly` anyway.
+      # Drafted until every asset is up, so the updater never sees half a release.
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           name: Nightly
+          draft: true
           prerelease: true
           make_latest: false
           files: out/*
@@ -139,3 +148,8 @@ jobs:
             Automated build from the latest commit on main. Expect bugs.
 
             commit: ${{ needs.changed.outputs.sha }}
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit nightly --draft=false

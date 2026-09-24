@@ -24,6 +24,8 @@ env:
 
 jobs:
   build-arm:
+    # Nightly builds its own release; publishing it must not start a second build.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'nightly'
     # Native arm64 runner (free for public repos) — no cross-compile, no qemu.
     # One job per target core; they run in parallel on separate runners, so the
     # 3× Servo compile is ~1× wall-clock. A pure codegen flag (RUSTFLAGS) — the
@@ -231,6 +233,8 @@ jobs:
             retsurf-portmaster.zip.sha256
 
   build-universal:
+    # Nightly builds its own release; publishing it must not start a second build.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'nightly'
     # A single generic aarch64 binary for non-PortMaster installs: no -C
     # target-cpu, so it runs on any ARMv8.0+ core. Its own build rather than the
     # a53 reuse, so no core's tuning leaks in.
