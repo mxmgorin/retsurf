@@ -50,6 +50,8 @@ use std::{
 /// WebAudio factory methods Servo lacks (`createScriptProcessor` and etc.);
 /// games die at init without them, so every document gets a facade first.
 const WEBAUDIO_COMPAT_JS: &str = include_str!("assets/webaudio_compat.js");
+/// IDBIndex cursors over a store snapshot; Emscripten's IDBFS stalls without them.
+const IDB_INDEX_COMPAT_JS: &str = include_str!("assets/idb_index_compat.js");
 
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
@@ -229,6 +231,10 @@ impl AppBrowserInner {
         )));
         user_content.add_script(Rc::new(servo::UserScript::new(
             WEBAUDIO_COMPAT_JS.to_string(),
+            None,
+        )));
+        user_content.add_script(Rc::new(servo::UserScript::new(
+            IDB_INDEX_COMPAT_JS.to_string(),
             None,
         )));
         let forced_dark = forced_dark::stylesheet();
