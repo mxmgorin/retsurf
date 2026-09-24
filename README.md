@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/images/retsurf-banner.png" alt="retsurf — a gamepad-first web browser for retro handhelds" width="830">
+  <img src="resources/images/retsurf-banner.png" alt="retsurf" width="420">
 </p>
 
 <div align="center">
@@ -104,7 +104,7 @@ Templates with the defaults are written on first run. See **[Configuration & bin
 If you find the project useful, here is how you can help:
 
 - **Tell other people about it.** Sharing the project helps it reach more users.
-- **Report bugs and request features** in [Issues](https://github.com/mxmgorin/retsurf/issues). If something is broken or you have an idea, let me know.
+- **Report bugs and request features** in [Issues](https://github.com/mxmgorin/retsurf/issues). Feedback is welcome.
 - **Star the repo.** It helps the project get noticed and keeps me motivated.
 
 ## Credits
