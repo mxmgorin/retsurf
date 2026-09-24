@@ -52,6 +52,8 @@ use std::{
 const WEBAUDIO_COMPAT_JS: &str = include_str!("assets/webaudio_compat.js");
 /// IDBIndex cursors over a store snapshot; Emscripten's IDBFS stalls without them.
 const IDB_INDEX_COMPAT_JS: &str = include_str!("assets/idb_index_compat.js");
+/// WebAssembly streaming over a buffered body; a script-made stream never settles.
+const WASM_STREAMING_COMPAT_JS: &str = include_str!("assets/wasm_streaming_compat.js");
 
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
@@ -235,6 +237,10 @@ impl AppBrowserInner {
         )));
         user_content.add_script(Rc::new(servo::UserScript::new(
             IDB_INDEX_COMPAT_JS.to_string(),
+            None,
+        )));
+        user_content.add_script(Rc::new(servo::UserScript::new(
+            WASM_STREAMING_COMPAT_JS.to_string(),
             None,
         )));
         let forced_dark = forced_dark::stylesheet();
