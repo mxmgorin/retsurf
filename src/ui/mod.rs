@@ -184,7 +184,7 @@ pub struct AppUi {
     game_mode_toast: Option<Instant>,
     /// Worded at entry from the ways out this device has.
     game_mode_toast_text: String,
-    /// Game Mode's own menu (the reserved Select hold).
+    /// Game Mode's own menu (the `game_mode` gesture).
     pub game_menu: GameMenu,
     /// Its map list and one map's rows, opened from that menu.
     pub input_maps: InputMaps,
@@ -235,6 +235,8 @@ pub struct AppUi {
     pub prompt: Prompt,
     /// The gamepad's latched D-pad scroll mode, drawn in place of the cursor.
     scroll_mode: bool,
+    /// Per-axis direction the cursor is edge-scrolling, `(0, 0)` when not.
+    edge_scroll: (i8, i8),
     /// Whether hint mode draws combo badges; off = plain spatial hops.
     hint_badges: bool,
     /// Whether the last input came from the keyboard; picks the badge alphabet.
@@ -306,6 +308,7 @@ impl AppUi {
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
+            edge_scroll: (0, 0),
             hint_badges: input.hint_badges,
             last_input_keyboard: false,
             memory_overlay: debug.memory_overlay,
@@ -705,7 +708,7 @@ impl AppUi {
                     }
                 } else if cursor_visible.is_some() {
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
-                    cursor::paint_cursor(ctx, pos, self.scroll_mode);
+                    cursor::paint_cursor(ctx, pos, self.scroll_mode, self.edge_scroll);
                 }
 
                 if self.toast_visible_for().is_some() {

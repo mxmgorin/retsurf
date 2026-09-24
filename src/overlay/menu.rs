@@ -1,4 +1,4 @@
-//! The full-screen menu opened with Select (or the menu toolbar button): a tabbed
+//! The full-screen menu opened with the `menu` action (or the menu toolbar button): a tabbed
 //! overlay over the page with Tabs / Bookmarks / History / Downloads sections.
 //! It owns the overlay state (whether it's shown, which section is active) and the
 //! Bookmarks, History, and Downloads stores. The central router ([`crate::app`])

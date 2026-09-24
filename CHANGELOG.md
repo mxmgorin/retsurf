@@ -90,8 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   either order resets), which frees `hold:l1` for home and `hold:r1` for reload;
   tabs went onto chords — `select+l1` / `select+r1` step them, `start+l1` closes
   one and `start+r1` opens one, through a new `close_tab` action. `hold:start`
-  opens the Game Mode menu, Settings keeps `hold:select` to itself, and `r3`,
-  `hold:b`, `select+y` and `select+start` are free. A `bindings.toml` written
+  opens the Game Mode menu, `start` opens the menu and `select` opens settings;
+  `scroll` has no default gesture, since pushing the cursor against an edge now
+  scrolls, and `r3`, `hold:b`, `hold:select`, `select+y` and `select+start` are
+  free. Settings pressed again while open closes it rather than quitting, so the
+  pad has no quit gesture by default; bind `quit` for one. A `bindings.toml` written
   before this release keeps every gesture it spells; the new actions still arrive
   bound, since an action with nothing on a device gets its defaults back at
   startup. The game keeps the button the gesture sits on: a hold and a chord are
