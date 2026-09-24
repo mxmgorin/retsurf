@@ -74,6 +74,8 @@ chmod +x "$here/gradlew"
 #    registry is shared and cargo wipes it, so it is never edited in place).
 src="$repo/target/sdl-android-src"
 rm -rf "$src"
+# A cold runner has no target/ yet.
+mkdir -p "$repo/target"
 cp -r "$sdl_src" "$src"
 for p in "$here"/patches/*.patch; do
     [ -e "$p" ] || continue
