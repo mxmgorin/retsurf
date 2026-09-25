@@ -15,7 +15,7 @@
 //! only the default display.
 
 use euclid::default::Size2D;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_void, CStr};
 use std::mem;
 #[cfg(target_os = "android")]
@@ -30,10 +30,12 @@ const EGL_READ: i32 = 0x305a;
 
 type EglGetCurrent = unsafe extern "C" fn() -> *const c_void;
 type EglGetCurrentSurface = unsafe extern "C" fn(i32) -> *const c_void;
+type EglMakeCurrent =
+    unsafe extern "C" fn(*const c_void, *const c_void, *const c_void, *const c_void) -> u32;
 
 /// SDL's EGL handles. An `EGLImageKHR` belongs to a display rather than to a
 /// context, so surfman has to run on the display SDL already opened.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 struct EglState {
     display: *const c_void,
     context: *const c_void,
@@ -49,12 +51,20 @@ pub struct FrontBuffers {
     /// SDL's EGL context wrapped as a surfman one, so surfman's make-current
     /// asks EGL for the state it is already in.
     context: RefCell<Context>,
+    /// The handles `context` wraps; rewrapped when SDL's surfaces change.
+    egl: Cell<EglState>,
+    get_current_surface: EglGetCurrentSurface,
+    make_current: EglMakeCurrent,
 }
 
 impl FrontBuffers {
     /// Must run with SDL's context current: every handle below is read off it,
     /// and surfman loads its GL entry points from it. `None` costs WebGL only.
     pub fn new(get_proc: impl Fn(&str) -> *const c_void) -> Option<Self> {
+        let get_current_surface: EglGetCurrentSurface =
+            unsafe { mem::transmute(non_null(get_proc("eglGetCurrentSurface"))?) };
+        let make_current: EglMakeCurrent =
+            unsafe { mem::transmute(non_null(get_proc("eglMakeCurrent"))?) };
         let egl = EglState::current(&get_proc)?;
         egl.log_image_extensions(&get_proc);
         // surfman panics rather than fails when Android's buffer import is
@@ -78,7 +88,52 @@ impl FrontBuffers {
             connection,
             device,
             context: RefCell::new(context),
+            egl: Cell::new(egl),
+            get_current_surface,
+            make_current,
         })
+    }
+
+    /// Android replaces SDL's window surface across background/resume, and a
+    /// context wrapped over the old one fails every make-current. Needs SDL's
+    /// context current.
+    fn track_sdl_surfaces(&self) {
+        let old = self.egl.get();
+        let current = unsafe {
+            EglState {
+                draw_surface: (self.get_current_surface)(EGL_DRAW),
+                read_surface: (self.get_current_surface)(EGL_READ),
+                ..old
+            }
+        };
+        if current == old || current.draw_surface.is_null() {
+            return;
+        }
+        let context = match unsafe { wrap_native_context(&self.device, current.native()) } {
+            Ok(context) => context,
+            Err(err) => {
+                log::warn!("SDL's new window surface is not wrappable ({err:?})");
+                return;
+            }
+        };
+        let mut stale = self.context.replace(context);
+        if let Err(err) = self.device.destroy_context(&mut stale) {
+            log::warn!("failed to release the stale wrapped GL context: {err:?}");
+        }
+        // Destroying a wrapped context unbinds whatever is current.
+        let rebound = unsafe {
+            (self.make_current)(
+                current.display,
+                current.draw_surface,
+                current.read_surface,
+                current.context,
+            )
+        };
+        if rebound == 0 {
+            log::warn!("gl: could not rebind SDL's context after the rewrap");
+        }
+        self.egl.set(current);
+        log::info!("gl: WebGL composite rewrapped onto SDL's new window surface");
     }
 
     pub fn connection(&self) -> Connection {
@@ -91,6 +146,7 @@ impl FrontBuffers {
         &self,
         surface: Surface,
     ) -> Result<(SurfaceTexture, u32, Size2D<i32>), Surface> {
+        self.track_sdl_surfaces();
         let size = self.device.surface_info(&surface).size;
         let surface_texture = match self
             .device
@@ -110,6 +166,7 @@ impl FrontBuffers {
     }
 
     pub fn destroy_texture(&self, surface_texture: SurfaceTexture) -> Option<Surface> {
+        self.track_sdl_surfaces();
         self.device
             .destroy_surface_texture(&mut self.context.borrow_mut(), surface_texture)
             .map_err(|(err, _)| log::warn!("WebGL front buffer texture leaked ({err:?})"))
@@ -208,8 +265,6 @@ impl EglState {
         Some(state)
     }
 
-    /// Read once: SDL keeps one window surface for the window's life, bar an
-    /// Android background/resume, across which these go stale.
     fn native(&self) -> NativeContext {
         NativeContext {
             egl_context: self.context,
