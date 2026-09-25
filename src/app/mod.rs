@@ -294,10 +294,13 @@ impl App {
             self.frame_timer.ui_done(at);
 
             // Android raises the system soft keyboard to match focus; desktop
-            // leaves SDL's always-on text input alone and uses the OSK.
+            // leaves SDL's always-on text input alone and uses the OSK. Not under
+            // the OSK: SDL's text view then takes the stick's motion events.
             #[cfg(target_os = "android")]
             {
-                let want = self.ui.wants_keyboard() || self.browser.text_input_focused();
+                let osk_up = self.ui.focus() == crate::ui::Focus::Osk;
+                let want =
+                    !osk_up && (self.ui.wants_keyboard() || self.browser.text_input_focused());
                 crate::platform::window::set_text_input(want);
             }
 
