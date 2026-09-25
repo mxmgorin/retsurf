@@ -706,8 +706,12 @@ impl AppUi {
                         ToolbarPosition::Bottom => self.toolbar_height,
                         ToolbarPosition::Top => 0.0,
                     };
-                    self.osk_height =
-                        osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset) + bottom_inset;
+                    let drawn = osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset);
+                    let screen = ctx.content_rect();
+                    self.osk_height = screen.bottom() - drawn.top();
+                    if osk::keep_on_screen(&mut self.osk, drawn, screen) {
+                        self.request_repaint();
+                    }
                 } else if self.hints.visible {
                     // Rects the page has scrolled out from under are left
                     // undrawn: a badge would mark whatever took that place.

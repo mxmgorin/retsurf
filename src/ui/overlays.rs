@@ -191,6 +191,10 @@ impl AppUi {
         self.osk.set_pad_layout(layout);
     }
 
+    pub fn osk_clipped(&self) -> (f32, f32) {
+        self.osk.clipped()
+    }
+
     /// Whether the keyboard has focus and a button `input` means something to it.
     pub fn osk_takes(&mut self, input: PadInput) -> bool {
         self.osk.set_picking(self.map_edit.picking().is_some());
@@ -208,7 +212,7 @@ impl AppUi {
         match self.osk.read(input) {
             Reading::Pass => false,
             // The analog tick asks for no repaint of its own.
-            Reading::Aim(changed) => {
+            Reading::Drawn(changed) => {
                 if changed {
                     self.request_repaint();
                 }

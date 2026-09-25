@@ -238,6 +238,8 @@ pub enum InputCommand {
         aim: (f32, f32),
         stick: (f32, f32),
         scroll: (f32, f32),
+        /// The right stick's full vector.
+        right: (f32, f32),
         scroll_mode: bool,
     },
 }

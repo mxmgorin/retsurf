@@ -78,7 +78,7 @@ impl Wheel {
     /// What `input` means on the wheel.
     pub(super) fn read(&mut self, input: PadInput) -> Reading {
         match input {
-            PadInput::Stick(stick, threshold) => Reading::Aim(self.aim(stick, threshold)),
+            PadInput::Stick(stick, threshold) => Reading::Drawn(self.aim(stick, threshold)),
             _ => self.command(input).map_or(Reading::Pass, Reading::Command),
         }
     }
@@ -105,7 +105,11 @@ impl Wheel {
             PadInput::Dpad(dx, _) if dx > 0 => OskCommand::Press(Key::Right),
             PadInput::Start => OskCommand::Press(Key::Tab),
             PadInput::Select => OskCommand::Press(Key::Lang),
-            PadInput::Dpad(..) | PadInput::Nav(..) | PadInput::Stick(..) => return None,
+            PadInput::Dpad(..)
+            | PadInput::Nav(..)
+            | PadInput::Stick(..)
+            | PadInput::Move(..)
+            | PadInput::R3 => return None,
         };
         Some(cmd)
     }

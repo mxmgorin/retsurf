@@ -329,8 +329,9 @@ impl App {
                 aim,
                 stick,
                 scroll,
+                right,
                 scroll_mode,
-            } => self.route_analog(*aim, *stick, *scroll, *scroll_mode, out),
+            } => self.route_analog(*aim, *stick, *scroll, *right, *scroll_mode, out),
         }
     }
 
@@ -432,6 +433,7 @@ impl App {
         aim: (f32, f32),
         stick: (f32, f32),
         scroll: (f32, f32),
+        right: (f32, f32),
         scroll_mode: bool,
         out: &mut Vec<AppCommand>,
     ) {
@@ -456,6 +458,15 @@ impl App {
             cfg.edge_scroll,
         );
 
+        // The right stick carries the keyboard at cursor speed, and scrolls the
+        // page once it is pinned against an edge.
+        if right != (0.0, 0.0) {
+            let step = cursor_speed * dt;
+            let moved = self.osk_input(PadInput::Move(right.0 * step, right.1 * step), out);
+            if moved && edge_scroll {
+                self.edge_scroll(right, self.ui.osk_clipped(), scroll_speed * dt);
+            }
+        }
         // The keyboard may claim the stick.
         if self.osk_input(PadInput::Stick(stick, nav_threshold), out) {
             return;

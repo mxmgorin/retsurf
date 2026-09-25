@@ -60,17 +60,40 @@ fn panel() -> egui::Frame {
         .inner_margin(12.0)
 }
 
-/// The keyboard's area, anchored to the bottom and lifted by `bottom_inset`.
-fn osk_area(bottom_inset: f32) -> egui::Area {
+/// The keyboard's area at the bottom, lifted by `bottom_inset` and moved by its
+/// offset. Unconstrained: [`keep_on_screen`] reads the offset back from the rect.
+fn osk_area(osk: &Osk, bottom_inset: f32) -> egui::Area {
+    let (dx, dy) = osk.offset();
     egui::Area::new(egui::Id::new("osk"))
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -bottom_inset))
+        .anchor(
+            egui::Align2::CENTER_BOTTOM,
+            egui::vec2(dx, dy - bottom_inset),
+        )
+        .constrain(false)
+}
+
+/// Keep the `drawn` rect's centre on `screen`; whether the frame drew it past that.
+pub(super) fn keep_on_screen(osk: &mut Osk, drawn: egui::Rect, screen: egui::Rect) -> bool {
+    let (dx, dy) = osk.offset();
+    let home = drawn.center() - egui::vec2(dx, dy);
+    let min = screen.min - home;
+    let max = screen.max - home;
+    osk.set_bounds((min.x, min.y), (max.x, max.y))
 }
 
 /// Draw the on-screen keyboard: a dark rounded overlay anchored to the bottom.
 /// `bottom_inset` lifts it off that edge, to clear a bottom toolbar. Returns the
-/// drawn height (logical px), which the page scrolls a field of its own past.
-pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, layout: PadLayout, bottom_inset: f32) -> f32 {
+/// drawn rect.
+pub(super) fn add_osk(
+    ctx: &egui::Context,
+    osk: &Osk,
+    layout: PadLayout,
+    bottom_inset: f32,
+) -> egui::Rect {
+    // The auto-hide toolbar is a Foreground area too, and egui stacks those by
+    // last interaction, which the button-less wheel never has.
+    ctx.move_to_top(osk_layer());
     if osk.wheel() {
         return wheel::add_wheel(ctx, osk, layout, bottom_inset);
     }
@@ -94,7 +117,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, layout: PadLayout, bottom_
             .rect_filled(ctx.content_rect(), 0.0, SCRIM);
     }
 
-    let area = osk_area(bottom_inset).show(ctx, |ui| {
+    let area = osk_area(osk, bottom_inset).show(ctx, |ui| {
         panel().show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(KEY_GAP, 5.0);
             // The area sizes to the keys, so egui has no width to centre
@@ -159,5 +182,5 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, layout: PadLayout, bottom_
             ACCENT,
         );
     }
-    area.response.rect.height()
+    area.response.rect
 }

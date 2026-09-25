@@ -98,7 +98,7 @@ impl Gamepad {
     /// and to time pending holds and repeats (no SDL event marks either).
     pub fn is_active(&self) -> bool {
         self.aim() != (0.0, 0.0)
-            || self.right.vector().1 != 0.0
+            || self.right.vector() != (0.0, 0.0)
             || self.pads.next_deadline(Instant::now()).is_some()
     }
 
@@ -195,6 +195,7 @@ impl Gamepad {
             aim: self.aim(),
             stick: self.left.vector(),
             scroll: (0.0, self.right.vector().1),
+            right: self.right.vector(),
             scroll_mode: self.scroll_mode,
         }));
     }

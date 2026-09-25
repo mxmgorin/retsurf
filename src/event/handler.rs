@@ -799,6 +799,7 @@ fn pad_input(pad: Pad, pressed: bool) -> Option<PadInput> {
         Pad::R2 => PadInput::RightTrigger,
         Pad::Start => PadInput::Start,
         Pad::Select => PadInput::Select,
+        Pad::R3 => PadInput::R3,
         _ => {
             let (dx, dy) = pad.vector()?;
             PadInput::Dpad(dx, dy)

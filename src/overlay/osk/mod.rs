@@ -100,6 +100,10 @@ pub enum PadInput {
     Dpad(i32, i32),
     /// The left stick, and the deflection that counts as a push.
     Stick((f32, f32), f32),
+    /// Carry the keyboard this many logical px.
+    Move(f32, f32),
+    /// The right stick's click.
+    R3,
     Start,
     Select,
 }
@@ -109,8 +113,8 @@ pub enum PadInput {
 pub enum Reading {
     /// Not the keyboard's: the caller keeps its own meaning.
     Pass,
-    /// The stick moved the aim; `true` when that changed what is drawn.
-    Aim(bool),
+    /// Taken with no command; `true` when it changed what is drawn.
+    Drawn(bool),
     Command(OskCommand),
 }
 
@@ -143,6 +147,11 @@ pub struct Osk {
     named: bool,
     style: OskStyle,
     wheel: Wheel,
+    /// How far the keyboard was moved from its place at the bottom, in logical px.
+    offset: (f32, f32),
+    /// The offset's (min, max), as the last frame drew them.
+    bounds: Option<((f32, f32), (f32, f32))>,
+    clipped: (f32, f32),
 }
 
 impl Osk {
@@ -182,6 +191,9 @@ impl Osk {
             named: false,
             style: cfg.style,
             wheel: Wheel::new(pad_layout),
+            offset: (0.0, 0.0),
+            bounds: None,
+            clipped: (0.0, 0.0),
         }
     }
 
@@ -201,14 +213,53 @@ impl Osk {
 
     /// What a pad input means to the style on screen.
     pub fn read(&mut self, input: PadInput) -> Reading {
+        match input {
+            PadInput::Move(dx, dy) => {
+                let want = (self.offset.0 + dx, self.offset.1 + dy);
+                self.offset = self.bounded(want);
+                self.clipped = (want.0 - self.offset.0, want.1 - self.offset.1);
+                return Reading::Drawn(true);
+            }
+            PadInput::R3 => {
+                self.offset = (0.0, 0.0);
+                return Reading::Drawn(true);
+            }
+            _ => {}
+        }
         match self.wheel() {
             true => self.wheel.read(input),
             false => grid_command(input).map_or(Reading::Pass, Reading::Command),
         }
     }
 
+    pub fn offset(&self) -> (f32, f32) {
+        self.offset
+    }
+
+    /// The part of the last move the bounds held back.
+    pub fn clipped(&self) -> (f32, f32) {
+        self.clipped
+    }
+
+    /// Bound the offset between `min` and `max` from now on; whether that moved it.
+    pub fn set_bounds(&mut self, min: (f32, f32), max: (f32, f32)) -> bool {
+        self.bounds = Some((min, max));
+        let held = self.bounded(self.offset);
+        std::mem::replace(&mut self.offset, held) != held
+    }
+
+    fn bounded(&self, (x, y): (f32, f32)) -> (f32, f32) {
+        match self.bounds {
+            Some((min, max)) => (x.clamp(min.0, max.0), y.clamp(min.1, max.1)),
+            None => (x, y),
+        }
+    }
+
     /// Whether a button `input` means something to the style on screen.
     pub fn takes(&self, input: PadInput) -> bool {
+        if matches!(input, PadInput::Move(..) | PadInput::R3) {
+            return true;
+        }
         match self.wheel() {
             true => self.wheel.command(input),
             false => grid_command(input),
@@ -570,6 +621,8 @@ fn grid_command(input: PadInput) -> Option<OskCommand> {
         PadInput::Shoulder(_)
         | PadInput::Dpad(..)
         | PadInput::Stick(..)
+        | PadInput::Move(..)
+        | PadInput::R3
         | PadInput::Start
         | PadInput::Select => return None,
     };

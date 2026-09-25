@@ -156,15 +156,15 @@ fn paint_tab(
     painter.add(shape);
 }
 
-/// Draw the daisywheel; returns the drawn height.
+/// Draw the wheel; returns the drawn rect.
 pub(super) fn add_wheel(
     ctx: &egui::Context,
     osk: &Osk,
     layout: PadLayout,
     bottom_inset: f32,
-) -> f32 {
+) -> egui::Rect {
     let side = 2.0 * RIM_RADIUS;
-    let area = osk_area(bottom_inset + WHEEL_MARGIN).show(ctx, |ui| {
+    let area = osk_area(osk, bottom_inset + WHEEL_MARGIN).show(ctx, |ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
         let painter = ui.painter();
         let centre = rect.center();
@@ -244,5 +244,5 @@ pub(super) fn add_wheel(
         paint_tab(painter, centre, select, ("SELECT", &lang), TAB_FILL);
         paint_tab(painter, centre, start, ("START", "TAB"), TAB_FILL);
     });
-    area.response.rect.height() + WHEEL_MARGIN
+    area.response.rect
 }
