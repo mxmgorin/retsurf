@@ -10,7 +10,7 @@ use super::{
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
 use crate::overlay::hints::{HintInput, Sym};
-use crate::overlay::osk::OskCommand;
+use crate::overlay::osk::{Face, Key, OskCommand};
 use crate::ui::Focus;
 use std::time::{Duration, Instant};
 
@@ -36,7 +36,7 @@ impl App {
             InputCommand::Confirm(pressed) => match focus {
                 Focus::Osk => {
                     if *pressed {
-                        self.ui.osk(OskCommand::Activate, &self.browser, out);
+                        self.osk_face(Face::South, OskCommand::Activate, out);
                     }
                 }
                 Focus::Prompt => {
@@ -115,7 +115,7 @@ impl App {
                 Focus::Page => self.primary_action(*pressed),
             },
             InputCommand::Cancel => match focus {
-                Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
+                Focus::Osk => self.osk_face(Face::East, OskCommand::Hide, out),
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
@@ -163,6 +163,10 @@ impl App {
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
+                Focus::Osk if self.ui.osk_takes_face(Face::West) => {
+                    self.ui
+                        .osk(OskCommand::Face(Face::West), &self.browser, out)
+                }
                 Focus::Hints | Focus::Osk | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
@@ -217,6 +221,11 @@ impl App {
             // Discrete D-pad press: in hint mode it types a combo symbol;
             // everywhere else the D-pad already moves via the aim vector.
             InputCommand::DpadPress(dx, dy) => {
+                // The wheel owns the stick, so the D-pad is left to slide the caret.
+                if focus == Focus::Osk && self.ui.osk_wheel() && *dx != 0 {
+                    let key = if *dx < 0 { Key::Left } else { Key::Right };
+                    self.ui.osk(OskCommand::Press(key), &self.browser, out);
+                }
                 if focus == Focus::Hints && self.config.input.hint_badges {
                     if let Some(sym) = dpad_sym(*dx, *dy) {
                         self.hint_sym(sym);
@@ -234,7 +243,7 @@ impl App {
             // hints on the page. Unpinning is the dial editor's job, not a press.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
-                Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
+                Focus::Osk => self.osk_face(Face::North, OskCommand::Space, out),
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
                 Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
@@ -256,6 +265,11 @@ impl App {
                 // In the dial editor they reorder the focused pin (Left/Right
                 // moves the selection there).
                 Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
+                // Over the wheel they switch the layout, which has no key there.
+                Focus::Osk if self.ui.osk_wheel() => {
+                    self.ui
+                        .osk(OskCommand::Press(Key::Lang), &self.browser, out)
+                }
                 // In hint mode L1/R1 are combo symbols; with combos off they fall
                 // through to the page back/forward below.
                 Focus::Hints if self.config.input.hint_badges => {
@@ -321,6 +335,16 @@ impl App {
                 scroll_mode,
             } => self.route_analog(*aim, *stick, *scroll, *scroll_mode, out),
         }
+    }
+
+    /// A face button over the keyboard: the wheel's when it takes `face`,
+    /// otherwise `fallback`, its grid meaning.
+    fn osk_face(&mut self, face: Face, fallback: OskCommand, out: &mut Vec<AppCommand>) {
+        let cmd = match self.ui.osk_takes_face(face) {
+            true => OskCommand::Face(face),
+            false => fallback,
+        };
+        self.ui.osk(cmd, &self.browser, out);
     }
 
     /// Hint-mode directional input: hop the selection, or scroll a chunk and
@@ -439,6 +463,12 @@ impl App {
             cfg.hint_badges,
             cfg.edge_scroll,
         );
+
+        // The wheel aims with the stick alone; the D-pad arrives as presses.
+        if self.ui.focus() == Focus::Osk && self.ui.osk_wheel() {
+            self.ui.osk_aim(stick, nav_threshold);
+            return;
+        }
 
         // Over an overlay the stick becomes the same discrete `Nav` steps the
         // keyboard arrows emit, so both devices share one execution path.

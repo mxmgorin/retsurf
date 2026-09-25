@@ -38,7 +38,7 @@ pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use game_mode::GameModeConfig;
 pub use history::HistoryConfig;
 pub use input::{CursorMode, InputConfig};
-pub use osk::OskConfig;
+pub use osk::{OskConfig, OskStyle};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
 pub use update::{Channel, UpdateConfig};

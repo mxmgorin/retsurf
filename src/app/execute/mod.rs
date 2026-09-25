@@ -323,6 +323,7 @@ impl App {
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
+        self.ui.set_osk_style(self.config.osk.style);
         self.ui.menu.history_mut().set_config(&self.config.history);
         self.ui.set_memory_debug(
             self.config.debug.memory_overlay,

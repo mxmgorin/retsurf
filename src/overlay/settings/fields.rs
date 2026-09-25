@@ -6,7 +6,7 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, PageTheme,
+    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, OskStyle, PageTheme,
     ToolbarPosition,
 };
 
@@ -254,6 +254,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "Cursor speed",           float!(input.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
     f(S::Input,  "Input",     "Scroll speed",           float!(input.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
     f(S::Input,  "Input",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
+    f(S::Input,  "Input",     "Keyboard style",         choice!(osk.style: OskStyle), false),
     f(S::Input,  "Input",     "OSK stick threshold",    float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
     f(S::Input,  "Input",     "OSK repeat delay (ms)",  int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
     f(S::Input,  "Input",     "OSK repeat rate (ms)",   int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),

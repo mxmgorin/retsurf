@@ -6,9 +6,9 @@ use super::{dial_edit, home, settings, AppUi, OskField};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
-    config::AppConfig,
+    config::{AppConfig, OskStyle},
     overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
-    overlay::osk::{OskCommand, OskTarget},
+    overlay::osk::{Face, OskCommand, OskTarget},
 };
 use egui_sdl2::egui;
 
@@ -179,6 +179,28 @@ impl AppUi {
         // the keyboard away is how that is called off.
         if matches!(cmd, OskCommand::Hide) {
             self.input_maps.take_naming();
+        }
+    }
+
+    pub fn set_osk_style(&mut self, style: OskStyle) {
+        self.osk.set_style(style);
+    }
+
+    /// Whether the keyboard up is the wheel rather than the grid.
+    pub fn osk_wheel(&self) -> bool {
+        self.osk.wheel()
+    }
+
+    /// Whether `face` is the wheel's to handle right now (see
+    /// [`crate::overlay::osk::Osk::takes_face`]).
+    pub fn osk_takes_face(&self, face: Face) -> bool {
+        self.osk.takes_face(face)
+    }
+
+    /// Aim the wheel with the left stick, repainting when the group changes.
+    pub fn osk_aim(&mut self, stick: (f32, f32), threshold: f32) {
+        if self.osk.aim(stick, threshold) {
+            self.request_repaint();
         }
     }
 

@@ -11,16 +11,38 @@
 //!
 //! The **Fn** key swaps the characters for [`NAMED_ROWS`]: the page gets those
 //! as real events, a key picker ([`OskTarget::Capture`]) records them by name.
+//!
+//! `[osk] style = "wheel"` swaps the grid for a daisywheel: the left stick aims
+//! at one of [`WHEEL_SECTORS`] groups and a face button types the group's
+//! character in the matching corner ([`Face`]). With the stick centred the face
+//! buttons keep their grid meanings, except **A**, which flips between the
+//! layout's [`LayoutDef::wheel`] layers. A key picker always gets the grid.
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
-use crate::config::OskConfig;
+use crate::config::{OskConfig, OskStyle};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
 use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::f32::consts::TAU;
 use std::str::FromStr;
 use std::sync::LazyLock;
+
+/// The wheel's groups: one per stick direction, clockwise from up.
+pub const WHEEL_SECTORS: usize = 8;
+
+/// How far past a group's edge the stick must swing before the next group takes
+/// over, in groups, so a stick resting on a boundary does not flicker.
+const WHEEL_EDGE_HYSTERESIS: f32 = 0.15;
+
+/// The share of the aim threshold the stick may sag to and keep its group, so
+/// easing off while pressing a face button does not drop to the centre.
+const WHEEL_RELEASE: f32 = 0.6;
+
+/// One wheel layer: [`WHEEL_SECTORS`] groups of four characters, each in
+/// [`Face`] order.
+type WheelLayer = [&'static str; WHEEL_SECTORS];
 
 /// Where typed input goes: the egui address bar, a borrowed edit buffer, or the
 /// page's focused element (via Servo keyboard events). Picked per command by
@@ -65,6 +87,30 @@ pub enum OskCommand {
     Enter,
     /// Move the selection by one cell (`dx`, `dy` ∈ -1..=1).
     Move(i32, i32),
+    /// Apply `key` without selecting it.
+    Press(Key),
+    /// A face button on the wheel: types its corner of the aimed group, or with
+    /// the stick centred flips the layer on [`Face::South`] and does nothing else.
+    Face(Face),
+}
+
+/// A face button by where it sits, which is what the wheel labels: SDL names
+/// the south button `a` whatever the pad prints on it.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Face {
+    West,
+    North,
+    East,
+    South,
+}
+
+impl Face {
+    /// Index order of a group's characters in [`WheelLayer`].
+    pub const ALL: [Face; 4] = [Face::West, Face::North, Face::East, Face::South];
+
+    fn index(self) -> usize {
+        self as usize
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -171,6 +217,9 @@ struct LayoutDef {
     name: &'static str,
     rows: [&'static str; 4],
     shift_rows: [&'static str; 4],
+    /// The daisywheel's layers, cycled by **A** with the stick centred. Letters
+    /// shift by case only; anything else types as written.
+    wheel: [WheelLayer; 2],
 }
 
 /// The built-in layouts, selectable via `[osk] layouts` in the config. Adding
@@ -191,6 +240,14 @@ static LAYOUTS: &[LayoutDef] = &[
             "ASDFGHJKL:\"",
             "ZXCVBNM<>?",
         ],
+        wheel: [
+            [
+                "abcd", "efgh", "ijkl", "mnop", "qrst", "uvwx", "yz.,", "/:-@",
+            ],
+            [
+                "1234", "5678", "90-=", "!?#$", "%&*_", "()[]", "'\";+", "<>{}",
+            ],
+        ],
     },
     LayoutDef {
         name: "ru",
@@ -206,6 +263,15 @@ static LAYOUTS: &[LayoutDef] = &[
             "ФЫВАПРОЛДЖЭ",
             "ЯЧСМИТЬБЮ,",
         ],
+        // Thirty-three letters do not fit one layer; ё rides with the digits.
+        wheel: [
+            [
+                "абвг", "дежз", "ийкл", "мноп", "рсту", "фхцч", "шщъы", "ьэюя",
+            ],
+            [
+                "1234", "5678", "90.,", "ё!?-", "@#%&", "*_+=", "()\"'", "/:;№",
+            ],
+        ],
     },
 ];
 
@@ -216,13 +282,14 @@ pub struct Layout {
     pub name: &'static str,
     keys: Vec<Vec<Key>>,
     shift_map: HashMap<char, char>,
+    wheel: &'static [WheelLayer; 2],
 }
 
 impl Layout {
     /// Wrap a definition's character rows in the fixed frame: Backspace top
     /// right, Enter at the home-row right, Shift around the bottom letter row,
     /// Space along the bottom with the arrow cluster after it.
-    fn build(def: &LayoutDef) -> Self {
+    fn build(def: &'static LayoutDef) -> Self {
         let chars = |r: usize| def.rows[r].chars().map(Char);
         let keys = vec![
             chars(0).chain([Backspace]).collect(),
@@ -239,6 +306,7 @@ impl Layout {
             name: def.name,
             keys,
             shift_map,
+            wheel: &def.wheel,
         }
     }
 
@@ -287,6 +355,11 @@ pub struct Osk {
     picking: bool,
     /// Whether the picker is on [`NAMED_ROWS`] rather than the characters.
     named: bool,
+    style: OskStyle,
+    /// The wheel group the stick aims at; `None` while it is centred.
+    sector: Option<usize>,
+    /// Index into the active layout's [`LayoutDef::wheel`].
+    layer: usize,
 }
 
 impl Osk {
@@ -324,6 +397,75 @@ impl Osk {
             grid: OnceCell::new(),
             picking: false,
             named: false,
+            style: cfg.style,
+            sector: None,
+            layer: 0,
+        }
+    }
+
+    pub fn set_style(&mut self, style: OskStyle) {
+        self.style = style;
+        self.sector = None;
+    }
+
+    /// Whether the wheel is up rather than the grid.
+    pub fn wheel(&self) -> bool {
+        self.style == OskStyle::Wheel && !self.picking
+    }
+
+    /// The aimed group, if any.
+    pub fn sector(&self) -> Option<usize> {
+        self.sector
+    }
+
+    /// Whether `face` means [`OskCommand::Face`] right now rather than its grid
+    /// command.
+    pub fn takes_face(&self, face: Face) -> bool {
+        self.wheel() && (self.sector.is_some() || face == Face::South)
+    }
+
+    /// Aim the wheel with a stick vector (SDL axes, y down); `threshold` is the
+    /// deflection that picks a group. Returns whether the aimed group changed.
+    pub fn aim(&mut self, (x, y): (f32, f32), threshold: f32) -> bool {
+        let len = x.hypot(y);
+        let hold = self.sector.is_some() && len >= threshold * WHEEL_RELEASE;
+        let sector = if len < threshold && !hold {
+            None
+        } else {
+            let n = WHEEL_SECTORS as f32;
+            let pos = x.atan2(-y).rem_euclid(TAU) / TAU * n;
+            match self.sector {
+                Some(s) if circular_distance(pos, s as f32, n) <= 0.5 + WHEEL_EDGE_HYSTERESIS => {
+                    Some(s)
+                }
+                _ => Some(pos.round() as usize % WHEEL_SECTORS),
+            }
+        };
+        let changed = sector != self.sector;
+        self.sector = sector;
+        changed
+    }
+
+    /// The character `face` types in `sector` of the current layer, under the
+    /// current Shift and Caps.
+    pub fn wheel_char(&self, sector: usize, face: Face) -> char {
+        let group = self.layout().wheel[self.layer][sector];
+        let c = group
+            .chars()
+            .nth(face.index())
+            .expect("every wheel group holds one character per face");
+        if c.is_alphabetic() && (self.shift() ^ self.caps) {
+            c.to_uppercase().next().unwrap_or(c)
+        } else {
+            c
+        }
+    }
+
+    /// What centred **A** flips to, as its label.
+    pub fn next_layer_label(&self) -> &'static str {
+        match self.layer {
+            0 => "123",
+            _ => "abc",
         }
     }
 
@@ -337,6 +479,7 @@ impl Osk {
     /// Take the keyboard down, dropping the grid with it.
     pub fn hide(&mut self) {
         self.visible = false;
+        self.sector = None;
         self.grid.take();
     }
 
@@ -425,6 +568,7 @@ impl Osk {
                 self.shift_once = false;
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
+                self.layer = 0;
             }
             OskCommand::Hide => self.hide(),
             OskCommand::Activate => self.activate(target, browser, commands),
@@ -433,6 +577,19 @@ impl Osk {
             OskCommand::Shift(held) => self.shift_held = held,
             OskCommand::Enter => self.enter(target, browser, commands),
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
+            OskCommand::Press(key) => self.press(key, target, browser, commands),
+            OskCommand::Face(face) => match self.sector {
+                Some(sector) => {
+                    let shift = self.shift();
+                    let c = self.wheel_char(sector, face);
+                    self.input_char(target, c, shift, browser);
+                    self.shift_once = false;
+                }
+                None if face == Face::South => {
+                    self.layer = (self.layer + 1) % self.layout().wheel.len()
+                }
+                None => {}
+            },
         }
     }
 
@@ -459,15 +616,26 @@ impl Osk {
         self.col = (self.col as i32 + dx).clamp(0, cols - 1) as usize;
     }
 
-    /// Apply the selected key. Typed input goes to whatever `target` points at
-    /// (address bar / prompt dialog / the page, via Servo keyboard events).
+    /// Apply the selected key.
     fn activate(
         &mut self,
         target: OskTarget,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        match self.current() {
+        self.press(self.current(), target, browser, commands);
+    }
+
+    /// Apply `key`. Typed input goes to whatever `target` points at (address
+    /// bar / prompt dialog / the page, via Servo keyboard events).
+    fn press(
+        &mut self,
+        key: Key,
+        target: OskTarget,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        match key {
             // The on-screen Shift key arms a one-shot Shift (toggle so a mis-tap
             // can be undone); L2 is the held modifier and lives in `shift_held`.
             Shift => self.shift_once = !self.shift_once,
@@ -490,7 +658,7 @@ impl Osk {
             // Picking: the frame keys name themselves, which is how a row gets
             // an arrow or Tab without the grid carrying one.
             Tab | Left | Right | Up | Down if matches!(target, OskTarget::Capture(_)) => {
-                let name = match self.current() {
+                let name = match key {
                     Tab => "Tab",
                     Left => "ArrowLeft",
                     Right => "ArrowRight",
@@ -652,6 +820,12 @@ impl Osk {
     }
 }
 
+/// The distance between two positions on a circle `n` long.
+fn circular_distance(a: f32, b: f32, n: f32) -> f32 {
+    let d = (a - b).rem_euclid(n);
+    d.min(n - d)
+}
+
 /// Whether `<`/`>` move the caret for this target: the editable fields that
 /// render an egui caret (not Page, not the caret-less Settings rows).
 fn caret_field(target: &OskTarget) -> bool {
@@ -770,6 +944,95 @@ mod tests {
         osk.toggle_named();
         osk.set_picking(false);
         assert!(osk.named);
+    }
+
+    /// A short group is a face button that panics, a long one a character
+    /// nothing can type.
+    #[test]
+    fn every_wheel_group_has_one_character_per_face() {
+        for def in LAYOUTS {
+            for group in def.wheel.iter().flatten() {
+                assert_eq!(
+                    group.chars().count(),
+                    Face::ALL.len(),
+                    "{} {group}",
+                    def.name
+                );
+            }
+        }
+    }
+
+    fn wheel() -> Osk {
+        let mut osk = osk();
+        osk.set_style(OskStyle::Wheel);
+        osk
+    }
+
+    #[test]
+    fn the_stick_picks_groups_clockwise_from_up() {
+        let mut osk = wheel();
+        let dirs = [
+            (0.0, -1.0),
+            (0.7, -0.7),
+            (1.0, 0.0),
+            (0.7, 0.7),
+            (0.0, 1.0),
+            (-0.7, 0.7),
+            (-1.0, 0.0),
+            (-0.7, -0.7),
+        ];
+        for (sector, dir) in dirs.into_iter().enumerate() {
+            osk.aim(dir, 0.5);
+            assert_eq!(osk.sector(), Some(sector), "{dir:?}");
+        }
+        osk.aim((0.0, 0.0), 0.5);
+        assert_eq!(osk.sector(), None);
+    }
+
+    /// A stick resting on the up/up-right boundary must not flicker between them.
+    #[test]
+    fn a_group_holds_past_its_edge() {
+        let mut osk = wheel();
+        osk.aim((0.0, -1.0), 0.5);
+        let just_past = (TAU / WHEEL_SECTORS as f32) * 0.55;
+        osk.aim((just_past.sin(), -just_past.cos()), 0.5);
+        assert_eq!(osk.sector(), Some(0));
+    }
+
+    /// Easing off while pressing must not turn a letter into a centred press.
+    #[test]
+    fn a_sagging_stick_keeps_its_group() {
+        let mut osk = wheel();
+        osk.aim((1.0, 0.0), 0.5);
+        osk.aim((0.4, 0.0), 0.5);
+        assert_eq!(osk.sector(), Some(2));
+        assert!(osk.takes_face(Face::East));
+    }
+
+    #[test]
+    fn centred_only_south_belongs_to_the_wheel() {
+        let osk = wheel();
+        assert!(osk.takes_face(Face::South));
+        assert!(!osk.takes_face(Face::North));
+        assert!(!osk.takes_face(Face::West));
+        assert!(!osk.takes_face(Face::East));
+    }
+
+    /// A key picker needs the named keys the wheel cannot reach.
+    #[test]
+    fn a_picker_gets_the_grid() {
+        let mut osk = wheel();
+        osk.set_picking(true);
+        assert!(!osk.wheel());
+        assert!(!osk.takes_face(Face::South));
+    }
+
+    #[test]
+    fn shift_capitalises_wheel_letters_only() {
+        let mut osk = wheel();
+        osk.shift_once = true;
+        assert_eq!(osk.wheel_char(0, Face::West), 'A');
+        assert_eq!(osk.wheel_char(6, Face::East), '.');
     }
 
     /// A cell valid on one grid can be past the end of another.
