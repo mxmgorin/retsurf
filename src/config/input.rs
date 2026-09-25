@@ -42,6 +42,9 @@ pub struct InputConfig {
     /// Read A/B and X/Y across from how the pad reports them, for a pad whose
     /// printed A arrives as B.
     pub swap_face_buttons: bool,
+    /// Whether a focused field raises Android's system keyboard. Off leaves
+    /// typing to the on-screen keyboard.
+    pub system_keyboard: bool,
     /// Whether a page may rumble the pad (the Gamepad API's `playEffect`). Off
     /// also stops advertising the capability to newly loaded documents.
     pub haptics: bool,
@@ -64,6 +67,7 @@ impl Default for InputConfig {
             haptics: true,
             pad_layout: PadLayout::default(),
             swap_face_buttons: false,
+            system_keyboard: true,
         }
     }
 }

@@ -299,8 +299,9 @@ impl App {
             #[cfg(target_os = "android")]
             {
                 let osk_up = self.ui.focus() == crate::ui::Focus::Osk;
-                let want =
-                    !osk_up && (self.ui.wants_keyboard() || self.browser.text_input_focused());
+                let want = self.config.input.system_keyboard
+                    && !osk_up
+                    && (self.ui.wants_keyboard() || self.browser.text_input_focused());
                 crate::platform::window::set_text_input(want);
             }
 
