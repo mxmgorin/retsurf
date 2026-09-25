@@ -19,6 +19,8 @@ pub enum AppCommand {
     Input(InputCommand),
     Menu(MenuAction),
     ToggleBookmark,
+    /// Put the caret in the address bar, with the keyboard up for a pad.
+    FocusAddressBar,
     /// Close the focused tab. Closing the last one leaves a fresh tab open.
     CloseTab,
     GameMode,
@@ -51,6 +53,7 @@ impl AppCommand {
             AppCommand::Browser(_)
             | AppCommand::Menu(_)
             | AppCommand::ToggleBookmark
+            | AppCommand::FocusAddressBar
             | AppCommand::CloseTab
             | AppCommand::Settings(_) => false,
         }

@@ -13,6 +13,7 @@ use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::Task;
+use crate::ui::Focus;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
@@ -35,6 +36,7 @@ impl App {
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
+            AppCommand::FocusAddressBar => self.focus_address_bar(out),
             AppCommand::CloseTab => self.close_tab_at(self.browser.active_tab()),
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
@@ -341,6 +343,22 @@ impl App {
         // The frame cap takes effect on the very next frame, which is what makes
         // it worth tuning by hand on a device.
         self.window.set_max_fps(self.config.display.max_fps);
+    }
+
+    /// Put the caret where an address is typed, over the page or the start page
+    /// only; the start page's search field stands in for the address bar there.
+    fn focus_address_bar(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.focus() {
+            Focus::Home => self.ui.home.focus_search(),
+            Focus::Page | Focus::Hints => {
+                self.ui.hints.hide();
+                self.ui.focus_address_bar();
+            }
+            _ => return,
+        }
+        if !self.ui.last_input_keyboard() {
+            self.ui.osk(OskCommand::Show, &self.browser, out);
+        }
     }
 
     /// A on the start page: open the focused speed-dial tile, open the speed-dial

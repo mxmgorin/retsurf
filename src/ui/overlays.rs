@@ -440,6 +440,16 @@ impl AppUi {
         self.hints.push_label(Label::Key(c))
     }
 
+    pub fn focus_address_bar(&mut self) {
+        let id = egui::Id::new(super::ids::LOCATION);
+        self.egui_ctx.memory_mut(|m| m.request_focus(id));
+    }
+
+    /// Whether the latest input came from the keyboard rather than a pad.
+    pub fn last_input_keyboard(&self) -> bool {
+        self.last_input_keyboard
+    }
+
     /// Whether the address-bar text field currently holds keyboard focus (also
     /// guards plain-key keyboard shortcuts in the event handler).
     pub fn address_bar_focused(&self) -> bool {
