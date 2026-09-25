@@ -40,7 +40,7 @@ pub use game_mode::GameModeConfig;
 pub use history::HistoryConfig;
 pub use input::{CursorMode, InputConfig};
 pub use osk::{OskConfig, OskStyle};
-pub use pad_layout::PadLayout;
+pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
 pub use update::{Channel, UpdateConfig};

@@ -8,14 +8,15 @@ use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
-    command::{AppCommand, GameMapEditAction, SettingsAction},
+    command::{AppCommand, GameMapEditAction, InputCommand, SettingsAction},
     config::InputConfig,
     event::gamepad::labelled_pad,
     event::window::handle_window,
+    overlay::osk::PadInput,
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
-use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, Keymap};
+use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, trigger_of, Keymap};
 use inputbind::{Bindings, Capture, Captured, Pad, PadGesture, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
@@ -525,8 +526,7 @@ impl AppEventHandler {
             if key.pressed {
                 ui.note_input_keyboard(false);
             }
-            self.gamepad
-                .on_pad(pad, key.pressed, &self.bindings, commands);
+            self.pad_edge(pad, key.pressed, ui, commands);
             return;
         }
         // Remember the input came from the keyboard so hint mode picks
@@ -543,6 +543,22 @@ impl AppEventHandler {
 
     /// One pad-button edge, either direction — the controller twin of
     /// [`Self::on_key_event`].
+    /// One pad edge: the keyboard's while it has focus and wants it, the
+    /// bindings' otherwise. A press the pad machine saw is released there too.
+    fn pad_edge(
+        &mut self,
+        pad: Pad,
+        pressed: bool,
+        ui: &mut AppUi,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        let owed = !pressed && self.gamepad.held().contains(&pad);
+        if !owed && osk_claims(pad, pressed, ui, commands) {
+            return;
+        }
+        self.gamepad.on_pad(pad, pressed, &self.bindings, commands);
+    }
+
     fn on_pad_button(
         &mut self,
         which: u32,
@@ -563,8 +579,9 @@ impl AppEventHandler {
         self.to_page(browser, which, |slot| {
             gamepad_api::button(slot, button, pressed)
         });
-        self.gamepad
-            .on_button(button, pressed, &self.bindings, commands);
+        if let Some(pad) = labelled_pad(button, self.gamepad.cfg.swap_face_buttons) {
+            self.pad_edge(pad, pressed, ui, commands);
+        }
     }
 
     fn handle_event(
@@ -718,7 +735,16 @@ impl AppEventHandler {
                     return;
                 }
                 self.to_page(browser, which, |slot| gamepad_api::axis(slot, axis, value));
-                self.gamepad.on_axis(axis, value, &self.bindings, commands);
+                if trigger_of(axis).is_some() {
+                    let (released, pressed) = self.gamepad.trigger_edges(axis, value);
+                    for (pad, down) in [(released, false), (pressed, true)] {
+                        if let Some(pad) = pad {
+                            self.pad_edge(pad, down, ui, commands);
+                        }
+                    }
+                    return;
+                }
+                self.gamepad.on_axis(axis, value);
             }
             Event::ControllerButtonDown { which, button, .. } => {
                 self.on_pad_button(which, button, true, ui, browser, commands);
@@ -738,6 +764,46 @@ impl AppEventHandler {
             _ => {}
         }
     }
+}
+
+/// Offer a pad edge to the keyboard ahead of the bindings; whether it took it.
+fn osk_claims(pad: Pad, pressed: bool, ui: &mut AppUi, commands: &mut Vec<AppCommand>) -> bool {
+    let Some(input) = pad_input(pad, pressed) else {
+        return false;
+    };
+    // Decided on the press's meaning, so a release follows its press.
+    let press = pad_input(pad, true).expect("a pad with a release edge has a press edge");
+    if !ui.osk_takes(press) {
+        return false;
+    }
+    let edge = match input {
+        PadInput::LeftTrigger(_) => true,
+        _ => pressed,
+    };
+    if edge {
+        commands.push(AppCommand::Input(InputCommand::OskButton(input)));
+    }
+    true
+}
+
+/// The keyboard's reading of a pad edge; `None` for pads it has no use for.
+fn pad_input(pad: Pad, pressed: bool) -> Option<PadInput> {
+    Some(match pad {
+        Pad::A => PadInput::A,
+        Pad::B => PadInput::B,
+        Pad::X => PadInput::X,
+        Pad::Y => PadInput::Y,
+        Pad::L1 => PadInput::Shoulder(-1),
+        Pad::R1 => PadInput::Shoulder(1),
+        Pad::L2 => PadInput::LeftTrigger(pressed),
+        Pad::R2 => PadInput::RightTrigger,
+        Pad::Start => PadInput::Start,
+        Pad::Select => PadInput::Select,
+        _ => {
+            let (dx, dy) = pad.vector()?;
+            PadInput::Dpad(dx, dy)
+        }
+    })
 }
 
 /// Anything the keyboard produces, including the text edge SDL derives from it.

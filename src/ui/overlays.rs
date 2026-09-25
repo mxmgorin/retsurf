@@ -8,7 +8,7 @@ use crate::{
     command::{AppCommand, SettingsAction},
     config::{AppConfig, OskStyle, PadLayout},
     overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
-    overlay::osk::{Face, FacePlaces, OskCommand, OskTarget},
+    overlay::osk::{OskCommand, OskTarget, PadInput, Reading},
 };
 use egui_sdl2::egui;
 
@@ -191,26 +191,33 @@ impl AppUi {
         self.osk.set_pad_layout(layout);
     }
 
-    /// Where the face buttons sit, by the letter they read as.
-    pub fn face_places(&self) -> FacePlaces {
-        self.osk.places()
+    /// Whether the keyboard has focus and a button `input` means something to it.
+    pub fn osk_takes(&mut self, input: PadInput) -> bool {
+        self.osk.set_picking(self.map_edit.picking().is_some());
+        self.focus() == Focus::Osk && self.osk.takes(input)
     }
 
-    /// Whether the keyboard up is the wheel rather than the grid.
-    pub fn osk_wheel(&self) -> bool {
-        self.osk.wheel()
-    }
-
-    /// Whether `face` is the wheel's to handle right now (see
-    /// [`crate::overlay::osk::Osk::takes_face`]).
-    pub fn osk_takes_face(&self, face: Face) -> bool {
-        self.osk.takes_face(face)
-    }
-
-    /// Aim the wheel with the left stick, repainting when the group changes.
-    pub fn osk_aim(&mut self, stick: (f32, f32), threshold: f32) {
-        if self.osk.aim(stick, threshold) {
-            self.request_repaint();
+    /// Offer the keyboard a pad input; whether it took it.
+    pub fn osk_input(
+        &mut self,
+        input: PadInput,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
+        self.osk.set_picking(self.map_edit.picking().is_some());
+        match self.osk.read(input) {
+            Reading::Pass => false,
+            // The analog tick asks for no repaint of its own.
+            Reading::Aim(changed) => {
+                if changed {
+                    self.request_repaint();
+                }
+                true
+            }
+            Reading::Command(cmd) => {
+                self.osk(cmd, browser, commands);
+                true
+            }
         }
     }
 

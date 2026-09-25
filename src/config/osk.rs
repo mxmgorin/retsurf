@@ -30,6 +30,6 @@ token_enum! {
         Grid => "grid", "Grid",
         /// The left stick picks one of eight groups, a face button one of its
         /// four characters. Needs an analog stick.
-        Wheel => "wheel", "Daisy wheel",
+        Wheel => "wheel", "Wheel",
     }
 }

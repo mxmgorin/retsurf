@@ -14,8 +14,8 @@
 //! the spatial selection frame stays so confirm still works.
 
 use super::theme::ACCENT;
+use crate::config::FaceLabels;
 use crate::overlay::hints::{Hints, Label, Sym};
-use crate::overlay::osk::FaceLabels;
 use egui_sdl2::egui;
 
 /// Height of one combo-symbol cell (logical px); the badge is a row of these.

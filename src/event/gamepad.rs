@@ -118,27 +118,8 @@ impl Gamepad {
         self.actions = actions;
     }
 
-    pub fn on_axis(
-        &mut self,
-        axis: Axis,
-        value: i16,
-        bindings: &Bindings<Action>,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        // L2/R2 are throttle-style axes. They feed the pad machine too, so
-        // `l2`/`r2` gestures are bindable like any other.
-        if let Some(pad) = trigger_of(axis) {
-            let edges = self.trigger_edges(axis, value);
-            let right = pad == Pad::R2;
-            for (edge, pressed) in [(edges.0, false), (edges.1, true)] {
-                if edge.is_some() {
-                    commands.push(AppCommand::Input(InputCommand::Trigger { right, pressed }));
-                }
-            }
-            self.feed_edges(edges, bindings, commands);
-            return;
-        }
-
+    /// A stick axis; the triggers arrive as pad edges ([`Self::trigger_edges`]).
+    pub fn on_axis(&mut self, axis: Axis, value: i16) {
         // The sticks drive the cursor and the scroll, so their direction edges
         // are dropped; the deadzone is the Stick's and applies to the vector.
         let value = axis_value(value);
@@ -148,35 +129,6 @@ impl Gamepad {
             Axis::RightX => _ = self.right.axis(true, value),
             Axis::RightY => _ = self.right.axis(false, value),
             _ => {}
-        }
-    }
-
-    /// Feed a (released, pressed) edge pair to the pad machine, release first so
-    /// a change ends the old hold before starting the new one.
-    fn feed_edges(
-        &mut self,
-        edges: (Option<Pad>, Option<Pad>),
-        bindings: &Bindings<Action>,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        let (released, pressed) = edges;
-        if let Some(pad) = released {
-            self.press(pad, false, bindings, commands);
-        }
-        if let Some(pad) = pressed {
-            self.press(pad, true, bindings, commands);
-        }
-    }
-
-    pub fn on_button(
-        &mut self,
-        button: Button,
-        pressed: bool,
-        bindings: &Bindings<Action>,
-        commands: &mut Vec<AppCommand>,
-    ) {
-        if let Some(pad) = labelled_pad(button, self.cfg.swap_face_buttons) {
-            self.on_pad(pad, pressed, bindings, commands);
         }
     }
 
@@ -248,8 +200,7 @@ impl Gamepad {
     }
 }
 
-/// The pad `button` reads as. SDL names a controller's buttons by position;
-/// `swap` reads A/B and X/Y across, for a pad that prints A on the east.
+/// The pad `button` reads as; `swap` exchanges A/B and X/Y.
 pub fn labelled_pad(button: Button, swap: bool) -> Option<Pad> {
     let pad = pad_of(button)?;
     Some(match (swap, pad) {
@@ -276,7 +227,6 @@ fn cadence_of(cfg: &InputConfig) -> Cadence {
 mod tests {
     use super::*;
 
-    /// Swapped, the east button is A, so A confirms from where it is printed.
     #[test]
     fn swap_reads_the_face_buttons_across() {
         let read = |button| labelled_pad(button, true);

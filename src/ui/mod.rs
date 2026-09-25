@@ -37,7 +37,7 @@ use crate::{
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::Menu,
-    overlay::osk::{FaceLabels, Osk},
+    overlay::osk::Osk,
     overlay::prompt::Prompt,
     overlay::settings::Settings,
     platform::window::AppWindow,
@@ -513,7 +513,7 @@ impl AppUi {
         self.schedule_idle_repaints(cursor_visible);
 
         let snapshot = self.frame_snapshot(browser);
-        let face = FaceLabels::of(self.pad_layout);
+        let face = self.pad_layout.labels();
         // Android's system bars follow the chrome: whatever hides the toolbar
         // wants the whole panel.
         #[cfg(target_os = "android")]

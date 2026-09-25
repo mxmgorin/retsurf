@@ -5,9 +5,9 @@
 
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
-use crate::overlay::osk::FaceLabels;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::cell::RefCell;

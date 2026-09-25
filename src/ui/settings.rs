@@ -6,8 +6,8 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
+use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::osk::FaceLabels;
 use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;

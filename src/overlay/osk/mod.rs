@@ -12,37 +12,25 @@
 //! The **Fn** key swaps the characters for [`NAMED_ROWS`]: the page gets those
 //! as real events, a key picker ([`OskTarget::Capture`]) records them by name.
 //!
-//! `[osk] style = "wheel"` swaps the grid for a daisywheel: the left stick aims
-//! at one of [`WHEEL_SECTORS`] groups and a face button types the group's
-//! character in the matching corner ([`Face`]). With the stick centred the face
-//! buttons keep their grid meanings, except **A**, which flips between the
-//! layout's [`LayoutDef::wheel`] layers. A key picker always gets the grid.
+//! `[osk] style = "wheel"` swaps the grid for a wheel ([`wheel`]); a key
+//! picker always gets the grid. Pad intents arrive as [`PadInput`] and the style
+//! on screen decides their meaning ([`Osk::read`]).
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
-use crate::config::{OskConfig, OskStyle, PadLayout};
+use crate::config::{Face, OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
+use layout::{Layout, LayoutDef, LAYOUTS, NAMED_KEYS};
 use std::cell::OnceCell;
-use std::collections::HashMap;
-use std::f32::consts::TAU;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use wheel::Wheel;
 
-/// The wheel's groups: one per stick direction, clockwise from up.
-pub const WHEEL_SECTORS: usize = 8;
+mod layout;
+pub mod wheel;
 
-/// How far past a group's edge the stick must swing before the next group takes
-/// over, in groups, so a stick resting on a boundary does not flicker.
-const WHEEL_EDGE_HYSTERESIS: f32 = 0.15;
-
-/// The share of the aim threshold the stick may sag to and keep its group, so
-/// easing off while pressing a face button does not drop to the centre.
-const WHEEL_RELEASE: f32 = 0.6;
-
-/// One wheel layer: [`WHEEL_SECTORS`] groups of four characters, each in
-/// [`Face`] order.
-type WheelLayer = [&'static str; WHEEL_SECTORS];
+pub use layout::Key;
+use Key::*;
 
 /// Where typed input goes: the egui address bar, a borrowed edit buffer, or the
 /// page's focused element (via Servo keyboard events). Picked per command by
@@ -72,7 +60,7 @@ pub enum OskTarget<'a> {
 /// An operation on the on-screen keyboard. The router produces these from the
 /// contextual buttons, the stick and the dedicated keys, then dispatches them
 /// via [`Osk::handle`].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum OskCommand {
     Show,
     Hide,
@@ -89,300 +77,41 @@ pub enum OskCommand {
     Move(i32, i32),
     /// Apply `key` without selecting it.
     Press(Key),
-    /// A face button on the wheel: types its corner of the aimed group, or with
-    /// the stick centred flips the layer on A's face and does nothing else.
+    /// A wheel face press: the aimed group's corner, or centred on A the next layer.
     Face(Face),
 }
 
-/// A face button by where it sits, which is what the wheel labels: SDL names
-/// the south button `a` whatever the pad prints on it.
+/// A gamepad input while the keyboard has focus. A/B/X/Y also carry the confirm,
+/// cancel, keyboard and hints actions.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Face {
-    West,
-    North,
-    East,
-    South,
+pub enum PadInput {
+    A,
+    B,
+    X,
+    Y,
+    /// L1 (-1) or R1 (+1).
+    Shoulder(i32),
+    /// L2 held or released.
+    LeftTrigger(bool),
+    RightTrigger,
+    /// One navigation step.
+    Nav(i32, i32),
+    /// A discrete D-pad press.
+    Dpad(i32, i32),
+    /// The left stick, and the deflection that counts as a push.
+    Stick((f32, f32), f32),
+    Start,
+    Select,
 }
 
-/// Where each face button sits, by the Xbox letter it reads as.
+/// What the keyboard makes of a [`PadInput`].
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub struct FacePlaces {
-    pub a: Face,
-    pub b: Face,
-    pub x: Face,
-    pub y: Face,
-}
-
-impl FacePlaces {
-    /// Where a `layout` pad prints each letter.
-    pub fn of(layout: PadLayout) -> Self {
-        match layout {
-            PadLayout::Nintendo => FacePlaces {
-                a: Face::East,
-                b: Face::South,
-                x: Face::North,
-                y: Face::West,
-            },
-            PadLayout::Xbox | PadLayout::PlayStation => FacePlaces {
-                a: Face::South,
-                b: Face::East,
-                x: Face::West,
-                y: Face::North,
-            },
-        }
-    }
-}
-
-/// What each face button prints, named by the Xbox letter it reads as.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct FaceLabels {
-    pub a: &'static str,
-    pub b: &'static str,
-    pub x: &'static str,
-    pub y: &'static str,
-}
-
-impl FaceLabels {
-    pub fn of(layout: PadLayout) -> Self {
-        match layout {
-            PadLayout::Nintendo | PadLayout::Xbox => FaceLabels {
-                a: "A",
-                b: "B",
-                x: "X",
-                y: "Y",
-            },
-            PadLayout::PlayStation => FaceLabels {
-                a: egui_phosphor::bold::X,
-                b: egui_phosphor::bold::CIRCLE,
-                x: egui_phosphor::bold::SQUARE,
-                y: egui_phosphor::bold::TRIANGLE,
-            },
-        }
-    }
-}
-
-impl Face {
-    /// Index order of a group's characters in [`WheelLayer`].
-    pub const ALL: [Face; 4] = [Face::West, Face::North, Face::East, Face::South];
-
-    fn index(self) -> usize {
-        self as usize
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Key {
-    Char(char),
-    Tab,
-    Caps,
-    Space,
-    Backspace,
-    Shift,
-    Left,
-    Up,
-    Down,
-    Right,
-    Enter,
-    /// Cycle to the next enabled layout; labeled with the current one's name.
-    Lang,
-    /// Empty the field being typed into.
-    Clear,
-    Hide,
-    /// Swap between the characters and [`NAMED_ROWS`]; labeled with the one it
-    /// leads to.
-    Fn,
-    /// `label` is the cell, `name` the `keyboard_types` spelling it sends.
-    Named {
-        label: &'static str,
-        name: &'static str,
-    },
-}
-
-impl Key {
-    /// The gamepad button that directly triggers this key (the router's
-    /// mapping), shown as a corner badge so the shortcuts are discoverable;
-    /// keys without a dedicated button use D-pad + **A**.
-    pub fn button_hint(self, face: FaceLabels) -> Option<&'static str> {
-        match self {
-            Key::Backspace => Some(face.x),
-            Key::Space => Some(face.y),
-            Key::Shift => Some("L2"),
-            Key::Enter => Some("R2"),
-            Key::Hide => Some(face.b),
-            _ => None,
-        }
-    }
-}
-
-use Key::*;
-
-/// The keys no character grid can carry, laid out like a keyboard's. Names are
-/// `NamedKey` spellings; their `code` comes from [`code_for_named`].
-static NAMED_ROWS: &[&[(&str, &str)]] = &[
-    &[
-        ("Esc", "Escape"),
-        ("F1", "F1"),
-        ("F2", "F2"),
-        ("F3", "F3"),
-        ("F4", "F4"),
-        ("F5", "F5"),
-        ("F6", "F6"),
-        ("F7", "F7"),
-        ("F8", "F8"),
-        ("F9", "F9"),
-        ("F10", "F10"),
-        ("F11", "F11"),
-        ("F12", "F12"),
-    ],
-    // The navigation cluster in its usual 3x2.
-    &[("Ins", "Insert"), ("Home", "Home"), ("PgUp", "PageUp")],
-    &[("Del", "Delete"), ("End", "End"), ("PgDn", "PageDown")],
-    // Bare modifiers, which games bind to run and crouch. Not the map's
-    // `shift`/`ctrl`/`alt` flags: those qualify another key.
-    &[
-        ("Shift", "Shift"),
-        ("Ctrl", "Control"),
-        ("Alt", "Alt"),
-        ("Meta", "Meta"),
-    ],
-];
-
-/// The row every grid ends with. The keyboard is anchored to the bottom, so
-/// keeping it identical leaves these keys put when Fn swaps what is above.
-fn frame_row() -> Vec<Key> {
-    vec![Lang, Fn, Clear, Space, Left, Up, Down, Right, Hide]
-}
-
-/// [`NAMED_ROWS`] over that same frame row; identical for every `Osk`, so it is
-/// built once.
-static NAMED_KEYS: LazyLock<Vec<Vec<Key>>> = LazyLock::new(|| {
-    NAMED_ROWS
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|(label, name)| Named { label, name })
-                .collect()
-        })
-        .chain([frame_row()])
-        .collect()
-});
-
-/// A built-in layout's data: the four character rows between the fixed frame
-/// keys, each mirrored by its shifted variant (position by position).
-struct LayoutDef {
-    /// Config name (matched case-insensitively) and the Lang key's label.
-    name: &'static str,
-    rows: [&'static str; 4],
-    shift_rows: [&'static str; 4],
-    /// The daisywheel's layers, cycled by **A** with the stick centred. Letters
-    /// shift by case only; anything else types as written.
-    wheel: [WheelLayer; 2],
-}
-
-/// The built-in layouts, selectable via `[osk] layouts` in the config. Adding
-/// a language is adding an entry here: four rows of characters arranged like
-/// the physical keyboard, plus their shifted forms.
-static LAYOUTS: &[LayoutDef] = &[
-    LayoutDef {
-        name: "en",
-        rows: [
-            "`1234567890-=",
-            "qwertyuiop[]\\",
-            "asdfghjkl;'",
-            "zxcvbnm,./",
-        ],
-        shift_rows: [
-            "~!@#$%^&*()_+",
-            "QWERTYUIOP{}|",
-            "ASDFGHJKL:\"",
-            "ZXCVBNM<>?",
-        ],
-        wheel: [
-            [
-                "abcd", "efgh", "ijkl", "mnop", "qrst", "uvwx", "yz.,", "/:-@",
-            ],
-            [
-                "1234", "5678", "90-=", "!?#$", "%&*_", "()[]", "'\";+", "<>{}",
-            ],
-        ],
-    },
-    LayoutDef {
-        name: "ru",
-        rows: [
-            "ё1234567890-=",
-            "йцукенгшщзхъ\\",
-            "фывапролджэ",
-            "ячсмитьбю.",
-        ],
-        shift_rows: [
-            "Ё!\"№;%:?*()_+",
-            "ЙЦУКЕНГШЩЗХЪ/",
-            "ФЫВАПРОЛДЖЭ",
-            "ЯЧСМИТЬБЮ,",
-        ],
-        // Thirty-three letters do not fit one layer; ё rides with the digits.
-        wheel: [
-            [
-                "абвг", "дежз", "ийкл", "мноп", "рсту", "фхцч", "шщъы", "ьэюя",
-            ],
-            [
-                "1234", "5678", "90.,", "ё!?-", "@#%&", "*_+=", "()\"'", "/:;№",
-            ],
-        ],
-    },
-];
-
-/// A ready-to-use layout: the full key grid (character rows wrapped in the
-/// fixed frame) and the Shift mapping for non-letter characters.
-pub struct Layout {
-    /// Shown on the Lang key.
-    pub name: &'static str,
-    keys: Vec<Vec<Key>>,
-    shift_map: HashMap<char, char>,
-    wheel: &'static [WheelLayer; 2],
-}
-
-impl Layout {
-    /// Wrap a definition's character rows in the fixed frame: Backspace top
-    /// right, Enter at the home-row right, Shift around the bottom letter row,
-    /// Space along the bottom with the arrow cluster after it.
-    fn build(def: &'static LayoutDef) -> Self {
-        let chars = |r: usize| def.rows[r].chars().map(Char);
-        let keys = vec![
-            chars(0).chain([Backspace]).collect(),
-            [Tab].into_iter().chain(chars(1)).collect(),
-            [Caps].into_iter().chain(chars(2)).chain([Enter]).collect(),
-            [Shift].into_iter().chain(chars(3)).chain([Shift]).collect(),
-            frame_row(),
-        ];
-        let mut shift_map = HashMap::new();
-        for (row, shifted) in def.rows.iter().zip(def.shift_rows) {
-            shift_map.extend(row.chars().zip(shifted.chars()));
-        }
-        Self {
-            name: def.name,
-            keys,
-            shift_map,
-            wheel: &def.wheel,
-        }
-    }
-
-    /// The character a `Char` key produces given the modifier state. Letters
-    /// flip case by `shift XOR caps` (Caps Lock only affects case); anything
-    /// else shifts through the layout's mapping.
-    pub fn resolve_char(&self, c: char, shift: bool, caps: bool) -> char {
-        if c.is_alphabetic() {
-            if shift ^ caps {
-                c.to_uppercase().next().unwrap_or(c)
-            } else {
-                c
-            }
-        } else if shift {
-            self.shift_map.get(&c).copied().unwrap_or(c)
-        } else {
-            c
-        }
-    }
+pub enum Reading {
+    /// Not the keyboard's: the caller keeps its own meaning.
+    Pass,
+    /// The stick moved the aim; `true` when that changed what is drawn.
+    Aim(bool),
+    Command(OskCommand),
 }
 
 /// On-screen keyboard state: visibility, the selected cell, shift/caps, and
@@ -413,11 +142,7 @@ pub struct Osk {
     /// Whether the picker is on [`NAMED_ROWS`] rather than the characters.
     named: bool,
     style: OskStyle,
-    places: FacePlaces,
-    /// The wheel group the stick aims at; `None` while it is centred.
-    sector: Option<usize>,
-    /// Index into the active layout's [`LayoutDef::wheel`].
-    layer: usize,
+    wheel: Wheel,
 }
 
 impl Osk {
@@ -456,24 +181,17 @@ impl Osk {
             picking: false,
             named: false,
             style: cfg.style,
-            places: FacePlaces::of(pad_layout),
-            sector: None,
-            layer: 0,
+            wheel: Wheel::new(pad_layout),
         }
     }
 
     pub fn set_style(&mut self, style: OskStyle) {
         self.style = style;
-        self.sector = None;
+        self.wheel.centre();
     }
 
     pub fn set_pad_layout(&mut self, layout: PadLayout) {
-        self.places = FacePlaces::of(layout);
-    }
-
-    /// Where the face buttons sit, which is where the wheel draws them.
-    pub fn places(&self) -> FacePlaces {
-        self.places
+        self.wheel.set_pad_layout(layout);
     }
 
     /// Whether the wheel is up rather than the grid.
@@ -481,60 +199,21 @@ impl Osk {
         self.style == OskStyle::Wheel && !self.picking
     }
 
-    /// The aimed group, if any.
-    pub fn sector(&self) -> Option<usize> {
-        self.sector
-    }
-
-    /// Whether `face` means [`OskCommand::Face`] right now rather than its grid
-    /// command.
-    pub fn takes_face(&self, face: Face) -> bool {
-        self.wheel() && (self.sector.is_some() || face == self.places.a)
-    }
-
-    /// Aim the wheel with a stick vector (SDL axes, y down); `threshold` is the
-    /// deflection that picks a group. Returns whether the aimed group changed.
-    pub fn aim(&mut self, (x, y): (f32, f32), threshold: f32) -> bool {
-        let len = x.hypot(y);
-        let hold = self.sector.is_some() && len >= threshold * WHEEL_RELEASE;
-        let sector = if len < threshold && !hold {
-            None
-        } else {
-            let n = WHEEL_SECTORS as f32;
-            let pos = x.atan2(-y).rem_euclid(TAU) / TAU * n;
-            match self.sector {
-                Some(s) if circular_distance(pos, s as f32, n) <= 0.5 + WHEEL_EDGE_HYSTERESIS => {
-                    Some(s)
-                }
-                _ => Some(pos.round() as usize % WHEEL_SECTORS),
-            }
-        };
-        let changed = sector != self.sector;
-        self.sector = sector;
-        changed
-    }
-
-    /// The character `face` types in `sector` of the current layer, under the
-    /// current Shift and Caps.
-    pub fn wheel_char(&self, sector: usize, face: Face) -> char {
-        let group = self.layout().wheel[self.layer][sector];
-        let c = group
-            .chars()
-            .nth(face.index())
-            .expect("every wheel group holds one character per face");
-        if c.is_alphabetic() && (self.shift() ^ self.caps) {
-            c.to_uppercase().next().unwrap_or(c)
-        } else {
-            c
+    /// What a pad input means to the style on screen.
+    pub fn read(&mut self, input: PadInput) -> Reading {
+        match self.wheel() {
+            true => self.wheel.read(input),
+            false => grid_command(input).map_or(Reading::Pass, Reading::Command),
         }
     }
 
-    /// What centred **A** flips to, as its label.
-    pub fn next_layer_label(&self) -> &'static str {
-        match self.layer {
-            0 => "123",
-            _ => "abc",
+    /// Whether a button `input` means something to the style on screen.
+    pub fn takes(&self, input: PadInput) -> bool {
+        match self.wheel() {
+            true => self.wheel.command(input),
+            false => grid_command(input),
         }
+        .is_some()
     }
 
     /// The active layout, built on demand rather than held: the grid is wanted
@@ -547,7 +226,7 @@ impl Osk {
     /// Take the keyboard down, dropping the grid with it.
     pub fn hide(&mut self) {
         self.visible = false;
-        self.sector = None;
+        self.wheel.centre();
         self.grid.take();
     }
 
@@ -636,7 +315,7 @@ impl Osk {
                 self.shift_once = false;
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
-                self.layer = 0;
+                self.wheel.reset_layer();
             }
             OskCommand::Hide => self.hide(),
             OskCommand::Activate => self.activate(target, browser, commands),
@@ -646,18 +325,7 @@ impl Osk {
             OskCommand::Enter => self.enter(target, browser, commands),
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
             OskCommand::Press(key) => self.press(key, target, browser, commands),
-            OskCommand::Face(face) => match self.sector {
-                Some(sector) => {
-                    let shift = self.shift();
-                    let c = self.wheel_char(sector, face);
-                    self.input_char(target, c, shift, browser);
-                    self.shift_once = false;
-                }
-                None if face == self.places.a => {
-                    self.layer = (self.layer + 1) % self.layout().wheel.len()
-                }
-                None => {}
-            },
+            OskCommand::Face(face) => self.wheel_face(face, target, browser),
         }
     }
 
@@ -888,10 +556,24 @@ impl Osk {
     }
 }
 
-/// The distance between two positions on a circle `n` long.
-fn circular_distance(a: f32, b: f32, n: f32) -> f32 {
-    let d = (a - b).rem_euclid(n);
-    d.min(n - d)
+/// What `input` means on the grid.
+fn grid_command(input: PadInput) -> Option<OskCommand> {
+    let cmd = match input {
+        PadInput::A => OskCommand::Activate,
+        PadInput::B => OskCommand::Hide,
+        PadInput::X => OskCommand::Backspace,
+        PadInput::Y => OskCommand::Space,
+        PadInput::LeftTrigger(held) => OskCommand::Shift(held),
+        PadInput::RightTrigger => OskCommand::Enter,
+        PadInput::Nav(dx, dy) => OskCommand::Move(dx, dy),
+        // Left to the caller.
+        PadInput::Shoulder(_)
+        | PadInput::Dpad(..)
+        | PadInput::Stick(..)
+        | PadInput::Start
+        | PadInput::Select => return None,
+    };
+    Some(cmd)
 }
 
 /// Whether `<`/`>` move the caret for this target: the editable fields that
@@ -949,8 +631,8 @@ fn send_named(browser: &AppBrowser, key: NamedKey, code: Code) {
 
 #[cfg(test)]
 mod tests {
+    use super::layout::NAMED_ROWS;
     use super::*;
-    use std::str::FromStr;
 
     fn osk() -> Osk {
         Osk::new(&OskConfig::default(), PadLayout::default())
@@ -1012,105 +694,6 @@ mod tests {
         osk.toggle_named();
         osk.set_picking(false);
         assert!(osk.named);
-    }
-
-    /// A short group is a face button that panics, a long one a character
-    /// nothing can type.
-    #[test]
-    fn every_wheel_group_has_one_character_per_face() {
-        for def in LAYOUTS {
-            for group in def.wheel.iter().flatten() {
-                assert_eq!(
-                    group.chars().count(),
-                    Face::ALL.len(),
-                    "{} {group}",
-                    def.name
-                );
-            }
-        }
-    }
-
-    fn wheel() -> Osk {
-        let mut osk = osk();
-        osk.set_style(OskStyle::Wheel);
-        osk
-    }
-
-    #[test]
-    fn the_stick_picks_groups_clockwise_from_up() {
-        let mut osk = wheel();
-        let dirs = [
-            (0.0, -1.0),
-            (0.7, -0.7),
-            (1.0, 0.0),
-            (0.7, 0.7),
-            (0.0, 1.0),
-            (-0.7, 0.7),
-            (-1.0, 0.0),
-            (-0.7, -0.7),
-        ];
-        for (sector, dir) in dirs.into_iter().enumerate() {
-            osk.aim(dir, 0.5);
-            assert_eq!(osk.sector(), Some(sector), "{dir:?}");
-        }
-        osk.aim((0.0, 0.0), 0.5);
-        assert_eq!(osk.sector(), None);
-    }
-
-    /// A stick resting on the up/up-right boundary must not flicker between them.
-    #[test]
-    fn a_group_holds_past_its_edge() {
-        let mut osk = wheel();
-        osk.aim((0.0, -1.0), 0.5);
-        let just_past = (TAU / WHEEL_SECTORS as f32) * 0.55;
-        osk.aim((just_past.sin(), -just_past.cos()), 0.5);
-        assert_eq!(osk.sector(), Some(0));
-    }
-
-    /// Easing off while pressing must not turn a letter into a centred press.
-    #[test]
-    fn a_sagging_stick_keeps_its_group() {
-        let mut osk = wheel();
-        osk.aim((1.0, 0.0), 0.5);
-        osk.aim((0.4, 0.0), 0.5);
-        assert_eq!(osk.sector(), Some(2));
-        assert!(osk.takes_face(Face::East));
-    }
-
-    /// Centred, only A flips the layer, wherever the layout prints it.
-    #[test]
-    fn centred_only_a_belongs_to_the_wheel() {
-        for layout in [PadLayout::Nintendo, PadLayout::Xbox, PadLayout::PlayStation] {
-            let mut osk = wheel();
-            osk.set_pad_layout(layout);
-            for face in Face::ALL {
-                assert_eq!(osk.takes_face(face), face == osk.places().a, "{layout:?}");
-            }
-        }
-    }
-
-    /// A Nintendo pad prints A on the east, so that corner is A's to type.
-    #[test]
-    fn a_types_the_corner_it_is_printed_on() {
-        assert_eq!(FacePlaces::of(PadLayout::Nintendo).a, Face::East);
-        assert_eq!(FacePlaces::of(PadLayout::Xbox).a, Face::South);
-    }
-
-    /// A key picker needs the named keys the wheel cannot reach.
-    #[test]
-    fn a_picker_gets_the_grid() {
-        let mut osk = wheel();
-        osk.set_picking(true);
-        assert!(!osk.wheel());
-        assert!(!osk.takes_face(osk.places().a));
-    }
-
-    #[test]
-    fn shift_capitalises_wheel_letters_only() {
-        let mut osk = wheel();
-        osk.shift_once = true;
-        assert_eq!(osk.wheel_char(0, Face::West), 'A');
-        assert_eq!(osk.wheel_char(6, Face::East), '.');
     }
 
     /// A cell valid on one grid can be past the end of another.

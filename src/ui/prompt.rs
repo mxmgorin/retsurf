@@ -5,7 +5,7 @@
 
 use super::theme::{self, ACCENT, DIM, SCRIM};
 use crate::command::{AppCommand, PromptAction};
-use crate::overlay::osk::FaceLabels;
+use crate::config::FaceLabels;
 use crate::overlay::prompt::{select_rows, Prompt, SelectRow};
 use egui_phosphor::bold;
 use egui_sdl2::egui;

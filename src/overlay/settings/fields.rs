@@ -256,7 +256,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Input,  "Input",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
     f(S::Input,  "Input",     "Gamepad layout",         choice!(input.pad_layout: PadLayout), false),
     f(S::Input,  "Input",     "Swap A/B and X/Y",       flag!(input.swap_face_buttons), false),
-    f(S::Input,  "Input",     "Keyboard style",         choice!(osk.style: OskStyle), false),
+    f(S::Input,  "Input",     "On-screen keyboard",     choice!(osk.style: OskStyle), false),
     f(S::Input,  "Input",     "OSK stick threshold",    float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
     f(S::Input,  "Input",     "OSK repeat delay (ms)",  int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
     f(S::Input,  "Input",     "OSK repeat rate (ms)",   int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),

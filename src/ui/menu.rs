@@ -5,10 +5,10 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::history;
 use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
-use crate::overlay::osk::FaceLabels;
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, AtomExt as _};
 
@@ -212,7 +212,6 @@ pub(super) fn add_menu(
             Section::History | Section::Tabs => Some("bookmark"),
             Section::Downloads => None,
         };
-        // Matches what X does: a tab closes, a list entry leaves its list.
         let x_action = match menu.section() {
             Section::Tabs => "close",
             Section::Bookmarks | Section::History | Section::Downloads => "remove",

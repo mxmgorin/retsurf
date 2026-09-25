@@ -77,7 +77,7 @@ action_table! {
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.
-        Osk => "osk", "Keyboard",
+        Osk => "osk", "On-screen keyboard",
         /// Opens the Game Mode menu, and closes it again; the mode is entered and
         /// left by a row there, not by this. Mirrored inside the mode, where the
         /// tables are bypassed, so the way in and the way out are one gesture.

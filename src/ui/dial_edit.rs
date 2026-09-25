@@ -6,9 +6,9 @@
 use super::home::{paint_action_tile, paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{self, ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::dial_edit::DialEdit;
-use crate::overlay::osk::FaceLabels;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 

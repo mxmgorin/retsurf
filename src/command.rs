@@ -5,7 +5,7 @@
 
 use crate::browser::BrowserCommand;
 use crate::overlay::menu::Section;
-use crate::overlay::osk::OskCommand;
+use crate::overlay::osk::{OskCommand, PadInput};
 use crate::overlay::settings::SettingsSection;
 
 #[derive(Clone)]
@@ -228,6 +228,8 @@ pub enum InputCommand {
         button: crate::event::game::input_map::ClickButton,
         pressed: bool,
     },
+    /// A pad button the keyboard claimed ahead of its binding.
+    OskButton(PadInput),
     /// Per-frame analog state, all normalized to -1..=1. `aim` merges the left
     /// stick and D-pad, `stick` is the stick alone (hint mode hops on it while
     /// the D-pad types combos), `scroll` is the page-scroll vector, and
