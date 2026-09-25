@@ -9,7 +9,7 @@
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
 
-retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on PCs, offering flexible, remappable controls for comfortable web browsing and gaming using only a gamepad or keyboard.
+retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops, with gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
 
 **[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
 
