@@ -1,0 +1,19 @@
+android: route joystick motion through the text-input view
+
+While text input is on, SDL's DummyEdit holds focus, so Android delivers
+generic motion events (gamepad sticks and triggers) to it instead of the
+SDLSurface that carries SDL's motion listener. Buttons still arrive through its
+key listener, so a stick released while the view has focus never reports its
+return to centre and its direction sticks.
+
+--- a/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
++++ b/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
+@@ -1902,6 +1902,8 @@
+         setFocusableInTouchMode(true);
+         setFocusable(true);
+         setOnKeyListener(this);
++        // Focused while text input is on, so joystick motion lands here.
++        setOnGenericMotionListener(SDLActivity.getMotionListener());
+     }
+ 
+     @Override
