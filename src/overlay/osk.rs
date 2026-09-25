@@ -20,7 +20,7 @@
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
-use crate::config::{OskConfig, OskStyle};
+use crate::config::{OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
 use std::cell::OnceCell;
@@ -90,7 +90,7 @@ pub enum OskCommand {
     /// Apply `key` without selecting it.
     Press(Key),
     /// A face button on the wheel: types its corner of the aimed group, or with
-    /// the stick centred flips the layer on [`Face::South`] and does nothing else.
+    /// the stick centred flips the layer on A's face and does nothing else.
     Face(Face),
 }
 
@@ -102,6 +102,63 @@ pub enum Face {
     North,
     East,
     South,
+}
+
+/// Where each face button sits, by the Xbox letter it reads as.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct FacePlaces {
+    pub a: Face,
+    pub b: Face,
+    pub x: Face,
+    pub y: Face,
+}
+
+impl FacePlaces {
+    /// Where a `layout` pad prints each letter.
+    pub fn of(layout: PadLayout) -> Self {
+        match layout {
+            PadLayout::Nintendo => FacePlaces {
+                a: Face::East,
+                b: Face::South,
+                x: Face::North,
+                y: Face::West,
+            },
+            PadLayout::Xbox | PadLayout::PlayStation => FacePlaces {
+                a: Face::South,
+                b: Face::East,
+                x: Face::West,
+                y: Face::North,
+            },
+        }
+    }
+}
+
+/// What each face button prints, named by the Xbox letter it reads as.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FaceLabels {
+    pub a: &'static str,
+    pub b: &'static str,
+    pub x: &'static str,
+    pub y: &'static str,
+}
+
+impl FaceLabels {
+    pub fn of(layout: PadLayout) -> Self {
+        match layout {
+            PadLayout::Nintendo | PadLayout::Xbox => FaceLabels {
+                a: "A",
+                b: "B",
+                x: "X",
+                y: "Y",
+            },
+            PadLayout::PlayStation => FaceLabels {
+                a: egui_phosphor::bold::X,
+                b: egui_phosphor::bold::CIRCLE,
+                x: egui_phosphor::bold::SQUARE,
+                y: egui_phosphor::bold::TRIANGLE,
+            },
+        }
+    }
 }
 
 impl Face {
@@ -145,13 +202,13 @@ impl Key {
     /// The gamepad button that directly triggers this key (the router's
     /// mapping), shown as a corner badge so the shortcuts are discoverable;
     /// keys without a dedicated button use D-pad + **A**.
-    pub fn button_hint(self) -> Option<&'static str> {
+    pub fn button_hint(self, face: FaceLabels) -> Option<&'static str> {
         match self {
-            Key::Backspace => Some("X"),
-            Key::Space => Some("Y"),
+            Key::Backspace => Some(face.x),
+            Key::Space => Some(face.y),
             Key::Shift => Some("L2"),
             Key::Enter => Some("R2"),
-            Key::Hide => Some("B"),
+            Key::Hide => Some(face.b),
             _ => None,
         }
     }
@@ -356,6 +413,7 @@ pub struct Osk {
     /// Whether the picker is on [`NAMED_ROWS`] rather than the characters.
     named: bool,
     style: OskStyle,
+    places: FacePlaces,
     /// The wheel group the stick aims at; `None` while it is centred.
     sector: Option<usize>,
     /// Index into the active layout's [`LayoutDef::wheel`].
@@ -363,7 +421,7 @@ pub struct Osk {
 }
 
 impl Osk {
-    pub fn new(cfg: &OskConfig) -> Self {
+    pub fn new(cfg: &OskConfig, pad_layout: PadLayout) -> Self {
         let mut langs: Vec<&'static LayoutDef> = cfg
             .layouts
             .iter()
@@ -398,6 +456,7 @@ impl Osk {
             picking: false,
             named: false,
             style: cfg.style,
+            places: FacePlaces::of(pad_layout),
             sector: None,
             layer: 0,
         }
@@ -406,6 +465,15 @@ impl Osk {
     pub fn set_style(&mut self, style: OskStyle) {
         self.style = style;
         self.sector = None;
+    }
+
+    pub fn set_pad_layout(&mut self, layout: PadLayout) {
+        self.places = FacePlaces::of(layout);
+    }
+
+    /// Where the face buttons sit, which is where the wheel draws them.
+    pub fn places(&self) -> FacePlaces {
+        self.places
     }
 
     /// Whether the wheel is up rather than the grid.
@@ -421,7 +489,7 @@ impl Osk {
     /// Whether `face` means [`OskCommand::Face`] right now rather than its grid
     /// command.
     pub fn takes_face(&self, face: Face) -> bool {
-        self.wheel() && (self.sector.is_some() || face == Face::South)
+        self.wheel() && (self.sector.is_some() || face == self.places.a)
     }
 
     /// Aim the wheel with a stick vector (SDL axes, y down); `threshold` is the
@@ -585,7 +653,7 @@ impl Osk {
                     self.input_char(target, c, shift, browser);
                     self.shift_once = false;
                 }
-                None if face == Face::South => {
+                None if face == self.places.a => {
                     self.layer = (self.layer + 1) % self.layout().wheel.len()
                 }
                 None => {}
@@ -885,7 +953,7 @@ mod tests {
     use std::str::FromStr;
 
     fn osk() -> Osk {
-        Osk::new(&OskConfig::default())
+        Osk::new(&OskConfig::default(), PadLayout::default())
     }
 
     /// A name the map cannot parse is a key that silently does nothing, and a
@@ -1009,13 +1077,23 @@ mod tests {
         assert!(osk.takes_face(Face::East));
     }
 
+    /// Centred, only A flips the layer, wherever the layout prints it.
     #[test]
-    fn centred_only_south_belongs_to_the_wheel() {
-        let osk = wheel();
-        assert!(osk.takes_face(Face::South));
-        assert!(!osk.takes_face(Face::North));
-        assert!(!osk.takes_face(Face::West));
-        assert!(!osk.takes_face(Face::East));
+    fn centred_only_a_belongs_to_the_wheel() {
+        for layout in [PadLayout::Nintendo, PadLayout::Xbox, PadLayout::PlayStation] {
+            let mut osk = wheel();
+            osk.set_pad_layout(layout);
+            for face in Face::ALL {
+                assert_eq!(osk.takes_face(face), face == osk.places().a, "{layout:?}");
+            }
+        }
+    }
+
+    /// A Nintendo pad prints A on the east, so that corner is A's to type.
+    #[test]
+    fn a_types_the_corner_it_is_printed_on() {
+        assert_eq!(FacePlaces::of(PadLayout::Nintendo).a, Face::East);
+        assert_eq!(FacePlaces::of(PadLayout::Xbox).a, Face::South);
     }
 
     /// A key picker needs the named keys the wheel cannot reach.
@@ -1024,7 +1102,7 @@ mod tests {
         let mut osk = wheel();
         osk.set_picking(true);
         assert!(!osk.wheel());
-        assert!(!osk.takes_face(Face::South));
+        assert!(!osk.takes_face(osk.places().a));
     }
 
     #[test]

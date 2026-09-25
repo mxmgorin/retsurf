@@ -32,11 +32,12 @@ impl App {
     /// [`Focus`] for the overlay precedence.
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         let focus = self.ui.focus();
+        let places = self.ui.face_places();
         match command {
             InputCommand::Confirm(pressed) => match focus {
                 Focus::Osk => {
                     if *pressed {
-                        self.osk_face(Face::South, OskCommand::Activate, out);
+                        self.osk_face(places.a, OskCommand::Activate, out);
                     }
                 }
                 Focus::Prompt => {
@@ -115,7 +116,7 @@ impl App {
                 Focus::Page => self.primary_action(*pressed),
             },
             InputCommand::Cancel => match focus {
-                Focus::Osk => self.osk_face(Face::East, OskCommand::Hide, out),
+                Focus::Osk => self.osk_face(places.b, OskCommand::Hide, out),
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
@@ -163,9 +164,8 @@ impl App {
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
-                Focus::Osk if self.ui.osk_takes_face(Face::West) => {
-                    self.ui
-                        .osk(OskCommand::Face(Face::West), &self.browser, out)
+                Focus::Osk if self.ui.osk_takes_face(places.x) => {
+                    self.ui.osk(OskCommand::Face(places.x), &self.browser, out)
                 }
                 Focus::Hints | Focus::Osk | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
@@ -243,7 +243,7 @@ impl App {
             // hints on the page. Unpinning is the dial editor's job, not a press.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
-                Focus::Osk => self.osk_face(Face::North, OskCommand::Space, out),
+                Focus::Osk => self.osk_face(places.y, OskCommand::Space, out),
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
                 Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos

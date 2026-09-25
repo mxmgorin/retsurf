@@ -175,7 +175,7 @@ impl Gamepad {
         bindings: &Bindings<Action>,
         commands: &mut Vec<AppCommand>,
     ) {
-        if let Some(pad) = pad_of(button) {
+        if let Some(pad) = labelled_pad(button, self.cfg.swap_face_buttons) {
             self.on_pad(pad, pressed, bindings, commands);
         }
     }
@@ -248,6 +248,19 @@ impl Gamepad {
     }
 }
 
+/// The pad `button` reads as. SDL names a controller's buttons by position;
+/// `swap` reads A/B and X/Y across, for a pad that prints A on the east.
+pub fn labelled_pad(button: Button, swap: bool) -> Option<Pad> {
+    let pad = pad_of(button)?;
+    Some(match (swap, pad) {
+        (true, Pad::A) => Pad::B,
+        (true, Pad::B) => Pad::A,
+        (true, Pad::X) => Pad::Y,
+        (true, Pad::Y) => Pad::X,
+        (_, pad) => pad,
+    })
+}
+
 fn hold_of(cfg: &InputConfig) -> Duration {
     Duration::from_millis(cfg.hold_ms)
 }
@@ -256,5 +269,27 @@ fn cadence_of(cfg: &InputConfig) -> Cadence {
     Cadence {
         initial_delay: Duration::from_millis(cfg.osk_nav_initial_delay_ms),
         interval: Duration::from_millis(cfg.osk_nav_repeat_ms),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Swapped, the east button is A, so A confirms from where it is printed.
+    #[test]
+    fn swap_reads_the_face_buttons_across() {
+        let read = |button| labelled_pad(button, true);
+        assert_eq!(read(Button::B), Some(Pad::A));
+        assert_eq!(read(Button::A), Some(Pad::B));
+        assert_eq!(read(Button::Y), Some(Pad::X));
+        assert_eq!(read(Button::X), Some(Pad::Y));
+        assert_eq!(read(Button::Start), Some(Pad::Start));
+    }
+
+    #[test]
+    fn unswapped_stays_positional() {
+        assert_eq!(labelled_pad(Button::A, false), Some(Pad::A));
+        assert_eq!(labelled_pad(Button::Y, false), Some(Pad::Y));
     }
 }

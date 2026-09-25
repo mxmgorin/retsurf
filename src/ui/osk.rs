@@ -2,7 +2,8 @@
 //! [`crate::overlay::osk`]).
 
 use super::theme::{ACCENT, SCRIM};
-use crate::overlay::osk::{Face, Key, Osk, WHEEL_SECTORS};
+use crate::config::PadLayout;
+use crate::overlay::osk::{Face, FaceLabels, Key, Osk, WHEEL_SECTORS};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::f32::consts::TAU;
@@ -90,10 +91,11 @@ fn osk_area(bottom_inset: f32) -> egui::Area {
 /// Draw the on-screen keyboard: a dark rounded overlay anchored to the bottom.
 /// `bottom_inset` lifts it off that edge, to clear a bottom toolbar. Returns the
 /// drawn height (logical px), which the page scrolls a field of its own past.
-pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
+pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, layout: PadLayout, bottom_inset: f32) -> f32 {
     if osk.wheel() {
-        return add_wheel(ctx, osk, bottom_inset);
+        return add_wheel(ctx, osk, layout, bottom_inset);
     }
+    let face = FaceLabels::of(layout);
     let selected = osk.selected();
     let shift = osk.shift();
     // Hand-tuned to fill `ROW_SPAN`, each on its own shorter row; Space gives up
@@ -153,7 +155,7 @@ pub(super) fn add_osk(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 
                         }
                         // The keys with a direct gamepad shortcut wear it
                         // as a small badge in the top-left corner.
-                        if let Some(btn) = key.button_hint() {
+                        if let Some(btn) = key.button_hint(face) {
                             ui.painter().text(
                                 response.rect.left_top() + egui::vec2(4.0, 2.0),
                                 egui::Align2::LEFT_TOP,
@@ -191,22 +193,33 @@ fn face_dir(face: Face) -> egui::Vec2 {
     }
 }
 
-/// The colour pads conventionally print on `face`'s button (the Xbox one), so a
-/// character's colour names the button that types it.
-fn face_color(face: Face) -> egui::Color32 {
-    match face {
-        Face::North => egui::Color32::from_rgb(0xf2, 0xc8, 0x3c),
-        Face::West => egui::Color32::from_rgb(0x4f, 0x9d, 0xff),
-        Face::East => egui::Color32::from_rgb(0xf0, 0x5c, 0x5c),
-        Face::South => egui::Color32::from_rgb(0x5c, 0xd0, 0x6a),
+const FACE_YELLOW: egui::Color32 = egui::Color32::from_rgb(0xf2, 0xc8, 0x3c);
+const FACE_BLUE: egui::Color32 = egui::Color32::from_rgb(0x4f, 0x9d, 0xff);
+const FACE_RED: egui::Color32 = egui::Color32::from_rgb(0xf0, 0x5c, 0x5c);
+const FACE_GREEN: egui::Color32 = egui::Color32::from_rgb(0x5c, 0xd0, 0x6a);
+const FACE_PINK: egui::Color32 = egui::Color32::from_rgb(0xe8, 0x7a, 0xc8);
+
+/// The colour `layout`'s pads print on `face`'s button, so a character's colour
+/// names the button that types it.
+fn face_color(layout: PadLayout, face: Face) -> egui::Color32 {
+    match (layout, face) {
+        (PadLayout::Xbox, Face::North) | (PadLayout::Nintendo, Face::South) => FACE_YELLOW,
+        (PadLayout::Xbox, Face::West)
+        | (PadLayout::Nintendo, Face::North)
+        | (PadLayout::PlayStation, Face::South) => FACE_BLUE,
+        (_, Face::East) => FACE_RED,
+        (PadLayout::Xbox, Face::South)
+        | (PadLayout::Nintendo, Face::West)
+        | (PadLayout::PlayStation, Face::North) => FACE_GREEN,
+        (PadLayout::PlayStation, Face::West) => FACE_PINK,
     }
 }
 
-/// The character's colour on a `face_color(face)` fill; yellow needs dark ink.
-fn face_ink(face: Face) -> egui::Color32 {
-    match face {
-        Face::North => egui::Color32::from_gray(0x20),
-        Face::West | Face::East | Face::South => egui::Color32::WHITE,
+/// The character's colour on a `face_color` fill; yellow needs dark ink.
+fn face_ink(color: egui::Color32) -> egui::Color32 {
+    match color == FACE_YELLOW {
+        true => egui::Color32::from_gray(0x20),
+        false => egui::Color32::WHITE,
     }
 }
 
@@ -225,7 +238,7 @@ fn paint_space_mark(painter: &egui::Painter, at: egui::Pos2, color: egui::Color3
 
 /// Draw the daisywheel: the groups on a ring, the aimed one lit, and the
 /// centred face buttons' meanings on the hub. Returns the drawn height.
-fn add_wheel(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
+fn add_wheel(ctx: &egui::Context, osk: &Osk, layout: PadLayout, bottom_inset: f32) -> f32 {
     let side = 2.0 * (WHEEL_RADIUS + GROUP_RADIUS);
     let area = osk_area(bottom_inset).show(ctx, |ui| {
         panel().show(ui, |ui| {
@@ -259,7 +272,10 @@ fn add_wheel(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
                 for face in Face::ALL {
                     let button = at + face_dir(face) * FACE_OFFSET;
                     let (fill, ink) = match aimed {
-                        true => (face_color(face), face_ink(face)),
+                        true => {
+                            let color = face_color(layout, face);
+                            (color, face_ink(color))
+                        }
                         false => (FACE_IDLE, egui::Color32::WHITE),
                     };
                     painter.circle_filled(button, FACE_RADIUS, fill);
@@ -270,16 +286,14 @@ fn add_wheel(ctx: &egui::Context, osk: &Osk, bottom_inset: f32) -> f32 {
 
             painter.circle_stroke(centre, HUB_RADIUS, egui::Stroke::new(1.0, HINT));
             if osk.sector().is_none() {
-                for face in Face::ALL {
-                    let at = centre + face_dir(face) * FACE_OFFSET;
-                    let color = face_color(face);
-                    match face {
-                        Face::North => paint_space_mark(painter, at, color),
-                        Face::West => text(at, bold::BACKSPACE, HUB_ICON, color),
-                        Face::East => text(at, bold::X, HUB_ICON, color),
-                        Face::South => text(at, osk.next_layer_label(), HUB_FONT, color),
-                    }
-                }
+                let places = osk.places();
+                let at = |face| centre + face_dir(face) * FACE_OFFSET;
+                let color = |face| face_color(layout, face);
+                paint_space_mark(painter, at(places.y), color(places.y));
+                text(at(places.x), bold::BACKSPACE, HUB_ICON, color(places.x));
+                text(at(places.b), bold::X, HUB_ICON, color(places.b));
+                let layer = osk.next_layer_label();
+                text(at(places.a), layer, HUB_FONT, color(places.a));
             }
 
             let legend = |at, align, label: &str, color| {

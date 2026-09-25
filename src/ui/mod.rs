@@ -28,7 +28,7 @@ use crate::{
     command::AppCommand,
     config::{
         DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
-        ToolbarPosition, UpdateConfig,
+        PadLayout, ToolbarPosition, UpdateConfig,
     },
     overlay::dial_edit::DialEdit,
     overlay::game::input_maps::InputMaps,
@@ -37,7 +37,7 @@ use crate::{
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::Menu,
-    overlay::osk::Osk,
+    overlay::osk::{FaceLabels, Osk},
     overlay::prompt::Prompt,
     overlay::settings::Settings,
     platform::window::AppWindow,
@@ -239,6 +239,8 @@ pub struct AppUi {
     edge_scroll: (i8, i8),
     /// Whether hint mode draws combo badges; off = plain spatial hops.
     hint_badges: bool,
+    /// Which letters and colours the face buttons wear on screen.
+    pad_layout: PadLayout,
     /// Whether the last input came from the keyboard; picks the badge alphabet.
     last_input_keyboard: bool,
     /// Whether the debug memory overlay is enabled (`[debug] memory_overlay`).
@@ -298,7 +300,7 @@ impl AppUi {
             toolbar_autohide: display.toolbar_autohide,
             toolbar_shown: true,
             scroll_accum: 0.0,
-            osk: Osk::new(osk),
+            osk: Osk::new(osk, input.pad_layout),
             menu: Menu::new(history, downloads, user_agent),
             settings: Settings::new(),
             update: Updater::new(update),
@@ -310,6 +312,7 @@ impl AppUi {
             scroll_mode: false,
             edge_scroll: (0, 0),
             hint_badges: input.hint_badges,
+            pad_layout: input.pad_layout,
             last_input_keyboard: false,
             memory_overlay: debug.memory_overlay,
             memory_log: debug.memory_log,
@@ -510,6 +513,7 @@ impl AppUi {
         self.schedule_idle_repaints(cursor_visible);
 
         let snapshot = self.frame_snapshot(browser);
+        let face = FaceLabels::of(self.pad_layout);
         // Android's system bars follow the chrome: whatever hides the toolbar
         // wants the whole panel.
         #[cfg(target_os = "android")]
@@ -626,6 +630,7 @@ impl AppUi {
                         self.menu.dial.urls(),
                         self.webview_rect,
                         caret_for(OskField::Home),
+                        face,
                         commands,
                     );
                 }
@@ -637,6 +642,7 @@ impl AppUi {
                         &mut self.dial_edit,
                         self.menu.dial.urls(),
                         caret_for(OskField::DialEdit),
+                        face,
                         commands,
                     );
                 }
@@ -646,7 +652,7 @@ impl AppUi {
                     // The overlay owns its row selection; an egui-focused row
                     // would take Enter a second time and activate twice.
                     drop_egui_focus(ctx);
-                    settings::add_settings(ctx, &self.settings, &update, commands);
+                    settings::add_settings(ctx, &self.settings, &update, face, commands);
                 }
 
                 // Its own block rather than the chain below, so the keyboard can
@@ -675,13 +681,14 @@ impl AppUi {
                         &mut self.prompt,
                         caret_for(OskField::Prompt),
                         osk_lift,
+                        face,
                         commands,
                     );
                 }
 
                 if self.menu.visible {
                     drop_egui_focus(ctx);
-                    menu::add_menu(ctx, &self.menu, &tab_infos, commands);
+                    menu::add_menu(ctx, &self.menu, &tab_infos, face, commands);
                 } else if self.game_menu.visible {
                     // Same as the menu's: a focused row would activate twice.
                     drop_egui_focus(ctx);
@@ -699,12 +706,14 @@ impl AppUi {
                         ToolbarPosition::Bottom => self.toolbar_height,
                         ToolbarPosition::Top => 0.0,
                     };
-                    self.osk_height = osk::add_osk(ctx, &self.osk, bottom_inset) + bottom_inset;
+                    self.osk_height =
+                        osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset) + bottom_inset;
                 } else if self.hints.visible {
                     // Rects the page has scrolled out from under are left
                     // undrawn: a badge would mark whatever took that place.
                     if !self.hints.is_stale() {
-                        hints::add_hints(ctx, &self.hints, self.webview_rect, self.hint_badges);
+                        let badges = self.hint_badges.then_some(face);
+                        hints::add_hints(ctx, &self.hints, self.webview_rect, badges);
                     }
                 } else if cursor_visible.is_some() {
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);

@@ -10,11 +10,12 @@ use crate::{
     browser::AppBrowser,
     command::{AppCommand, GameMapEditAction, SettingsAction},
     config::InputConfig,
+    event::gamepad::labelled_pad,
     event::window::handle_window,
     platform::window::AppWindow,
     ui::{AppUi, Focus},
 };
-use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, pad_of, Keymap};
+use inputbind::sdl::{axis_value, is_modifier, key_code, key_name, mods_for, Keymap};
 use inputbind::{Bindings, Capture, Captured, Pad, PadGesture, Store, Tick};
 use sdl2::controller::Axis;
 use sdl2::event::Event;
@@ -357,9 +358,11 @@ impl AppEventHandler {
     ) {
         // The buttons a map sends ride the pad that drove them, so the page
         // reads a remap as the same device rather than a second one.
+        let swap = self.gamepad.cfg.swap_face_buttons;
         let withheld = self.routing_input().is_some_and(|input| {
             input.note_pad_slot(browser.pad_slot(instance_id));
-            pad_of(button).is_some_and(|pad| input.on_pad(pad, pressed, browser, commands))
+            labelled_pad(button, swap)
+                .is_some_and(|pad| input.on_pad(pad, pressed, browser, commands))
         });
         if !withheld {
             self.to_page(browser, instance_id, |slot| {
@@ -430,10 +433,12 @@ impl AppEventHandler {
             // Autorepeat and the text edge are swallowed, never bound.
             Event::KeyDown { .. } | Event::KeyUp { .. } | Event::TextInput { .. } => return true,
             Event::ControllerButtonDown { button, .. } => {
-                pad_of(*button).and_then(|pad| listening.capture.on_press(pad, now))
+                labelled_pad(*button, self.gamepad.cfg.swap_face_buttons)
+                    .and_then(|pad| listening.capture.on_press(pad, now))
             }
             Event::ControllerButtonUp { button, .. } => {
-                pad_of(*button).and_then(|pad| listening.capture.on_release(pad, now))
+                labelled_pad(*button, self.gamepad.cfg.swap_face_buttons)
+                    .and_then(|pad| listening.capture.on_release(pad, now))
             }
             // A trigger binds as the button it is, a stick only where a map is
             // listening; both are consumed, so nothing moves underneath.

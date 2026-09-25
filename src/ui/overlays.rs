@@ -6,9 +6,9 @@ use super::{dial_edit, home, settings, AppUi, OskField};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
-    config::{AppConfig, OskStyle},
+    config::{AppConfig, OskStyle, PadLayout},
     overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
-    overlay::osk::{Face, OskCommand, OskTarget},
+    overlay::osk::{Face, FacePlaces, OskCommand, OskTarget},
 };
 use egui_sdl2::egui;
 
@@ -184,6 +184,16 @@ impl AppUi {
 
     pub fn set_osk_style(&mut self, style: OskStyle) {
         self.osk.set_style(style);
+    }
+
+    pub fn set_pad_layout(&mut self, layout: PadLayout) {
+        self.pad_layout = layout;
+        self.osk.set_pad_layout(layout);
+    }
+
+    /// Where the face buttons sit, by the letter they read as.
+    pub fn face_places(&self) -> FacePlaces {
+        self.osk.places()
     }
 
     /// Whether the keyboard up is the wheel rather than the grid.
