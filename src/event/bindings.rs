@@ -489,9 +489,9 @@ mod tests {
     /// An unknown key name is only logged, so a typo would ship as a dead shortcut.
     #[test]
     fn every_default_key_gesture_resolves_through_sdl() {
-        let names = KeyNames::new();
+        let names = crate::event::test_key_names();
         let store = default_store();
-        let bindings = build(&store, &names);
+        let bindings = build(&store, names);
         for (text, name) in &store.keyboard {
             let gesture = inputbind::KeyGesture::parse(text)
                 .unwrap_or_else(|| panic!("`{text}` is not a key gesture"));

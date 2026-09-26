@@ -19,3 +19,11 @@ pub mod window;
 pub(crate) fn key_names() -> KeyNames {
     KeyNames::new()
 }
+
+/// The one table every test shares: classic SDL2 names keys in a static buffer,
+/// so tables built on parallel test threads tear.
+#[cfg(test)]
+pub(crate) fn test_key_names() -> &'static KeyNames {
+    static NAMES: std::sync::LazyLock<KeyNames> = std::sync::LazyLock::new(KeyNames::new);
+    &NAMES
+}

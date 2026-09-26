@@ -387,11 +387,12 @@ impl InputMap {
 mod tests {
     use super::store::{parse_built_in, BUILT_IN};
     use super::*;
+    use crate::event::test_key_names;
     use keyboard_types::NamedKey;
 
     fn resolve(text: &str) -> InputMap {
         let raw: RawInputMap = toml::from_str(text).expect("valid map");
-        InputMap::resolve("test", raw, &KeyNames::new())
+        InputMap::resolve("test", raw, test_key_names())
     }
 
     /// The built-ins ship in the binary, so a typo in one is a startup panic —
@@ -399,9 +400,9 @@ mod tests {
     /// nothing at all: `pad` is raw so a game reads the sticks itself.
     #[test]
     fn every_built_in_keeps_the_pointer_or_is_fully_raw() {
-        let keys = KeyNames::new();
+        let keys = test_key_names();
         for (id, text) in BUILT_IN {
-            let map = InputMap::resolve(id, parse_built_in(id, text), &keys);
+            let map = InputMap::resolve(id, parse_built_in(id, text), keys);
             assert!(!map.name.is_empty(), "`{id}` has no name");
             // Which source clicks and which stick points is the map's own
             // business; that it can click and point at all is not.
@@ -435,7 +436,7 @@ mod tests {
     /// which is what the editor's rows are written against.
     #[test]
     fn the_key_table_resolves_to_sdl_codes() {
-        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        let code = test_key_names().code("w").expect("SDL spells one key `w`");
         let map = resolve("[key]\nw = \"key.ArrowUp\"\n");
         assert!(matches!(map.key(None, code), Some(Target::Key(_))));
     }
@@ -460,9 +461,9 @@ mod tests {
     /// theirs said out loud, which is the trap a stock map must not ship.
     #[test]
     fn no_built_in_sends_a_key_the_page_cannot_identify() {
-        let names = KeyNames::new();
+        let names = test_key_names();
         for (id, text) in BUILT_IN {
-            let map = InputMap::resolve(id, parse_built_in(id, text), &names);
+            let map = InputMap::resolve(id, parse_built_in(id, text), names);
             let check = |target: Option<&Target>, whose: String| {
                 if let Some(Target::Key(key)) = target {
                     assert_ne!(key.code, Code::Unidentified, "{whose}");
@@ -595,7 +596,7 @@ mod tests {
         );
         assert_eq!(map.pad(None, Pad::A), Some(&Target::Pad(Pad::B)));
         assert_eq!(map.pad(None, Pad::B), None);
-        let code = KeyNames::new().code("w").expect("SDL spells one key `w`");
+        let code = test_key_names().code("w").expect("SDL spells one key `w`");
         assert_eq!(map.key(None, code), Some(&Target::Pad(Pad::L1)));
     }
 
@@ -786,7 +787,7 @@ mod tests {
             analog = "mouse.cursor"
             "#,
         );
-        let copy = map.copy("my-game", "My game".to_string(), &KeyNames::new());
+        let copy = map.copy("my-game", "My game".to_string(), test_key_names());
         assert_eq!(copy.id, "my-game");
         assert_eq!(copy.name, "My game");
         assert_eq!(copy.pad(None, Pad::A), map.pad(None, Pad::A));
