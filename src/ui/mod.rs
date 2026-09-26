@@ -51,6 +51,9 @@ use std::time::{Duration, Instant};
 /// with `sync_scale` (see [`scale`]).
 pub fn init_egui_ctx(ctx: &egui::Context) {
     theme::apply(ctx);
+    // Ctrl+=/- belong to the page zoom; egui's own would scale the chrome for a
+    // frame until the configured scale is pushed back.
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
     if let Some(scale) = crate::config::device_scale() {
         ctx.set_zoom_factor(scale);
     }
