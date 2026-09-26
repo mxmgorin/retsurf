@@ -129,8 +129,8 @@ there loses nothing — measured.
 This is what blanked a page that entered fullscreen, since Servo's UA rule
 `*|*:not(:root):fullscreen` sets `position: fixed` on the element a page
 fullscreens, and games and modals usually fullscreen a flex wrapper or a canvas.
-`tests/pages/fixed-overlay.html` is the reduction; the analysis, including what
-remains unexplained, is in the workshop notes (`UPSTREAM_SERVO_IFC_OUT_OF_FLOW.md`).
+`tests/pages/fixed-overlay.html` is the reduction; the fix is proposed upstream as
+[servo#48081](https://github.com/servo/servo/pull/48081).
 
 ## Cost
 
