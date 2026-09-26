@@ -3,6 +3,7 @@
 //! [`crate::overlay::game`]. Split from the dispatcher for size alone.
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
+use crate::config::Scaling;
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
 use crate::event::game::GameMode;
@@ -33,9 +34,14 @@ impl App {
                 // that names the live map, and loading one is what it costs.
                 let (_, name) = self.game_mode().live();
                 self.ui.set_input_map_name(name);
-                self.ui.game_menu.open(self.ui.game_mode());
+                self.open_game_menu();
             }
         }
+    }
+
+    fn open_game_menu(&mut self) {
+        self.ui.game_menu.scaling = self.config.game_mode.view.scaling;
+        self.ui.game_menu.open(self.ui.game_mode());
     }
 
     /// Enter Game Mode, closing whatever overlay is up: the point is that the
@@ -51,6 +57,8 @@ impl App {
             &bindings::key_gestures(Action::GameMode),
         );
         self.ui.enter_game_mode(toast);
+        self.browser
+            .set_game_scaling(self.config.game_mode.view.scaling);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
         self.ui.menu.close();
         self.ui.hints.hide();
@@ -64,6 +72,7 @@ impl App {
     fn leave_game_mode(&mut self) {
         self.ui.leave_game_mode();
         self.ui.game_menu.close();
+        self.browser.set_game_scaling(Scaling::Off);
         // A pad the map asked for exists only while the map runs.
         self.browser.drop_mapped_pad();
         log::info!("game mode: false");
@@ -75,6 +84,12 @@ impl App {
     pub(super) fn game_menu_action(&mut self, action: &GameMenuAction, out: &mut Vec<AppCommand>) {
         match action {
             GameMenuAction::Activate => self.game_menu_activate(out),
+            // Only a row with a value steps; the rest act on A alone.
+            GameMenuAction::Adjust(dir) => {
+                if self.ui.game_menu.row() == GameRow::View {
+                    self.step_scaling(*dir);
+                }
+            }
             GameMenuAction::Click(index) => {
                 self.ui.game_menu.select(*index);
                 self.game_menu_activate(out);
@@ -86,6 +101,7 @@ impl App {
     fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.game_menu.row() {
             GameRow::Back => self.ui.game_menu.close(),
+            GameRow::View => self.step_scaling(1),
             // The maps are their own screens; the menu is what B returns to.
             GameRow::InputMap => {
                 self.ui.game_menu.close();
@@ -107,6 +123,17 @@ impl App {
         }
     }
 
+    /// Move `[game_mode.view] scaling` by `dir` values, live when the mode is on.
+    fn step_scaling(&mut self, dir: i32) {
+        let scaling = self.config.game_mode.view.scaling.step(dir);
+        self.config.game_mode.view.scaling = scaling;
+        self.config.save();
+        self.ui.game_menu.scaling = scaling;
+        if self.ui.game_mode() {
+            self.browser.set_game_scaling(scaling);
+        }
+    }
+
     /// Apply an action on Game Mode's map screens (see
     /// [`crate::overlay::game::input_maps`]).
     pub(super) fn input_maps_action(
@@ -118,7 +145,7 @@ impl App {
             // B pops one screen; past the list there is the menu that opened it.
             GameInputMapsAction::Close => {
                 if !self.ui.input_maps.back() {
-                    self.ui.game_menu.open(self.ui.game_mode());
+                    self.open_game_menu();
                 }
             }
             GameInputMapsAction::Activate => self.input_maps_activate(out),

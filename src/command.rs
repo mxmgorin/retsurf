@@ -68,6 +68,8 @@ pub enum GameMenuAction {
     Activate,
     /// Focus row `index` and activate it.
     Click(usize),
+    /// Left/Right on the focused row: step its value.
+    Adjust(i32),
 }
 
 /// Actions on Game Mode's input-map screens.

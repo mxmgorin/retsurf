@@ -5,8 +5,9 @@
 //! [`delegate`]; address-bar text interpretation in [`url`]. Around those:
 //! [`engine`] (Servo construction and prefs), [`memory`] (reports and heap
 //! profile), [`pads`] (what the page knows of the gamepads), [`home`] /
-//! [`reader`] (the built-in pages), [`blob_download`] and [`forced_dark`]
-//! (user-content scripts), [`adblock`] and [`content_filter`] (load filtering).
+//! [`reader`] (the built-in pages), [`game_scaling`] (a game sized to the screen),
+//! [`blob_download`] and [`forced_dark`] (user-content scripts), [`adblock`] and
+//! [`content_filter`] (load filtering).
 
 pub mod adblock;
 mod blob_download;
@@ -18,6 +19,7 @@ mod delegate;
 mod engine;
 mod favicon;
 mod forced_dark;
+mod game_scaling;
 mod home;
 mod input;
 pub mod memory;
@@ -177,6 +179,10 @@ struct AppBrowserInner {
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
     hint_rects: RefCell<Option<Vec<crate::overlay::hints::Hint>>>,
+    /// The [`game_scaling`] mode in force, so each change is applied once.
+    game_scaling: Cell<crate::config::Scaling>,
+    /// Its user script while a mode is on, kept so it can be detached again.
+    game_scaling_script: RefCell<Option<Rc<servo::UserScript>>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -292,6 +298,8 @@ impl AppBrowserInner {
             adblock,
             content_filter: Cell::new(content_filter),
             hint_rects: RefCell::new(None),
+            game_scaling: Cell::new(crate::config::Scaling::Off),
+            game_scaling_script: RefCell::new(None),
             ime_control: Cell::new(None),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             dismissed_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),

@@ -45,6 +45,7 @@ pub(in crate::ui) fn add_game_menu(
                 for (index, &row) in menu.rows().iter().enumerate() {
                     let value = match row {
                         GameRow::InputMap => map_name,
+                        GameRow::View => menu.scaling.label(),
                         _ => "",
                     };
                     let label = row.label();

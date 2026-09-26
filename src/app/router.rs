@@ -200,7 +200,13 @@ impl App {
                         self.ui.menu.move_sel(*dy);
                     }
                 }
-                Focus::GameMenu => self.ui.game_menu.move_sel(*dy),
+                Focus::GameMenu => {
+                    if *dy != 0 {
+                        self.ui.game_menu.move_sel(*dy);
+                    } else if *dx != 0 {
+                        out.push(AppCommand::GameMenu(GameMenuAction::Adjust(*dx)));
+                    }
+                }
                 Focus::GameInputMaps => self.ui.input_maps.move_sel(*dy),
                 Focus::GameMapEdit => self.ui.map_edit.move_sel(*dy),
                 // Up/Down moves between rows, Left/Right adjusts the focused value.

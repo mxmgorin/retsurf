@@ -3,6 +3,8 @@
 //! API), so the list is short. The central router ([`crate::app`]) drives it
 //! like any other overlay; [`crate::ui`] renders it.
 
+use crate::config::Scaling;
+
 /// A row of the menu; which rows show depends on the mode (see [`GameMenu::open`]).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameRow {
@@ -15,6 +17,10 @@ pub enum GameRow {
     /// devices run, and everything that can be done to one. Reachable from
     /// outside the mode too, so the map can be set before a game.
     InputMap,
+    /// What Game Mode shows: the page, or its game cut out and sized to the
+    /// screen. A setting, like the map: set from either side of the mode,
+    /// applied only inside it.
+    View,
     /// Summon the on-screen keyboard; it types into the page.
     Osk,
     /// Turn Game Mode off. Last, as far as the list allows from where an
@@ -26,13 +32,14 @@ pub enum GameRow {
 const IN_MODE: &[GameRow] = &[
     GameRow::Back,
     GameRow::InputMap,
+    GameRow::View,
     GameRow::Osk,
     GameRow::Exit,
 ];
 
-/// Outside it: entering, or setting the map up first. B closes, and the browser
+/// Outside it: entering, or setting the game up first. B closes, and the browser
 /// has its own keyboard, so neither Back nor Osk has a use here.
-const OUT_OF_MODE: &[GameRow] = &[GameRow::Enter, GameRow::InputMap];
+const OUT_OF_MODE: &[GameRow] = &[GameRow::Enter, GameRow::InputMap, GameRow::View];
 
 impl GameRow {
     /// The row's label. No trailing ellipsis: that marks a row which asks for
@@ -41,6 +48,7 @@ impl GameRow {
         match self {
             GameRow::Enter => "Enter game mode",
             GameRow::Back => "Back to game",
+            GameRow::View => "View",
             // Singular: the value beside it is the map in use, and one map
             // covers both devices — hence input, not controller.
             GameRow::InputMap => "Input map",
@@ -56,6 +64,8 @@ pub struct GameMenu {
     pub visible: bool,
     rows: &'static [GameRow],
     selected: usize,
+    /// `[game_mode.view] scaling`, for the row's value.
+    pub scaling: Scaling,
 }
 
 impl GameMenu {
@@ -64,6 +74,7 @@ impl GameMenu {
             visible: false,
             rows: OUT_OF_MODE,
             selected: 0,
+            scaling: Scaling::Off,
         }
     }
 
@@ -124,7 +135,7 @@ mod tests {
         menu.open(false);
         assert_eq!(menu.row(), GameRow::Enter);
         menu.move_sel(99);
-        assert_eq!(menu.row(), GameRow::InputMap);
+        assert_eq!(menu.row(), GameRow::View);
     }
 
     /// Each mode offers its own way across and nothing that only makes sense in
