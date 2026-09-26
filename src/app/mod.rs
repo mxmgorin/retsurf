@@ -15,6 +15,7 @@ use crate::browser::AppBrowser;
 use crate::data::session::Session;
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
+use crate::platform::clipboard::Clipboard;
 use crate::ui::AppUi;
 use crate::{config::AppConfig, platform::window::AppWindow};
 use sdl2::Sdl;
@@ -96,7 +97,13 @@ impl App {
         let audio = crate::media::init(sdl, &config.audio, &config.video);
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
-        let browser = AppBrowser::new(window.rendering_ctx(), event_sender.clone(), &config)?;
+        let clipboard = Clipboard::new(sdl.video()?.clipboard());
+        let browser = AppBrowser::new(
+            window.rendering_ctx(),
+            event_sender.clone(),
+            clipboard,
+            &config,
+        )?;
         log::info!("init: browser ready; creating event handler + ui");
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.

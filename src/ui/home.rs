@@ -4,6 +4,7 @@
 //! routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
+use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
 use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
@@ -51,7 +52,7 @@ pub(super) fn add_home(
     home: &mut Home,
     pins: &[String],
     webview: egui::Rect,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -261,7 +262,7 @@ fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
 /// handheld the OSK writes into the same buffer. Enter submits it (handled in
 /// the keyboard/router layer).
-fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<usize>) {
+fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<OskCaret>) {
     let selected = home.search_focused();
     let edit_id = egui::Id::new(super::ids::HOME_SEARCH);
     // While the OSK types here, mirror its caret (egui won't follow the external

@@ -5,6 +5,7 @@
 
 use super::home::{paint_action_tile, paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{self, ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
+use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
 use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
@@ -17,7 +18,7 @@ pub(super) fn add_dial_edit(
     ctx: &egui::Context,
     edit: &mut DialEdit,
     pins: &[String],
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -143,7 +144,7 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
 /// The URL entry field: an egui text field (its `dial_edit_url` id keeps egui
 /// keyboard focus in sync with the selection); the OSK types into the same
 /// buffer on the handheld.
-fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<usize>) {
+fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<OskCaret>) {
     let selected = edit.field_focused();
     let edit_id = egui::Id::new(super::ids::DIAL_EDIT_URL);
     // While the OSK types here, mirror its caret (egui won't follow the external

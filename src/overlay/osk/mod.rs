@@ -26,8 +26,11 @@ use std::cell::OnceCell;
 use std::str::FromStr;
 use wheel::Wheel;
 
+mod edit;
 mod layout;
 pub mod wheel;
+
+pub use edit::Edit;
 
 pub use layout::Key;
 use Key::*;
@@ -81,6 +84,7 @@ pub enum OskCommand {
     Press(Key),
     /// A wheel face press: the aimed group's corner.
     Face(Face),
+    Edit(Edit),
 }
 
 /// A gamepad input while the keyboard has focus. A/B/X/Y also carry the confirm,
@@ -135,6 +139,8 @@ pub struct Osk {
     /// Backspace act here, `<`/`>` move it. Reset to buffer end on Show, clamped
     /// on use. Page/Settings ignore it, staying append-only as before.
     caret: usize,
+    /// Where the selection started, as a char index; it runs to [`Self::caret`].
+    anchor: Option<usize>,
     row: usize,
     col: usize,
     /// The enabled layouts in Lang-cycle order; never empty.
@@ -183,6 +189,7 @@ impl Osk {
             shift_held: false,
             shift_once: false,
             caret: 0,
+            anchor: None,
             // Start on `a` (the home row's first letter), not the top-left
             // backtick; the cell then persists across hide/show.
             row: 2,
@@ -230,7 +237,7 @@ impl Osk {
             _ => {}
         }
         match self.wheel() {
-            true => self.wheel.read(input),
+            true => self.wheel.read(input, self.shift()),
             false => grid_command(input).map_or(Reading::Pass, Reading::Command),
         }
     }
@@ -264,7 +271,7 @@ impl Osk {
             return true;
         }
         match self.wheel() {
-            true => self.wheel.command(input),
+            true => self.wheel.command(input, self.shift()),
             false => grid_command(input),
         }
         .is_some()
@@ -369,6 +376,7 @@ impl Osk {
                 self.shift_once = false;
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
+                self.anchor = None;
                 self.wheel.set_digits(false);
             }
             OskCommand::Hide => self.hide(),
@@ -381,6 +389,7 @@ impl Osk {
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
             OskCommand::Press(key) => self.press(key, target, browser, commands),
             OskCommand::Face(face) => self.wheel_face(face, target, browser),
+            OskCommand::Edit(edit) => self.edit(edit, target, browser),
         }
     }
 
@@ -388,10 +397,10 @@ impl Osk {
         (self.row, self.col)
     }
 
-    /// Caret position (char index) for the field the OSK types into, so its
-    /// egui `TextEdit` can park its cursor to match.
-    pub fn caret(&self) -> usize {
-        self.caret
+    /// The selection's anchor and caret (char indices, equal when nothing is
+    /// selected) in the field the OSK types into, for its `TextEdit` to mirror.
+    pub fn caret(&self) -> (usize, usize) {
+        (self.anchor.unwrap_or(self.caret), self.caret)
     }
 
     fn current(&self) -> Key {
@@ -442,8 +451,12 @@ impl Osk {
             Backspace => self.backspace(target, browser),
             // In an editable field `<`/`>` slide the caret and the egui TextEdit
             // mirrors it; Up/Down do nothing on a single-line field.
-            Left if caret_field(&target) => self.caret = self.caret.saturating_sub(1),
+            Left if caret_field(&target) => {
+                self.anchor = None;
+                self.caret = self.caret.saturating_sub(1)
+            }
             Right if caret_field(&target) => {
+                self.anchor = None;
                 self.caret = (self.caret + 1).min(target_char_len(&target, browser))
             }
             // Picking: the frame keys name themselves, which is how a row gets
@@ -506,6 +519,7 @@ impl Osk {
             OskTarget::Page => browser.clear_focused_field(),
         }
         self.caret = 0;
+        self.anchor = None;
     }
 
     /// A picker records the map's spelling, the page gets a real key event, and
@@ -529,34 +543,44 @@ impl Osk {
         self.input_char(target, ' ', shift, browser);
     }
 
-    /// Delete the character before the caret (the **Backspace** key or **X**).
+    /// Delete the selection, or else the character before the caret (the
+    /// **Backspace** key or **X**).
     fn backspace(&mut self, target: OskTarget, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => {
-                self.caret = remove_before(&mut browser.get_state_mut().location, self.caret)
-            }
+            OskTarget::AddressBar => self.remove_before(&mut browser.get_state_mut().location),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
-            | OskTarget::GameName(buf) => self.caret = remove_before(buf, self.caret),
+            | OskTarget::GameName(buf) => self.remove_before(buf),
             OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
+    }
+
+    /// Delete the selection from `buf`, or else the char before the caret.
+    fn remove_before(&mut self, buf: &mut String) {
+        if !self.delete_selection(buf) {
+            self.caret = remove_before(buf, self.caret);
+        }
+    }
+
+    /// Put `c` in place of the selection, or at the caret, advancing it.
+    fn insert(&mut self, buf: &mut String, c: char) {
+        self.delete_selection(buf);
+        self.caret = insert_at(buf, self.caret, c);
     }
 
     /// Insert `c` at the caret (advancing it) for an editable field, or send it
     /// to the page as a key event.
     fn input_char(&mut self, target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => {
-                self.caret = insert_at(&mut browser.get_state_mut().location, self.caret, c)
-            }
+            OskTarget::AddressBar => self.insert(&mut browser.get_state_mut().location, c),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
-            | OskTarget::GameName(buf) => self.caret = insert_at(buf, self.caret, c),
+            | OskTarget::GameName(buf) => self.insert(buf, c),
             OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
                 browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(

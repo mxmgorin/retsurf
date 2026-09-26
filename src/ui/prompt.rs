@@ -4,6 +4,7 @@
 //! page dimmed behind it.
 
 use super::theme::{self, ACCENT, DIM, SCRIM};
+use super::OskCaret;
 use crate::command::{AppCommand, PromptAction};
 use crate::config::FaceLabels;
 use crate::overlay::prompt::{select_rows, Prompt, SelectRow};
@@ -19,7 +20,7 @@ const ROW_H: f32 = 26.0;
 pub(super) fn add_prompt(
     ctx: &egui::Context,
     prompt: &mut Prompt,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     osk_lift: f32,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
@@ -196,7 +197,7 @@ fn add_dialog(
     message: &str,
     has_input: bool,
     has_cancel: bool,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;

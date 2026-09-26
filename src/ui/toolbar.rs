@@ -2,6 +2,7 @@
 //! address bar, bookmark toggle, and the chips that jump into menu sections.
 
 use super::theme;
+use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
 use crate::command::{AppCommand, MenuAction, SettingsAction};
 use crate::config::ToolbarPosition;
@@ -324,7 +325,7 @@ pub(super) struct ToolbarInputs {
     /// Page zoom percent; `None` at the config default, where no chip shows.
     pub zoom_pct: Option<u16>,
     /// The OSK's caret, when it types here; egui's caret is parked on it.
-    pub osk_caret: Option<usize>,
+    pub osk_caret: Option<OskCaret>,
     pub position: ToolbarPosition,
 }
 

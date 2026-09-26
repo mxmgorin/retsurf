@@ -1,9 +1,11 @@
 //! The wheel style: the left stick aims at one of [`WHEEL_SECTORS`] groups
 //! and a face button types the group's character on its own side of the pad.
-//! Centred, the face buttons keep their grid meanings, A being Enter. R2 holds
-//! the digits layer up.
+//! Centred, the face buttons keep their grid meanings, A being Enter, and under
+//! Shift copy, cut and paste. R2 holds the digits layer up; the D-pad moves the
+//! caret, extends the selection under Shift, selects all (up) and toggles Caps
+//! (down).
 
-use super::{Key, Osk, OskCommand, OskTarget, PadInput, Reading};
+use super::{Edit, Key, Osk, OskCommand, OskTarget, PadInput, Reading};
 use crate::browser::AppBrowser;
 use crate::config::{Face, FacePlaces, PadLayout};
 use std::f32::consts::TAU;
@@ -75,33 +77,44 @@ impl Wheel {
         changed
     }
 
-    /// What `input` means on the wheel.
-    pub(super) fn read(&mut self, input: PadInput) -> Reading {
+    /// What `input` means on the wheel, `shift` being the keyboard's Shift.
+    pub(super) fn read(&mut self, input: PadInput, shift: bool) -> Reading {
         match input {
             PadInput::Stick(stick, threshold) => Reading::Drawn(self.aim(stick, threshold)),
-            _ => self.command(input).map_or(Reading::Pass, Reading::Command),
+            _ => self
+                .command(input, shift)
+                .map_or(Reading::Pass, Reading::Command),
         }
     }
 
     /// What a button `input` means on the wheel; the stick is [`Self::read`]'s.
-    pub(super) fn command(&self, input: PadInput) -> Option<OskCommand> {
+    pub(super) fn command(&self, input: PadInput, shift: bool) -> Option<OskCommand> {
         // Aimed, a face types its corner; centred, it keeps its grid meaning.
         let face = |face, centred| match self.sector {
             Some(_) => OskCommand::Face(face),
             None => centred,
         };
+        let edit = |plain, shifted| match shift {
+            true => OskCommand::Edit(shifted),
+            false => plain,
+        };
         let cmd = match input {
-            PadInput::A => face(self.places.a, OskCommand::Enter),
+            PadInput::A => face(self.places.a, edit(OskCommand::Enter, Edit::Copy)),
             PadInput::B => face(self.places.b, OskCommand::Hide),
-            PadInput::X => face(self.places.x, OskCommand::Backspace),
-            PadInput::Y => face(self.places.y, OskCommand::Space),
+            PadInput::X => face(self.places.x, edit(OskCommand::Backspace, Edit::Cut)),
+            PadInput::Y => face(self.places.y, edit(OskCommand::Space, Edit::Paste)),
             PadInput::Shoulder(delta) if delta < 0 => OskCommand::Backspace,
             PadInput::Shoulder(_) => OskCommand::Space,
             PadInput::LeftTrigger(held) => OskCommand::Shift(held),
             PadInput::RightTrigger(held) => OskCommand::Digits(held),
-            // The stick owns the wheel, so the D-pad slides the caret.
+            // The stick owns the wheel, so the D-pad edits.
+            PadInput::Dpad(dx, _) if dx != 0 && shift => {
+                OskCommand::Edit(Edit::Extend(dx.signum()))
+            }
             PadInput::Dpad(dx, _) if dx < 0 => OskCommand::Press(Key::Left),
             PadInput::Dpad(dx, _) if dx > 0 => OskCommand::Press(Key::Right),
+            PadInput::Dpad(_, dy) if dy < 0 => OskCommand::Edit(Edit::SelectAll),
+            PadInput::Dpad(_, dy) if dy > 0 => OskCommand::Press(Key::Caps),
             PadInput::Start => OskCommand::Press(Key::Tab),
             PadInput::Select => OskCommand::Press(Key::Lang),
             PadInput::Dpad(..)
@@ -233,6 +246,34 @@ mod tests {
             );
             assert_eq!(osk.read(PadInput::Y), Reading::Command(OskCommand::Space));
         }
+    }
+
+    /// Under Shift the centred faces edit; B stays the way out.
+    #[test]
+    fn shifted_centred_faces_copy_cut_and_paste() {
+        let mut osk = wheel();
+        osk.shift_held = true;
+        let edit = |e| Reading::Command(OskCommand::Edit(e));
+        assert_eq!(osk.read(PadInput::A), edit(Edit::Copy));
+        assert_eq!(osk.read(PadInput::X), edit(Edit::Cut));
+        assert_eq!(osk.read(PadInput::Y), edit(Edit::Paste));
+        assert_eq!(osk.read(PadInput::B), Reading::Command(OskCommand::Hide));
+        osk.read(PadInput::Stick((1.0, 0.0), 0.5));
+        let a = osk.wheel.places.a;
+        assert_eq!(osk.read(PadInput::A), Reading::Command(OskCommand::Face(a)));
+    }
+
+    #[test]
+    fn the_dpad_moves_selects_and_toggles_caps() {
+        let mut osk = wheel();
+        let cmd = |osk: &mut Osk, dx, dy| osk.read(PadInput::Dpad(dx, dy));
+        let press = |k| Reading::Command(OskCommand::Press(k));
+        let edit = |e| Reading::Command(OskCommand::Edit(e));
+        assert_eq!(cmd(&mut osk, -1, 0), press(Key::Left));
+        assert_eq!(cmd(&mut osk, 0, -1), edit(Edit::SelectAll));
+        assert_eq!(cmd(&mut osk, 0, 1), press(Key::Caps));
+        osk.shift_held = true;
+        assert_eq!(cmd(&mut osk, 1, 0), edit(Edit::Extend(1)));
     }
 
     #[test]

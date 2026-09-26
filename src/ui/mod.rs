@@ -85,15 +85,23 @@ fn drop_egui_focus(ctx: &egui::Context) {
     });
 }
 
-/// Park egui's caret at char index `pos` (clamped to `char_count`) in an
-/// externally-edited single-line `TextEdit`, so it tracks the OSK's caret (see
-/// [`OskField`]). Call *before* the field renders so the caret lands this frame.
-pub(super) fn park_caret(ctx: &egui::Context, id: egui::Id, pos: usize, char_count: usize) {
+/// The OSK's selection anchor and caret, as char indices; equal when nothing is
+/// selected.
+pub(super) type OskCaret = (usize, usize);
+
+/// Park egui's selection at `(anchor, caret)` (clamped to `char_count`) in an
+/// externally-edited single-line `TextEdit`, so it tracks the OSK's (see
+/// [`OskField`]). Call *before* the field renders so it lands this frame.
+pub(super) fn park_caret(
+    ctx: &egui::Context,
+    id: egui::Id,
+    (anchor, caret): OskCaret,
+    char_count: usize,
+) {
     let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
-    let at = egui::text::CCursor::new(pos.min(char_count));
-    state
-        .cursor
-        .set_char_range(Some(egui::text::CCursorRange::one(at)));
+    let at = |pos: usize| egui::text::CCursor::new(pos.min(char_count));
+    let range = egui::text::CCursorRange::two(at(anchor), at(caret));
+    state.cursor.set_char_range(Some(range));
     egui::TextEdit::store_state(ctx, id, state);
 }
 
@@ -130,7 +138,7 @@ struct FrameInputs {
     tab_infos: Vec<crate::data::session::TabInfo>,
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
-    osk_caret: usize,
+    osk_caret: OskCaret,
     chrome_hidden: ChromeHidden,
 }
 

@@ -33,6 +33,7 @@ mod pads;
 pub use pads::PadSlots;
 
 use crate::data::downloads::{BlobDownload, DownloadRequest};
+use crate::platform::clipboard::Clipboard;
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{AppConfig, ExperimentalConfig, PageTheme},
@@ -202,6 +203,8 @@ struct AppBrowserInner {
     /// `Arc<Mutex>` because the report arrives on an IPC router thread, not the
     /// main loop. Drained by [`AppBrowser::take_memory_report`].
     mem_report: Arc<Mutex<Option<MemoryReportResult>>>,
+    /// Shared with every webview, so page fields and the chrome copy to one place.
+    clipboard: Rc<Clipboard>,
 }
 
 impl AppBrowserInner {
@@ -210,6 +213,7 @@ impl AppBrowserInner {
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         adblock: Adblock,
+        clipboard: Clipboard,
         config: &AppConfig,
     ) -> Self {
         let browser = &config.browser;
@@ -279,6 +283,7 @@ impl AppBrowserInner {
             haptic_requests: FrameQueue::new(UserEvent::HapticPending, event_sender.clone()),
             screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
+            clipboard: Rc::new(clipboard),
             event_sender,
         }
     }
@@ -306,6 +311,7 @@ impl AppBrowserInner {
             .hidpi_scale_factor(euclid::Scale::new(self.hidpi.get()))
             .delegate(delegate)
             .gamepad_delegate(gamepad)
+            .clipboard_delegate(self.clipboard.clone())
             .user_content_manager(self.user_content.clone())
             .build();
         if self.default_zoom != 1.0 {
@@ -358,6 +364,7 @@ impl AppBrowser {
     pub fn new(
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
+        clipboard: Clipboard,
         config: &AppConfig,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
@@ -376,6 +383,7 @@ impl AppBrowser {
             rendering_ctx,
             event_sender.clone(),
             Adblock::new(&config.adblock),
+            clipboard,
             config,
         );
 
@@ -390,6 +398,11 @@ impl AppBrowser {
             .active_webview()
             .map(|tab| tab.animating())
             .unwrap_or(false)
+    }
+
+    /// The clipboard the pages share, for the chrome's own fields.
+    pub fn clipboard(&self) -> &Clipboard {
+        &self.inner.clipboard
     }
 
     /// Whether the active tab's page holds fullscreen, which hides the chrome.

@@ -1,6 +1,6 @@
 //! Rendering of the wheel: a translucent disc with the character groups on
-//! a ring, the hub's centred-stick actions, and the other buttons' tabs on the
-//! rim. Colours and sides follow the pad layout.
+//! a ring, the hub's centred-stick actions (clipboard ones under Shift), and the
+//! other buttons' tabs on the rim. Colours and sides follow the pad layout.
 
 use super::osk_area;
 use crate::config::{Face, PadLayout};
@@ -223,10 +223,21 @@ pub(super) fn add_wheel(
             None => face_color(layout, face),
             Some(_) => HUB_DIM,
         };
-        paint_space_mark(painter, at(places.y), color(places.y));
-        text(at(places.x), bold::BACKSPACE, HUB_ICON, color(places.x));
         text(at(places.b), bold::X, HUB_ICON, color(places.b));
-        text(at(places.a), bold::KEY_RETURN, HUB_ICON, color(places.a));
+        if osk.shift() {
+            text(
+                at(places.y),
+                bold::CLIPBOARD_TEXT,
+                HUB_ICON,
+                color(places.y),
+            );
+            text(at(places.x), bold::SCISSORS, HUB_ICON, color(places.x));
+            text(at(places.a), bold::COPY, HUB_ICON, color(places.a));
+        } else {
+            paint_space_mark(painter, at(places.y), color(places.y));
+            text(at(places.x), bold::BACKSPACE, HUB_ICON, color(places.x));
+            text(at(places.a), bold::KEY_RETURN, HUB_ICON, color(places.a));
+        }
 
         // Triggers outside, shoulders inside, each on its own side of the pad.
         let shift = match osk.shift() || osk.caps {
