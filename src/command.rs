@@ -5,7 +5,7 @@
 
 use crate::browser::BrowserCommand;
 use crate::overlay::menu::Section;
-use crate::overlay::osk::OskCommand;
+use crate::overlay::osk::{OskCommand, PadInput};
 use crate::overlay::settings::SettingsSection;
 
 #[derive(Clone)]
@@ -19,6 +19,8 @@ pub enum AppCommand {
     Input(InputCommand),
     Menu(MenuAction),
     ToggleBookmark,
+    /// Put the caret in the address bar, with the keyboard up for a pad.
+    FocusAddressBar,
     /// Close the focused tab. Closing the last one leaves a fresh tab open.
     CloseTab,
     GameMode,
@@ -51,6 +53,7 @@ impl AppCommand {
             AppCommand::Browser(_)
             | AppCommand::Menu(_)
             | AppCommand::ToggleBookmark
+            | AppCommand::FocusAddressBar
             | AppCommand::CloseTab
             | AppCommand::Settings(_) => false,
         }
@@ -228,6 +231,8 @@ pub enum InputCommand {
         button: crate::event::game::input_map::ClickButton,
         pressed: bool,
     },
+    /// A pad button the keyboard claimed ahead of its binding.
+    OskButton(PadInput),
     /// Per-frame analog state, all normalized to -1..=1. `aim` merges the left
     /// stick and D-pad, `stick` is the stick alone (hint mode hops on it while
     /// the D-pad types combos), `scroll` is the page-scroll vector, and
@@ -236,6 +241,8 @@ pub enum InputCommand {
         aim: (f32, f32),
         stick: (f32, f32),
         scroll: (f32, f32),
+        /// The right stick's full vector.
+        right: (f32, f32),
         scroll_mode: bool,
     },
 }

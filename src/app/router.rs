@@ -10,7 +10,7 @@ use super::{
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
 use crate::overlay::hints::{HintInput, Sym};
-use crate::overlay::osk::OskCommand;
+use crate::overlay::osk::{OskCommand, PadInput};
 use crate::ui::Focus;
 use std::time::{Duration, Instant};
 
@@ -36,7 +36,7 @@ impl App {
             InputCommand::Confirm(pressed) => match focus {
                 Focus::Osk => {
                     if *pressed {
-                        self.ui.osk(OskCommand::Activate, &self.browser, out);
+                        self.osk_input(PadInput::A, out);
                     }
                 }
                 Focus::Prompt => {
@@ -115,7 +115,9 @@ impl App {
                 Focus::Page => self.primary_action(*pressed),
             },
             InputCommand::Cancel => match focus {
-                Focus::Osk => self.ui.osk(OskCommand::Hide, &self.browser, out),
+                Focus::Osk => {
+                    self.osk_input(PadInput::B, out);
+                }
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
@@ -163,7 +165,10 @@ impl App {
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
                 Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
-                Focus::Hints | Focus::Osk | Focus::Prompt | Focus::Home | Focus::Page => {
+                Focus::Osk => {
+                    self.osk_input(PadInput::X, out);
+                }
+                Focus::Hints | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
                     // On the start page, X types into the search field — focus it
@@ -171,12 +176,7 @@ impl App {
                     if focus == Focus::Home {
                         self.ui.home.focus_search();
                     }
-                    let cmd = if focus == Focus::Osk {
-                        OskCommand::Backspace
-                    } else {
-                        OskCommand::Show
-                    };
-                    self.ui.osk(cmd, &self.browser, out);
+                    self.ui.osk(OskCommand::Show, &self.browser, out);
                 }
             },
             // Tab switching is parked while a modal prompt is up — it belongs
@@ -189,7 +189,9 @@ impl App {
             // One overlay-navigation step: whichever overlay is open owns it,
             // and with none open the handler forwards the arrows to the page.
             InputCommand::Nav(dx, dy) => match focus {
-                Focus::Osk => self.ui.osk(OskCommand::Move(*dx, *dy), &self.browser, out),
+                Focus::Osk => {
+                    self.osk_input(PadInput::Nav(*dx, *dy), out);
+                }
                 Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
                 Focus::Menu => {
                     if *dx != 0 {
@@ -234,7 +236,9 @@ impl App {
             // hints on the page. Unpinning is the dial editor's job, not a press.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
-                Focus::Osk => self.ui.osk(OskCommand::Space, &self.browser, out),
+                Focus::Osk => {
+                    self.osk_input(PadInput::Y, out);
+                }
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
                 Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
@@ -246,46 +250,48 @@ impl App {
                     self.browser.collect_hints();
                 }
             },
-            InputCommand::Shoulder(delta) => match focus {
-                Focus::Menu => self.ui.menu.switch_section(*delta),
-                // L1/R1 switch the settings section (Left/Right edits values).
-                Focus::Settings => self.ui.settings.switch_section(*delta),
-                // No sections to switch here — and page navigation under one of
-                // Game Mode's screens would leave the game.
-                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
-                // In the dial editor they reorder the focused pin (Left/Right
-                // moves the selection there).
-                Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
-                // In hint mode L1/R1 are combo symbols; with combos off they fall
-                // through to the page back/forward below.
-                Focus::Hints if self.config.input.hint_badges => {
-                    self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
+            InputCommand::Shoulder(delta) => {
+                // The keyboard may claim them first.
+                if self.osk_input(PadInput::Shoulder(*delta), out) {
+                    return;
                 }
-                Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
-                    // Page navigation is parked while the modal prompt is up (it
-                    // may sit under the keyboard), like tab switching.
-                    if !self.ui.prompt.visible() {
-                        let cmd = if *delta < 0 {
-                            BrowserCommand::Back
-                        } else {
-                            BrowserCommand::Forward
-                        };
-                        self.browser.execute_command(&cmd, &self.config.browser);
+                match focus {
+                    Focus::Menu => self.ui.menu.switch_section(*delta),
+                    // L1/R1 switch the settings section (Left/Right edits values).
+                    Focus::Settings => self.ui.settings.switch_section(*delta),
+                    // No sections to switch here — and page navigation under one of
+                    // Game Mode's screens would leave the game.
+                    Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                    // In the dial editor they reorder the focused pin (Left/Right
+                    // moves the selection there).
+                    Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
+                    // In hint mode L1/R1 are combo symbols; with combos off they fall
+                    // through to the page back/forward below.
+                    Focus::Hints if self.config.input.hint_badges => {
+                        self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                     }
-                }
-            },
-            // Only while the keyboard is up: L2 is a held Shift, R2 is Enter on
-            // the press edge. Elsewhere the triggers are ordinary bindable pads.
-            InputCommand::Trigger { right, pressed } => {
-                if focus == Focus::Osk {
-                    if *right {
-                        if *pressed {
-                            self.ui.osk(OskCommand::Enter, &self.browser, out);
+                    Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
+                        // Page navigation is parked while the modal prompt is up (it
+                        // may sit under the keyboard), like tab switching.
+                        if !self.ui.prompt.visible() {
+                            let cmd = if *delta < 0 {
+                                BrowserCommand::Back
+                            } else {
+                                BrowserCommand::Forward
+                            };
+                            self.browser.execute_command(&cmd, &self.config.browser);
                         }
-                    } else {
-                        self.ui.osk(OskCommand::Shift(*pressed), &self.browser, out);
                     }
                 }
+            }
+            // Only while the keyboard is up; both edges go, for the held
+            // modifiers. Elsewhere the triggers are ordinary bindable pads.
+            InputCommand::Trigger { right, pressed } => {
+                let input = match right {
+                    true => PadInput::RightTrigger(*pressed),
+                    false => PadInput::LeftTrigger(*pressed),
+                };
+                self.osk_input(input, out);
             }
             // The stock zoom pads are the keyboard's Shift and Enter.
             InputCommand::Zoom(delta) => {
@@ -314,13 +320,22 @@ impl App {
                         .mouse_button(sdl_button(*button), x, y, *pressed);
                 }
             }
+            InputCommand::OskButton(input) => {
+                self.osk_input(*input, out);
+            }
             InputCommand::Analog {
                 aim,
                 stick,
                 scroll,
+                right,
                 scroll_mode,
-            } => self.route_analog(*aim, *stick, *scroll, *scroll_mode, out),
+            } => self.route_analog(*aim, *stick, *scroll, *right, *scroll_mode, out),
         }
+    }
+
+    /// Offer the keyboard a pad input while it has focus; whether it took it.
+    pub(super) fn osk_input(&mut self, input: PadInput, out: &mut Vec<AppCommand>) -> bool {
+        self.ui.focus() == Focus::Osk && self.ui.osk_input(input, &self.browser, out)
     }
 
     /// Hint-mode directional input: hop the selection, or scroll a chunk and
@@ -416,6 +431,7 @@ impl App {
         aim: (f32, f32),
         stick: (f32, f32),
         scroll: (f32, f32),
+        right: (f32, f32),
         scroll_mode: bool,
         out: &mut Vec<AppCommand>,
     ) {
@@ -439,6 +455,20 @@ impl App {
             cfg.hint_badges,
             cfg.edge_scroll,
         );
+
+        // The right stick carries the keyboard at cursor speed, and scrolls the
+        // page once it is pinned against an edge.
+        if right != (0.0, 0.0) {
+            let step = cursor_speed * dt;
+            let moved = self.osk_input(PadInput::Move(right.0 * step, right.1 * step), out);
+            if moved && edge_scroll {
+                self.edge_scroll(right, self.ui.osk_clipped(), scroll_speed * dt);
+            }
+        }
+        // The keyboard may claim the stick.
+        if self.osk_input(PadInput::Stick(stick, nav_threshold), out) {
+            return;
+        }
 
         // Over an overlay the stick becomes the same discrete `Nav` steps the
         // keyboard arrows emit, so both devices share one execution path.

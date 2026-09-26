@@ -6,9 +6,9 @@ use super::{dial_edit, home, settings, AppUi, OskField};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
-    config::AppConfig,
+    config::{AppConfig, OskStyle, PadLayout},
     overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
-    overlay::osk::{OskCommand, OskTarget},
+    overlay::osk::{OskCommand, OskTarget, PadInput, Reading},
 };
 use egui_sdl2::egui;
 
@@ -179,6 +179,49 @@ impl AppUi {
         // the keyboard away is how that is called off.
         if matches!(cmd, OskCommand::Hide) {
             self.input_maps.take_naming();
+        }
+    }
+
+    pub fn set_osk_style(&mut self, style: OskStyle) {
+        self.osk.set_style(style);
+    }
+
+    pub fn set_pad_layout(&mut self, layout: PadLayout) {
+        self.pad_layout = layout;
+        self.osk.set_pad_layout(layout);
+    }
+
+    pub fn osk_clipped(&self) -> (f32, f32) {
+        self.osk.clipped()
+    }
+
+    /// Whether the keyboard has focus and a button `input` means something to it.
+    pub fn osk_takes(&mut self, input: PadInput) -> bool {
+        self.osk.set_picking(self.map_edit.picking().is_some());
+        self.focus() == Focus::Osk && self.osk.takes(input)
+    }
+
+    /// Offer the keyboard a pad input; whether it took it.
+    pub fn osk_input(
+        &mut self,
+        input: PadInput,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) -> bool {
+        self.osk.set_picking(self.map_edit.picking().is_some());
+        match self.osk.read(input) {
+            Reading::Pass => false,
+            // The analog tick asks for no repaint of its own.
+            Reading::Drawn(changed) => {
+                if changed {
+                    self.request_repaint();
+                }
+                true
+            }
+            Reading::Command(cmd) => {
+                self.osk(cmd, browser, commands);
+                true
+            }
         }
     }
 
@@ -395,6 +438,16 @@ impl AppUi {
     #[inline]
     pub fn hints_push_key(&mut self, c: char) -> HintInput {
         self.hints.push_label(Label::Key(c))
+    }
+
+    pub fn focus_address_bar(&mut self) {
+        let id = egui::Id::new(super::ids::LOCATION);
+        self.egui_ctx.memory_mut(|m| m.request_focus(id));
+    }
+
+    /// Whether the latest input came from the keyboard rather than a pad.
+    pub fn last_input_keyboard(&self) -> bool {
+        self.last_input_keyboard
     }
 
     /// Whether the address-bar text field currently holds keyboard focus (also

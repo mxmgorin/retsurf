@@ -6,8 +6,8 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, PageTheme,
-    ToolbarPosition,
+    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, OskStyle, PadLayout,
+    PageTheme, ToolbarPosition,
 };
 
 /// How a field is displayed, edited, and reached in a config. `Choice` carries
@@ -250,18 +250,25 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
 
-    f(S::Input,  "Input",     "Stick dead zone",        float!(input.deadzone as f32, bounds::DEADZONE, 0.05, 2), false),
-    f(S::Input,  "Input",     "Cursor speed",           float!(input.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
-    f(S::Input,  "Input",     "Scroll speed",           float!(input.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
-    f(S::Input,  "Input",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
-    f(S::Input,  "Input",     "OSK stick threshold",    float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
-    f(S::Input,  "Input",     "OSK repeat delay (ms)",  int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
-    f(S::Input,  "Input",     "OSK repeat rate (ms)",   int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
-    f(S::Input,  "Input",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
-    f(S::Input,  "Input",     "Cursor mode",            choice!(input.cursor_mode: CursorMode), true),
-    f(S::Input,  "Input",     "Hint badges",            flag!(input.hint_badges), false),
-    f(S::Input,  "Input",     "Edge scrolling",         flag!(input.edge_scroll), false),
-    f(S::Input,  "Input",     "Gamepad rumble",         flag!(input.haptics), false),
+    f(S::Input,    "Gamepad",     "Gamepad layout",         choice!(input.pad_layout: PadLayout), false),
+    f(S::Input,    "Gamepad",     "Swap A/B and X/Y",       flag!(input.swap_face_buttons), false),
+    f(S::Input,    "Gamepad",     "Stick dead zone",        float!(input.deadzone as f32, bounds::DEADZONE, 0.05, 2), false),
+    f(S::Input,    "Gamepad",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
+    f(S::Input,    "Gamepad",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
+    f(S::Input,    "Gamepad",     "Gamepad rumble",         flag!(input.haptics), false),
+
+    f(S::Input,    "Cursor & scroll", "Cursor mode",        choice!(input.cursor_mode: CursorMode), true),
+    f(S::Input,    "Cursor & scroll", "Cursor speed",       float!(input.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
+    f(S::Input,    "Cursor & scroll", "Scroll speed",       float!(input.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
+    f(S::Input,    "Cursor & scroll", "Edge scrolling",     flag!(input.edge_scroll), false),
+    f(S::Input,    "Cursor & scroll", "Hint badges",        flag!(input.hint_badges), false),
+
+    f(S::Input,    "Keyboard",    "On-screen keyboard",     choice!(osk.style: OskStyle), false),
+    #[cfg(target_os = "android")]
+    f(S::Input,    "Keyboard",    "System keyboard",        flag!(input.system_keyboard), false),
+    f(S::Input,    "Keyboard",    "Stick threshold",        float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
+    f(S::Input,    "Keyboard",    "Repeat delay (ms)",      int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
+    f(S::Input,    "Keyboard",    "Repeat rate (ms)",       int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),

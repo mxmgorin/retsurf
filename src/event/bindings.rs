@@ -77,7 +77,7 @@ action_table! {
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.
-        Osk => "osk", "Keyboard",
+        Osk => "osk", "On-screen keyboard",
         /// Opens the Game Mode menu, and closes it again; the mode is entered and
         /// left by a row there, not by this. Mirrored inside the mode, where the
         /// tables are bypassed, so the way in and the way out are one gesture.
@@ -95,6 +95,8 @@ action_table! {
         Next => "next", "Forward / next",
         /// Navigate the active tab to the configured home page.
         Home => "home", "Home",
+        /// Type a new address (see [`AppCommand::FocusAddressBar`]).
+        Address => "address", "Address bar",
         /// Toggle link-hint navigation.
         Hints => "hints", "Link hints",
         /// Toggle the D-pad / left stick between cursor and page scroll, for devices
@@ -233,6 +235,7 @@ impl Action {
             Action::Hints => AppCommand::Input(InputCommand::Hints),
             Action::Bookmark => AppCommand::ToggleBookmark,
             Action::Home => AppCommand::Browser(BrowserCommand::Home),
+            Action::Address => AppCommand::FocusAddressBar,
             Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
@@ -297,6 +300,7 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("hold:x", Action::Reader),
         ("hold:y", Action::Bookmark),
         ("select", Action::Settings),
+        ("hold:select", Action::Address),
         ("select+l1", Action::TabPrev),
         ("select+r1", Action::TabNext),
         ("start+l1", Action::CloseTab),
@@ -316,6 +320,7 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+h", Action::Home),
         ("ctrl+e", Action::Reader),
         ("ctrl+m", Action::Menu),
+        ("ctrl+l", Action::Address),
         ("ctrl+,", Action::Settings),
         // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
         // is the only key the browser still answers.

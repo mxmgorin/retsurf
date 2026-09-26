@@ -4,7 +4,9 @@
 //! page dimmed behind it.
 
 use super::theme::{self, ACCENT, DIM, SCRIM};
+use super::OskCaret;
 use crate::command::{AppCommand, PromptAction};
+use crate::config::FaceLabels;
 use crate::overlay::prompt::{select_rows, Prompt, SelectRow};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -18,8 +20,9 @@ const ROW_H: f32 = 26.0;
 pub(super) fn add_prompt(
     ctx: &egui::Context,
     prompt: &mut Prompt,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     osk_lift: f32,
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -58,7 +61,7 @@ pub(super) fn add_prompt(
                         ui, screen, prompt, &message, has_input, has_cancel, osk_caret, commands,
                     );
                 } else if let Some(EmbedderControl::SelectElement(select)) = prompt.front() {
-                    add_select(ui, screen, prompt, select, commands);
+                    add_select(ui, screen, prompt, select, face, commands);
                 }
             });
         });
@@ -71,6 +74,7 @@ fn add_select(
     screen: egui::Rect,
     prompt: &Prompt,
     select: &SelectElement,
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;
@@ -78,9 +82,9 @@ fn add_select(
     let row_w = (screen.width() - 96.0).min(448.0);
     ui.label(
         egui::RichText::new(if multiple {
-            "Select options — A toggles, OK applies"
+            format!("Select options — {} toggles, OK applies", face.a)
         } else {
-            "Select an option"
+            "Select an option".to_string()
         })
         .color(dim),
     );
@@ -193,7 +197,7 @@ fn add_dialog(
     message: &str,
     has_input: bool,
     has_cancel: bool,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;

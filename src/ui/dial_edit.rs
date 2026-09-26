@@ -4,8 +4,10 @@
 //! through [`crate::command::MenuAction`].
 
 use super::home::{paint_action_tile, paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
-use super::theme::{ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
+use super::theme::{self, ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
+use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::dial_edit::DialEdit;
 use egui_phosphor::bold;
@@ -16,7 +18,8 @@ pub(super) fn add_dial_edit(
     ctx: &egui::Context,
     edit: &mut DialEdit,
     pins: &[String],
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -52,7 +55,7 @@ pub(super) fn add_dial_edit(
                         ui.add_space(24.0);
                         add_field(ui, edit, field_w, osk_caret);
                     });
-                    add_hint_bar(ui, screen);
+                    add_hint_bar(ui, screen, face);
                 });
         });
 }
@@ -141,7 +144,7 @@ fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> 
 /// The URL entry field: an egui text field (its `dial_edit_url` id keeps egui
 /// keyboard focus in sync with the selection); the OSK types into the same
 /// buffer on the handheld.
-fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<usize>) {
+fn add_field(ui: &mut egui::Ui, edit: &mut DialEdit, width: f32, osk_caret: Option<OskCaret>) {
     let selected = edit.field_focused();
     let edit_id = egui::Id::new(super::ids::DIAL_EDIT_URL);
     // While the OSK types here, mirror its caret (egui won't follow the external
@@ -197,12 +200,18 @@ fn add_close_button(ui: &mut egui::Ui, screen: egui::Rect, commands: &mut Vec<Ap
 }
 
 /// A dim one-line control hint pinned near the bottom of the panel.
-fn add_hint_bar(ui: &egui::Ui, screen: egui::Rect) {
+fn add_hint_bar(ui: &egui::Ui, screen: egui::Rect, face: FaceLabels) {
     let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
     ui.painter().text(
         egui::pos2(screen.center().x, screen.bottom() - 22.0),
         egui::Align2::CENTER_CENTER,
-        format!("{up}{down} select   A type   X delete   L1/R1 move   B back"),
+        theme::hint_line(&[
+            &format!("{up}{down} select"),
+            &format!("{} type", face.a),
+            &format!("{} unpin", face.x),
+            "L1/R1 move",
+            &format!("{} back", face.b),
+        ]),
         egui::FontId::proportional(12.0),
         MUTED,
     );

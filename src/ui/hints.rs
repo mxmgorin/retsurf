@@ -14,6 +14,7 @@
 //! the spatial selection frame stays so confirm still works.
 
 use super::theme::ACCENT;
+use crate::config::FaceLabels;
 use crate::overlay::hints::{Hints, Label, Sym};
 use egui_sdl2::egui;
 
@@ -31,7 +32,13 @@ const PILL_INK: egui::Color32 = egui::Color32::from_rgb(0x10, 0x16, 0x14);
 const DONE_PILL: egui::Color32 = egui::Color32::from_gray(0x3a);
 const DONE_INK: egui::Color32 = egui::Color32::from_gray(0xc0);
 
-pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect, badges: bool) {
+/// Draw the hint frames, and with `badges` their codes in those face labels.
+pub(super) fn add_hints(
+    ctx: &egui::Context,
+    hints: &Hints,
+    webview: egui::Rect,
+    badges: Option<FaceLabels>,
+) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("hints"),
@@ -71,8 +78,8 @@ pub(super) fn add_hints(ctx: &egui::Context, hints: &Hints, webview: egui::Rect,
 
         // Only the live targets carry a readable badge; faded hints drop it.
         // With combos disabled, no badges at all — just the spatial frames.
-        if badges && matched {
-            draw_badge(&painter, rect, webview, hints.code(i), typed.len());
+        if let Some(face) = badges.filter(|_| matched) {
+            draw_badge(&painter, rect, webview, hints.code(i), typed.len(), face);
         }
     }
 }
@@ -86,6 +93,7 @@ fn draw_badge(
     webview: egui::Rect,
     code: &[Label],
     done: usize,
+    face: FaceLabels,
 ) {
     let mut x = rect.left();
     // The selected hint's frame is drawn 2px outside the rect; clear it too.
@@ -102,7 +110,7 @@ fn draw_badge(
         // Cells abut with no gap; round only the row's outer corners so a code
         // reads as one pill.
         painter.rect_filled(cell, group_corners(j, last), pill);
-        draw_label(painter, cell, label, ink);
+        draw_label(painter, cell, label, ink, face);
         x += w;
     }
 }
@@ -129,11 +137,17 @@ fn cell_width(label: Label) -> f32 {
 
 /// Render one code cell centered in its pill: a gamepad symbol (lettered button
 /// or D-pad triangle) or a typed keyboard letter (drawn uppercase).
-fn draw_label(painter: &egui::Painter, cell: egui::Rect, label: Label, ink: egui::Color32) {
+fn draw_label(
+    painter: &egui::Painter,
+    cell: egui::Rect,
+    label: Label,
+    ink: egui::Color32,
+    face: FaceLabels,
+) {
     let mut buf = [0u8; 4];
     let text: &str = match label {
-        Label::Sym(Sym::X) => "X",
-        Label::Sym(Sym::Y) => "Y",
+        Label::Sym(Sym::X) => face.x,
+        Label::Sym(Sym::Y) => face.y,
         Label::Sym(Sym::L1) => "L1",
         Label::Sym(Sym::R1) => "R1",
         Label::Sym(sym) => {
@@ -142,7 +156,7 @@ fn draw_label(painter: &egui::Painter, cell: egui::Rect, label: Label, ink: egui
         }
         Label::Key(c) => c.to_ascii_uppercase().encode_utf8(&mut buf),
     };
-    let size = if text.len() == 2 { 9.0 } else { 10.0 };
+    let size = if text.chars().count() == 2 { 9.0 } else { 10.0 };
     painter.text(
         cell.center(),
         egui::Align2::CENTER_CENTER,

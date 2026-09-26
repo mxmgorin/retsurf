@@ -11,16 +11,29 @@
 //!
 //! The **Fn** key swaps the characters for [`NAMED_ROWS`]: the page gets those
 //! as real events, a key picker ([`OskTarget::Capture`]) records them by name.
+//!
+//! `[osk] style = "wheel"` swaps the grid for a wheel ([`wheel`]); a key
+//! picker always gets the grid. Pad intents arrive as [`PadInput`] and the style
+//! on screen decides their meaning ([`Osk::read`]).
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{AppCommand, GameInputMapsAction, MenuAction, PromptAction};
-use crate::config::OskConfig;
+use crate::config::{Face, OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
 use keyboard_types::{Code, NamedKey};
+use layout::{Layout, LayoutDef, LAYOUTS, NAMED_KEYS};
 use std::cell::OnceCell;
-use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use wheel::Wheel;
+
+mod edit;
+mod layout;
+pub mod wheel;
+
+pub use edit::Edit;
+
+pub use layout::Key;
+use Key::*;
 
 /// Where typed input goes: the egui address bar, a borrowed edit buffer, or the
 /// page's focused element (via Servo keyboard events). Picked per command by
@@ -50,7 +63,7 @@ pub enum OskTarget<'a> {
 /// An operation on the on-screen keyboard. The router produces these from the
 /// contextual buttons, the stick and the dedicated keys, then dispatches them
 /// via [`Osk::handle`].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum OskCommand {
     Show,
     Hide,
@@ -61,203 +74,55 @@ pub enum OskCommand {
     Space,
     /// Set the held-Shift modifier: `true` while the trigger is held.
     Shift(bool),
+    /// Hold the wheel's digits layer up: `true` while the trigger is held.
+    Digits(bool),
     /// Submit (load the address bar or send Enter), then hide.
     Enter,
     /// Move the selection by one cell (`dx`, `dy` ∈ -1..=1).
     Move(i32, i32),
+    /// Apply `key` without selecting it.
+    Press(Key),
+    /// A wheel face press: the aimed group's corner.
+    Face(Face),
+    Edit(Edit),
 }
 
+/// A gamepad input while the keyboard has focus. A/B/X/Y also carry the confirm,
+/// cancel, keyboard and hints actions.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Key {
-    Char(char),
-    Tab,
-    Caps,
-    Space,
-    Backspace,
-    Shift,
-    Left,
-    Up,
-    Down,
-    Right,
-    Enter,
-    /// Cycle to the next enabled layout; labeled with the current one's name.
-    Lang,
-    /// Empty the field being typed into.
-    Clear,
-    Hide,
-    /// Swap between the characters and [`NAMED_ROWS`]; labeled with the one it
-    /// leads to.
-    Fn,
-    /// `label` is the cell, `name` the `keyboard_types` spelling it sends.
-    Named {
-        label: &'static str,
-        name: &'static str,
-    },
+pub enum PadInput {
+    A,
+    B,
+    X,
+    Y,
+    /// L1 (-1) or R1 (+1).
+    Shoulder(i32),
+    /// L2 held or released.
+    LeftTrigger(bool),
+    /// R2 held or released.
+    RightTrigger(bool),
+    /// One navigation step.
+    Nav(i32, i32),
+    /// A discrete D-pad press.
+    Dpad(i32, i32),
+    /// The left stick, and the deflection that counts as a push.
+    Stick((f32, f32), f32),
+    /// Carry the keyboard this many logical px.
+    Move(f32, f32),
+    /// The right stick's click.
+    R3,
+    Start,
+    Select,
 }
 
-impl Key {
-    /// The gamepad button that directly triggers this key (the router's
-    /// mapping), shown as a corner badge so the shortcuts are discoverable;
-    /// keys without a dedicated button use D-pad + **A**.
-    pub fn button_hint(self) -> Option<&'static str> {
-        match self {
-            Key::Backspace => Some("X"),
-            Key::Space => Some("Y"),
-            Key::Shift => Some("L2"),
-            Key::Enter => Some("R2"),
-            Key::Hide => Some("B"),
-            _ => None,
-        }
-    }
-}
-
-use Key::*;
-
-/// The keys no character grid can carry, laid out like a keyboard's. Names are
-/// `NamedKey` spellings; their `code` comes from [`code_for_named`].
-static NAMED_ROWS: &[&[(&str, &str)]] = &[
-    &[
-        ("Esc", "Escape"),
-        ("F1", "F1"),
-        ("F2", "F2"),
-        ("F3", "F3"),
-        ("F4", "F4"),
-        ("F5", "F5"),
-        ("F6", "F6"),
-        ("F7", "F7"),
-        ("F8", "F8"),
-        ("F9", "F9"),
-        ("F10", "F10"),
-        ("F11", "F11"),
-        ("F12", "F12"),
-    ],
-    // The navigation cluster in its usual 3x2.
-    &[("Ins", "Insert"), ("Home", "Home"), ("PgUp", "PageUp")],
-    &[("Del", "Delete"), ("End", "End"), ("PgDn", "PageDown")],
-    // Bare modifiers, which games bind to run and crouch. Not the map's
-    // `shift`/`ctrl`/`alt` flags: those qualify another key.
-    &[
-        ("Shift", "Shift"),
-        ("Ctrl", "Control"),
-        ("Alt", "Alt"),
-        ("Meta", "Meta"),
-    ],
-];
-
-/// The row every grid ends with. The keyboard is anchored to the bottom, so
-/// keeping it identical leaves these keys put when Fn swaps what is above.
-fn frame_row() -> Vec<Key> {
-    vec![Lang, Fn, Clear, Space, Left, Up, Down, Right, Hide]
-}
-
-/// [`NAMED_ROWS`] over that same frame row; identical for every `Osk`, so it is
-/// built once.
-static NAMED_KEYS: LazyLock<Vec<Vec<Key>>> = LazyLock::new(|| {
-    NAMED_ROWS
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|(label, name)| Named { label, name })
-                .collect()
-        })
-        .chain([frame_row()])
-        .collect()
-});
-
-/// A built-in layout's data: the four character rows between the fixed frame
-/// keys, each mirrored by its shifted variant (position by position).
-struct LayoutDef {
-    /// Config name (matched case-insensitively) and the Lang key's label.
-    name: &'static str,
-    rows: [&'static str; 4],
-    shift_rows: [&'static str; 4],
-}
-
-/// The built-in layouts, selectable via `[osk] layouts` in the config. Adding
-/// a language is adding an entry here: four rows of characters arranged like
-/// the physical keyboard, plus their shifted forms.
-static LAYOUTS: &[LayoutDef] = &[
-    LayoutDef {
-        name: "en",
-        rows: [
-            "`1234567890-=",
-            "qwertyuiop[]\\",
-            "asdfghjkl;'",
-            "zxcvbnm,./",
-        ],
-        shift_rows: [
-            "~!@#$%^&*()_+",
-            "QWERTYUIOP{}|",
-            "ASDFGHJKL:\"",
-            "ZXCVBNM<>?",
-        ],
-    },
-    LayoutDef {
-        name: "ru",
-        rows: [
-            "ё1234567890-=",
-            "йцукенгшщзхъ\\",
-            "фывапролджэ",
-            "ячсмитьбю.",
-        ],
-        shift_rows: [
-            "Ё!\"№;%:?*()_+",
-            "ЙЦУКЕНГШЩЗХЪ/",
-            "ФЫВАПРОЛДЖЭ",
-            "ЯЧСМИТЬБЮ,",
-        ],
-    },
-];
-
-/// A ready-to-use layout: the full key grid (character rows wrapped in the
-/// fixed frame) and the Shift mapping for non-letter characters.
-pub struct Layout {
-    /// Shown on the Lang key.
-    pub name: &'static str,
-    keys: Vec<Vec<Key>>,
-    shift_map: HashMap<char, char>,
-}
-
-impl Layout {
-    /// Wrap a definition's character rows in the fixed frame: Backspace top
-    /// right, Enter at the home-row right, Shift around the bottom letter row,
-    /// Space along the bottom with the arrow cluster after it.
-    fn build(def: &LayoutDef) -> Self {
-        let chars = |r: usize| def.rows[r].chars().map(Char);
-        let keys = vec![
-            chars(0).chain([Backspace]).collect(),
-            [Tab].into_iter().chain(chars(1)).collect(),
-            [Caps].into_iter().chain(chars(2)).chain([Enter]).collect(),
-            [Shift].into_iter().chain(chars(3)).chain([Shift]).collect(),
-            frame_row(),
-        ];
-        let mut shift_map = HashMap::new();
-        for (row, shifted) in def.rows.iter().zip(def.shift_rows) {
-            shift_map.extend(row.chars().zip(shifted.chars()));
-        }
-        Self {
-            name: def.name,
-            keys,
-            shift_map,
-        }
-    }
-
-    /// The character a `Char` key produces given the modifier state. Letters
-    /// flip case by `shift XOR caps` (Caps Lock only affects case); anything
-    /// else shifts through the layout's mapping.
-    pub fn resolve_char(&self, c: char, shift: bool, caps: bool) -> char {
-        if c.is_alphabetic() {
-            if shift ^ caps {
-                c.to_uppercase().next().unwrap_or(c)
-            } else {
-                c
-            }
-        } else if shift {
-            self.shift_map.get(&c).copied().unwrap_or(c)
-        } else {
-            c
-        }
-    }
+/// What the keyboard makes of a [`PadInput`].
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Reading {
+    /// Not the keyboard's: the caller keeps its own meaning.
+    Pass,
+    /// Taken with no command; `true` when it changed what is drawn.
+    Drawn(bool),
+    Command(OskCommand),
 }
 
 /// On-screen keyboard state: visibility, the selected cell, shift/caps, and
@@ -274,6 +139,8 @@ pub struct Osk {
     /// Backspace act here, `<`/`>` move it. Reset to buffer end on Show, clamped
     /// on use. Page/Settings ignore it, staying append-only as before.
     caret: usize,
+    /// Where the selection started, as a char index; it runs to [`Self::caret`].
+    anchor: Option<usize>,
     row: usize,
     col: usize,
     /// The enabled layouts in Lang-cycle order; never empty.
@@ -287,10 +154,17 @@ pub struct Osk {
     picking: bool,
     /// Whether the picker is on [`NAMED_ROWS`] rather than the characters.
     named: bool,
+    style: OskStyle,
+    wheel: Wheel,
+    /// How far the keyboard was moved from its place at the bottom, in logical px.
+    offset: (f32, f32),
+    /// The offset's (min, max), as the last frame drew them.
+    bounds: Option<((f32, f32), (f32, f32))>,
+    clipped: (f32, f32),
 }
 
 impl Osk {
-    pub fn new(cfg: &OskConfig) -> Self {
+    pub fn new(cfg: &OskConfig, pad_layout: PadLayout) -> Self {
         let mut langs: Vec<&'static LayoutDef> = cfg
             .layouts
             .iter()
@@ -315,6 +189,7 @@ impl Osk {
             shift_held: false,
             shift_once: false,
             caret: 0,
+            anchor: None,
             // Start on `a` (the home row's first letter), not the top-left
             // backtick; the cell then persists across hide/show.
             row: 2,
@@ -324,7 +199,82 @@ impl Osk {
             grid: OnceCell::new(),
             picking: false,
             named: false,
+            style: cfg.style,
+            wheel: Wheel::new(pad_layout),
+            offset: (0.0, 0.0),
+            bounds: None,
+            clipped: (0.0, 0.0),
         }
+    }
+
+    pub fn set_style(&mut self, style: OskStyle) {
+        self.style = style;
+        self.wheel.centre();
+    }
+
+    pub fn set_pad_layout(&mut self, layout: PadLayout) {
+        self.wheel.set_pad_layout(layout);
+    }
+
+    /// Whether the wheel is up rather than the grid.
+    pub fn wheel(&self) -> bool {
+        self.style == OskStyle::Wheel && !self.picking
+    }
+
+    /// What a pad input means to the style on screen.
+    pub fn read(&mut self, input: PadInput) -> Reading {
+        match input {
+            PadInput::Move(dx, dy) => {
+                let want = (self.offset.0 + dx, self.offset.1 + dy);
+                self.offset = self.bounded(want);
+                self.clipped = (want.0 - self.offset.0, want.1 - self.offset.1);
+                return Reading::Drawn(true);
+            }
+            PadInput::R3 => {
+                self.offset = (0.0, 0.0);
+                return Reading::Drawn(true);
+            }
+            _ => {}
+        }
+        match self.wheel() {
+            true => self.wheel.read(input, self.shift()),
+            false => grid_command(input).map_or(Reading::Pass, Reading::Command),
+        }
+    }
+
+    pub fn offset(&self) -> (f32, f32) {
+        self.offset
+    }
+
+    /// The part of the last move the bounds held back.
+    pub fn clipped(&self) -> (f32, f32) {
+        self.clipped
+    }
+
+    /// Bound the offset between `min` and `max` from now on; whether that moved it.
+    pub fn set_bounds(&mut self, min: (f32, f32), max: (f32, f32)) -> bool {
+        self.bounds = Some((min, max));
+        let held = self.bounded(self.offset);
+        std::mem::replace(&mut self.offset, held) != held
+    }
+
+    fn bounded(&self, (x, y): (f32, f32)) -> (f32, f32) {
+        match self.bounds {
+            Some((min, max)) => (x.clamp(min.0, max.0), y.clamp(min.1, max.1)),
+            None => (x, y),
+        }
+    }
+
+    /// Whether a button `input` means something to the style on screen.
+    pub fn takes(&self, input: PadInput) -> bool {
+        if matches!(input, PadInput::Move(..) | PadInput::R3) {
+            return true;
+        }
+        match self.wheel() {
+            true => self.wheel.command(input, self.shift()),
+            false => grid_command(input),
+        }
+        .is_some()
     }
 
     /// The active layout, built on demand rather than held: the grid is wanted
@@ -337,6 +287,7 @@ impl Osk {
     /// Take the keyboard down, dropping the grid with it.
     pub fn hide(&mut self) {
         self.visible = false;
+        self.wheel.centre();
         self.grid.take();
     }
 
@@ -425,14 +376,20 @@ impl Osk {
                 self.shift_once = false;
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
+                self.anchor = None;
+                self.wheel.set_digits(false);
             }
             OskCommand::Hide => self.hide(),
             OskCommand::Activate => self.activate(target, browser, commands),
             OskCommand::Backspace => self.backspace(target, browser),
             OskCommand::Space => self.type_space(target, browser),
             OskCommand::Shift(held) => self.shift_held = held,
+            OskCommand::Digits(held) => self.wheel.set_digits(held),
             OskCommand::Enter => self.enter(target, browser, commands),
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
+            OskCommand::Press(key) => self.press(key, target, browser, commands),
+            OskCommand::Face(face) => self.wheel_face(face, target, browser),
+            OskCommand::Edit(edit) => self.edit(edit, target, browser),
         }
     }
 
@@ -440,10 +397,10 @@ impl Osk {
         (self.row, self.col)
     }
 
-    /// Caret position (char index) for the field the OSK types into, so its
-    /// egui `TextEdit` can park its cursor to match.
-    pub fn caret(&self) -> usize {
-        self.caret
+    /// The selection's anchor and caret (char indices, equal when nothing is
+    /// selected) in the field the OSK types into, for its `TextEdit` to mirror.
+    pub fn caret(&self) -> (usize, usize) {
+        (self.anchor.unwrap_or(self.caret), self.caret)
     }
 
     fn current(&self) -> Key {
@@ -459,15 +416,26 @@ impl Osk {
         self.col = (self.col as i32 + dx).clamp(0, cols - 1) as usize;
     }
 
-    /// Apply the selected key. Typed input goes to whatever `target` points at
-    /// (address bar / prompt dialog / the page, via Servo keyboard events).
+    /// Apply the selected key.
     fn activate(
         &mut self,
         target: OskTarget,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
-        match self.current() {
+        self.press(self.current(), target, browser, commands);
+    }
+
+    /// Apply `key`. Typed input goes to whatever `target` points at (address
+    /// bar / prompt dialog / the page, via Servo keyboard events).
+    fn press(
+        &mut self,
+        key: Key,
+        target: OskTarget,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        match key {
             // The on-screen Shift key arms a one-shot Shift (toggle so a mis-tap
             // can be undone); L2 is the held modifier and lives in `shift_held`.
             Shift => self.shift_once = !self.shift_once,
@@ -483,14 +451,18 @@ impl Osk {
             Backspace => self.backspace(target, browser),
             // In an editable field `<`/`>` slide the caret and the egui TextEdit
             // mirrors it; Up/Down do nothing on a single-line field.
-            Left if caret_field(&target) => self.caret = self.caret.saturating_sub(1),
+            Left if caret_field(&target) => {
+                self.anchor = None;
+                self.caret = self.caret.saturating_sub(1)
+            }
             Right if caret_field(&target) => {
+                self.anchor = None;
                 self.caret = (self.caret + 1).min(target_char_len(&target, browser))
             }
             // Picking: the frame keys name themselves, which is how a row gets
             // an arrow or Tab without the grid carrying one.
             Tab | Left | Right | Up | Down if matches!(target, OskTarget::Capture(_)) => {
-                let name = match self.current() {
+                let name = match key {
                     Tab => "Tab",
                     Left => "ArrowLeft",
                     Right => "ArrowRight",
@@ -547,6 +519,7 @@ impl Osk {
             OskTarget::Page => browser.clear_focused_field(),
         }
         self.caret = 0;
+        self.anchor = None;
     }
 
     /// A picker records the map's spelling, the page gets a real key event, and
@@ -570,34 +543,44 @@ impl Osk {
         self.input_char(target, ' ', shift, browser);
     }
 
-    /// Delete the character before the caret (the **Backspace** key or **X**).
+    /// Delete the selection, or else the character before the caret (the
+    /// **Backspace** key or **X**).
     fn backspace(&mut self, target: OskTarget, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => {
-                self.caret = remove_before(&mut browser.get_state_mut().location, self.caret)
-            }
+            OskTarget::AddressBar => self.remove_before(&mut browser.get_state_mut().location),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
-            | OskTarget::GameName(buf) => self.caret = remove_before(buf, self.caret),
+            | OskTarget::GameName(buf) => self.remove_before(buf),
             OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
+    }
+
+    /// Delete the selection from `buf`, or else the char before the caret.
+    fn remove_before(&mut self, buf: &mut String) {
+        if !self.delete_selection(buf) {
+            self.caret = remove_before(buf, self.caret);
+        }
+    }
+
+    /// Put `c` in place of the selection, or at the caret, advancing it.
+    fn insert(&mut self, buf: &mut String, c: char) {
+        self.delete_selection(buf);
+        self.caret = insert_at(buf, self.caret, c);
     }
 
     /// Insert `c` at the caret (advancing it) for an editable field, or send it
     /// to the page as a key event.
     fn input_char(&mut self, target: OskTarget, c: char, shift: bool, browser: &AppBrowser) {
         match target {
-            OskTarget::AddressBar => {
-                self.caret = insert_at(&mut browser.get_state_mut().location, self.caret, c)
-            }
+            OskTarget::AddressBar => self.insert(&mut browser.get_state_mut().location, c),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
             | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
-            | OskTarget::GameName(buf) => self.caret = insert_at(buf, self.caret, c),
+            | OskTarget::GameName(buf) => self.insert(buf, c),
             OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
                 browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
@@ -650,6 +633,29 @@ impl Osk {
         }
         self.visible = false;
     }
+}
+
+/// What `input` means on the grid.
+fn grid_command(input: PadInput) -> Option<OskCommand> {
+    let cmd = match input {
+        PadInput::A => OskCommand::Activate,
+        PadInput::B => OskCommand::Hide,
+        PadInput::X => OskCommand::Backspace,
+        PadInput::Y => OskCommand::Space,
+        PadInput::LeftTrigger(held) => OskCommand::Shift(held),
+        PadInput::RightTrigger(true) => OskCommand::Enter,
+        PadInput::Nav(dx, dy) => OskCommand::Move(dx, dy),
+        // Left to the caller.
+        PadInput::Shoulder(_)
+        | PadInput::RightTrigger(false)
+        | PadInput::Dpad(..)
+        | PadInput::Stick(..)
+        | PadInput::Move(..)
+        | PadInput::R3
+        | PadInput::Start
+        | PadInput::Select => return None,
+    };
+    Some(cmd)
 }
 
 /// Whether `<`/`>` move the caret for this target: the editable fields that
@@ -707,11 +713,11 @@ fn send_named(browser: &AppBrowser, key: NamedKey, code: Code) {
 
 #[cfg(test)]
 mod tests {
+    use super::layout::NAMED_ROWS;
     use super::*;
-    use std::str::FromStr;
 
     fn osk() -> Osk {
-        Osk::new(&OskConfig::default())
+        Osk::new(&OskConfig::default(), PadLayout::default())
     }
 
     /// A name the map cannot parse is a key that silently does nothing, and a

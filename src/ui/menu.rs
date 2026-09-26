@@ -5,6 +5,7 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::history;
 use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
@@ -186,6 +187,7 @@ pub(super) fn add_menu(
     ctx: &egui::Context,
     menu: &Menu,
     tabs: &[TabInfo],
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -205,19 +207,27 @@ pub(super) fn add_menu(
             commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
         }
         // Y is section-specific: Bookmarks pins to the dial, History/Tabs bookmark.
-        let y_hint = match menu.section() {
-            Section::Bookmarks => "   Y pin",
-            Section::History | Section::Tabs => "   Y bookmark",
-            Section::Downloads => "",
+        let y_action = match menu.section() {
+            Section::Bookmarks => Some("pin"),
+            Section::History | Section::Tabs => Some("bookmark"),
+            Section::Downloads => None,
+        };
+        let x_action = match menu.section() {
+            Section::Tabs => "close",
+            Section::Bookmarks | Section::History | Section::Downloads => "remove",
         };
         let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
         let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
-        ui.label(
-            egui::RichText::new(format!(
-                "{left}{right} section   {up}{down} select   A open   X delete{y_hint}   B close"
-            ))
-            .color(dim),
-        );
+        let mut hints = vec![
+            format!("{left}{right} section"),
+            format!("{up}{down} select"),
+            format!("{} open", face.a),
+            format!("{} {x_action}", face.x),
+        ];
+        hints.extend(y_action.map(|y| format!("{} {y}", face.y)));
+        hints.push(format!("{} back", face.b));
+        let hints: Vec<&str> = hints.iter().map(String::as_str).collect();
+        ui.label(egui::RichText::new(theme::hint_line(&hints)).color(dim));
         ui.add_space(8.0);
 
         match menu.section() {

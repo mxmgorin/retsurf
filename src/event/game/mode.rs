@@ -556,6 +556,7 @@ impl GameInput {
             aim,
             stick: (0.0, 0.0),
             scroll,
+            right: (0.0, 0.0),
             scroll_mode: false,
         }));
     }

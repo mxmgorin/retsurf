@@ -2,10 +2,11 @@
 # Pull the SDL pieces that must match the linked sdl2-sys version (2.26.4) out of
 # the Cargo registry into this Gradle project, and build the matching libSDL2.so:
 #
-#   1. Java glue   -> app/src/main/java/org/libsdl/app/*.java
+#   1. Java glue   -> app/src/main/java/org/libsdl/app/*.java (patched, see
+#      android/patches)
 #   2. Gradle wrapper jar + gradlew (so ./gradlew works without a system Gradle)
-#   3. libSDL2.so (built from a patched copy of the SDL source for arm64-v8a via
-#      the NDK + CMake; see android/patches)
+#   3. libSDL2.so (built from the patched SDL source for arm64-v8a via the NDK
+#      + CMake)
 #   4. libc++_shared.so (from the NDK sysroot)
 #
 # Run `cargo fetch` first so the sdl2-sys source is present. Requires
@@ -42,10 +43,24 @@ sdl_src="$sdl_crate/SDL"
 sdl_proj="$sdl_src/android-project"
 echo "using SDL from: $sdl_crate"
 
+# 0. A patched copy of the registry source, which feeds both the Java glue and
+#    libSDL2.so (the registry is shared and cargo wipes it, so it is never
+#    edited in place).
+src="$repo/target/sdl-android-src"
+rm -rf "$src"
+# A cold runner has no target/ yet.
+mkdir -p "$repo/target"
+cp -r "$sdl_src" "$src"
+for p in "$here"/patches/*.patch; do
+    [ -e "$p" ] || continue
+    echo "applying $(basename "$p")"
+    patch -p1 -d "$src" -i "$p"
+done
+
 # 1. Java glue
 glue_dst="$here/app/src/main/java/org/libsdl/app"
 mkdir -p "$glue_dst"
-cp "$sdl_proj"/app/src/main/java/org/libsdl/app/*.java "$glue_dst/"
+cp "$src"/android-project/app/src/main/java/org/libsdl/app/*.java "$glue_dst/"
 
 # 1b. Launcher icons. The res/mipmap-* dirs are generated (git-ignored), so lay
 #     down SDL's placeholder for every density first (keeps @mipmap/ic_launcher
@@ -70,19 +85,7 @@ cp "$sdl_proj/gradle/wrapper/gradle-wrapper.jar" "$here/gradle/wrapper/"
 cp "$sdl_proj/gradlew" "$sdl_proj/gradlew.bat" "$here/"
 chmod +x "$here/gradlew"
 
-# 3. libSDL2.so for arm64-v8a, from a patched copy of the registry source (the
-#    registry is shared and cargo wipes it, so it is never edited in place).
-src="$repo/target/sdl-android-src"
-rm -rf "$src"
-# A cold runner has no target/ yet.
-mkdir -p "$repo/target"
-cp -r "$sdl_src" "$src"
-for p in "$here"/patches/*.patch; do
-    [ -e "$p" ] || continue
-    echo "applying $(basename "$p")"
-    patch -p1 -d "$src" -i "$p"
-done
-
+# 3. libSDL2.so for arm64-v8a, from the patched copy made above.
 jnilibs="$here/app/src/main/jniLibs/$abi"
 mkdir -p "$jnilibs"
 build="$repo/target/sdl-android-$abi"

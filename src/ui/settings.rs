@@ -6,6 +6,7 @@
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
+use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
 use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
@@ -410,6 +411,7 @@ pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
     update: &UpdateState,
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -429,17 +431,33 @@ pub(super) fn add_settings(
         }
         let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
         let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
+        let (ok, back) = (face.a, face.b);
+        let (section, mv) = ("L1/R1 section", format!("{up}{down} move"));
         let hint = if settings.capturing() {
-            "Press a button or key to bind      Esc cancel".to_string()
+            theme::hint_line(&["Press a button or key to bind", "Esc cancel"])
         } else if settings.is_info_section() {
-            format!("L1/R1 section   {up}{down} move   A select   B close")
+            theme::hint_line(&[
+                section,
+                &mv,
+                &format!("{ok} select"),
+                &format!("{back} back"),
+            ])
         } else if settings.is_controls_section() {
-            format!("L1/R1 section   {up}{down} move   A open / bind / remove   B save & close")
+            theme::hint_line(&[
+                section,
+                &mv,
+                &format!("{ok} open / bind / remove"),
+                &format!("{back} save & back"),
+            ])
         } else {
-            format!(
-                "L1/R1 section   {up}{down} move   {left}{right} adjust   A edit   \
-                 B save & close      * needs restart"
-            )
+            theme::hint_line(&[
+                section,
+                &mv,
+                &format!("{left}{right} adjust"),
+                &format!("{ok} edit"),
+                &format!("{back} save & back"),
+                "* needs restart",
+            ])
         };
         ui.label(egui::RichText::new(hint).color(dim));
         if let Some(note) = settings.controls_note() {

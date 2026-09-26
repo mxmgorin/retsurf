@@ -4,7 +4,9 @@
 //! routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
+use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
+use crate::config::FaceLabels;
 use crate::data::dial::SETTINGS_PIN;
 use crate::overlay::home::Home;
 use egui_phosphor::bold;
@@ -50,7 +52,8 @@ pub(super) fn add_home(
     home: &mut Home,
     pins: &[String],
     webview: egui::Rect,
-    osk_caret: Option<usize>,
+    osk_caret: Option<OskCaret>,
+    face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
     let area = webview;
@@ -109,15 +112,15 @@ pub(super) fn add_home(
                                 });
                             });
                     });
-                    add_hint_bar(ui, area);
+                    add_hint_bar(ui, area, face);
                 });
         });
 }
 
 /// The bottom control-hint bar: key-cap pills with their action. Painted rather
 /// than laid out in the flow, so the tile count can't move it.
-fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
-    const HINTS: &[(&str, &str)] = &[("A", "Open"), (bold::LIST, "Menu")];
+fn add_hint_bar(ui: &egui::Ui, area: egui::Rect, face: FaceLabels) {
+    let hints = [(face.a, "Open"), (bold::LIST, "Menu")];
     const PAD: f32 = 6.0; // pill horizontal padding around the key glyph
     const GAP_KL: f32 = 6.0; // key pill to its label
     const GAP_SEG: f32 = 18.0; // between hint segments
@@ -126,7 +129,7 @@ fn add_hint_bar(ui: &egui::Ui, area: egui::Rect) {
     let painter = ui.painter();
 
     // Lay out every glyph first so the row can be centered as a whole.
-    let segs: Vec<_> = HINTS
+    let segs: Vec<_> = hints
         .iter()
         .map(|(key, label)| {
             let kg = painter.layout_no_wrap(key.to_string(), key_font.clone(), INK);
@@ -259,7 +262,7 @@ fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
 /// The hero search / URL field. Editable directly (desktop keyboard); on the
 /// handheld the OSK writes into the same buffer. Enter submits it (handled in
 /// the keyboard/router layer).
-fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<usize>) {
+fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<OskCaret>) {
     let selected = home.search_focused();
     let edit_id = egui::Id::new(super::ids::HOME_SEARCH);
     // While the OSK types here, mirror its caret (egui won't follow the external

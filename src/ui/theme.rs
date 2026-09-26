@@ -103,6 +103,11 @@ pub fn icon_fill(glyph: &str) -> egui::RichText {
         .family(egui::FontFamily::Name(FILL_FAMILY.into()))
 }
 
+/// Join control hints (`"A open"`, ...) into one line, a small dot between each.
+pub fn hint_line(hints: &[&str]) -> String {
+    hints.join(&format!("  {}  ", egui_phosphor::bold::DOT))
+}
+
 /// Side of the square close button (logical px).
 pub const CLOSE_SIZE: f32 = 28.0;
 

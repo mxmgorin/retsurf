@@ -1,4 +1,5 @@
 use crate::config::token_enum::token_enum;
+use crate::config::PadLayout;
 use serde::{Deserialize, Serialize};
 
 /// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,
@@ -36,6 +37,14 @@ pub struct InputConfig {
     /// Whether pushing the cursor against a window edge scrolls the page that
     /// way. Never in Game Mode, where the cursor belongs to the game.
     pub edge_scroll: bool,
+    /// Which pad's letters and colours the on-screen hints draw.
+    pub pad_layout: PadLayout,
+    /// Read A/B and X/Y across from how the pad reports them, for a pad whose
+    /// printed A arrives as B.
+    pub swap_face_buttons: bool,
+    /// Whether a focused field raises Android's system keyboard. Off leaves
+    /// typing to the on-screen keyboard.
+    pub system_keyboard: bool,
     /// Whether a page may rumble the pad (the Gamepad API's `playEffect`). Off
     /// also stops advertising the capability to newly loaded documents.
     pub haptics: bool,
@@ -56,6 +65,9 @@ impl Default for InputConfig {
             hint_badges: true,
             edge_scroll: true,
             haptics: true,
+            pad_layout: PadLayout::default(),
+            swap_face_buttons: false,
+            system_keyboard: true,
         }
     }
 }

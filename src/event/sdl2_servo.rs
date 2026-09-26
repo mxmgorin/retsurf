@@ -121,7 +121,7 @@ pub fn char_keyboard_event(c: char, shift: bool, down: bool) -> servo::KeyboardE
 
 /// The `code` for a printable character where the standard defines one; games
 /// branch on `e.code` (`KeyW` for WASD) for layout-independent input.
-pub(super) fn code_for_char(c: char) -> keyboard_types::Code {
+pub fn code_for_char(c: char) -> keyboard_types::Code {
     use keyboard_types::Code;
     match c.to_ascii_lowercase() {
         'a' => Code::KeyA,
