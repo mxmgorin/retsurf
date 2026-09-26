@@ -1,7 +1,7 @@
 //! The wheel style: the left stick aims at one of [`WHEEL_SECTORS`] groups
 //! and a face button types the group's character on its own side of the pad.
-//! Centred, the face buttons keep their grid meanings, except A, which flips
-//! between the layout's wheel layers.
+//! Centred, the face buttons keep their grid meanings, A being Enter. R2 holds
+//! the digits layer up.
 
 use super::{Key, Osk, OskCommand, OskTarget, PadInput, Reading};
 use crate::browser::AppBrowser;
@@ -26,8 +26,8 @@ const WHEEL_RELEASE: f32 = 0.6;
 pub(super) struct Wheel {
     /// The group the stick aims at; `None` while it is centred.
     sector: Option<usize>,
-    /// Index into the active layout's wheel layers.
-    layer: usize,
+    /// Whether R2 holds the digits layer up.
+    digits: bool,
     places: FacePlaces,
 }
 
@@ -35,7 +35,7 @@ impl Wheel {
     pub(super) fn new(layout: PadLayout) -> Self {
         Self {
             sector: None,
-            layer: 0,
+            digits: false,
             places: layout.places(),
         }
     }
@@ -49,8 +49,8 @@ impl Wheel {
         self.sector = None;
     }
 
-    pub(super) fn reset_layer(&mut self) {
-        self.layer = 0;
+    pub(super) fn set_digits(&mut self, held: bool) {
+        self.digits = held;
     }
 
     /// Aim with a stick vector (SDL axes, y down); `threshold` is the deflection
@@ -91,15 +91,14 @@ impl Wheel {
             None => centred,
         };
         let cmd = match input {
-            // Centred, A flips the layer.
-            PadInput::A => OskCommand::Face(self.places.a),
+            PadInput::A => face(self.places.a, OskCommand::Enter),
             PadInput::B => face(self.places.b, OskCommand::Hide),
             PadInput::X => face(self.places.x, OskCommand::Backspace),
             PadInput::Y => face(self.places.y, OskCommand::Space),
             PadInput::Shoulder(delta) if delta < 0 => OskCommand::Backspace,
             PadInput::Shoulder(_) => OskCommand::Space,
             PadInput::LeftTrigger(held) => OskCommand::Shift(held),
-            PadInput::RightTrigger => OskCommand::Enter,
+            PadInput::RightTrigger(held) => OskCommand::Digits(held),
             // The stick owns the wheel, so the D-pad slides the caret.
             PadInput::Dpad(dx, _) if dx < 0 => OskCommand::Press(Key::Left),
             PadInput::Dpad(dx, _) if dx > 0 => OskCommand::Press(Key::Right),
@@ -124,43 +123,27 @@ impl Osk {
     /// The character `face` types in `sector` of the current layer, under the
     /// current Shift and Caps.
     pub fn wheel_char(&self, sector: usize, face: Face) -> char {
-        let group = self.layout().wheel[self.wheel.layer][sector];
         let index = FACES
             .iter()
             .position(|f| *f == face)
             .expect("FACES lists every face");
-        let c = group
-            .chars()
-            .nth(index)
-            .expect("every wheel group holds one character per face");
-        if c.is_alphabetic() && (self.shift() ^ self.caps) {
-            c.to_uppercase().next().unwrap_or(c)
-        } else {
-            c
-        }
+        let slot = (sector, index);
+        self.layout()
+            .wheel_char(self.wheel.digits, slot, self.shift(), self.caps)
     }
 
-    /// What centred **A** flips to, as its label.
-    pub fn next_layer_label(&self) -> &'static str {
-        match self.wheel.layer {
-            0 => "123",
-            _ => "abc",
-        }
+    /// Whether R2 holds the digits layer up.
+    pub fn digits(&self) -> bool {
+        self.wheel.digits
     }
 
-    /// Type `face`'s corner of the aimed group; centred, A flips the layer.
+    /// Type `face`'s corner of the aimed group.
     pub(super) fn wheel_face(&mut self, face: Face, target: OskTarget, browser: &AppBrowser) {
-        match self.wheel.sector {
-            Some(sector) => {
-                let shift = self.shift();
-                let c = self.wheel_char(sector, face);
-                self.input_char(target, c, shift, browser);
-                self.shift_once = false;
-            }
-            None if face == self.wheel.places.a => {
-                self.wheel.layer = (self.wheel.layer + 1) % self.layout().wheel.len()
-            }
-            None => {}
+        if let Some(sector) = self.wheel.sector {
+            let shift = self.shift();
+            let c = self.wheel_char(sector, face);
+            self.input_char(target, c, shift, browser);
+            self.shift_once = false;
         }
     }
 }
@@ -173,7 +156,7 @@ fn circular_distance(a: f32, b: f32, n: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::super::layout::LAYOUTS;
+    use super::super::layout::{DIGITS, DIGITS_SHIFTED, LAYOUTS, LEFT_OF_ONE};
     use super::*;
     use crate::config::{OskConfig, OskStyle};
 
@@ -188,7 +171,7 @@ mod tests {
     #[test]
     fn every_wheel_group_has_one_character_per_face() {
         for def in LAYOUTS {
-            for group in def.wheel.iter().flatten() {
+            for group in def.letters.iter().chain(&DIGITS).chain(&DIGITS_SHIFTED) {
                 assert_eq!(group.chars().count(), FACES.len(), "{} {group}", def.name);
             }
         }
@@ -236,14 +219,13 @@ mod tests {
         assert_eq!(osk.read(PadInput::B), Reading::Command(OskCommand::Face(b)));
     }
 
-    /// Centred, only A is the wheel's, wherever the layout prints it.
+    /// Centred, the faces keep their grid meaning, wherever the layout prints them.
     #[test]
-    fn centred_the_other_faces_keep_their_grid_meaning() {
+    fn centred_the_faces_keep_their_grid_meaning() {
         for layout in [PadLayout::Nintendo, PadLayout::Xbox, PadLayout::PlayStation] {
             let mut osk = wheel();
             osk.set_pad_layout(layout);
-            let a = layout.places().a;
-            assert_eq!(osk.read(PadInput::A), Reading::Command(OskCommand::Face(a)));
+            assert_eq!(osk.read(PadInput::A), Reading::Command(OskCommand::Enter));
             assert_eq!(osk.read(PadInput::B), Reading::Command(OskCommand::Hide));
             assert_eq!(
                 osk.read(PadInput::X),
@@ -251,6 +233,18 @@ mod tests {
             );
             assert_eq!(osk.read(PadInput::Y), Reading::Command(OskCommand::Space));
         }
+    }
+
+    #[test]
+    fn r2_holds_the_digits_layer() {
+        let mut osk = wheel();
+        for held in [true, false] {
+            let digits = Reading::Command(OskCommand::Digits(held));
+            assert_eq!(osk.read(PadInput::RightTrigger(held)), digits);
+        }
+        assert_eq!(osk.wheel_char(0, Face::West), 'a');
+        osk.wheel.set_digits(true);
+        assert_eq!(osk.wheel_char(0, Face::West), '1');
     }
 
     /// A key picker needs the named keys the wheel cannot reach.
@@ -262,11 +256,71 @@ mod tests {
         assert_eq!(osk.read(PadInput::Stick((1.0, 0.0), 0.5)), Reading::Pass);
     }
 
+    /// Every character the wheel of the `lang`th default layout can type.
+    fn typeable(lang: usize) -> std::collections::HashSet<char> {
+        let mut osk = wheel();
+        osk.lang = lang;
+        let mut typed = std::collections::HashSet::new();
+        for shift in [false, true] {
+            osk.shift_once = shift;
+            for digits in [false, true] {
+                osk.wheel.digits = digits;
+                for sector in 0..WHEEL_SECTORS {
+                    typed.extend(FACES.map(|face| osk.wheel_char(sector, face)));
+                }
+            }
+        }
+        typed
+    }
+
+    /// The ASCII symbols and digits the `lang`th default layout's wheel lacks.
+    fn missing_ascii(lang: usize) -> String {
+        let typed = typeable(lang);
+        ('!'..='~')
+            .filter(|c| !c.is_ascii_alphabetic() && !typed.contains(c))
+            .collect()
+    }
+
+    /// No symbol needs the grid.
     #[test]
-    fn shift_capitalises_wheel_letters_only() {
+    fn the_wheel_reaches_every_symbol() {
+        assert_eq!(missing_ascii(0), "");
+        assert_eq!(missing_ascii(1), "");
+    }
+
+    /// Russian puts ё in the left-of-1 slot, as its keyboard does.
+    #[test]
+    fn the_russian_wheel_types_yo() {
+        let typed = typeable(1);
+        assert!(typed.contains(&'ё') && typed.contains(&'Ё') && typed.contains(&'№'));
+    }
+
+    /// A shifted slot must add a symbol, never repeat one the layer shows. The
+    /// left-of-1 slot is the layout's key, not the layer's.
+    #[test]
+    fn the_shifted_digits_layer_repeats_nothing() {
+        let plain: Vec<char> = DIGITS
+            .iter()
+            .flat_map(|g| g.chars())
+            .map(|c| if c == LEFT_OF_ONE { 'ё' } else { c })
+            .collect();
+        let shifted = DIGITS_SHIFTED.iter().flat_map(|g| g.chars());
+        for (i, c) in shifted.enumerate() {
+            let moved = c != plain[i];
+            assert!(!moved || !plain.contains(&c), "{c} is already on the layer");
+        }
+    }
+
+    #[test]
+    fn shift_changes_letters_and_the_digits_layer() {
         let mut osk = wheel();
         osk.shift_once = true;
         assert_eq!(osk.wheel_char(0, Face::West), 'A');
-        assert_eq!(osk.wheel_char(6, Face::East), '.');
+        assert_eq!(osk.wheel_char(7, Face::East), '-');
+        osk.wheel.set_digits(true);
+        assert_eq!(osk.wheel_char(0, Face::West), '1');
+        assert_eq!(osk.wheel_char(2, Face::East), '>');
+        assert_eq!(osk.wheel_char(5, Face::North), '`');
+        assert_eq!(osk.wheel_char(7, Face::West), '`');
     }
 }

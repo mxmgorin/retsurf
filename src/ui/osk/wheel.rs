@@ -44,7 +44,6 @@ const GROUP_FONT: f32 = 13.0;
 const AIMED_FONT: f32 = 15.0;
 const TAB_FONT: f32 = 10.0;
 const HUB_ICON: f32 = 16.0;
-const HUB_FONT: f32 = 11.0;
 /// The drawn space mark, a bracket open upward.
 const SPACE_MARK_W: f32 = 12.0;
 const SPACE_MARK_H: f32 = 4.0;
@@ -227,8 +226,7 @@ pub(super) fn add_wheel(
         paint_space_mark(painter, at(places.y), color(places.y));
         text(at(places.x), bold::BACKSPACE, HUB_ICON, color(places.x));
         text(at(places.b), bold::X, HUB_ICON, color(places.b));
-        let layer = osk.next_layer_label();
-        text(at(places.a), layer, HUB_FONT, color(places.a));
+        text(at(places.a), bold::KEY_RETURN, HUB_ICON, color(places.a));
 
         // Triggers outside, shoulders inside, each on its own side of the pad.
         let shift = match osk.shift() || osk.caps {
@@ -238,7 +236,11 @@ pub(super) fn add_wheel(
         paint_tab(painter, centre, -TRIGGER_TAB, ("L2", "SHIFT"), shift);
         paint_tab(painter, centre, -SHOULDER_TAB, ("L1", "DEL"), TAB_FILL);
         paint_tab(painter, centre, SHOULDER_TAB, ("R1", "SPACE"), TAB_FILL);
-        paint_tab(painter, centre, TRIGGER_TAB, ("R2", "ENTER"), TAB_FILL);
+        let digits = match osk.digits() {
+            true => ACCENT,
+            false => TAB_FILL,
+        };
+        paint_tab(painter, centre, TRIGGER_TAB, ("R2", "NUM"), digits);
         let lang = osk.layout().name.to_uppercase();
         let (select, start) = (TAU / 2.0 + BOTTOM_TAB, TAU / 2.0 - BOTTOM_TAB);
         paint_tab(painter, centre, select, ("SELECT", &lang), TAB_FILL);

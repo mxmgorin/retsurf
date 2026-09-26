@@ -284,16 +284,14 @@ impl App {
                     }
                 }
             }
-            // Only while the keyboard is up: L2 is a held Shift, R2 is Enter on
-            // the press edge. Elsewhere the triggers are ordinary bindable pads.
+            // Only while the keyboard is up; both edges go, for the held
+            // modifiers. Elsewhere the triggers are ordinary bindable pads.
             InputCommand::Trigger { right, pressed } => {
                 let input = match right {
-                    true => pressed.then_some(PadInput::RightTrigger),
-                    false => Some(PadInput::LeftTrigger(*pressed)),
+                    true => PadInput::RightTrigger(*pressed),
+                    false => PadInput::LeftTrigger(*pressed),
                 };
-                if let Some(input) = input {
-                    self.osk_input(input, out);
-                }
+                self.osk_input(input, out);
             }
             // The stock zoom pads are the keyboard's Shift and Enter.
             InputCommand::Zoom(delta) => {

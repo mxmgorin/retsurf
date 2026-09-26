@@ -11,6 +11,20 @@ use std::sync::LazyLock;
 /// [`super::wheel::FACES`] order.
 pub(super) type WheelLayer = [&'static str; WHEEL_SECTORS];
 
+/// The wheel's digits layer, shared by every layout. With [`DIGITS_SHIFTED`] it
+/// holds every symbol a letters layer may lack.
+pub(super) static DIGITS: WheelLayer = [
+    "1234", "5678", "90.,", "?!:;", "-_/@", "(')\"", "+*=%", "`#&$",
+];
+
+/// [`DIGITS`] under Shift, slot by slot, so no symbol shifts into another's.
+pub(super) static DIGITS_SHIFTED: WheelLayer = [
+    "1234", "5678", "90><", "?!:;", "-|\\@", "[`]~", "{^}%", "`№&$",
+];
+
+/// The [`DIGITS`] slot that types the layout's key left of 1, as a keyboard does.
+pub(super) const LEFT_OF_ONE: char = '`';
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Key {
     Char(char),
@@ -115,9 +129,8 @@ pub(super) struct LayoutDef {
     pub(super) name: &'static str,
     rows: [&'static str; 4],
     shift_rows: [&'static str; 4],
-    /// The wheel's layers, cycled by **A** with the stick centred. Letters
-    /// shift by case only; anything else types as written.
-    pub(super) wheel: [WheelLayer; 2],
+    /// The wheel's letters layer; [`DIGITS`] is the other one.
+    pub(super) letters: WheelLayer,
 }
 
 /// The built-in layouts, selectable via `[osk] layouts` in the config. Adding
@@ -138,13 +151,8 @@ pub(super) static LAYOUTS: &[LayoutDef] = &[
             "ASDFGHJKL:\"",
             "ZXCVBNM<>?",
         ],
-        wheel: [
-            [
-                "abcd", "efgh", "ijkl", "mnop", "qrst", "uvwx", "yz.,", "/:-@",
-            ],
-            [
-                "1234", "5678", "90-=", "!?#$", "%&*_", "()[]", "'\";+", "<>{}",
-            ],
+        letters: [
+            "abcd", "efgh", "ijkl", "mnop", "qrst", "uvwx", "yz.,", "/:-@",
         ],
     },
     LayoutDef {
@@ -161,14 +169,10 @@ pub(super) static LAYOUTS: &[LayoutDef] = &[
             "ФЫВАПРОЛДЖЭ",
             "ЯЧСМИТЬБЮ,",
         ],
-        // Thirty-three letters do not fit one layer; ё rides with the digits.
-        wheel: [
-            [
-                "абвг", "дежз", "ийкл", "мноп", "рсту", "фхцч", "шщъы", "ьэюя",
-            ],
-            [
-                "1234", "5678", "90.,", "ё!?-", "@#%&", "*_+=", "()\"'", "/:;№",
-            ],
+        // Thirty-three letters do not fit one layer; ё takes the digits'
+        // left-of-1 slot.
+        letters: [
+            "абвг", "дежз", "ийкл", "мноп", "рсту", "фхцч", "шщъы", "ьэюя",
         ],
     },
 ];
@@ -180,7 +184,8 @@ pub struct Layout {
     pub name: &'static str,
     pub(super) keys: Vec<Vec<Key>>,
     shift_map: HashMap<char, char>,
-    pub(super) wheel: &'static [WheelLayer; 2],
+    pub(super) letters: &'static WheelLayer,
+    left_of_one: char,
 }
 
 impl Layout {
@@ -204,7 +209,11 @@ impl Layout {
             name: def.name,
             keys,
             shift_map,
-            wheel: &def.wheel,
+            letters: &def.letters,
+            left_of_one: def.rows[0]
+                .chars()
+                .next()
+                .expect("a layout's number row is never empty"),
         }
     }
 
@@ -222,6 +231,33 @@ impl Layout {
             self.shift_map.get(&c).copied().unwrap_or(c)
         } else {
             c
+        }
+    }
+
+    /// The character the `index`th face of wheel group `sector` types. Shift and
+    /// Caps change letters' case; Shift also picks [`DIGITS_SHIFTED`].
+    pub fn wheel_char(
+        &self,
+        digits: bool,
+        (sector, index): (usize, usize),
+        shift: bool,
+        caps: bool,
+    ) -> char {
+        let nth = |layer: &WheelLayer| {
+            layer[sector]
+                .chars()
+                .nth(index)
+                .expect("every wheel group holds one character per face")
+        };
+        let c = match digits {
+            false => nth(self.letters),
+            true if nth(&DIGITS) == LEFT_OF_ONE => self.left_of_one,
+            true if shift => nth(&DIGITS_SHIFTED),
+            true => nth(&DIGITS),
+        };
+        match c.is_alphabetic() {
+            true => self.resolve_char(c, shift, caps),
+            false => c,
         }
     }
 }

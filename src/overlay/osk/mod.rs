@@ -71,13 +71,15 @@ pub enum OskCommand {
     Space,
     /// Set the held-Shift modifier: `true` while the trigger is held.
     Shift(bool),
+    /// Hold the wheel's digits layer up: `true` while the trigger is held.
+    Digits(bool),
     /// Submit (load the address bar or send Enter), then hide.
     Enter,
     /// Move the selection by one cell (`dx`, `dy` ∈ -1..=1).
     Move(i32, i32),
     /// Apply `key` without selecting it.
     Press(Key),
-    /// A wheel face press: the aimed group's corner, or centred on A the next layer.
+    /// A wheel face press: the aimed group's corner.
     Face(Face),
 }
 
@@ -93,7 +95,8 @@ pub enum PadInput {
     Shoulder(i32),
     /// L2 held or released.
     LeftTrigger(bool),
-    RightTrigger,
+    /// R2 held or released.
+    RightTrigger(bool),
     /// One navigation step.
     Nav(i32, i32),
     /// A discrete D-pad press.
@@ -366,13 +369,14 @@ impl Osk {
                 self.shift_once = false;
                 // Caret to the buffer end, so typing continues from the text.
                 self.caret = target_char_len(&target, browser);
-                self.wheel.reset_layer();
+                self.wheel.set_digits(false);
             }
             OskCommand::Hide => self.hide(),
             OskCommand::Activate => self.activate(target, browser, commands),
             OskCommand::Backspace => self.backspace(target, browser),
             OskCommand::Space => self.type_space(target, browser),
             OskCommand::Shift(held) => self.shift_held = held,
+            OskCommand::Digits(held) => self.wheel.set_digits(held),
             OskCommand::Enter => self.enter(target, browser, commands),
             OskCommand::Move(dx, dy) => self.move_sel(dx, dy),
             OskCommand::Press(key) => self.press(key, target, browser, commands),
@@ -615,10 +619,11 @@ fn grid_command(input: PadInput) -> Option<OskCommand> {
         PadInput::X => OskCommand::Backspace,
         PadInput::Y => OskCommand::Space,
         PadInput::LeftTrigger(held) => OskCommand::Shift(held),
-        PadInput::RightTrigger => OskCommand::Enter,
+        PadInput::RightTrigger(true) => OskCommand::Enter,
         PadInput::Nav(dx, dy) => OskCommand::Move(dx, dy),
         // Left to the caller.
         PadInput::Shoulder(_)
+        | PadInput::RightTrigger(false)
         | PadInput::Dpad(..)
         | PadInput::Stick(..)
         | PadInput::Move(..)

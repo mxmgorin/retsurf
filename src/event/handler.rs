@@ -777,7 +777,7 @@ fn osk_claims(pad: Pad, pressed: bool, ui: &mut AppUi, commands: &mut Vec<AppCom
         return false;
     }
     let edge = match input {
-        PadInput::LeftTrigger(_) => true,
+        PadInput::LeftTrigger(_) | PadInput::RightTrigger(_) => true,
         _ => pressed,
     };
     if edge {
@@ -796,7 +796,7 @@ fn pad_input(pad: Pad, pressed: bool) -> Option<PadInput> {
         Pad::L1 => PadInput::Shoulder(-1),
         Pad::R1 => PadInput::Shoulder(1),
         Pad::L2 => PadInput::LeftTrigger(pressed),
-        Pad::R2 => PadInput::RightTrigger,
+        Pad::R2 => PadInput::RightTrigger(pressed),
         Pad::Start => PadInput::Start,
         Pad::Select => PadInput::Select,
         Pad::R3 => PadInput::R3,
