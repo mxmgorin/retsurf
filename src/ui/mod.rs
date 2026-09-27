@@ -147,9 +147,13 @@ struct FrameInputs {
     chrome_hidden: ChromeHidden,
 }
 
-/// The sites whose icons this frame draws: the menu's current section, each
-/// tab with its live icon.
-fn page_icon_wants<'a>(menu: &'a Menu, tabs: &'a [TabInfo]) -> Vec<(&'a str, Option<&'a Favicon>)> {
+/// The sites whose icons this frame draws: the menu's current section and the
+/// speed dial when `dial_shown`, each tab with its live icon.
+fn page_icon_wants<'a>(
+    menu: &'a Menu,
+    dial_shown: bool,
+    tabs: &'a [TabInfo],
+) -> Vec<(&'a str, Option<&'a Favicon>)> {
     let mut wanted = Vec::new();
     if menu.visible {
         match menu.section() {
@@ -167,6 +171,9 @@ fn page_icon_wants<'a>(menu: &'a Menu, tabs: &'a [TabInfo]) -> Vec<(&'a str, Opt
             ),
             Section::Downloads => {}
         }
+    }
+    if dial_shown {
+        wanted.extend(menu.dial.urls().iter().map(|u| (u.as_str(), None)));
     }
     wanted
 }
@@ -666,7 +673,8 @@ impl AppUi {
                     }
                 }
 
-                let wanted = page_icon_wants(&self.menu, &tab_infos);
+                let dial_shown = self.home_active || self.dial_edit.visible();
+                let wanted = page_icon_wants(&self.menu, dial_shown, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
 
                 // A backdrop over the blank web view, below the foreground
@@ -675,7 +683,10 @@ impl AppUi {
                     home::add_home(
                         ctx,
                         &mut self.home,
-                        self.menu.dial.urls(),
+                        home::DialPins {
+                            urls: self.menu.dial.urls(),
+                            icons: &self.page_icons,
+                        },
                         self.webview_rect,
                         caret_for(OskField::Home),
                         face,
@@ -688,7 +699,10 @@ impl AppUi {
                     dial_edit::add_dial_edit(
                         ctx,
                         &mut self.dial_edit,
-                        self.menu.dial.urls(),
+                        home::DialPins {
+                            urls: self.menu.dial.urls(),
+                            icons: &self.page_icons,
+                        },
                         caret_for(OskField::DialEdit),
                         face,
                         commands,

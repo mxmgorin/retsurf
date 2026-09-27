@@ -331,8 +331,8 @@ fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
         return None;
     }
     let side = egui::vec2(ROW_FONT, ROW_FONT);
-    Some(match icons.texture(url) {
-        Some(texture) => egui::Image::new(texture).fit_to_exact_size(side).into(),
+    Some(match icons.icon(url) {
+        Some(icon) => egui::Image::new(icon.row).fit_to_exact_size(side).into(),
         None => egui::RichText::new(bold::GLOBE)
             .size(ROW_FONT)
             .color(DIM)

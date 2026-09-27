@@ -3,6 +3,7 @@
 //! grid of the pinned shortcuts, and a bottom control-hint bar. Navigation is
 //! routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
+use super::favicon::{Icon, PageIcons};
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
@@ -19,6 +20,13 @@ use std::collections::HashMap;
 /// wordmark stays on Hack via [`add_wordmark`] regardless.
 fn font(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
+}
+
+/// The pinned URLs with the site icons to draw them by.
+#[derive(Clone, Copy)]
+pub(super) struct DialPins<'a> {
+    pub urls: &'a [String],
+    pub icons: &'a PageIcons,
 }
 
 /// Tile footprint (logical px) and grid spacing. Shared with the dial editor.
@@ -50,7 +58,7 @@ const HINT_BAND: f32 = HINT_BASE + HINT_PILL_H / 2.0 + 8.0;
 pub(super) fn add_home(
     ctx: &egui::Context,
     home: &mut Home,
-    pins: &[String],
+    pins: DialPins,
     webview: egui::Rect,
     osk_caret: Option<OskCaret>,
     face: FaceLabels,
@@ -323,16 +331,16 @@ pub(super) fn slot_count(pins: &[String]) -> usize {
 fn add_dial(
     ui: &mut egui::Ui,
     home: &Home,
-    pins: &[String],
+    pins: DialPins,
     width: f32,
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    tile_grid(ui, width, cols, slot_count(pins), |ui, i| {
+    tile_grid(ui, width, cols, slot_count(pins.urls), |ui, i| {
         let selected = home.tile() == Some(i);
-        match pins.get(i) {
+        match pins.urls.get(i) {
             Some(url) => {
-                if add_tile(ui, url, selected).clicked() {
+                if add_tile(ui, url, pins.icons.icon(url), selected).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
                 }
             }
@@ -384,14 +392,18 @@ pub(super) fn tile_grid(
 
 /// Glyph-square side length within a tile.
 pub(super) const GLYPH: f32 = 52.0;
+/// A site icon inside the glyph square: near the 32 px cache, so it stays sharp.
+const DIAL_ICON: f32 = 34.0;
+/// How much of an icon's tint colours its glyph square over [`SURFACE`].
+const TINT_MIX: f32 = 0.35;
 
 /// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
 /// the brand name beneath it. Custom-painted (not a Button) for the two-tier
 /// look.
-fn add_tile(ui: &mut egui::Ui, url: &str, selected: bool) -> egui::Response {
+fn add_tile(ui: &mut egui::Ui, url: &str, icon: Option<Icon>, selected: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     keep_visible(ui, &resp, rect, selected);
-    paint_tile(ui.painter(), rect, url, selected || resp.hovered());
+    paint_tile(ui.painter(), rect, url, icon, selected || resp.hovered());
     resp
 }
 
@@ -409,10 +421,23 @@ fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected
     }
 }
 
-/// Paint a speed-dial tile's visuals into `rect`; the caller owns the click
-/// region and any extra overlay.
-pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, active: bool) {
-    let glyph = paint_glyph_square(painter, rect, active, Some(SURFACE));
+/// Paint a speed-dial tile's visuals into `rect`: the site `icon` on a square
+/// tinted after it, else the initial; the caller owns the click region and any
+/// extra overlay.
+pub(super) fn paint_tile(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    url: &str,
+    icon: Option<Icon>,
+    active: bool,
+) {
+    let icon = icon.filter(|_| url != SETTINGS_PIN);
+    let fill = match icon {
+        Some(icon) if icon.dark => INK,
+        Some(icon) => SURFACE.lerp_to_gamma(icon.tint, TINT_MIX),
+        None => SURFACE,
+    };
+    let glyph = paint_glyph_square(painter, rect, active, Some(fill));
 
     // The settings sentinel isn't a real address: show a gear glyph and "Settings"
     // rather than the garbage `brand_label` would derive from `retsurf:settings`.
@@ -427,13 +452,23 @@ pub(super) fn paint_tile(painter: &egui::Painter, rect: egui::Rect, url: &str, a
             .unwrap_or_default();
         (initial, label)
     };
-    painter.text(
-        glyph.center(),
-        egui::Align2::CENTER_CENTER,
-        glyph_text,
-        font(22.0),
-        INK,
-    );
+    match icon {
+        Some(Icon { bare: texture, .. }) => {
+            let fit = DIAL_ICON / texture.size_vec2().max_elem();
+            let at = egui::Rect::from_center_size(glyph.center(), texture.size_vec2() * fit);
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            painter.image(texture.id(), at, uv, egui::Color32::WHITE);
+        }
+        None => {
+            painter.text(
+                glyph.center(),
+                egui::Align2::CENTER_CENTER,
+                glyph_text,
+                font(22.0),
+                INK,
+            );
+        }
+    }
 
     // Brand name under the glyph (truncated so a long name can't overflow).
     painter.text(

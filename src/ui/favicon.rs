@@ -1,8 +1,8 @@
 //! GPU copies of the site icons on screen, keyed by host (see
 //! [`crate::data::page_icons`]). Each frame names the hosts it is about to draw
 //! and everything else is freed, so no texture outlives the list that showed it.
-//! A dark icon is baked onto a light plate at upload, so it reads on the dark
-//! chrome.
+//! A dark icon also gets a copy baked onto a light plate, for surfaces that
+//! cannot paint one behind it.
 
 use super::theme::INK;
 use crate::browser::Favicon;
@@ -20,11 +20,29 @@ pub(super) struct PageIcons {
     entries: HashMap<String, Entry>,
 }
 
-/// One host's icon; `texture: None` records that the disk had none, so a
+/// One host's icon; `textures: None` records that the disk had none, so a
 /// missing file is not re-read every frame.
 struct Entry {
     id: Option<u64>,
-    texture: Option<egui::TextureHandle>,
+    textures: Option<Textures>,
+}
+
+struct Textures {
+    row: egui::TextureHandle,
+    /// Only a dark icon has one; the others are drawn as `row`.
+    bare: Option<egui::TextureHandle>,
+    tint: egui::Color32,
+    dark: bool,
+}
+
+/// A site icon as drawn: `row` for list rows, `bare` with no plate for surfaces
+/// that colour themselves after `tint` or, when `dark`, a light fill.
+#[derive(Clone, Copy)]
+pub(super) struct Icon<'a> {
+    pub row: &'a egui::TextureHandle,
+    pub bare: &'a egui::TextureHandle,
+    pub tint: egui::Color32,
+    pub dark: bool,
 }
 
 impl PageIcons {
@@ -78,9 +96,15 @@ impl PageIcons {
     }
 
     /// The icon for `url`'s site, if [`Self::sync`] named it and one exists.
-    pub fn texture(&self, url: &str) -> Option<&egui::TextureHandle> {
+    pub fn icon(&self, url: &str) -> Option<Icon<'_>> {
         let host = page_icons::host_key(url)?;
-        self.entries.get(&host)?.texture.as_ref()
+        let t = self.entries.get(&host)?.textures.as_ref()?;
+        Some(Icon {
+            row: &t.row,
+            bare: t.bare.as_ref().unwrap_or(&t.row),
+            tint: t.tint,
+            dark: t.dark,
+        })
     }
 }
 
@@ -88,17 +112,24 @@ impl Entry {
     fn upload(ctx: &egui::Context, icon: Option<&Favicon>) -> Self {
         Self {
             id: icon.map(|i| i.id),
-            texture: icon.map(|icon| {
-                let image = if icon.dark {
-                    on_plate(icon)
-                } else {
+            textures: icon.map(|icon| {
+                let load = |name: &str, image| {
+                    ctx.load_texture(
+                        format!("page-icon-{name}-{}", icon.id),
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    )
+                };
+                let bare = || {
                     egui::ColorImage::from_rgba_unmultiplied([icon.width, icon.height], &icon.rgba)
                 };
-                ctx.load_texture(
-                    format!("page-icon-{}", icon.id),
-                    image,
-                    egui::TextureOptions::LINEAR,
-                )
+                let [r, g, b] = icon.tint;
+                Textures {
+                    row: load("row", if icon.dark { on_plate(icon) } else { bare() }),
+                    bare: icon.dark.then(|| load("bare", bare())),
+                    tint: egui::Color32::from_rgb(r, g, b),
+                    dark: icon.dark,
+                }
             }),
         }
     }

@@ -107,7 +107,7 @@ dark_last_row = false      # paint the screen's last row black, for panels that 
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats over the page, either edge)
-page_icons = true          # site icons on tabs, bookmarks and history (see below)
+page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
@@ -546,16 +546,18 @@ for forcing it on a machine that has both.
 
 ## Page icons
 
-`page_icons` puts each site's icon beside its tab, bookmark and history row. The
-icon is the one a page names with `<link rel="icon">`; `/favicon.ico` is not
-tried, so a site without the tag gets a globe. Nothing extra is fetched: the
-engine downloads the icon either way.
+`page_icons` puts each site's icon beside its tab, bookmark and history row and
+on its speed-dial tile. The icon is the one a page names with `<link rel="icon">`;
+`/favicon.ico` is not tried, so a site without the tag gets a globe (a letter on
+the dial). Nothing extra is fetched: the engine downloads the icon either way.
 
 Icons are shrunk to 32 px and kept as one PNG per site in the data dir's
 `page_icons/` folder, so the lists show them without the page open. A dark icon
-is drawn on a light plate to stay readable on the dark chrome. The folder is
-trimmed at startup to the sites the bookmarks, history and saved tabs still
-name. With `[history] enabled = false`, only bookmarked sites are stored. **Clear browsing data** and clearing the history drop the icons that
+is drawn on a light plate in the lists and on a light tile on the speed dial,
+where other tiles take a muted shade of their icon's main colour. The folder is
+trimmed at startup to the sites the bookmarks, pins, history and saved tabs still
+name. With `[history] enabled = false`, only bookmarked and pinned sites are
+stored. **Clear browsing data** and clearing the history drop the icons that
 only the history referenced. Turning the setting off frees the icons in memory
 and leaves the folder alone.
 

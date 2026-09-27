@@ -3,7 +3,8 @@
 //! and a URL field + "Add" beneath. Tiles reuse the start page's look; edits go
 //! through [`crate::command::MenuAction`].
 
-use super::home::{paint_action_tile, paint_tile, tile_grid, GAP, GLYPH, TILE_H, TILE_W};
+use super::favicon::Icon;
+use super::home::{paint_action_tile, paint_tile, tile_grid, DialPins, GAP, GLYPH, TILE_H, TILE_W};
 use super::theme::{self, ACCENT, BG, BORDER, CLOSE_SIZE, INK, MUTED, SURFACE};
 use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
@@ -17,7 +18,7 @@ use egui_sdl2::egui;
 pub(super) fn add_dial_edit(
     ctx: &egui::Context,
     edit: &mut DialEdit,
-    pins: &[String],
+    pins: DialPins,
     osk_caret: Option<OskCaret>,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
@@ -73,16 +74,16 @@ pub(super) fn slot_count(pins: &[String]) -> usize {
 fn add_grid(
     ui: &mut egui::Ui,
     edit: &DialEdit,
-    pins: &[String],
+    pins: DialPins,
     width: f32,
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    tile_grid(ui, width, cols, slot_count(pins), |ui, slot| {
+    tile_grid(ui, width, cols, slot_count(pins.urls), |ui, slot| {
         let selected = edit.tile() == Some(slot);
-        match pins.get(slot) {
+        match pins.urls.get(slot) {
             Some(url) => {
-                if add_edit_tile(ui, url, selected, slot) {
+                if add_edit_tile(ui, url, pins.icons.icon(url), selected, slot) {
                     commands.push(AppCommand::Menu(MenuAction::DialRemoveAt(slot)));
                 }
             }
@@ -107,10 +108,16 @@ fn add_pin_settings_tile(ui: &mut egui::Ui, selected: bool) -> bool {
 
 /// One editor tile: the shared tile visual plus a delete badge. The body is inert
 /// (edit-only); returns whether the badge was clicked.
-fn add_edit_tile(ui: &mut egui::Ui, url: &str, selected: bool, index: usize) -> bool {
+fn add_edit_tile(
+    ui: &mut egui::Ui,
+    url: &str,
+    icon: Option<Icon>,
+    selected: bool,
+    index: usize,
+) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::hover());
     let active = selected || resp.hovered();
-    paint_tile(ui.painter(), rect, url, active);
+    paint_tile(ui.painter(), rect, url, icon, active);
 
     // Delete badge, top-right of the glyph square.
     let glyph_top = rect.top() + 2.0;

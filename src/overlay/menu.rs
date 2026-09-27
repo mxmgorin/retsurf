@@ -235,14 +235,15 @@ impl Menu {
         }
     }
 
-    /// Hosts whose icons the saved lists show: bookmarks, plus the history when
-    /// `with_history`.
+    /// Hosts whose icons the saved lists show: bookmarks and pins, plus the
+    /// history when `with_history`.
     pub fn icon_hosts(&self, with_history: bool) -> HashSet<String> {
         let history = self.history.entries().iter().map(|e| e.url.as_str());
         let history = history.take(if with_history { usize::MAX } else { 0 });
         self.bookmarks
             .urls()
             .iter()
+            .chain(self.dial.urls())
             .map(String::as_str)
             .chain(history)
             .filter_map(page_icons::host_key)
