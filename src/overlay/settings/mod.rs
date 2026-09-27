@@ -360,6 +360,16 @@ impl Settings {
         )
     }
 
+    /// Config row `i`'s value when it is an on/off flag; `None` for any other
+    /// kind, or while the overlay is closed.
+    pub fn flag(&self, i: usize) -> Option<bool> {
+        let draft = self.draft()?;
+        match &fields::FIELDS[i].kind {
+            Kind::Bool { get, .. } => Some(get(&draft.config)),
+            _ => None,
+        }
+    }
+
     /// The OSK's edit buffer for the focused row — the draft's own `String` for a
     /// `Text` field, so typing lands straight in the draft. `None` otherwise.
     pub fn selected_text_mut(&mut self) -> Option<&mut String> {

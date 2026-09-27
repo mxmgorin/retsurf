@@ -4,7 +4,7 @@
 //! A edit, B save & close — all of it without an analog stick.
 
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
+use super::theme::{self, ACCENT, DIM, HAIRLINE, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
@@ -20,6 +20,10 @@ const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboar
 
 /// The square step buttons trailing a numeric row.
 const STEP_W: f32 = 26.0;
+/// An on/off switch's track (logical px); the knob is inset by `SWITCH_INSET`.
+const SWITCH_W: f32 = 34.0;
+const SWITCH_H: f32 = 18.0;
+const SWITCH_INSET: f32 = 3.0;
 
 /// The shared row shape (see [`panel::row`]), taking this file's owned strings.
 fn setting_row(
@@ -30,6 +34,29 @@ fn setting_row(
     value: String,
 ) -> egui::Response {
     panel::row(ui, width, selected, &label, &value)
+}
+
+/// An on/off switch at the trailing edge of `row`, where a value would sit.
+fn paint_switch(ui: &egui::Ui, row: egui::Rect, on: bool) {
+    let right = row.right() - ui.spacing().button_padding.x;
+    let track = egui::Rect::from_min_size(
+        egui::pos2(right - SWITCH_W, row.center().y - SWITCH_H / 2.0),
+        egui::vec2(SWITCH_W, SWITCH_H),
+    );
+    let (fill, knob_fill) = if on {
+        (ACCENT, egui::Color32::WHITE)
+    } else {
+        (HAIRLINE, DIM)
+    };
+    let painter = ui.painter();
+    painter.rect_filled(track, SWITCH_H / 2.0, fill);
+    let r = SWITCH_H / 2.0 - SWITCH_INSET;
+    let x = if on {
+        track.right() - SWITCH_H / 2.0
+    } else {
+        track.left() + SWITCH_H / 2.0
+    };
+    painter.circle_filled(egui::pos2(x, track.center().y), r, knob_fill);
 }
 
 /// A left/right step button for a numeric row, accent on the focused row.
@@ -510,12 +537,20 @@ pub(super) fn add_settings(
                 } else {
                     field.label.to_string()
                 };
-                let value = settings.value_str(i);
+                let flag = settings.flag(i);
+                let value = if flag.is_some() {
+                    String::new()
+                } else {
+                    settings.value_str(i)
+                };
                 let steppable = settings.is_steppable(i);
 
                 ui.horizontal(|ui| {
                     let row_w = if steppable { num_w } else { full_w };
                     let resp = setting_row(ui, row_w, selected, label, value);
+                    if let Some(on) = flag {
+                        paint_switch(ui, resp.rect, on);
+                    }
                     // Keep the focused row in view — no cursor to drag the bar.
                     if selected {
                         center_selected(&resp);
