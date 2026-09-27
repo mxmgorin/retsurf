@@ -166,6 +166,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let replaces = self.max_tabs.get() == 1;
         if !replaces && !self.has_tab_room() {
             log::warn!("tab cap reached: declined a page-opened tab");
+            self.notices.push(super::BrowserNotice::PopupRefused {
+                cap: self.max_tabs.get(),
+            });
             return;
         }
         let webview = self.build_webview(

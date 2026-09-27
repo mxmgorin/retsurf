@@ -93,6 +93,9 @@ impl AppBrowser {
             };
             log::info!("tab cap {cap} reached: closing tab {oldest}");
             self.remove_tab(oldest);
+            self.inner
+                .notices
+                .push(super::BrowserNotice::OldestTabClosed { cap });
         }
     }
 

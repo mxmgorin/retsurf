@@ -50,7 +50,7 @@ const WAVE_BAND: f32 = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
 /// the strip content must stay out of.
 const HINT_BASE: f32 = 18.0;
 const HINT_PILL_H: f32 = 18.0;
-const HINT_BAND: f32 = HINT_BASE + HINT_PILL_H / 2.0 + 8.0;
+pub(super) const HINT_BAND: f32 = HINT_BASE + HINT_PILL_H / 2.0 + 8.0;
 
 /// Draw the start-page overlay over the (blank) web view, confined to the
 /// `webview` rect so the toolbar stays usable. Any activation is pushed as a

@@ -1,9 +1,8 @@
 //! Game Mode's slice of the chrome: the mode flag the router and keyboard
-//! read, the entry toast, and the map name its menu shows.
+//! read, the entry toast's wording, and the map name its menu shows.
 
 use super::{drop_egui_focus, AppUi};
-use egui_sdl2::egui;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How long the Game Mode entry toast stays before fading.
 const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
@@ -27,14 +26,13 @@ impl AppUi {
     /// before we are, so a focused address bar would go on eating them.
     pub fn enter_game_mode(&mut self, toast: String) {
         self.game_mode = true;
-        self.game_mode_toast = Some(Instant::now());
-        self.game_mode_toast_text = toast;
+        self.toast_for(toast, GAME_MODE_TOAST);
         drop_egui_focus(&self.egui_ctx);
     }
 
     pub fn leave_game_mode(&mut self) {
         self.game_mode = false;
-        self.game_mode_toast = None;
+        self.toast = None;
     }
 
     /// Adopt the name of a map chosen in the menu, or set by an edited
@@ -42,12 +40,6 @@ impl AppUi {
     #[inline]
     pub fn set_input_map_name(&mut self, name: String) {
         self.input_map_name = name;
-    }
-
-    /// Time left on the entry toast, or `None` once it has faded.
-    pub(super) fn toast_visible_for(&self) -> Option<Duration> {
-        self.game_mode_toast
-            .and_then(|t| GAME_MODE_TOAST.checked_sub(t.elapsed()))
     }
 }
 
@@ -64,19 +56,6 @@ pub fn game_mode_toast_text(pad: Option<String>, keys: &[String]) -> String {
         text.push_str(" for the menu");
     }
     text
-}
-
-/// The Game Mode entry toast: the chrome just hid, so name the way back.
-pub(super) fn add_game_mode_toast(ctx: &egui::Context, text: &str) {
-    egui::Area::new(egui::Id::new("game_mode_toast"))
-        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
-        .order(egui::Order::Foreground)
-        .interactable(false)
-        .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.label(text);
-            });
-        });
 }
 
 #[cfg(test)]

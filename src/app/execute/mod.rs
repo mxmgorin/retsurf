@@ -37,7 +37,10 @@ impl App {
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::FocusAddressBar => self.focus_address_bar(out),
-            AppCommand::CloseTab => self.close_tab_at(self.browser.active_tab()),
+            AppCommand::CloseTab => {
+                self.close_tab_at(self.browser.active_tab());
+                self.ui.toast("Tab closed");
+            }
             AppCommand::GameMode => self.game_mode_gesture(),
             AppCommand::GameMenu(action) => self.game_menu_action(action, out),
             AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),
@@ -83,7 +86,7 @@ impl App {
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
-            MenuAction::ToggleBookmark(url) => self.ui.menu.toggle_bookmark(url),
+            MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
             MenuAction::DialEdit => self.ui.dial_edit.open(),
             MenuAction::DialClose => self.ui.dial_edit.close(),
             MenuAction::DialAdd(url) => self.dial_add(url),
@@ -128,8 +131,18 @@ impl App {
     fn toggle_current_bookmark(&mut self) {
         let url = self.browser.state().page_url().to_string();
         if !url.is_empty() {
-            self.ui.menu.toggle_bookmark(&url);
+            self.toggle_bookmark(&url);
         }
+    }
+
+    fn toggle_bookmark(&mut self, url: &str) {
+        self.ui.menu.toggle_bookmark(url);
+        let saved = self.ui.menu.is_bookmarked(url);
+        self.ui.toast(if saved {
+            "Bookmarked"
+        } else {
+            "Bookmark removed"
+        });
     }
 
     /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
@@ -172,18 +185,24 @@ impl App {
             Section::Bookmarks => {
                 if let Some(url) = self.ui.menu.selected_url() {
                     self.ui.menu.dial.toggle(&url);
+                    let pinned = self.ui.menu.dial.contains(&url);
+                    self.ui.toast(if pinned {
+                        "Pinned to speed dial"
+                    } else {
+                        "Unpinned from speed dial"
+                    });
                 }
             }
             Section::History => {
                 if let Some(url) = self.ui.menu.selected_url() {
-                    self.ui.menu.toggle_bookmark(&url);
+                    self.toggle_bookmark(&url);
                 }
             }
             Section::Tabs => {
                 if let Some(index) = self.selected_tab_index() {
                     if let Some(info) = self.browser.tabs().get(index) {
                         if !info.url.is_empty() {
-                            self.ui.menu.toggle_bookmark(&info.url);
+                            self.toggle_bookmark(&info.url);
                         }
                     }
                 }
@@ -272,6 +291,7 @@ impl App {
         self.session.discard();
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.browser.home_page);
+        self.ui.toast("Browsing data cleared");
         log::info!("cleared browsing data");
     }
 
@@ -281,6 +301,7 @@ impl App {
     fn restore_defaults(&mut self) {
         self.ui.settings.restore_defaults();
         self.ui.menu.dial.reset();
+        self.ui.toast("Defaults restored");
         log::info!("restored default settings, bindings and pins");
     }
 

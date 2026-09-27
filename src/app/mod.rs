@@ -192,6 +192,9 @@ impl App {
             for (url, icon) in self.browser.take_new_icons() {
                 self.store_page_icon(&url, &icon);
             }
+            for notice in self.browser.take_notices() {
+                self.ui.toast(crate::ui::notice_text(notice));
+            }
 
             // A closed document leaves its memory with the allocator rather than
             // the kernel; here that is 200 MB the device swaps around for nothing.
@@ -255,6 +258,7 @@ impl App {
             self.ui.menu.downloads.poll();
             for request in self.browser.take_download_requests() {
                 self.ui.menu.downloads.start(request, &self.event_sender);
+                self.ui.toast("Download started");
             }
             // Rumble a page asked for, played here because the main loop owns
             // the SDL controllers.

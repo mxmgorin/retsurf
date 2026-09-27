@@ -19,10 +19,12 @@ mod prompt;
 mod scale;
 mod settings;
 mod theme;
+mod toast;
 mod toolbar;
 
 pub use self::game_mode::game_mode_toast_text;
 pub use self::overlays::Focus;
+pub use self::toast::notice_text;
 
 use crate::{
     browser::{AppBrowser, Favicon},
@@ -223,11 +225,8 @@ pub struct AppUi {
     /// Game Mode: the browser stops consuming input and the chrome hides.
     /// [`crate::event::keyboard`] reads it to forward a key instead of binding it.
     game_mode: bool,
-    /// When Game Mode was entered; the chrome hides with nothing else on screen,
-    /// so a toast names the way out for [`GAME_MODE_TOAST`], then fades.
-    game_mode_toast: Option<Instant>,
-    /// Worded at entry from the ways out this device has.
-    game_mode_toast_text: String,
+    /// The notice on screen, if any (see [`toast`]).
+    toast: Option<toast::Toast>,
     /// Game Mode's own menu (the `game_mode` gesture).
     pub game_menu: GameMenu,
     /// Its map list and one map's rows, opened from that menu.
@@ -326,8 +325,7 @@ impl AppUi {
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
             game_mode: false,
-            game_mode_toast: None,
-            game_mode_toast_text: String::new(),
+            toast: None,
             game_menu: GameMenu::new(),
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
@@ -491,9 +489,12 @@ impl AppUi {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
         }
-        // The Game Mode toast needs one wake at its expiry to be erased.
+        // A toast needs one wake at its expiry to be erased.
         if let Some(left) = self.toast_visible_for() {
             self.repaint_delay = Some(self.repaint_delay.map_or(left, |d| d.min(left)));
+        }
+        if self.take_fresh_toast() {
+            self.request_repaint();
         }
     }
 
@@ -793,9 +794,7 @@ impl AppUi {
                     cursor::paint_cursor(ctx, pos, self.scroll_mode, self.edge_scroll);
                 }
 
-                if self.toast_visible_for().is_some() {
-                    game_mode::add_game_mode_toast(ctx, &self.game_mode_toast_text);
-                }
+                self.add_toast(ctx);
 
                 // Drawn last so it sits above everything; non-interactive, so it
                 // never blocks input.

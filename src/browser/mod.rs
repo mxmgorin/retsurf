@@ -58,6 +58,15 @@ const IDB_INDEX_COMPAT_JS: &str = include_str!("assets/idb_index_compat.js");
 /// WebAssembly streaming over a buffered body; a script-made stream never settles.
 const WASM_STREAMING_COMPAT_JS: &str = include_str!("assets/wasm_streaming_compat.js");
 
+/// Something the browser did on its own that the user should hear about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserNotice {
+    /// Opening a tab past the cap closed the oldest one not in view.
+    OldestTabClosed { cap: usize },
+    /// A page asked for a new tab at the cap and was refused.
+    PopupRefused { cap: usize },
+}
+
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
 }
@@ -150,6 +159,7 @@ struct AppBrowserInner {
     /// Page icons that arrived since the last drain, with the URL of the page
     /// that named them.
     new_icons: FrameQueue<(String, Favicon)>,
+    notices: FrameQueue<BrowserNotice>,
     /// Download navigations denied by [`delegate`], drained once per frame.
     download_requests: FrameQueue<DownloadRequest>,
     /// Webviews whose page signalled a captured blob download (see
@@ -271,6 +281,7 @@ impl AppBrowserInner {
             // History entries only matter once a pass happens anyway.
             visited: FrameQueue::silent(event_sender.clone()),
             new_icons: FrameQueue::silent(event_sender.clone()),
+            notices: FrameQueue::new(UserEvent::BrowserFrameReady, event_sender.clone()),
             download_requests: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_pings: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_downloads: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
@@ -482,6 +493,12 @@ impl AppBrowser {
     #[inline]
     pub fn take_visited(&self) -> Vec<String> {
         self.inner.visited.take()
+    }
+
+    /// Take and clear the notices raised since the last call.
+    #[inline]
+    pub fn take_notices(&self) -> Vec<BrowserNotice> {
+        self.inner.notices.take()
     }
 
     /// Take and clear the page icons that arrived since the last call, each
