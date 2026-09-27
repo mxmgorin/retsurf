@@ -2,6 +2,7 @@
 //! the section bar with the close action, and the four section lists
 //! (Tabs / Bookmarks / History / Downloads).
 
+use super::favicon::PageIcons;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
@@ -77,13 +78,22 @@ fn row_atoms<'a>(
 /// A URL row's label: site name in white, rest of the URL dim and middle-elided
 /// to `width`. Leading with the name makes the list scannable; keeping both ends
 /// of the path keeps what differs between two rows of the same site.
-fn url_atoms(ui: &egui::Ui, url: &str, pinned: bool, width: f32) -> egui::Atoms<'static> {
+fn url_atoms(
+    ui: &egui::Ui,
+    url: &str,
+    pinned: bool,
+    icon: Option<egui::Atom<'static>>,
+    width: f32,
+) -> egui::Atoms<'static> {
     let font = egui::FontId::proportional(ROW_FONT);
     let brand_text = super::home::brand_label(url);
-    // Row padding, the gap after the brand, and the pin when there is one.
+    // Row padding, the gap after the brand, and the pin and icon when present.
     let mut budget = width - text_width(ui, &brand_text, &font) - 24.0;
     if pinned {
         budget -= text_width(ui, bold::PUSH_PIN, &font) + 4.0;
+    }
+    if icon.is_some() {
+        budget -= ROW_FONT + 4.0;
     }
     let brand = egui::RichText::new(brand_text)
         .size(ROW_FONT)
@@ -98,6 +108,9 @@ fn url_atoms(ui: &egui::Ui, url: &str, pinned: bool, width: f32) -> egui::Atoms<
                 .size(ROW_FONT)
                 .color(ACCENT),
         );
+    }
+    if let Some(icon) = icon {
+        atoms.push_left(icon);
     }
     atoms
 }
@@ -187,6 +200,7 @@ pub(super) fn add_menu(
     ctx: &egui::Context,
     menu: &Menu,
     tabs: &[TabInfo],
+    icons: &PageIcons,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -231,11 +245,9 @@ pub(super) fn add_menu(
         ui.add_space(8.0);
 
         match menu.section() {
-            Section::Tabs => {
-                add_tabs_section(ui, screen, menu, tabs, menu.tab_selected(), commands)
-            }
-            Section::Bookmarks => add_bookmarks_section(ui, screen, menu, commands),
-            Section::History => add_history_section(ui, screen, menu, commands),
+            Section::Tabs => add_tabs_section(ui, screen, menu, tabs, icons, commands),
+            Section::Bookmarks => add_bookmarks_section(ui, screen, menu, icons, commands),
+            Section::History => add_history_section(ui, screen, menu, icons, commands),
             Section::Downloads => add_downloads_section(ui, screen, menu, commands),
         }
     });
@@ -251,10 +263,11 @@ fn add_tabs_section(
     screen: egui::Rect,
     menu: &Menu,
     tabs: &[TabInfo],
-    selected: usize,
+    icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;
+    let selected = menu.tab_selected();
     // Title width, less the two trailing buttons and the spacing before each.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
     section_scroll(ui, screen).show(ui, |ui| {
@@ -279,12 +292,17 @@ fn add_tabs_section(
             ui.horizontal(|ui| {
                 // The active tab is accent and bold, the cursor's row is the
                 // selectable highlight: the two must read apart on one row.
+                let text = egui::RichText::new(&tab.title).size(ROW_FONT);
                 let text = if tab.active {
-                    egui::RichText::new(&tab.title).color(ACCENT).strong()
+                    text.color(ACCENT).strong()
                 } else {
-                    egui::RichText::new(&tab.title).color(egui::Color32::WHITE)
+                    text.color(egui::Color32::WHITE)
                 };
-                let resp = row_button(ui, row_w, sel, text);
+                let mut atoms = egui::Atoms::new((text.atom_shrink(true), egui::Atom::grow()));
+                if let Some(icon) = site_icon(icons, &tab.url) {
+                    atoms.push_left(icon);
+                }
+                let resp = row_atoms(ui, row_w, sel, atoms);
                 if sel {
                     center_selected(&resp);
                 }
@@ -307,11 +325,27 @@ fn add_tabs_section(
     });
 }
 
+/// A row's leading site icon, or a globe so titles line up; `None` with icons off.
+fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
+    if !icons.enabled() {
+        return None;
+    }
+    let side = egui::vec2(ROW_FONT, ROW_FONT);
+    Some(match icons.texture(url) {
+        Some(texture) => egui::Image::new(texture).fit_to_exact_size(side).into(),
+        None => egui::RichText::new(bold::GLOBE)
+            .size(ROW_FONT)
+            .color(DIM)
+            .into(),
+    })
+}
+
 /// Bookmarks section: the saved URLs, highlighted row selected.
 fn add_bookmarks_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     menu: &Menu,
+    icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;
@@ -336,7 +370,8 @@ fn add_bookmarks_section(
             let selected = i == bookmarks.selected();
             // A leading pin marks a row pinned to the start-page dial (Y toggles).
             ui.horizontal(|ui| {
-                let atoms = url_atoms(ui, url, menu.dial.contains(url), row_w);
+                let icon = site_icon(icons, url);
+                let atoms = url_atoms(ui, url, menu.dial.contains(url), icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     center_selected(&resp);
@@ -416,6 +451,7 @@ fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     menu: &Menu,
+    icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;
@@ -445,7 +481,8 @@ fn add_history_section(
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
-                let atoms = url_atoms(ui, &entry.url, false, row_w);
+                let icon = site_icon(icons, &entry.url);
+                let atoms = url_atoms(ui, &entry.url, false, icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     center_selected(&resp);

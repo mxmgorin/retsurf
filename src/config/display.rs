@@ -34,6 +34,9 @@ pub struct DisplayConfig {
     /// over the page on either edge: a strip that came and went would resize the
     /// web view, reflowing the page mid-scroll.
     pub toolbar_autohide: bool,
+    /// Show site icons on tabs, bookmarks and history. Servo fetches them
+    /// either way; this keeps a 32 px copy per tab and per host.
+    pub page_icons: bool,
     /// Paint the screen's last row black. Some panels show that row again as the
     /// first one, so a light page bleeds a band above the toolbar (muOS/A133).
     pub dark_last_row: bool,
@@ -51,6 +54,7 @@ impl Default for DisplayConfig {
             cursor_linger_ms: 1500,
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
+            page_icons: true,
             dark_last_row: false,
         }
     }

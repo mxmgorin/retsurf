@@ -39,6 +39,7 @@ impl AppBrowser {
                     title,
                     url: tab.state.page_url.clone(),
                     active: i == active,
+                    favicon: tab.favicon.clone(),
                 }
             })
             .collect()
@@ -99,6 +100,17 @@ impl AppBrowser {
     #[inline]
     pub fn set_max_tabs(&self, max_tabs: u32) {
         self.inner.max_tabs.set(max_tabs as usize);
+    }
+
+    /// Turning icons off frees the stored ones; turning them on shows each
+    /// tab's from its next load.
+    pub fn set_page_icons(&self, on: bool) {
+        self.inner.page_icons.set(on);
+        if !on {
+            for tab in self.inner.tabs.borrow_mut().iter_mut() {
+                tab.favicon = None;
+            }
+        }
     }
 
     /// Reopen a saved session (see [`crate::data::session`]): a tab per URL, with

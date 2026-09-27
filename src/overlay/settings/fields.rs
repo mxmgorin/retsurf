@@ -249,6 +249,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Cursor linger (ms)",     int!(display.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
     f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
+    f(S::Display,  "Display",     "Page icons",             flag!(display.page_icons), false),
 
     f(S::Input,    "Gamepad",     "Gamepad layout",         choice!(input.pad_layout: PadLayout), false),
     f(S::Input,    "Gamepad",     "Swap A/B and X/Y",       flag!(input.swap_face_buttons), false),

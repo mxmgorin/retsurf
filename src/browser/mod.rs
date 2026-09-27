@@ -16,6 +16,7 @@ mod command;
 mod compositing;
 mod delegate;
 mod engine;
+mod favicon;
 mod forced_dark;
 mod home;
 mod input;
@@ -26,6 +27,7 @@ mod url;
 
 pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
+pub use favicon::Favicon;
 pub use home::HOME_URL;
 pub use url::try_into_url;
 
@@ -114,6 +116,9 @@ struct Tab {
     /// navigations; per tab so a background load can't spend the visible
     /// page's budget.
     page_images: RefCell<content_filter::PageImages>,
+    /// The page's icon, row-sized; dropped on top-level navigations, since
+    /// Servo keeps the previous page's until the new one names its own.
+    favicon: Option<Favicon>,
 }
 
 impl Tab {
@@ -123,6 +128,7 @@ impl Tab {
             webview,
             state: BrowserState::loading(),
             page_images: RefCell::default(),
+            favicon: None,
         }
     }
 }
@@ -141,6 +147,9 @@ struct AppBrowserInner {
     /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
     /// the address-bar text — so typing a URL doesn't pollute history.
     visited: FrameQueue<String>,
+    /// Page icons that arrived since the last drain, with the URL of the page
+    /// that named them.
+    new_icons: FrameQueue<(String, Favicon)>,
     /// Download navigations denied by [`delegate`], drained once per frame.
     download_requests: FrameQueue<DownloadRequest>,
     /// Webviews whose page signalled a captured blob download (see
@@ -183,6 +192,8 @@ struct AppBrowserInner {
     /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
     /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
+    /// `[display] page_icons`: whether tabs keep their page's icon.
+    page_icons: Cell<bool>,
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
     forced_dark: Rc<servo::user_contents::UserStyleSheet>,
@@ -259,6 +270,7 @@ impl AppBrowserInner {
             repaint_pending: Cell::new(false),
             // History entries only matter once a pass happens anyway.
             visited: FrameQueue::silent(event_sender.clone()),
+            new_icons: FrameQueue::silent(event_sender.clone()),
             download_requests: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_pings: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_downloads: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
@@ -277,6 +289,7 @@ impl AppBrowserInner {
             hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
+            page_icons: Cell::new(config.display.page_icons),
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
@@ -451,6 +464,7 @@ impl AppBrowser {
         self.set_page_theme(config.browser.page_theme);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
+        self.set_page_icons(config.display.page_icons);
     }
 
     /// Whether any tab is fetching, not just the shown one — a background tab's
@@ -468,6 +482,13 @@ impl AppBrowser {
     #[inline]
     pub fn take_visited(&self) -> Vec<String> {
         self.inner.visited.take()
+    }
+
+    /// Take and clear the page icons that arrived since the last call, each
+    /// with the URL of its page.
+    #[inline]
+    pub fn take_new_icons(&self) -> Vec<(String, Favicon)> {
+        self.inner.new_icons.take()
     }
 
     /// Take and clear the download navigations denied since the last call.

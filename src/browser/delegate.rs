@@ -4,7 +4,7 @@
 //! ad-block hook over every resource load (see [`crate::browser::adblock`]). New
 //! delegate hooks (favicons, dialogs, notifications, …) belong in this file.
 
-use super::{AppBrowserInner, BrowserState, Tab};
+use super::{AppBrowserInner, BrowserState, Favicon, Tab};
 use crate::event::user::UserEvent;
 use content_security_policy::Destination;
 use servo::WebView;
@@ -74,6 +74,26 @@ impl servo::WebViewDelegate for AppBrowserInner {
                 ));
             }
         }
+    }
+
+    fn notify_favicon_changed(&self, webview: WebView) {
+        if !self.page_icons.get() {
+            return;
+        }
+        let Some(i) = self.tab_index(webview.id()) else {
+            return;
+        };
+        let favicon = webview
+            .favicon()
+            .and_then(|image| Favicon::from_image(&image));
+        let mut tabs = self.tabs.borrow_mut();
+        if let Some(icon) = &favicon {
+            self.new_icons
+                .push((tabs[i].state.page_url.clone(), icon.clone()));
+        }
+        tabs[i].favicon = favicon;
+        drop(tabs);
+        self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
     /// Without this Servo answers `screen.width`, `availWidth` and `outerWidth`
@@ -163,6 +183,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             webview,
             state: BrowserState::default(),
             page_images: RefCell::default(),
+            favicon: None,
         });
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
@@ -194,16 +215,17 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // Per-page image cap: Servo loads every image eagerly, and a huge grid
         // freezes the device. Counted per distinct image, not per element.
         if let Some(i) = self.tab_index(webview.id()) {
-            let tabs = self.tabs.borrow();
-            let images = &tabs[i].page_images;
             if req.is_for_main_frame {
-                images.borrow_mut().clear();
+                let tab = &mut self.tabs.borrow_mut()[i];
+                tab.page_images.get_mut().clear();
+                tab.favicon = None;
             } else if is_subresource && !block && req.destination == Destination::Image {
                 if let Some(cap) = filter.image_cap() {
-                    if !images
-                        .borrow_mut()
-                        .allow(&url, req.referrer_url.as_ref(), cap)
-                    {
+                    if !self.tabs.borrow()[i].page_images.borrow_mut().allow(
+                        &url,
+                        req.referrer_url.as_ref(),
+                        cap,
+                    ) {
                         log::debug!("image cap: blocked {url}");
                         block = true;
                     }

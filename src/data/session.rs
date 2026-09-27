@@ -17,6 +17,7 @@ pub struct TabInfo {
     pub url: String,
     /// Whether this is the currently shown tab.
     pub active: bool,
+    pub favicon: Option<crate::browser::Favicon>,
 }
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).
@@ -101,6 +102,7 @@ mod tests {
             title: String::new(),
             url: url.to_string(),
             active,
+            favicon: None,
         }
     }
 

@@ -10,6 +10,8 @@ use crate::data::bookmarks::Bookmarks;
 use crate::data::dial::Dial;
 use crate::data::downloads::Downloads;
 use crate::data::history::History;
+use crate::data::page_icons;
+use std::collections::HashSet;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Section {
@@ -224,10 +226,27 @@ impl Menu {
     /// downloads (active ones stay). Goes through [`Self::clear_or_arm`].
     fn clear(&mut self) {
         match self.section {
-            Section::History => self.history.clear(),
+            Section::History => {
+                self.history.clear();
+                page_icons::prune(&self.icon_hosts(false));
+            }
             Section::Downloads => self.downloads.clear_finished(),
             Section::Tabs | Section::Bookmarks => {}
         }
+    }
+
+    /// Hosts whose icons the saved lists show: bookmarks, plus the history when
+    /// `with_history`.
+    pub fn icon_hosts(&self, with_history: bool) -> HashSet<String> {
+        let history = self.history.entries().iter().map(|e| e.url.as_str());
+        let history = history.take(if with_history { usize::MAX } else { 0 });
+        self.bookmarks
+            .urls()
+            .iter()
+            .map(String::as_str)
+            .chain(history)
+            .filter_map(page_icons::host_key)
+            .collect()
     }
 
     /// Record a visited URL (no-op if history is disabled). Only marks the store

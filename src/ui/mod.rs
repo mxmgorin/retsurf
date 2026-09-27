@@ -5,6 +5,7 @@
 mod chrome;
 mod cursor;
 mod dial_edit;
+mod favicon;
 mod game;
 mod game_mode;
 mod hints;
@@ -24,19 +25,20 @@ pub use self::game_mode::game_mode_toast_text;
 pub use self::overlays::Focus;
 
 use crate::{
-    browser::AppBrowser,
+    browser::{AppBrowser, Favicon},
     command::AppCommand,
     config::{
         DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
         PadLayout, ToolbarPosition, UpdateConfig,
     },
+    data::session::TabInfo,
     overlay::dial_edit::DialEdit,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
     overlay::game::menu::GameMenu,
     overlay::hints::Hints,
     overlay::home::Home,
-    overlay::menu::Menu,
+    overlay::menu::{Menu, Section},
     overlay::osk::Osk,
     overlay::prompt::Prompt,
     overlay::settings::Settings,
@@ -138,11 +140,35 @@ struct FrameInputs {
     /// Page-zoom chip percentage (`None` at the default zoom).
     zoom_pct: Option<u16>,
     /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
-    tab_infos: Vec<crate::data::session::TabInfo>,
+    tab_infos: Vec<TabInfo>,
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
     osk_caret: OskCaret,
     chrome_hidden: ChromeHidden,
+}
+
+/// The sites whose icons this frame draws: the menu's current section, each
+/// tab with its live icon.
+fn page_icon_wants<'a>(menu: &'a Menu, tabs: &'a [TabInfo]) -> Vec<(&'a str, Option<&'a Favicon>)> {
+    let mut wanted = Vec::new();
+    if menu.visible {
+        match menu.section() {
+            Section::Tabs => {
+                wanted.extend(tabs.iter().map(|t| (t.url.as_str(), t.favicon.as_ref())))
+            }
+            Section::Bookmarks => {
+                wanted.extend(menu.bookmarks().urls().iter().map(|u| (u.as_str(), None)))
+            }
+            Section::History => wanted.extend(
+                menu.history()
+                    .entries()
+                    .iter()
+                    .map(|e| (e.url.as_str(), None)),
+            ),
+            Section::Downloads => {}
+        }
+    }
+    wanted
 }
 
 /// The reasons the chrome hides, kept apart so leaving one does not reveal the
@@ -240,6 +266,8 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
+    /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
+    page_icons: favicon::PageIcons,
     /// Link-hint navigation state; the rects come from the browser.
     pub hints: Hints,
     /// Modal page prompts: queued `<select>` pickers and JS dialogs.
@@ -318,6 +346,7 @@ impl AppUi {
             home: Home::new(),
             dial_edit: DialEdit::new(),
             home_active: false,
+            page_icons: favicon::PageIcons::new(display.page_icons),
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
@@ -486,6 +515,11 @@ impl AppUi {
         }
     }
 
+    /// `[display] page_icons`, applied live; off frees every icon texture.
+    pub fn set_page_icons(&mut self, on: bool) {
+        self.page_icons.set_enabled(on);
+    }
+
     /// Keep the start-page / dial-editor selections in range before they render.
     fn clamp_overlay_selections(&mut self) {
         if self.home_active {
@@ -632,6 +666,9 @@ impl AppUi {
                     }
                 }
 
+                let wanted = page_icon_wants(&self.menu, &tab_infos);
+                self.page_icons.sync(ctx, wanted);
+
                 // A backdrop over the blank web view, below the foreground
                 // overlays; the dial editor covers it entirely.
                 if self.home_active && !self.dial_edit.visible() {
@@ -699,7 +736,14 @@ impl AppUi {
 
                 if self.menu.visible {
                     drop_egui_focus(ctx);
-                    menu::add_menu(ctx, &self.menu, &tab_infos, face, commands);
+                    menu::add_menu(
+                        ctx,
+                        &self.menu,
+                        &tab_infos,
+                        &self.page_icons,
+                        face,
+                        commands,
+                    );
                 } else if self.game_menu.visible {
                     // Same as the menu's: a focused row would activate twice.
                     drop_egui_focus(ctx);

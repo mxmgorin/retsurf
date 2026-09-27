@@ -262,11 +262,12 @@ impl App {
         }
     }
 
-    /// Wipe the browsing data: history, the finished downloads, the saved
-    /// session and the open tabs, plus Servo's cookies, web storage and HTTP
-    /// cache. Bookmarks, pins and the settings stay.
+    /// Wipe the browsing data: history, the icons only it referenced, the
+    /// finished downloads, the saved session and the open tabs, plus Servo's
+    /// cookies, web storage and HTTP cache. Bookmarks, pins and the settings stay.
     fn clear_browsing_data(&mut self) {
         self.ui.menu.history_mut().clear();
+        crate::data::page_icons::prune(&self.ui.menu.icon_hosts(false));
         self.ui.menu.downloads.clear_finished();
         self.session.discard();
         self.browser.clear_site_data();
@@ -325,6 +326,7 @@ impl App {
         self.ui
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
+        self.ui.set_page_icons(self.config.display.page_icons);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.input.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);

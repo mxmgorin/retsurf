@@ -11,8 +11,8 @@ use crate::command::{
     PromptAction, SettingsAction,
 };
 
-use crate::browser::AppBrowser;
-use crate::data::session::Session;
+use crate::browser::{AppBrowser, Favicon};
+use crate::data::{page_icons, session::Session};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::platform::clipboard::Clipboard;
@@ -167,6 +167,7 @@ impl App {
         self.ui.seed_scale(&self.window, &self.browser);
         // A pad plugged in before we started sends no connect event of its own.
         self.event_handler.announce_pads(&self.browser);
+        self.prune_page_icons();
         self.open_first_tabs();
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
@@ -187,6 +188,9 @@ impl App {
             for url in self.browser.take_visited() {
                 self.ui.menu.record_history(&url);
                 self.schedule_heap_trim();
+            }
+            for (url, icon) in self.browser.take_new_icons() {
+                self.store_page_icon(&url, &icon);
             }
 
             // A closed document leaves its memory with the allocator rather than
@@ -391,6 +395,30 @@ impl App {
             return;
         }
         self.browser.open_tab(&self.config.browser.home_page);
+    }
+
+    /// Cache `url`'s site icon for the saved lists. With history off only the
+    /// bookmarked sites are kept, or the cache would be a history.
+    fn store_page_icon(&self, url: &str, icon: &Favicon) {
+        let Some(host) = page_icons::host_key(url) else {
+            return;
+        };
+        if self.config.history.enabled || self.ui.menu.icon_hosts(false).contains(&host) {
+            page_icons::save(&host, icon);
+        }
+    }
+
+    /// Drop the icons of hosts nothing references any more: the lists trim
+    /// themselves, the cache does not.
+    fn prune_page_icons(&self) {
+        let mut keep = self.ui.menu.icon_hosts(true);
+        keep.extend(
+            self.session
+                .urls()
+                .iter()
+                .filter_map(|u| page_icons::host_key(u)),
+        );
+        page_icons::prune(&keep);
     }
 
     /// Ask the allocator for its free memory back once the document being torn

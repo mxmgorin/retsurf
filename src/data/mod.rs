@@ -7,6 +7,7 @@ pub mod bookmarks;
 pub mod dial;
 pub mod downloads;
 pub mod history;
+pub mod page_icons;
 pub mod session;
 
 use crate::config;
