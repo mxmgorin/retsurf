@@ -26,22 +26,29 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 
 | Start page | Browsing | Link hints | Keyboard |
 |:---:|:---:|:---:|:---:|
-| ![The built-in start page: a search field over a speed-dial grid of pinned sites](resources/images/retsurf-start-page.png) | ![Hacker News rendered by Servo in its mobile layout, the toolbar above it](resources/images/retsurf-page.png) | ![Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it](resources/images/retsurf-hints.png) | ![The on-screen keyboard raised under the start page's search field, which shows what has been typed](resources/images/retsurf-keyboard.png) |
+| ![The built-in start page: the retsurf banner over a search field and a speed-dial grid of pinned sites, tinted after their site icons](resources/images/retsurf-start-page.png) | ![Hacker News rendered by Servo in its mobile layout, the toolbar above it](resources/images/retsurf-page.png) | ![Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it](resources/images/retsurf-hints.png) | ![The on-screen keyboard raised under the start page's search field, which shows what has been typed](resources/images/retsurf-keyboard.png) |
 
 | Tabs | Downloads | Reader mode | Settings |
 |:---:|:---:|:---:|:---:|
-| ![The menu's Tabs section: open tabs by title, each with a bookmark and close button](resources/images/retsurf-tabs.png) | ![The Downloads section: one file downloading with percentage and size, one finished](resources/images/retsurf-downloads.png) | ![A Wikipedia article stripped to its text by reader mode](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
+| ![The menu's Tabs section: open tabs by site icon and title, each with a bookmark and close button](resources/images/retsurf-tabs.png) | ![The Downloads section: one file downloading with percentage and size, one finished](resources/images/retsurf-downloads.png) | ![A Wikipedia article stripped to its text by reader mode](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
+
+| Game mode | Input map | Controls | Forced dark |
+|:---:|:---:|:---:|:---:|
+| ![The Game mode menu over the WebGL racer HexGL mid-race, the browser chrome hidden: back to game, the input map in use, the on-screen keyboard and exit](resources/images/retsurf-game-mode.png) | ![The input map editor: each stick direction and gamepad button with the key or mouse action it sends to the game](resources/images/retsurf-input-map.png) | ![The settings Controls tab: each browser action with its gamepad and keyboard gestures](resources/images/retsurf-controls.png) | ![Lobsters, a light site with no dark theme, inverted by forced dark](resources/images/retsurf-forced-dark.png) |
 
 ## Features
 
 - **Gamepad-first navigation**<br>
-  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН).
+  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН) as a key grid or a stick-driven wheel.
 
 - **Customizable browser controls**<br>
   Every browser action can be rebound in-app, with support for tap, hold, and chord.
 
 - **Game mode**<br>
-  Hides the browser chrome and routes input to the page, with an in-app remapper that can rebind any button with multiple profiles.
+  Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input.
+
+- **Web games**<br>
+  WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let PICO-8 and Emscripten exports from itch.io run.
 
 - **Tabs, bookmarks, history, and downloads**<br>
   Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation and a toolbar chip for active downloads.
@@ -99,6 +106,7 @@ Android, and the handheld cross-builds.
 
 Files are stored in the user data directory (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
 Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for all options and the bindings reference.
+
 ## How to help
 
 If you find the project useful, here is how you can help:
