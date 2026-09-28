@@ -108,6 +108,7 @@ cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats over the page, either edge)
 page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
+home_style = "banner"      # start page header: "banner", "wordmark", or "compact" (none, more room for the dial)
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles

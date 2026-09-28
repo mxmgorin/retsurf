@@ -1,3 +1,4 @@
+use super::HomeStyle;
 use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +38,8 @@ pub struct DisplayConfig {
     /// Show site icons on tabs, bookmarks, history and the speed dial. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
+    /// What heads the start page above its search field.
+    pub home_style: HomeStyle,
     /// Paint the screen's last row black. Some panels show that row again as the
     /// first one, so a light page bleeds a band above the toolbar (muOS/A133).
     pub dark_last_row: bool,
@@ -55,6 +58,7 @@ impl Default for DisplayConfig {
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
             page_icons: true,
+            home_style: HomeStyle::Banner,
             dark_last_row: false,
         }
     }

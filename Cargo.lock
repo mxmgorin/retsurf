@@ -5453,6 +5453,7 @@ dependencies = [
  "openh264",
  "percent-encoding",
  "png",
+ "resvg",
  "rubato",
  "rust-embed",
  "rustls",

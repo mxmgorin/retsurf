@@ -30,8 +30,8 @@ use crate::{
     browser::{AppBrowser, Favicon},
     command::AppCommand,
     config::{
-        DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, InputConfig, OskConfig,
-        PadLayout, ToolbarPosition, UpdateConfig,
+        DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, HomeStyle, InputConfig,
+        OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
     data::session::TabInfo,
     overlay::dial_edit::DialEdit,
@@ -272,6 +272,9 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
+    /// `[display] home_style`, and the banner it may draw, rasterized on first use.
+    home_style: HomeStyle,
+    banner: home::Banner,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
     /// Link-hint navigation state; the rects come from the browser.
@@ -352,6 +355,8 @@ impl AppUi {
             dial_edit: DialEdit::new(),
             home_active: false,
             page_icons: favicon::PageIcons::new(display.page_icons),
+            home_style: display.home_style,
+            banner: home::Banner::default(),
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
@@ -523,6 +528,12 @@ impl AppUi {
         }
     }
 
+    /// `[display] home_style`, applied live.
+    #[inline]
+    pub fn set_home_style(&mut self, style: HomeStyle) {
+        self.home_style = style;
+    }
+
     /// `[display] page_icons`, applied live; off frees every icon texture.
     pub fn set_page_icons(&mut self, on: bool) {
         self.page_icons.set_enabled(on);
@@ -681,13 +692,22 @@ impl AppUi {
                 // A backdrop over the blank web view, below the foreground
                 // overlays; the dial editor covers it entirely.
                 if self.home_active && !self.dial_edit.visible() {
+                    let mark = match self.home_style {
+                        HomeStyle::Banner => self
+                            .banner
+                            .texture(ctx)
+                            .map_or(home::Mark::Wordmark, home::Mark::Banner),
+                        HomeStyle::Wordmark => home::Mark::Wordmark,
+                        HomeStyle::Compact => home::Mark::None,
+                    };
+                    let pins = home::DialPins {
+                        urls: self.menu.dial.urls(),
+                        icons: &self.page_icons,
+                    };
                     home::add_home(
                         ctx,
                         &mut self.home,
-                        home::DialPins {
-                            urls: self.menu.dial.urls(),
-                            icons: &self.page_icons,
-                        },
+                        home::HomeView { pins, mark },
                         self.webview_rect,
                         caret_for(OskField::Home),
                         face,

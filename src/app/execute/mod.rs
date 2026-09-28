@@ -348,6 +348,7 @@ impl App {
             .set_toolbar_autohide(self.config.display.toolbar_autohide);
         self.ui.set_hint_badges(self.config.input.hint_badges);
         self.ui.set_page_icons(self.config.display.page_icons);
+        self.ui.set_home_style(self.config.display.home_style);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.input.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);

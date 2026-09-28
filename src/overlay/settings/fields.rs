@@ -6,8 +6,8 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, MemoryProfile, OskStyle, PadLayout,
-    PageTheme, ToolbarPosition,
+    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, HomeStyle, MemoryProfile, OskStyle,
+    PadLayout, PageTheme, ToolbarPosition,
 };
 
 /// How a field is displayed, edited, and reached in a config. `Choice` carries
@@ -250,6 +250,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
     f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
     f(S::Display,  "Display",     "Page icons",             flag!(display.page_icons), false),
+    f(S::Display,  "Display",     "Home style",             choice!(display.home_style: HomeStyle), false),
 
     f(S::Input,    "Gamepad",     "Gamepad layout",         choice!(input.pad_layout: PadLayout), false),
     f(S::Input,    "Gamepad",     "Swap A/B and X/Y",       flag!(input.swap_face_buttons), false),
