@@ -3,52 +3,58 @@
 //! API), so the list is short. The central router ([`crate::app`]) drives it
 //! like any other overlay; [`crate::ui`] renders it.
 
-/// The rows, top to bottom.
+/// A row of the menu; which rows show depends on the mode (see [`GameMenu::open`]).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameRow {
-    /// Enter or leave Game Mode — the only row whose action depends on state,
-    /// and what the screen is mostly opened for, so it leads.
-    Toggle,
-    /// Close the menu: back to the game, or to the browser — either way, back
-    /// to what the opener was doing.
-    Resume,
+    /// Turn Game Mode on; the reason to open the menu from outside it.
+    Enter,
+    /// Close the menu over the running game. Not "Resume": the game never
+    /// stopped (Servo exposes no suspend API).
+    Back,
     /// Open the input-map screens (see [`super::input_maps`]): which map both
     /// devices run, and everything that can be done to one. Reachable from
-    /// outside the mode too, which is the point of opening the menu there.
+    /// outside the mode too, so the map can be set before a game.
     InputMap,
     /// Summon the on-screen keyboard; it types into the page.
     Osk,
+    /// Turn Game Mode off. Last, as far as the list allows from where an
+    /// accidental open lands.
+    Exit,
 }
 
-impl GameRow {
-    /// Top-to-bottom order, which is also the selection index.
-    pub const ALL: [GameRow; 4] = [
-        GameRow::Toggle,
-        GameRow::Resume,
-        GameRow::InputMap,
-        GameRow::Osk,
-    ];
+/// Inside the mode: a pause menu, so the way back leads and the way out ends it.
+const IN_MODE: &[GameRow] = &[
+    GameRow::Back,
+    GameRow::InputMap,
+    GameRow::Osk,
+    GameRow::Exit,
+];
 
-    /// The row's label. Only the toggle words itself by state; the panel is
-    /// titled GAME MODE, so it needs no noun of its own. No trailing ellipsis —
-    /// that marks a row which asks for something before it acts.
-    pub fn label(self, in_game_mode: bool) -> &'static str {
-        match (self, in_game_mode) {
-            (GameRow::Resume, _) => "Resume",
+/// Outside it: entering, or setting the map up first. B closes, and the browser
+/// has its own keyboard, so neither Back nor Osk has a use here.
+const OUT_OF_MODE: &[GameRow] = &[GameRow::Enter, GameRow::InputMap];
+
+impl GameRow {
+    /// The row's label. No trailing ellipsis: that marks a row which asks for
+    /// something before it acts.
+    pub fn label(self) -> &'static str {
+        match self {
+            GameRow::Enter => "Enter game mode",
+            GameRow::Back => "Back to game",
             // Singular: the value beside it is the map in use, and one map
             // covers both devices — hence input, not controller.
-            (GameRow::InputMap, _) => "Input map",
+            GameRow::InputMap => "Input map",
             // Not "Keyboard": a map has a `[keyboard]` table of physical
             // keys, and this is the one on screen.
-            (GameRow::Osk, _) => "On-screen keyboard",
-            (GameRow::Toggle, true) => "Disable",
-            (GameRow::Toggle, false) => "Enable",
+            GameRow::Osk => "On-screen keyboard",
+            GameRow::Exit => "Exit game mode",
         }
     }
 }
 
 pub struct GameMenu {
     pub visible: bool,
+    rows: &'static [GameRow],
     selected: usize,
 }
 
@@ -56,23 +62,20 @@ impl GameMenu {
     pub fn new() -> Self {
         Self {
             visible: false,
+            rows: OUT_OF_MODE,
             selected: 0,
         }
     }
 
-    /// Show it, highlighting what the opener most likely wants: inside the mode
-    /// Resume, so an accidental open over a running game is one A-press from
-    /// back and not from ending it; outside it, the row that enters.
+    /// Show the rows for the current mode, highlighting the first: back to the
+    /// game inside it, so an accidental open is one A-press from where it was.
     pub fn open(&mut self, in_game_mode: bool) {
         self.visible = true;
-        let wanted = match in_game_mode {
-            true => GameRow::Resume,
-            false => GameRow::Toggle,
+        self.rows = match in_game_mode {
+            true => IN_MODE,
+            false => OUT_OF_MODE,
         };
-        self.selected = GameRow::ALL
-            .iter()
-            .position(|row| *row == wanted)
-            .expect("ALL lists every row");
+        self.selected = 0;
     }
 
     pub fn close(&mut self) {
@@ -81,12 +84,12 @@ impl GameMenu {
 
     /// Move the highlight by `dy` rows (clamped to the ends, like the menu's).
     pub fn move_sel(&mut self, dy: i32) {
-        self.selected = crate::list::step(self.selected, dy, GameRow::ALL.len());
+        self.selected = crate::list::step(self.selected, dy, self.rows.len());
     }
 
     /// Focus a row by index.
     pub fn select(&mut self, index: usize) {
-        if index < GameRow::ALL.len() {
+        if index < self.rows.len() {
             self.selected = index;
         }
     }
@@ -95,8 +98,12 @@ impl GameMenu {
         self.selected
     }
 
+    pub fn rows(&self) -> &'static [GameRow] {
+        self.rows
+    }
+
     pub fn row(&self) -> GameRow {
-        GameRow::ALL[self.selected]
+        self.rows[self.selected]
     }
 }
 
@@ -105,33 +112,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_highlight_starts_where_the_opener_is_going_and_stops_at_the_ends() {
+    fn the_highlight_starts_on_the_first_row_and_stops_at_the_ends() {
         let mut menu = GameMenu::new();
         menu.open(true);
-        assert_eq!(menu.row(), GameRow::Resume);
+        assert_eq!(menu.row(), GameRow::Back);
         menu.move_sel(99);
-        assert_eq!(menu.row(), GameRow::Osk);
+        assert_eq!(menu.row(), GameRow::Exit);
         menu.move_sel(-99);
-        assert_eq!(menu.row(), GameRow::Toggle);
-        // Opened from outside the mode, entering is one A-press away — and an
-        // accidental open inside it must not put leaving there instead.
+        assert_eq!(menu.row(), GameRow::Back);
         menu.close();
         menu.open(false);
-        assert_eq!(menu.row(), GameRow::Toggle);
-        menu.close();
-        menu.open(true);
-        assert_ne!(menu.row(), GameRow::Toggle);
+        assert_eq!(menu.row(), GameRow::Enter);
+        menu.move_sel(99);
+        assert_eq!(menu.row(), GameRow::InputMap);
     }
 
-    /// One row words itself by state, and it is the one whose action does; no
-    /// row on these screens trails off into an ellipsis.
+    /// Each mode offers its own way across and nothing that only makes sense in
+    /// the other; no row trails off into an ellipsis.
     #[test]
-    fn the_labels_follow_the_mode() {
-        for row in GameRow::ALL {
-            assert!(!row.label(true).is_empty() && !row.label(false).is_empty());
-            assert!(!row.label(true).ends_with("..."), "{row:?}");
-            let same = row.label(true) == row.label(false);
-            assert_eq!(same, row != GameRow::Toggle, "{row:?}");
+    fn each_mode_lists_its_own_rows() {
+        assert!(IN_MODE.contains(&GameRow::Exit) && !IN_MODE.contains(&GameRow::Enter));
+        assert!(OUT_OF_MODE.contains(&GameRow::Enter) && !OUT_OF_MODE.contains(&GameRow::Exit));
+        assert!(!OUT_OF_MODE.contains(&GameRow::Back));
+        for row in IN_MODE.iter().chain(OUT_OF_MODE) {
+            assert!(!row.label().ends_with("..."), "{row:?}");
         }
     }
 }

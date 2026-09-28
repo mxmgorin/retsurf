@@ -85,7 +85,7 @@ impl App {
     /// A / Enter on the focused Game Mode row.
     fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.game_menu.row() {
-            GameRow::Resume => self.ui.game_menu.close(),
+            GameRow::Back => self.ui.game_menu.close(),
             // The maps are their own screens; the menu is what B returns to.
             GameRow::InputMap => {
                 self.ui.game_menu.close();
@@ -99,13 +99,11 @@ impl App {
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
             // The menu is the only way in and the only way out.
-            GameRow::Toggle => match self.ui.game_mode() {
-                true => self.leave_game_mode(),
-                false => {
-                    self.ui.game_menu.close();
-                    self.enter_game_mode(out);
-                }
-            },
+            GameRow::Enter => {
+                self.ui.game_menu.close();
+                self.enter_game_mode(out);
+            }
+            GameRow::Exit => self.leave_game_mode(),
         }
     }
 

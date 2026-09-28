@@ -15,11 +15,13 @@ const PANEL_W: f32 = 340.0;
 /// Margin left either side of the panel on a screen too narrow for [`PANEL_W`].
 const SIDE_MARGIN: f32 = 48.0;
 
+/// Opacity of the panel's fill, so the game still shows through behind the rows.
+const PANEL_OPACITY: f32 = 0.8;
+
 pub(in crate::ui) fn add_game_menu(
     ctx: &egui::Context,
     menu: &GameMenu,
     map_name: &str,
-    in_game_mode: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -35,16 +37,17 @@ pub(in crate::ui) fn add_game_menu(
                 0.0,
                 egui::Color32::from_black_alpha(160),
             );
-            theme::card_frame().show(ui, |ui| {
+            let fill = theme::PANEL_FILL.gamma_multiply(PANEL_OPACITY);
+            theme::card_frame().fill(fill).show(ui, |ui| {
                 ui.set_max_width(width);
                 add_header(ui);
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
-                for (index, row) in GameRow::ALL.into_iter().enumerate() {
+                for (index, &row) in menu.rows().iter().enumerate() {
                     let value = match row {
                         GameRow::InputMap => map_name,
                         _ => "",
                     };
-                    let label = row.label(in_game_mode);
+                    let label = row.label();
                     let resp = panel::row(ui, width, index == menu.selected(), label, value);
                     if resp.clicked() {
                         commands.push(AppCommand::GameMenu(GameMenuAction::Click(index)));

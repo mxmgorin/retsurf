@@ -782,13 +782,7 @@ impl AppUi {
                 } else if self.game_menu.visible {
                     // Same as the menu's: a focused row would activate twice.
                     drop_egui_focus(ctx);
-                    game::menu::add_game_menu(
-                        ctx,
-                        &self.game_menu,
-                        &self.input_map_name,
-                        self.game_mode,
-                        commands,
-                    );
+                    game::menu::add_game_menu(ctx, &self.game_menu, &self.input_map_name, commands);
                 } else if self.osk.visible {
                     // Clear a bottom toolbar so its address bar stays visible
                     // below the keys.

@@ -262,7 +262,7 @@ haptics = true             # let a page rumble the pad (the Gamepad vibration AP
 # (Ctrl+Alt+G, or a held Start on the pad) opens the Game Mode menu, in or out of
 # the mode; inside, the pad gesture it is bound to is mirrored and withheld from
 # the game, so rebinding it moves the way out with it. That
-# menu is the only way in and out — it leads with Enable or Disable — and its
+# menu is the only way in and out (Enter game mode, or Exit game mode last) and its
 # Input map row is where this one is picked (written back here), which is
 # why it opens outside the mode too; it also summons the on-screen keyboard over
 # the game. Which input map drives the pad and the keyboard while the mode is on: a
