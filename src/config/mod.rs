@@ -12,6 +12,7 @@ mod adblock;
 mod audio;
 pub mod bounds;
 mod browser;
+mod controls;
 mod data_saving;
 mod debug;
 mod display;
@@ -20,7 +21,7 @@ mod experimental;
 mod game_mode;
 mod history;
 mod home_style;
-mod input;
+mod interface;
 mod osk;
 mod pad_layout;
 mod paths;
@@ -32,15 +33,16 @@ mod video;
 pub use adblock::AdblockConfig;
 pub use audio::AudioConfig;
 pub use browser::{BrowserConfig, PageTheme};
+pub use controls::{ControlsConfig, CursorMode};
 pub use data_saving::DataSavingConfig;
 pub use debug::DebugConfig;
-pub use display::{DisplayConfig, ToolbarPosition};
+pub use display::DisplayConfig;
 pub use downloads::DownloadsConfig;
 pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use game_mode::{GameModeConfig, Scaling};
 pub use history::HistoryConfig;
 pub use home_style::HomeStyle;
-pub use input::{CursorMode, InputConfig};
+pub use interface::{InterfaceConfig, ToolbarPosition};
 pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
@@ -50,22 +52,25 @@ pub use video::VideoConfig;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
+/// Fields follow the settings screen's tabs and sub-headers, so the written
+/// file reads in the order the screen shows it.
 pub struct AppConfig {
     pub browser: BrowserConfig,
     pub experimental: ExperimentalConfig,
+    pub interface: InterfaceConfig,
+    pub controls: ControlsConfig,
+    pub osk: OskConfig,
     pub game_mode: GameModeConfig,
-    pub display: DisplayConfig,
-    pub input: InputConfig,
     pub history: HistoryConfig,
-    pub downloads: DownloadsConfig,
     pub adblock: AdblockConfig,
-    pub performance: PerformanceConfig,
     pub data_saving: DataSavingConfig,
     pub audio: AudioConfig,
     pub video: VideoConfig,
-    pub osk: OskConfig,
-    pub debug: DebugConfig,
+    pub performance: PerformanceConfig,
+    pub display: DisplayConfig,
+    pub downloads: DownloadsConfig,
     pub update: UpdateConfig,
+    pub debug: DebugConfig,
 }
 
 /// A boolean `RETSURF_*` toggle: `None` when unset, otherwise any value but
@@ -138,39 +143,51 @@ impl AppConfig {
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);
         fix_u32("display.height", &mut self.display.height, b::HEIGHT);
-        fix_u32("display.max_fps", &mut self.display.max_fps, b::MAX_FPS);
-        fix_f32("display.scale", &mut self.display.scale, b::SCALE);
+        fix_u32(
+            "performance.max_fps",
+            &mut self.performance.max_fps,
+            b::MAX_FPS,
+        );
+        fix_f32("interface.scale", &mut self.interface.scale, b::SCALE);
         fix_u64(
-            "display.cursor_linger_ms",
-            &mut self.display.cursor_linger_ms,
+            "interface.cursor_linger_ms",
+            &mut self.interface.cursor_linger_ms,
             b::CURSOR_LINGER_MS,
         );
 
-        let i = &mut self.input;
-        fix_f32("input.deadzone", &mut i.deadzone, b::DEADZONE);
-        fix_f32("input.cursor_speed", &mut i.cursor_speed, b::CURSOR_SPEED);
-        fix_f32("input.scroll_speed", &mut i.scroll_speed, b::SCROLL_SPEED);
+        let i = &mut self.controls;
+        fix_f32("controls.deadzone", &mut i.deadzone, b::DEADZONE);
         fix_f32(
-            "input.trigger_threshold",
+            "controls.cursor_speed",
+            &mut i.cursor_speed,
+            b::CURSOR_SPEED,
+        );
+        fix_f32(
+            "controls.scroll_speed",
+            &mut i.scroll_speed,
+            b::SCROLL_SPEED,
+        );
+        fix_f32(
+            "controls.trigger_threshold",
             &mut i.trigger_threshold,
             b::TRIGGER_THRESHOLD,
         );
         fix_f32(
-            "input.osk_nav_threshold",
+            "controls.osk_nav_threshold",
             &mut i.osk_nav_threshold,
             b::OSK_NAV_THRESHOLD,
         );
         fix_u64(
-            "input.osk_nav_initial_delay_ms",
+            "controls.osk_nav_initial_delay_ms",
             &mut i.osk_nav_initial_delay_ms,
             b::OSK_NAV_INITIAL_DELAY_MS,
         );
         fix_u64(
-            "input.osk_nav_repeat_ms",
+            "controls.osk_nav_repeat_ms",
             &mut i.osk_nav_repeat_ms,
             b::OSK_NAV_REPEAT_MS,
         );
-        fix_u64("input.hold_ms", &mut i.hold_ms, b::HOLD_MS);
+        fix_u64("controls.hold_ms", &mut i.hold_ms, b::HOLD_MS);
 
         fix_usize(
             "history.max_entries",

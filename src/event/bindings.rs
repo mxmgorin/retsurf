@@ -6,7 +6,7 @@
 //! ```toml
 //! [gamepad]
 //! a = "confirm"             # tap
-//! "hold:r1" = "reload"      # hold past [input] hold_ms
+//! "hold:r1" = "reload"      # hold past [controls] hold_ms
 //! "l2+r2" = "zoom_reset"    # chord: press R2 while holding L2
 //!
 //! [keyboard]

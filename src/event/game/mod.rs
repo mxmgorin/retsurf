@@ -9,7 +9,7 @@ pub mod mode;
 
 use crate::browser::AppBrowser;
 use crate::command::AppCommand;
-use crate::config::InputConfig;
+use crate::config::ControlsConfig;
 use crate::event::key_names;
 use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
@@ -87,7 +87,7 @@ impl GameMode {
     }
 
     /// Start routing: the live map becomes a translator.
-    pub fn start_routing(&mut self, cfg: &InputConfig) {
+    pub fn start_routing(&mut self, cfg: &ControlsConfig) {
         self.input = Some(GameInput::new(
             self.maps.pick(&self.live).clone(),
             cfg,
@@ -105,7 +105,7 @@ impl GameMode {
 
     /// Retune a running translator; one not running reads the config when it
     /// starts.
-    pub fn set_config(&mut self, cfg: &InputConfig) {
+    pub fn set_config(&mut self, cfg: &ControlsConfig) {
         if let Some(input) = &mut self.input {
             input.set_config(cfg);
         }

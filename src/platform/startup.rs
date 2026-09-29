@@ -20,7 +20,7 @@ pub fn prepare(config: &mut AppConfig) {
         .and_then(|v| v.parse::<u32>().ok())
     {
         // Lands after `load`'s sanitize pass, so it clamps here.
-        config.display.max_fps = fps.min(config::bounds::MAX_FPS.max as u32);
+        config.performance.max_fps = fps.min(config::bounds::MAX_FPS.max as u32);
     }
     if config.display.software_render && !cfg!(feature = "software") {
         log::warn!(

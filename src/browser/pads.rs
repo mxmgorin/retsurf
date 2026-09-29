@@ -136,7 +136,7 @@ impl AppBrowser {
         self.inner.haptic_requests.take()
     }
 
-    /// `[input] haptics`, applied live. Documents already loaded keep the
+    /// `[controls] haptics`, applied live. Documents already loaded keep the
     /// capability they were told at `Connected`; the gate on requests is here.
     pub fn set_haptics(&self, on: bool) {
         self.inner.haptics.set(on);

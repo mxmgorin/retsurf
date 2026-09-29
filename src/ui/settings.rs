@@ -8,7 +8,7 @@ use super::theme::{self, ACCENT, DIM, HAIRLINE, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
+use crate::overlay::settings::{Kind, Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -469,12 +469,12 @@ pub(super) fn add_settings(
                 &format!("{ok} select"),
                 &format!("{back} back"),
             ])
-        } else if settings.is_controls_section() {
+        } else if settings.bindings_open() {
             theme::hint_line(&[
                 section,
                 &mv,
                 &format!("{ok} open / bind / remove"),
-                &format!("{back} save & back"),
+                &format!("{back} back"),
             ])
         } else {
             theme::hint_line(&[
@@ -498,8 +498,8 @@ pub(super) fn add_settings(
             return;
         }
 
-        // Controls is a dynamic binding list, not FIELDS.
-        if settings.is_controls_section() {
+        // The binding list is dynamic, not FIELDS.
+        if settings.bindings_open() {
             add_controls(ui, settings, screen, commands);
             return;
         }
@@ -520,7 +520,7 @@ pub(super) fn add_settings(
             ui.spacing_mut().item_spacing.y = ROW_GAP;
             let mut last_cat = "";
             for (i, field) in rows {
-                if multi_cat && field.cat != last_cat {
+                if multi_cat && field.cat != last_cat && !field.cat.is_empty() {
                     last_cat = field.cat;
                     ui.add_space(6.0);
                     ui.label(
@@ -538,10 +538,10 @@ pub(super) fn add_settings(
                     field.label.to_string()
                 };
                 let flag = settings.flag(i);
-                let value = if flag.is_some() {
-                    String::new()
-                } else {
-                    settings.value_str(i)
+                let value = match (flag, &field.kind) {
+                    (Some(_), _) => String::new(),
+                    (None, Kind::Door { .. }) => bold::CARET_RIGHT.to_string(),
+                    (None, _) => settings.value_str(i),
                 };
                 let steppable = settings.is_steppable(i);
 

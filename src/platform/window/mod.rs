@@ -85,15 +85,17 @@ pub struct AppWindow {
 }
 
 impl AppWindow {
-    /// Build the window with the renderer `config` asks for. `ctx_init` styles
-    /// each [`egui::Context`] this window creates.
+    /// Build the window with the renderer `config` asks for, the software one
+    /// paced to `max_fps`. `ctx_init` styles each [`egui::Context`] this window
+    /// creates.
     pub fn new(
         sdl: &Sdl,
         config: &DisplayConfig,
+        max_fps: u32,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
-        let backend = build_backend(&video_subsystem, config, ctx_init)?;
+        let backend = build_backend(&video_subsystem, config, max_fps, ctx_init)?;
         let mut window = Self {
             video_subsystem,
             backend,
@@ -268,16 +270,21 @@ fn apply_feathering(ctx: &egui::Context, software: bool) {
 fn build_backend(
     video: &VideoSubsystem,
     config: &DisplayConfig,
+    max_fps: u32,
     ctx_init: fn(&egui::Context),
 ) -> Result<Box<dyn WindowBackend>, String> {
     if config.software_render {
-        return Ok(Box::new(SoftwareBackend::new(video, config, ctx_init)?));
+        return Ok(Box::new(SoftwareBackend::new(
+            video, config, max_fps, ctx_init,
+        )?));
     }
     match GlBackend::new(video, config, ctx_init) {
         Ok(backend) => Ok(Box::new(backend)),
         Err(e) => {
             log::warn!("GL unavailable ({e}); falling back to software rendering");
-            Ok(Box::new(SoftwareBackend::new(video, config, ctx_init)?))
+            Ok(Box::new(SoftwareBackend::new(
+                video, config, max_fps, ctx_init,
+            )?))
         }
     }
 }
@@ -286,6 +293,7 @@ fn build_backend(
 fn build_backend(
     video: &VideoSubsystem,
     config: &DisplayConfig,
+    _max_fps: u32,
     ctx_init: fn(&egui::Context),
 ) -> Result<Box<dyn WindowBackend>, String> {
     Ok(Box::new(GlBackend::new(video, config, ctx_init)?))

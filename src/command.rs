@@ -125,7 +125,7 @@ pub enum SettingsAction {
     /// Follow a link on the read-only About tab: save & close the overlay, then
     /// navigate the focused tab to `url`.
     OpenLink(String),
-    /// While capturing a binding (Controls section): the gesture just performed,
+    /// While capturing a binding (the binding list): the gesture just performed,
     /// to add to the focused action. `keyboard` tells a key combo from a gamepad
     /// gesture, whose strings can collide (e.g. `"a"`).
     CaptureBinding { gesture: String, keyboard: bool },

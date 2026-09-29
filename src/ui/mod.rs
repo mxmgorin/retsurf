@@ -30,7 +30,7 @@ use crate::{
     browser::{AppBrowser, Favicon},
     command::AppCommand,
     config::{
-        DebugConfig, DisplayConfig, DownloadsConfig, HistoryConfig, HomeStyle, InputConfig,
+        ControlsConfig, DebugConfig, DownloadsConfig, HistoryConfig, HomeStyle, InterfaceConfig,
         OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
     data::session::TabInfo,
@@ -244,7 +244,7 @@ pub struct AppUi {
     cursor_last_move: Option<Instant>,
     /// How long the cursor stays visible after a move (from the interface config).
     cursor_linger: Duration,
-    /// `[display] scale`: the user's factor over the fit to the panel.
+    /// `[interface] scale`: the user's factor over the fit to the panel.
     ui_scale: f32,
     /// `RETSURF_SCALE`, standing in for the panel's own fit where a launcher
     /// knows better (Android, which reports a density a resolution cannot).
@@ -272,7 +272,7 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
-    /// `[display] home_style`, and the banner it may draw, rasterized on first use.
+    /// `[interface] home_style`, and the banner it may draw, rasterized on first use.
     home_style: HomeStyle,
     banner: home::Banner,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
@@ -306,11 +306,11 @@ impl AppUi {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         window: &AppWindow,
-        display: &DisplayConfig,
+        interface: &InterfaceConfig,
         history: &HistoryConfig,
         downloads: &DownloadsConfig,
         osk: &OskConfig,
-        input: &InputConfig,
+        controls: &ControlsConfig,
         debug: &DebugConfig,
         update: &UpdateConfig,
         user_agent: String,
@@ -340,29 +340,29 @@ impl AppUi {
                 (w as f32 / ppp / 2.0, h as f32 / ppp / 2.0)
             },
             cursor_last_move: None,
-            cursor_linger: Duration::from_millis(display.cursor_linger_ms),
-            ui_scale: display.scale,
+            cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
+            ui_scale: interface.scale,
             forced_scale: crate::config::device_scale(),
-            toolbar_position: display.toolbar_position,
-            toolbar_autohide: display.toolbar_autohide,
+            toolbar_position: interface.toolbar_position,
+            toolbar_autohide: interface.toolbar_autohide,
             toolbar_shown: true,
             scroll_accum: 0.0,
-            osk: Osk::new(osk, input.pad_layout),
+            osk: Osk::new(osk, controls.pad_layout),
             menu: Menu::new(history, downloads, user_agent),
             settings: Settings::new(),
             update: Updater::new(update),
             home: Home::new(),
             dial_edit: DialEdit::new(),
             home_active: false,
-            page_icons: favicon::PageIcons::new(display.page_icons),
-            home_style: display.home_style,
+            page_icons: favicon::PageIcons::new(interface.page_icons),
+            home_style: interface.home_style,
             banner: home::Banner::default(),
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
             edge_scroll: (0, 0),
-            hint_badges: input.hint_badges,
-            pad_layout: input.pad_layout,
+            hint_badges: controls.hint_badges,
+            pad_layout: controls.pad_layout,
             last_input_keyboard: false,
             memory_overlay: debug.memory_overlay,
             memory_log: debug.memory_log,
@@ -528,13 +528,13 @@ impl AppUi {
         }
     }
 
-    /// `[display] home_style`, applied live.
+    /// `[interface] home_style`, applied live.
     #[inline]
     pub fn set_home_style(&mut self, style: HomeStyle) {
         self.home_style = style;
     }
 
-    /// `[display] page_icons`, applied live; off frees every icon texture.
+    /// `[interface] page_icons`, applied live; off frees every icon texture.
     pub fn set_page_icons(&mut self, on: bool) {
         self.page_icons.set_enabled(on);
     }

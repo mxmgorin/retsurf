@@ -9,7 +9,7 @@ use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, GameMapEditAction, InputCommand, SettingsAction},
-    config::InputConfig,
+    config::ControlsConfig,
     event::gamepad::labelled_pad,
     event::window::handle_window,
     overlay::osk::PadInput,
@@ -64,7 +64,7 @@ struct Listening {
 impl Listening {
     /// Start listening. `held` is the pads down right now — the press that
     /// activated the row, which must not be taken as the binding.
-    fn new(cfg: &InputConfig, held: &[Pad], now: Instant) -> Self {
+    fn new(cfg: &ControlsConfig, held: &[Pad], now: Instant) -> Self {
         let mut capture = Capture::new(Duration::from_millis(cfg.hold_ms), CAPTURE_TIMEOUT);
         capture.set(true, held, now);
         Self {
@@ -104,7 +104,7 @@ pub struct AppEventHandler {
 }
 
 impl AppEventHandler {
-    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: InputConfig) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: ControlsConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
         // `RETSURF_KEYMAP` wins over the driver name, and has to: the bundled
@@ -142,7 +142,7 @@ impl AppEventHandler {
     /// Push updated gamepad tunables (dead zone, trigger/hold thresholds) into
     /// the controller state machine — used when the settings overlay changes them
     /// live (see [`crate::app::App::apply_config`]).
-    pub fn set_gamepad_config(&mut self, cfg: InputConfig) {
+    pub fn set_gamepad_config(&mut self, cfg: ControlsConfig) {
         if let Some(game) = &mut self.game {
             game.set_config(&cfg);
         }

@@ -83,7 +83,7 @@ impl App {
                         // selection no longer sits where the page does.
                         self.hint_press_at = None;
                     } else {
-                        let hold = Duration::from_millis(self.config.input.hold_ms);
+                        let hold = Duration::from_millis(self.config.controls.hold_ms);
                         let held_long = self
                             .hint_press_at
                             .take()
@@ -128,8 +128,12 @@ impl App {
                 }
                 // B saves what changed and goes back to the map it edited.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Close)),
-                // B saves the draft and closes (same as the close button).
-                Focus::Settings => self.settings_close(out),
+                // B leaves a door's screen, else saves the draft and closes.
+                Focus::Settings => {
+                    if !self.ui.settings.close_door() {
+                        self.settings_close(out);
+                    }
+                }
                 // B drops a half-typed combo first, then exits hint mode.
                 Focus::Hints => {
                     if self.ui.hints.has_typed() {
@@ -164,7 +168,7 @@ impl App {
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
-                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
+                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::X),
                 Focus::Osk => {
                     self.osk_input(PadInput::X, out);
                 }
@@ -225,7 +229,7 @@ impl App {
             // Discrete D-pad press: in hint mode it types a combo symbol;
             // everywhere else the D-pad already moves via the aim vector.
             InputCommand::DpadPress(dx, dy) => {
-                if focus == Focus::Hints && self.config.input.hint_badges {
+                if focus == Focus::Hints && self.config.controls.hint_badges {
                     if let Some(sym) = dpad_sym(*dx, *dy) {
                         self.hint_sym(sym);
                     }
@@ -234,7 +238,7 @@ impl App {
             // A typed letter for a keyboard-driven hint round (the keyboard handler
             // only emits it in that mode); resolve it like a gamepad combo symbol.
             InputCommand::HintKey(c) => {
-                if focus == Focus::Hints && self.config.input.hint_badges {
+                if focus == Focus::Hints && self.config.controls.hint_badges {
                     self.hint_key(*c);
                 }
             }
@@ -249,7 +253,7 @@ impl App {
                 Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
-                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
+                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::Y),
                 Focus::Hints => self.ui.hints.hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();
@@ -273,7 +277,7 @@ impl App {
                     Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
                     // In hint mode L1/R1 are combo symbols; with combos off they fall
                     // through to the page back/forward below.
-                    Focus::Hints if self.config.input.hint_badges => {
+                    Focus::Hints if self.config.controls.hint_badges => {
                         self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                     }
                     Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
@@ -453,7 +457,7 @@ impl App {
         let dt = if dt > 0.1 { 0.0 } else { dt.min(0.05) };
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
-        let cfg = &self.config.input;
+        let cfg = &self.config.controls;
         let (cursor_speed, scroll_speed, nav_threshold, hint_badges, edge_scroll) = (
             cfg.cursor_speed,
             cfg.scroll_speed,
@@ -573,7 +577,7 @@ impl App {
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction
     /// and paces repeats, returning `true` on the frames a step should fire.
     fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
-        let cfg = &self.config.input;
+        let cfg = &self.config.controls;
         if dir != self.osk_nav_dir {
             self.osk_nav_dir = dir;
             if dir != (0, 0) {

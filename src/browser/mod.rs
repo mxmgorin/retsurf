@@ -208,7 +208,7 @@ struct AppBrowserInner {
     /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
     /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
-    /// `[display] page_icons`: whether tabs keep their page's icon.
+    /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
@@ -217,7 +217,7 @@ struct AppBrowserInner {
     /// here rather than in the event handler because every fresh document has to
     /// be told again: a `Connected` only reaches the document that is loaded.
     pads: RefCell<PadSlots>,
-    /// `[input] haptics`: whether a page may rumble the pad. Gates the requests
+    /// `[controls] haptics`: whether a page may rumble the pad. Gates the requests
     /// and what a `Connected` advertises.
     haptics: Cell<bool>,
     /// Rumble requests from pages, queued by the delegate for the main loop to
@@ -246,7 +246,7 @@ impl AppBrowserInner {
         let browser = &config.browser;
         let download_exts = config.downloads.extensions.clone();
         let content_filter = ContentFilter::from_config(&config.data_saving);
-        let haptics = config.input.haptics;
+        let haptics = config.controls.haptics;
         // Sanitize the configured zoom: Servo clamps it to [0.1, 10.0] anyway,
         // and a zero/negative/NaN default would make every tab unusable.
         let zoom = browser.page_zoom;
@@ -308,7 +308,7 @@ impl AppBrowserInner {
             hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
-            page_icons: Cell::new(config.display.page_icons),
+            page_icons: Cell::new(config.interface.page_icons),
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
@@ -473,7 +473,7 @@ impl AppBrowser {
     /// Adopt an edited config's live-tunable knobs, mirroring what [`Self::new`]
     /// read at construction — one list, so a new knob cannot land in only one.
     pub fn apply_config(&self, config: &AppConfig) {
-        self.set_haptics(config.input.haptics);
+        self.set_haptics(config.controls.haptics);
         // Lightweight-mode block flags take effect on the next subresource
         // load, no restart needed (unlike the engine-thread counts).
         self.set_content_filter(ContentFilter::from_config(&config.data_saving));
@@ -483,7 +483,7 @@ impl AppBrowser {
         self.set_page_theme(config.browser.page_theme);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
-        self.set_page_icons(config.display.page_icons);
+        self.set_page_icons(config.interface.page_icons);
     }
 
     /// Whether any tab is fetching, not just the shown one — a background tab's

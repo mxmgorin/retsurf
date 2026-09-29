@@ -96,19 +96,26 @@ notification = false          # Web Notifications                    — full on
 async_clipboard = false       # Async Clipboard API                  — full only
 permissions = false           # Permissions API                      — full only
 
-[display]
-width = 640                # size the window opens at, and where it is left on exit
-height = 480               # (desktop only: a handheld's window is its panel)
+[interface]
 scale = 1.0                # UI zoom, as a factor over the fit to the panel (see below)
-use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
-software_render = false    # draw everything on the CPU, with no GL at all (see below)
-max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
-dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
-cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats over the page, either edge)
-page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
 home_style = "banner"      # start page header: "banner", "wordmark", or "compact" (none, more room for the dial)
+page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
+cursor_linger_ms = 1500    # how long the cursor stays visible after moving
+
+[controls]
+deadzone = 0.25            # stick deflection below this is treated as centered
+cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
+scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
+trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
+osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
+osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
+osk_nav_repeat_ms = 140          # interval between auto-repeats
+hold_ms = 400              # holding a button this long fires its "hold:" gesture
+cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
+edge_scroll = true         # pushing the cursor against a window edge scrolls that way (never in Game Mode)
+haptics = true             # let a page rumble the pad (the Gamepad vibration API)
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
@@ -165,6 +172,14 @@ worker_pool_max = 0        # cap applied to every worker pool (image cache, asyn
 # restart. Safe to delete the file at any time. Also in the settings overlay
 # (Advanced tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
 http_disk_cache_mb = 0
+max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
+
+[display]
+width = 640                # size the window opens at, and where it is left on exit
+height = 480               # (desktop only: a handheld's window is its panel)
+use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
+software_render = false    # draw everything on the CPU, with no GL at all (see below)
+dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
 
 [history]
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)
@@ -242,19 +257,6 @@ max_decode_seconds = 300
 # turning this off makes video files play audio-only (the pre-0.6 behavior).
 # Read once at startup (restart to apply).
 enabled = true
-
-[input]
-deadzone = 0.25            # stick deflection below this is treated as centered
-cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
-scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
-trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
-osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
-osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
-osk_nav_repeat_ms = 140          # interval between auto-repeats
-hold_ms = 400              # holding a button this long fires its "hold:" gesture
-cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
-edge_scroll = true         # pushing the cursor against a window edge scrolls that way (never in Game Mode)
-haptics = true             # let a page rumble the pad (the Gamepad vibration API)
 
 [game_mode]
 # Game Mode hands the input to the page and hides the chrome, so a web game gets
@@ -367,7 +369,7 @@ l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this map is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
 
-[stick.left]                  # four directions, through [input] deadzone
+[stick.left]                  # four directions, through [controls] deadzone
 up = "key.ArrowUp"
 down = "key.ArrowDown"
 left = "key.ArrowLeft"
@@ -497,9 +499,9 @@ files.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
-| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[display].scale` still multiplies it. Set by the Android launcher to the display density |
+| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[interface].scale` still multiplies it. Set by the Android launcher to the display density |
 | `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
-| `RETSURF_MAX_FPS` | — | Overrides `[display].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
+| `RETSURF_MAX_FPS` | — | Overrides `[performance].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
 | `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
 | `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that hands the key over rather than spending it on a kill helper (both Miyoo packages set it) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
@@ -525,7 +527,7 @@ and Servo's GL stacks agree) — you don't normally set it yourself.
 The chrome is drawn against a 640x480 design and zoomed to fit the panel it is
 on, so a toolbar keeps its size in thumbs rather than in pixels. A fit within a
 quarter of a whole number is rounded down to it — fractional zoom lands glyphs
-between pixels, and the spare pixels widen the page instead. `[display].scale`
+between pixels, and the spare pixels widen the page instead. `[interface].scale`
 is a factor over that fit (0.6 to 1.6), so one setting means the same thing on a
 handheld and on a desktop window. The page follows the same zoom as its device
 pixel ratio, which keeps a CSS pixel and a chrome point the same size.

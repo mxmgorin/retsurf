@@ -18,7 +18,7 @@ const COMPOSE_FORMAT: PixelFormatEnum = PixelFormatEnum::ARGB8888;
 /// Background where neither the page nor the chrome covers.
 const CLEAR_COLOR: Color = Color::BLACK;
 
-/// Frame cap from `[display] max_fps` (`0` uncapped). Nothing on this path
+/// Frame cap from `[performance] max_fps` (`0` uncapped). Nothing on this path
 /// blocks like a GL swap, so an uncapped scrolling frame pins the CPU.
 fn frame_interval(max_fps: u32) -> Option<Duration> {
     let interval = (max_fps > 0).then(|| Duration::from_secs_f64(1.0 / max_fps as f64));
@@ -68,6 +68,7 @@ impl SoftwareBackend {
     pub(super) fn new(
         video_subsystem: &VideoSubsystem,
         config: &DisplayConfig,
+        max_fps: u32,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         let mut window = build_window(video_subsystem, config, false)?;
@@ -103,7 +104,7 @@ impl SoftwareBackend {
             page_rect: None,
             last_changed: None,
             partial: partial_present(),
-            frame_interval: frame_interval(config.max_fps),
+            frame_interval: frame_interval(max_fps),
         };
         backend.style_ctx();
         Ok(backend)

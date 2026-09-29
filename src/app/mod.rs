@@ -92,7 +92,12 @@ const SKIPPED_PASS_INTERVAL: Duration = Duration::from_millis(16);
 impl App {
     pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
         log::info!("init: creating window");
-        let window = AppWindow::new(sdl, &config.display, crate::ui::init_egui_ctx)?;
+        let window = AppWindow::new(
+            sdl,
+            &config.display,
+            config.performance.max_fps,
+            crate::ui::init_egui_ctx,
+        )?;
         // Before the browser: whichever media backend lands first is the one that sticks.
         let audio = crate::media::init(sdl, &config.audio, &config.video);
         log::info!("init: window ready; creating browser");
@@ -108,14 +113,14 @@ impl App {
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.
         crate::platform::priority::prioritize_main();
-        let event_handler = AppEventHandler::new(sdl, config.input.clone())?;
+        let event_handler = AppEventHandler::new(sdl, config.controls.clone())?;
         let ui = AppUi::new(
             &window,
-            &config.display,
+            &config.interface,
             &config.history,
             &config.downloads,
             &config.osk,
-            &config.input,
+            &config.controls,
             &config.debug,
             &config.update,
             crate::browser::effective_user_agent(&config.browser),
@@ -314,7 +319,7 @@ impl App {
             #[cfg(target_os = "android")]
             {
                 let osk_up = self.ui.focus() == crate::ui::Focus::Osk;
-                let want = self.config.input.system_keyboard
+                let want = self.config.controls.system_keyboard
                     && !osk_up
                     && (self.ui.wants_keyboard() || self.browser.text_input_focused());
                 crate::platform::window::set_text_input(want);

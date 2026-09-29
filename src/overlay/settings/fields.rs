@@ -1,8 +1,8 @@
 //! The static config-field table for the settings overlay: every editable
 //! [`crate::config::AppConfig`] field as a [`Field`] row. A [`Kind`] bundles the
 //! field's presentation with its typed get/set accessors into the config, so
-//! adding a setting is adding one row to [`FIELDS`]. The Controls section is
-//! not here — it's dynamic (see [`super::CtrlRow`]).
+//! adding a setting is adding one row to [`FIELDS`]. The binding list is not
+//! here — it's dynamic, behind a [`Kind::Door`] row (see [`super::controls`]).
 
 use super::SettingsSection;
 use crate::config::{
@@ -23,6 +23,8 @@ pub enum Kind {
     /// A row that runs something instead of holding a value: the first A arms
     /// it, the second runs it (see [`super::Settings::confirm_action`]).
     Action { task: Task },
+    /// A row that opens a screen of its own inside the section; B comes back.
+    Door { door: Door },
     /// Free text, typed via the on-screen keyboard (Left/Right does nothing; A
     /// opens it). `get_mut` hands the OSK the draft's own buffer.
     Text {
@@ -120,6 +122,13 @@ macro_rules! float {
     };
 }
 
+/// The screen a [`Kind::Door`] row opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Door {
+    /// The binding list (see [`super::controls`]).
+    Bindings,
+}
+
 /// What a [`Kind::Action`] row runs; the app does the work (see
 /// [`crate::app`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,11 +151,9 @@ impl Task {
     }
 }
 
-/// A config row in the list. `section` is the tab it lives under; `cat` is a
-/// sub-header shown only within sections that fold several config groups together
-/// (see [`SettingsSection`]). `restart` marks fields the running app can't apply
-/// live, flagged with `*` and a footer note. The Controls section is dynamic and
-/// has no `Field`s — see [`super::CtrlRow`].
+/// A row in a settings tab. `cat` is its sub-header, drawn only in a tab with
+/// several (empty: none); `restart` marks a field the running app can't apply
+/// live, flagged with `*`.
 pub struct Field {
     pub section: SettingsSection,
     pub cat: &'static str,
@@ -212,8 +219,8 @@ use SettingsSection as S;
 
 /// Every editable config field, in display order (grouped by [`SettingsSection`]).
 /// Adding a setting is adding a row here. `restart = true` marks fields the
-/// running app can't apply live. The Controls section is not here — it's built
-/// dynamically (see [`super::Settings::controls_rows`]).
+/// running app can't apply live. The binding list is not here — it's built
+/// dynamically behind a door row (see [`super::Settings::controls_rows`]).
 #[rustfmt::skip]
 pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Home page",              text!(browser.home_page), false),
@@ -241,36 +248,35 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "Async clipboard",       flag!(experimental.async_clipboard), false),
     f(S::Browser,  "Experimental", "Permissions",           flag!(experimental.permissions), false),
 
-    f(S::Display,  "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
-    f(S::Display,  "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
-    f(S::Display,  "Display",     "Interface scale",        float!(display.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
-    f(S::Display,  "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
-    f(S::Display,  "Display",     "Frame cap (fps)",        int!(display.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
-    f(S::Display,  "Display",     "Cursor linger (ms)",     int!(display.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
-    f(S::Display,  "Display",     "Toolbar position",       choice!(display.toolbar_position: ToolbarPosition), false),
-    f(S::Display,  "Display",     "Auto-hide toolbar",      flag!(display.toolbar_autohide), false),
-    f(S::Display,  "Display",     "Page icons",             flag!(display.page_icons), false),
-    f(S::Display,  "Display",     "Home style",             choice!(display.home_style: HomeStyle), false),
+    f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
+    f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
+    f(S::Interface, "Interface",  "Auto-hide toolbar",      flag!(interface.toolbar_autohide), false),
+    f(S::Interface, "Interface",  "Home style",             choice!(interface.home_style: HomeStyle), false),
+    f(S::Interface, "Interface",  "Page icons",             flag!(interface.page_icons), false),
+    f(S::Interface, "Interface",  "Cursor linger (ms)",     int!(interface.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
 
-    f(S::Input,    "Gamepad",     "Gamepad layout",         choice!(input.pad_layout: PadLayout), false),
-    f(S::Input,    "Gamepad",     "Swap A/B and X/Y",       flag!(input.swap_face_buttons), false),
-    f(S::Input,    "Gamepad",     "Stick dead zone",        float!(input.deadzone as f32, bounds::DEADZONE, 0.05, 2), false),
-    f(S::Input,    "Gamepad",     "Trigger threshold",      float!(input.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
-    f(S::Input,    "Gamepad",     "Hold gesture (ms)",      int!(input.hold_ms as u64, bounds::HOLD_MS, 50), false),
-    f(S::Input,    "Gamepad",     "Gamepad rumble",         flag!(input.haptics), false),
+    // No sub-header: it leads the tab, above the groups it is not part of.
+    f(S::Controls, "",            "Button bindings",        Kind::Door { door: Door::Bindings }, false),
 
-    f(S::Input,    "Cursor & scroll", "Cursor mode",        choice!(input.cursor_mode: CursorMode), true),
-    f(S::Input,    "Cursor & scroll", "Cursor speed",       float!(input.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
-    f(S::Input,    "Cursor & scroll", "Scroll speed",       float!(input.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
-    f(S::Input,    "Cursor & scroll", "Edge scrolling",     flag!(input.edge_scroll), false),
-    f(S::Input,    "Cursor & scroll", "Hint badges",        flag!(input.hint_badges), false),
+    f(S::Controls, "Gamepad",     "Gamepad layout",         choice!(controls.pad_layout: PadLayout), false),
+    f(S::Controls, "Gamepad",     "Swap A/B and X/Y",       flag!(controls.swap_face_buttons), false),
+    f(S::Controls, "Gamepad",     "Stick dead zone",        float!(controls.deadzone as f32, bounds::DEADZONE, 0.05, 2), false),
+    f(S::Controls, "Gamepad",     "Trigger threshold",      float!(controls.trigger_threshold as f32, bounds::TRIGGER_THRESHOLD, 0.05, 2), false),
+    f(S::Controls, "Gamepad",     "Hold gesture (ms)",      int!(controls.hold_ms as u64, bounds::HOLD_MS, 50), false),
+    f(S::Controls, "Gamepad",     "Gamepad rumble",         flag!(controls.haptics), false),
 
-    f(S::Input,    "Keyboard",    "On-screen keyboard",     choice!(osk.style: OskStyle), false),
+    f(S::Controls, "Cursor & scroll", "Cursor mode",        choice!(controls.cursor_mode: CursorMode), true),
+    f(S::Controls, "Cursor & scroll", "Cursor speed",       float!(controls.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
+    f(S::Controls, "Cursor & scroll", "Scroll speed",       float!(controls.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
+    f(S::Controls, "Cursor & scroll", "Edge scrolling",     flag!(controls.edge_scroll), false),
+    f(S::Controls, "Cursor & scroll", "Hint badges",        flag!(controls.hint_badges), false),
+
+    f(S::Controls, "Keyboard",    "On-screen keyboard",     choice!(osk.style: OskStyle), false),
     #[cfg(target_os = "android")]
-    f(S::Input,    "Keyboard",    "System keyboard",        flag!(input.system_keyboard), false),
-    f(S::Input,    "Keyboard",    "Stick threshold",        float!(input.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
-    f(S::Input,    "Keyboard",    "Repeat delay (ms)",      int!(input.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
-    f(S::Input,    "Keyboard",    "Repeat rate (ms)",       int!(input.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
+    f(S::Controls, "Keyboard",    "System keyboard",        flag!(controls.system_keyboard), false),
+    f(S::Controls, "Keyboard",    "Stick threshold",        float!(controls.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
+    f(S::Controls, "Keyboard",    "Repeat delay (ms)",      int!(controls.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
+    f(S::Controls, "Keyboard",    "Repeat rate (ms)",       int!(controls.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),
@@ -291,6 +297,10 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Advanced, "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
     f(S::Advanced, "Performance", "CPU boost on load",       flag!(performance.cpu_boost_on_load), false),
     f(S::Advanced, "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
+    f(S::Advanced, "Performance", "Frame cap (fps)",        int!(performance.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
+    f(S::Advanced, "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
+    f(S::Advanced, "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
+    f(S::Advanced, "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
     f(S::Advanced, "Downloads",   "Save folder",            text!(downloads.dir), true),
     f(S::Advanced, "Data",        "Clear browsing data",    Kind::Action { task: Task::ClearData }, false),
     f(S::Advanced, "Updates",     "Update channel",         choice!(update.channel: Channel), false),
@@ -312,8 +322,8 @@ mod tests {
         for field in FIELDS {
             let mut c = AppConfig::default();
             match &field.kind {
-                // No accessors to check — an action row holds no config value.
-                Kind::Action { .. } => {}
+                // No accessors to check — these rows hold no config value.
+                Kind::Action { .. } | Kind::Door { .. } => {}
                 Kind::Bool { get, set } => {
                     for v in [true, false] {
                         set(&mut c, v);

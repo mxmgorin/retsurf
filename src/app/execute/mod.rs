@@ -233,7 +233,7 @@ impl App {
                 self.settings_close(out);
                 self.open_url(url.clone());
             }
-            // Binding capture (Controls section): the gesture performed, bound
+            // Binding capture (the binding list): the gesture performed, bound
             // to the listening action. The raw input comes from the event loop.
             SettingsAction::CaptureBinding { gesture, keyboard } => {
                 self.ui.settings.apply_capture(gesture.clone(), *keyboard);
@@ -257,9 +257,8 @@ impl App {
         }
     }
 
-    /// A / Enter on the focused settings row: add/remove a binding in the Controls
-    /// section, run a confirmed action row, open the on-screen keyboard on a text
-    /// field, or step every other kind forward (Left/Right does the rest).
+    /// A / Enter on the focused settings row, by its kind; a value steps forward
+    /// (Left/Right does the rest).
     pub(super) fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
         if self.ui.settings.is_info_section() {
             // About tab: A activates the focused row (update action or a link);
@@ -267,8 +266,9 @@ impl App {
             if let Some(action) = self.ui.about_activate() {
                 out.push(AppCommand::Settings(action));
             }
-        } else if self.ui.settings.is_controls_section() {
+        } else if self.ui.settings.bindings_open() {
             self.ui.settings.controls_activate();
+        } else if self.ui.settings.open_door() {
         } else if let Some(task) = self.ui.settings.confirm_action() {
             match task {
                 Task::ClearData => self.clear_browsing_data(),
@@ -343,19 +343,19 @@ impl App {
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler
-            .set_gamepad_config(self.config.input.clone());
+            .set_gamepad_config(self.config.controls.clone());
         self.ui
-            .set_cursor_linger(self.config.display.cursor_linger_ms);
-        self.ui.set_ui_scale(self.config.display.scale);
+            .set_cursor_linger(self.config.interface.cursor_linger_ms);
+        self.ui.set_ui_scale(self.config.interface.scale);
         self.ui
-            .set_toolbar_position(self.config.display.toolbar_position);
+            .set_toolbar_position(self.config.interface.toolbar_position);
         self.ui
-            .set_toolbar_autohide(self.config.display.toolbar_autohide);
-        self.ui.set_hint_badges(self.config.input.hint_badges);
-        self.ui.set_page_icons(self.config.display.page_icons);
-        self.ui.set_home_style(self.config.display.home_style);
+            .set_toolbar_autohide(self.config.interface.toolbar_autohide);
+        self.ui.set_hint_badges(self.config.controls.hint_badges);
+        self.ui.set_page_icons(self.config.interface.page_icons);
+        self.ui.set_home_style(self.config.interface.home_style);
         self.ui.set_osk_style(self.config.osk.style);
-        self.ui.set_pad_layout(self.config.input.pad_layout);
+        self.ui.set_pad_layout(self.config.controls.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);
         self.ui.set_memory_debug(
             self.config.debug.memory_overlay,
@@ -371,7 +371,7 @@ impl App {
             .set_enabled(self.config.performance.cpu_boost_on_load);
         // The frame cap takes effect on the very next frame, which is what makes
         // it worth tuning by hand on a device.
-        self.window.set_max_fps(self.config.display.max_fps);
+        self.window.set_max_fps(self.config.performance.max_fps);
     }
 
     /// Put the caret where an address is typed, over the page or the start page

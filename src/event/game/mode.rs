@@ -8,7 +8,7 @@
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
 use crate::command::{AppCommand, InputCommand};
-use crate::config::InputConfig;
+use crate::config::ControlsConfig;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
 use inputbind::sdl::{axis_value, trigger_of};
@@ -106,7 +106,7 @@ pub struct GameInput {
 }
 
 impl GameInput {
-    pub fn new(map: InputMap, cfg: &InputConfig, exit: PadGesture) -> Self {
+    pub fn new(map: InputMap, cfg: &ControlsConfig, exit: PadGesture) -> Self {
         Self {
             map,
             held: Vec::new(),
@@ -148,7 +148,7 @@ impl GameInput {
     }
 
     /// Retuned in place, like [`super::gamepad::Gamepad::set_config`].
-    pub fn set_config(&mut self, cfg: &InputConfig) {
+    pub fn set_config(&mut self, cfg: &ControlsConfig) {
         for trigger in &mut self.triggers {
             trigger.set_threshold(cfg.trigger_threshold);
         }
