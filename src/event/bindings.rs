@@ -20,6 +20,7 @@ use crate::browser::BrowserCommand;
 use crate::command::{AppCommand, InputCommand, MenuAction, QuickAccessAction, SettingsAction};
 use crate::config;
 use crate::overlay::osk::OskCommand;
+use crate::overlay::quick_access::Strip;
 use inputbind::editor::{Groups, Requirement};
 use inputbind::sdl::KeyNames;
 use inputbind::{Action as Bindable, Bindings, PadGesture, Store};
@@ -52,7 +53,7 @@ macro_rules! action_table {
             }
 
             /// Friendly label for the settings UI (the Controls rows).
-            const fn label(self) -> &'static str {
+            pub const fn label(self) -> &'static str {
                 match self { $( $( Action::$variant => $label, )+ )+ }
             }
         }
@@ -72,15 +73,14 @@ action_table! {
         Confirm => "confirm", "Confirm",
         /// Cancel: close the open overlay, otherwise one step back.
         Cancel => "cancel", "Cancel",
-        /// Open / close the full-screen menu.
-        Menu => "menu", "Menu",
+        /// Open / close Quick Menu; also closes the lists menu it opened.
+        Menu => "menu", "Quick Menu",
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.
         Osk => "osk", "On-screen keyboard",
-        /// Opens Quick Access, and closes it again; Game Mode is entered and
-        /// left by a row there. Mirrored inside the mode, where the tables are
-        /// bypassed, so the way in and the way out are one gesture.
+        /// Open / close Quick Access. Mirrored inside the mode, where the tables
+        /// are bypassed, so the way in and the way out are one gesture.
         QuickAccess => "quick_access", "Quick Access",
         /// Quit immediately. Unbound by default; [`default_store`] carries the
         /// stock exit.
@@ -117,7 +117,7 @@ action_table! {
         /// Reload the page (space while the on-screen keyboard is open).
         Reload => "reload", "Reload",
         /// Toggle reader mode on the current page.
-        Reader => "reader", "Reader mode",
+        Reader => "reader", "Reader view",
         /// Bookmark the current page.
         Bookmark => "bookmark", "Bookmark",
         /// Step the page zoom up the ladder.
@@ -237,10 +237,12 @@ impl Action {
             Action::Home => AppCommand::Browser(BrowserCommand::Home),
             Action::Address => AppCommand::FocusAddressBar,
             Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
-            Action::Menu => AppCommand::Menu(MenuAction::Open),
+            Action::Menu => AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::QuickMenu)),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
-            Action::QuickAccess => AppCommand::QuickAccess(QuickAccessAction::Toggle),
+            Action::QuickAccess => {
+                AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::QuickAccess))
+            }
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
@@ -263,7 +265,8 @@ impl Action {
 pub const REQUIRED: &[Requirement<Action>] = &[
     ("Confirm", &[Action::Confirm]),
     ("Cancel", &[Action::Cancel]),
-    ("Opening settings", &[Action::Settings]),
+    // Quick Access carries a Settings row, so either way reaches it.
+    ("Opening settings", &[Action::Settings, Action::QuickAccess]),
 ];
 
 /// Per-surface override tables (`[surface.<name>]`). None: the router is what
@@ -291,15 +294,14 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("l2+r2", Action::ZoomReset),
         ("r2+l2", Action::ZoomReset),
         ("l3", Action::Hints),
-        // Both gestures defer: the menu opens on release.
-        ("start", Action::Menu),
-        // Matched on its own inside the mode, where these tables are bypassed, so
-        // rebinding it moves the way out with it.
-        ("hold:start", Action::QuickAccess),
+        // Held inside the mode, where these tables are bypassed, so rebinding it
+        // moves the way out with it; the game keeps Start's tap.
+        ("start", Action::QuickAccess),
         // On a hold so stickless devices (no R3) have reader out of the box.
         ("hold:x", Action::Reader),
         ("hold:y", Action::Bookmark),
-        ("select", Action::Settings),
+        // Defers: the menu opens on release.
+        ("select", Action::Menu),
         ("hold:select", Action::Address),
         ("select+l1", Action::TabPrev),
         ("select+r1", Action::TabNext),
@@ -567,7 +569,7 @@ mod tests {
         );
         assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
         assert_eq!(
-            store.gamepad.get("hold:start").map(String::as_str),
+            store.gamepad.get("start").map(String::as_str),
             Some("quick_access")
         );
     }
@@ -578,10 +580,10 @@ mod tests {
     fn a_taken_gesture_is_never_reclaimed() {
         let mut store = default_store();
         store.gamepad.retain(|_, name| name != "quick_access");
-        store.gamepad.insert("hold:start".into(), "reader".into());
+        store.gamepad.insert("start".into(), "reader".into());
         merge_missing_defaults(&mut store);
         assert_eq!(
-            store.gamepad.get("hold:start").map(String::as_str),
+            store.gamepad.get("start").map(String::as_str),
             Some("reader")
         );
     }
@@ -590,9 +592,7 @@ mod tests {
     #[test]
     fn a_retired_name_keeps_its_gestures() {
         let mut store = default_store();
-        store
-            .gamepad
-            .insert("hold:start".into(), "game_mode".into());
+        store.gamepad.insert("start".into(), "game_mode".into());
         rename_retired(&mut store);
         merge_missing_defaults(&mut store);
         assert_eq!(store, default_store());

@@ -1,9 +1,9 @@
 //! Game Mode's translator: the pad and the keyboard drive the game, not the
 //! chrome. What each source sends is the active [`InputMap`]; a source with a
 //! target is withheld from the page's raw input (the `bool` returns here), so
-//! one press is never seen twice. Whatever gesture `quick_access` is bound to is
-//! mirrored here, so the way out is the way in; its button is the game's again
-//! once the gesture has not happened.
+//! one press is never seen twice. The gestures that open Quick Access and Quick
+//! Menu are mirrored here as holds or chords, so the way out is the way in; their
+//! buttons are the game's again once a gesture has not happened.
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
@@ -11,6 +11,7 @@ use crate::command::{AppCommand, InputCommand, QuickAccessAction};
 use crate::config::ControlsConfig;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
+use crate::overlay::quick_access::Strip;
 use inputbind::sdl::{axis_value, trigger_of};
 use inputbind::{Pad, PadGesture, Trigger};
 use sdl2::controller::Axis;
@@ -87,17 +88,8 @@ pub struct GameInput {
     /// Gamepad buttons the page holds through this map, counted the same way.
     buttons: Vec<(Pad, u32)>,
     triggers: [Trigger; 2],
-    /// The gesture that opens Quick Access.
-    exit: PadGesture,
-    /// When the exit gesture's pad went down, while that gesture is a hold.
-    exit_at: Option<Instant>,
-    /// Set when the gesture fires, so its release does not also hand over a tap.
-    exit_fired: bool,
-    /// Whether the exit chord's leader is down.
-    exit_leader: bool,
-    /// Whether the exit chord's second pad had its press taken. Its release must
-    /// be taken too, or the game sees a release for a press it never got.
-    exit_second: bool,
+    /// The browser gestures still answered inside the mode, each opening a strip.
+    reserved: Vec<Mirror>,
     /// The release owed for a tap handed over late, sent a frame after its
     /// press: a game polling once a frame would miss the two in one.
     deferred: Option<Target>,
@@ -106,7 +98,7 @@ pub struct GameInput {
 }
 
 impl GameInput {
-    pub fn new(map: InputMap, cfg: &ControlsConfig, exit: PadGesture) -> Self {
+    pub fn new(map: InputMap, cfg: &ControlsConfig, reserved: &[(PadGesture, Strip)]) -> Self {
         Self {
             map,
             held: Vec::new(),
@@ -125,26 +117,18 @@ impl GameInput {
                 Trigger::new(Pad::L2, cfg.trigger_threshold),
                 Trigger::new(Pad::R2, cfg.trigger_threshold),
             ],
-            exit,
-            exit_at: None,
-            exit_fired: false,
-            exit_leader: false,
-            exit_second: false,
+            reserved: reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect(),
             deferred: None,
             deadzone: cfg.deadzone,
             hold: Duration::from_millis(cfg.hold_ms),
         }
     }
 
-    /// Replace the reserved gesture. Whatever the old one had part-way down is
-    /// forgotten, so a press begun under it cannot complete against the new one.
+    /// Replace the reserved gestures. Whatever the old ones had part-way down is
+    /// forgotten, so a press begun under one cannot complete against the new.
     /// A tap already handed over keeps its release.
-    pub fn set_exit(&mut self, exit: PadGesture) {
-        self.exit = exit;
-        self.exit_at = None;
-        self.exit_fired = false;
-        self.exit_leader = false;
-        self.exit_second = false;
+    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Strip)]) {
+        self.reserved = reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect();
     }
 
     /// Retuned in place, like [`super::gamepad::Gamepad::set_config`].
@@ -169,79 +153,35 @@ impl GameInput {
         self.active.last().copied()
     }
 
-    /// One edge of the gesture that opens Quick Access; returns whether the
-    /// pad belongs to it, i.e. is withheld from the game. Only a tap costs the
-    /// game its button: the other shapes hand the press over on release.
-    fn on_exit_pad(
+    /// One pad edge offered to the reserved gestures; returns whether one owns
+    /// the pad, i.e. it is withheld from the game.
+    fn on_reserved_pad(
         &mut self,
         pad: Pad,
         pressed: bool,
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        match self.exit {
-            PadGesture::Tap(on) if on == pad => {
-                if pressed {
-                    commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
-                }
-                true
+        for i in 0..self.reserved.len() {
+            let mut mirror = self.reserved[i];
+            let owned = mirror.on_pad(pad, pressed, commands);
+            // The gesture did not happen: the game gets the press it held.
+            let handed = owned && !pressed && mirror.leads(pad) && !mirror.take_fired();
+            self.reserved[i] = mirror;
+            if handed {
+                self.defer_tap(pad, browser, commands);
             }
-            PadGesture::Hold(on) if on == pad => {
-                match pressed {
-                    // A key-wired pad repeats the press it is already holding:
-                    // that is neither a new gesture nor a second firing.
-                    true if self.exit_at.is_none() && !self.exit_fired => {
-                        self.exit_at = Some(Instant::now());
-                    }
-                    true => {}
-                    false => {
-                        self.exit_at = None;
-                        self.defer_tap(pad, browser, commands);
-                    }
-                }
-                true
+            if owned {
+                return true;
             }
-            // Only the leader is spent while it is down: the second pad reaches
-            // the game unless the leader is already there.
-            PadGesture::Chord(leader, _) if leader == pad => {
-                match pressed {
-                    true if !self.exit_leader => {
-                        self.exit_leader = true;
-                        self.exit_fired = false;
-                    }
-                    true => {}
-                    false => {
-                        self.exit_leader = false;
-                        self.defer_tap(pad, browser, commands);
-                    }
-                }
-                true
-            }
-            PadGesture::Chord(_, second) if second == pad => {
-                match (pressed, self.exit_leader, self.exit_second) {
-                    (true, true, _) => {
-                        self.exit_second = true;
-                        self.exit_fired = true;
-                        commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
-                        true
-                    }
-                    // Whatever the leader did since, the game must not see a
-                    // release for a press it never got.
-                    (false, _, true) => {
-                        self.exit_second = false;
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => false,
         }
+        false
     }
 
     /// Hand over the press the gesture was holding, the gesture having not
     /// happened. An unbound source sends the button it is, as passthrough would.
     fn defer_tap(&mut self, pad: Pad, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
-        if std::mem::take(&mut self.exit_fired) || self.deferred.is_some() {
+        if self.deferred.is_some() {
             return;
         }
         let target = match self.map.pad(self.layer(), pad) {
@@ -261,7 +201,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        if self.on_exit_pad(pad, pressed, browser, commands) {
+        if self.on_reserved_pad(pad, pressed, browser, commands) {
             return true;
         }
         let slot = pad as usize;
@@ -538,18 +478,14 @@ impl GameInput {
         }
     }
 
-    /// Per-frame: end a tap handed over late, fire a due exit hold, and emit
+    /// Per-frame: end a tap handed over late, fire a due reserved hold, and emit
     /// whatever the sticks are bound to (the router moves the cursor from it).
     pub fn tick(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         if let Some(target) = self.deferred.take() {
             self.fire(&target, false, browser, commands);
         }
-        if let Some(at) = self.exit_at {
-            if at.elapsed() >= self.hold {
-                self.exit_at = None;
-                self.exit_fired = true;
-                commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
-            }
+        for mirror in &mut self.reserved {
+            mirror.tick(self.hold, commands);
         }
         let (aim, scroll) = self.analog();
         commands.push(AppCommand::Input(InputCommand::Analog {
@@ -602,7 +538,7 @@ impl GameInput {
         let (aim, scroll) = self.analog();
         aim != (0.0, 0.0)
             || scroll != (0.0, 0.0)
-            || self.exit_at.is_some()
+            || self.reserved.iter().any(|mirror| mirror.at.is_some())
             || self.deferred.is_some()
     }
 
@@ -624,12 +560,110 @@ impl GameInput {
             self.send_pad(button, false, browser);
         }
         self.set_click(false, commands);
-        self.exit_at = None;
-        self.exit_fired = false;
-        self.exit_leader = false;
-        self.exit_second = false;
+        for mirror in &mut self.reserved {
+            *mirror = Mirror::new(mirror.gesture, mirror.opens);
+        }
         // The drains above already ended whatever it was holding.
         self.deferred = None;
+    }
+}
+
+/// One reserved gesture's progress. A hold or a chord, never a tap: a tap would
+/// take its button from the game outright.
+#[derive(Clone, Copy)]
+struct Mirror {
+    gesture: PadGesture,
+    /// The strip the gesture opens.
+    opens: Strip,
+    /// When a hold's pad went down.
+    at: Option<Instant>,
+    /// Set when the gesture fires, so its release does not also hand over a tap.
+    fired: bool,
+    /// Whether a chord's leader is down.
+    leader: bool,
+    /// Whether a chord's second pad had its press taken, so its release is too.
+    second: bool,
+}
+
+impl Mirror {
+    fn new(gesture: PadGesture, opens: Strip) -> Self {
+        Self {
+            gesture,
+            opens,
+            at: None,
+            fired: false,
+            leader: false,
+            second: false,
+        }
+    }
+
+    fn fire(&mut self, commands: &mut Vec<AppCommand>) {
+        self.fired = true;
+        commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
+            self.opens,
+        )));
+    }
+
+    /// Whether `pad` is the one a hold or a chord waits on, whose tap is handed
+    /// over on release when the gesture did not happen.
+    fn leads(&self, pad: Pad) -> bool {
+        matches!(self.gesture, PadGesture::Hold(on) | PadGesture::Chord(on, _) if on == pad)
+    }
+
+    fn take_fired(&mut self) -> bool {
+        std::mem::take(&mut self.fired)
+    }
+
+    /// One edge; returns whether the pad belongs to the gesture. Only the
+    /// leader is spent while it is down: a chord's second pad reaches the game
+    /// unless the leader is already there.
+    fn on_pad(&mut self, pad: Pad, pressed: bool, commands: &mut Vec<AppCommand>) -> bool {
+        match self.gesture {
+            PadGesture::Hold(on) if on == pad => {
+                match pressed {
+                    // A key-wired pad repeats the press it is already holding:
+                    // that is neither a new gesture nor a second firing.
+                    true if self.at.is_none() && !self.fired => self.at = Some(Instant::now()),
+                    true => {}
+                    false => self.at = None,
+                }
+                true
+            }
+            PadGesture::Chord(leader, _) if leader == pad => {
+                match pressed {
+                    true if !self.leader => {
+                        self.leader = true;
+                        self.fired = false;
+                    }
+                    true => {}
+                    false => self.leader = false,
+                }
+                true
+            }
+            PadGesture::Chord(_, second) if second == pad => {
+                match (pressed, self.leader, self.second) {
+                    (true, true, _) => {
+                        self.second = true;
+                        self.fire(commands);
+                        true
+                    }
+                    (false, _, true) => {
+                        self.second = false;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Per-frame: fire a hold that has lasted long enough.
+    fn tick(&mut self, hold: Duration, commands: &mut Vec<AppCommand>) {
+        if self.at.is_some_and(|at| at.elapsed() >= hold) {
+            self.at = None;
+            self.fire(commands);
+        }
     }
 }
 

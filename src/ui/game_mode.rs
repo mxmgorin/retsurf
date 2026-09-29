@@ -1,5 +1,5 @@
-//! Game Mode's slice of the chrome: the mode flag the router and keyboard
-//! read, the entry toast's wording, and the map name the Game tab shows.
+//! Game Mode's slice of the chrome: the screens that shrink the browser's
+//! vocabulary, the entry toast's wording, and the map name the Game tab shows.
 
 use super::{drop_egui_focus, AppUi};
 use std::time::Duration;
@@ -8,11 +8,6 @@ use std::time::Duration;
 const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
 
 impl AppUi {
-    #[inline]
-    pub fn game_mode(&self) -> bool {
-        self.game_mode
-    }
-
     /// Whether one of Game Mode's own screens is up. The browser's vocabulary
     /// shrinks under any of them, in or out of the mode. Visibility, not
     /// [`Focus::is_game_screen`]: it stays true with the OSK open over one.
@@ -25,13 +20,11 @@ impl AppUi {
     /// Dropping egui's keyboard focus is part of it: egui is offered every key
     /// before we are, so a focused address bar would go on eating them.
     pub fn enter_game_mode(&mut self, toast: String) {
-        self.game_mode = true;
         self.toast_for(toast, GAME_MODE_TOAST);
         drop_egui_focus(&self.egui_ctx);
     }
 
     pub fn leave_game_mode(&mut self) {
-        self.game_mode = false;
         self.toast = None;
     }
 

@@ -1,11 +1,11 @@
-//! Reader mode: strip the page down to its article content with Mozilla's
+//! Reader view: strip the page down to its article content with Mozilla's
 //! Readability (vendored under `vendor/readability/`, Apache 2.0) and restyle
 //! it for a small screen. Everything happens inside the page via injected JS —
 //! the article replaces the DOM in place, so logged-in and dynamic pages work
 //! without a refetch. The original DOM is gone afterwards, so toggling off is
 //! a reload.
 
-use super::AppBrowser;
+use super::{AppBrowser, TabMode};
 
 static READABILITY_JS: &str = include_str!("../../vendor/readability/Readability.js");
 
@@ -29,10 +29,19 @@ impl AppBrowser {
         };
         let toggle = TOGGLE_JS.replace("__RETSURF_READER_CSS__", &READER_CSS.replace('\n', " "));
         let script = format!("(function() {{\n{READABILITY_JS}\n{toggle}\n}})()");
+        let inner = self.inner.clone();
         webview.clone().evaluate_javascript(script, move |result| {
             match result {
                 Ok(servo::JSValue::String(status)) => match status.as_str() {
-                    "ok" => log::debug!("reader mode: article extracted"),
+                    "ok" => {
+                        log::debug!("reader mode: article extracted");
+                        if let Some(i) = inner.tab_index(webview.id()) {
+                            let state = &mut inner.tabs.borrow_mut()[i].state;
+                            if state.mode == TabMode::Page {
+                                state.mode = TabMode::Reader;
+                            }
+                        }
+                    }
                     // Already in reader view — the original DOM is gone, so
                     // leaving is a reload.
                     "reader" => webview.reload(),

@@ -24,7 +24,7 @@ pub enum Kind {
     /// A row that runs something instead of holding a value: the first A arms
     /// it, the second runs it (see [`super::Settings::confirm_action`]).
     Action { task: Task },
-    /// A row that opens a screen of its own inside the section; B comes back.
+    /// A row that opens another screen.
     Door { door: Door },
     /// Free text, typed via the on-screen keyboard (Left/Right does nothing; A
     /// opens it). `get_mut` hands the OSK the draft's own buffer.
@@ -128,7 +128,8 @@ macro_rules! float {
 pub enum Door {
     /// The binding list (see [`super::controls`]).
     Bindings,
-    /// Game Mode's input-map screens, which the app owns; B comes back here.
+    /// Game Mode's input-map screens, which [`super::Settings::open_door`]
+    /// leaves to its caller.
     InputMaps,
 }
 
@@ -163,7 +164,7 @@ pub struct Field {
     pub label: &'static str,
     pub kind: Kind,
     pub restart: bool,
-    /// Also a quick row in Quick Access, in these modes: stepped there live.
+    /// Also a quick row, in these modes.
     pub quick: Option<Modes>,
 }
 
@@ -304,16 +305,14 @@ const fn f(
 use SettingsSection as S;
 
 /// Every editable config field, in display order (grouped by [`SettingsSection`]).
-/// Adding a setting is adding a row here. `restart = true` marks fields the
-/// running app can't apply live. The binding list is not here — it's built
-/// dynamically behind a door row (see [`super::Settings::controls_rows`]).
+/// The binding list is not here: it is built dynamically behind a door row.
 #[rustfmt::skip]
 pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Home page",              text!(browser.home_page), false),
     f(S::Browser,  "Browser",     "Search URL",             text!(browser.search_page), false),
     f(S::Browser,  "Browser",     "User agent",             ua_kind(), true),
     f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
-    f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false),
+    f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false).quick(Modes::Browser),
     f(S::Browser,  "Browser",     "Restore tabs",           flag!(browser.restore_tabs), false),
     f(S::Browser,  "Browser",     "Max tabs",               int!(browser.max_tabs as u32, bounds::MAX_TABS, 1, Some("Unlimited")), false),
     f(S::Browser,  "Browser",     "Keep site data",         flag!(browser.persist_site_data), true),
@@ -344,7 +343,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Interface",  "Page icons",             flag!(interface.page_icons), false),
     f(S::Interface, "Interface",  "Cursor linger (ms)",     int!(interface.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
 
-    // No sub-header: it leads the tab, above the groups it is not part of.
+    // No sub-header: the door belongs to no group.
     f(S::Controls, "",            "Button bindings",        Kind::Door { door: Door::Bindings }, false),
 
     f(S::Controls, "Gamepad",     "Gamepad layout",         choice!(controls.pad_layout: PadLayout), false),

@@ -261,15 +261,17 @@ enabled = true
 [game_mode]
 # Game Mode hands the input to the page and hides the chrome, so a web game gets
 # the keys and buttons the browser would otherwise take. The `quick_access` binding
-# (Ctrl+Alt+G, or a held Start on the pad) opens Quick Access, a strip at the
-# left edge, in or out of the mode; inside, the pad gesture it is bound to is
-# mirrored and withheld from the game, so rebinding it moves the way out with it.
-# Quick Access is the way in and out (Enter game mode, or Exit game mode last);
-# inside the mode it also steps the View live, summons the on-screen keyboard
-# over the game, and opens Settings on its Game tab, where the Input map row
-# picks the map (written back here). Which input map drives the pad and the
-# keyboard while the mode is on: a built-in ("keys", "wasd", "mouse" or "pad")
-# or the stem of an input_maps/<id>.toml of your own.
+# (Start on the pad, Ctrl+Alt+G) opens Quick Access, a strip at the right edge,
+# and `menu` (Select, Ctrl+M) opens Quick Menu at the left, in or out of the
+# mode. Inside it both pad gestures are mirrored as holds (a tap would take the
+# button from the game; a held one hands its press over on release), so
+# rebinding them moves the way out with them. Quick Access is the way in and out
+# (Enter game mode, or Exit game mode last); inside the mode it also steps the
+# View live and summons the on-screen keyboard over the game. Over a game Quick
+# Menu holds only Settings and Quit; Settings opens on the Game tab, where the
+# Input map row picks the map (written back here). Which input map drives the
+# pad and the keyboard while the mode is on: a built-in ("keys", "wasd",
+# "mouse" or "pad") or the stem of an input_maps/<id>.toml of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
 

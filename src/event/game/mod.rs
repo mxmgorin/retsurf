@@ -11,6 +11,7 @@ use crate::browser::AppBrowser;
 use crate::command::AppCommand;
 use crate::config::ControlsConfig;
 use crate::event::key_names;
+use crate::overlay::quick_access::Strip;
 use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
 use mode::GameInput;
@@ -18,15 +19,6 @@ use mode::GameInput;
 /// What the mode reserves while `quick_access` is bound to nothing on the pad, so
 /// a session is never entered without a way out.
 pub const DEFAULT_EXIT: PadGesture = PadGesture::Hold(Pad::Select);
-
-/// The button a gesture takes outright, which no map may bind. Only a tap does:
-/// the rest are undecided until release, and hand the press over then.
-pub fn spent_pad(exit: PadGesture) -> Option<Pad> {
-    match exit {
-        PadGesture::Tap(pad) => Some(pad),
-        PadGesture::Hold(_) | PadGesture::Chord(_, _) => None,
-    }
-}
 
 /// Everything Game Mode owns. Loaded when a screen or the mode itself asks for
 /// a map and dropped once none of them is up, so a run that stays in the browser
@@ -40,9 +32,8 @@ pub struct GameMode {
     /// being `Some` *is* the mode routing, and dropping it is what guarantees
     /// the page is left holding nothing.
     input: Option<GameInput>,
-    /// The gesture a running translator reserves for the menu, mirrored from
-    /// what `quick_access` is bound to on the pad.
-    exit: PadGesture,
+    /// The gestures a running translator reserves, each with the strip it opens.
+    reserved: Vec<(PadGesture, Strip)>,
 }
 
 impl GameMode {
@@ -58,16 +49,16 @@ impl GameMode {
             maps,
             live,
             input: None,
-            exit: DEFAULT_EXIT,
+            reserved: vec![(DEFAULT_EXIT, Strip::QuickAccess)],
         }
     }
 
-    /// Set the gesture a translator reserves for the menu. One already running
-    /// takes it at once, so the way out can change mid-session.
-    pub fn set_exit(&mut self, exit: PadGesture) {
-        self.exit = exit;
+    /// Set the gestures a translator reserves. One already running takes them
+    /// at once, so the way out can change mid-session.
+    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Strip)]) {
+        self.reserved = reserved.to_vec();
         if let Some(input) = &mut self.input {
-            input.set_exit(exit);
+            input.set_reserved(reserved);
         }
     }
 
@@ -91,7 +82,7 @@ impl GameMode {
         self.input = Some(GameInput::new(
             self.maps.pick(&self.live).clone(),
             cfg,
-            self.exit,
+            &self.reserved,
         ));
     }
 

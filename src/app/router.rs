@@ -531,7 +531,7 @@ impl App {
                 aim.1 * cursor_speed * dt,
                 &self.window,
             );
-            if edge_scroll && !self.ui.game_mode() {
+            if edge_scroll && !self.browser.in_game_mode() {
                 self.edge_scroll(aim, clipped, scroll_speed * dt);
             }
             // Only hover the page while the cursor is over it; over the toolbar

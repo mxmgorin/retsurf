@@ -1,10 +1,19 @@
 //! Shared list-highlight arithmetic: the one spelling of a clamped selection
-//! step, and the stores' [`ListCursor`] built on it.
+//! step and of a wrapping one, and the stores' [`ListCursor`] built on the first.
 
 /// Step `selected` by `dy` within a `len`-row list, clamped to its ends
 /// (0 when the list is empty).
 pub fn step(selected: usize, dy: i32, len: usize) -> usize {
     (selected as i32 + dy).clamp(0, (len as i32 - 1).max(0)) as usize
+}
+
+/// Step `selected` by `dy` within a `len`-row list, past either end to the
+/// other (0 when the list is empty).
+pub fn wrap(selected: usize, dy: i32, len: usize) -> usize {
+    match len {
+        0 => 0,
+        _ => (selected as i32 + dy).rem_euclid(len as i32) as usize,
+    }
 }
 
 /// Highlighted row in a menu list. `reserved` counts the leading non-entry rows

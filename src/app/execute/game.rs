@@ -4,14 +4,16 @@
 //! dispatcher for size alone.
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, QuickAccessAction};
+use crate::browser::TabMode;
 use crate::config::Scaling;
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
 use crate::event::game::GameMode;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
+use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::Entry;
+use crate::overlay::quick_access::{Entry, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -25,17 +27,34 @@ impl App {
             .game_mut(&self.config.game_mode.input_map)
     }
 
-    /// The Game Mode gesture: Quick Access, always. One gesture means one screen
-    /// in either state, and entering and leaving are its rows.
-    pub(super) fn toggle_quick_access(&mut self) {
-        match self.ui.quick_access.visible {
-            true => self.ui.quick_access.close(),
-            false => self.ui.quick_access.open(self.ui.game_mode(), &self.config),
+    /// Open `strip`, or close it when it is up; with the other strip up, swap.
+    fn toggle_strip(&mut self, strip: Strip) {
+        let panel = &mut self.ui.quick_access;
+        if panel.visible && panel.strip() == strip {
+            panel.close();
+            return;
         }
+        // The lists are what Quick Menu opens, so its gesture also closes them.
+        if strip == Strip::QuickMenu && self.ui.menu.visible {
+            self.ui.menu.close();
+            return;
+        }
+        self.ui
+            .quick_access
+            .open(strip, self.browser.mode(), &self.config);
+        let url = self.browser.state().page_url().to_string();
+        let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
+            true => "Saved",
+            false => "",
+        };
+        let tabs = self.browser.tab_count().to_string();
+        let panel = &mut self.ui.quick_access;
+        panel.set_value(Entry::Run(Action::Bookmark), saved.to_string());
+        panel.set_value(Entry::List(Section::Tabs), tabs);
     }
 
-    /// Open the settings screen, on `section` when given. The Game tab names the
-    /// live map, so it is read here, which is what loading the maps costs.
+    /// Open the settings screen, on `section` when given. Reads the live map's
+    /// name for the Game tab, which loads the maps.
     pub(super) fn open_settings(&mut self, section: Option<SettingsSection>) {
         let (_, name) = self.game_mode().live();
         self.ui.set_input_map_name(name);
@@ -64,6 +83,7 @@ impl App {
             self.event_handler.game_exit_text(),
             &bindings::key_gestures(Action::QuickAccess),
         );
+        self.browser.set_mode(TabMode::Game);
         self.ui.enter_game_mode(toast);
         self.browser
             .set_game_scaling(self.config.game_mode.view.scaling);
@@ -79,6 +99,7 @@ impl App {
     /// Leave it (Quick Access's Exit row), closing the panel.
     fn leave_game_mode(&mut self) {
         self.ui.leave_game_mode();
+        self.browser.set_mode(TabMode::Page);
         self.ui.quick_access.close();
         self.browser.set_game_scaling(Scaling::Off);
         // A pad the map asked for exists only while the map runs.
@@ -93,7 +114,7 @@ impl App {
         out: &mut Vec<AppCommand>,
     ) {
         match action {
-            QuickAccessAction::Toggle => self.toggle_quick_access(),
+            QuickAccessAction::Toggle(strip) => self.toggle_strip(*strip),
             QuickAccessAction::Activate => self.quick_access_activate(out),
             // Only a quick row steps; the rest act on A alone.
             QuickAccessAction::Adjust(dx) => {
@@ -111,7 +132,6 @@ impl App {
     /// A / Enter on the focused Quick Access row.
     fn quick_access_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.quick_access.row() {
-            Entry::Back => self.ui.quick_access.close(),
             Entry::Quick(field) => self.step_quick(field, 1, out),
             // The keyboard types into the page and outranks this panel, so close
             // it first — the two would fight over the pad otherwise.
@@ -119,9 +139,24 @@ impl App {
                 self.ui.quick_access.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
+            // As its gesture would, once the panel is out of the way.
+            Entry::Run(action) => {
+                self.ui.quick_access.close();
+                out.extend(action.command(true));
+            }
+            Entry::List(section) => {
+                self.ui.quick_access.close();
+                self.ui.menu_open();
+                self.ui.menu.set_section(section);
+            }
+            Entry::Quit => {
+                if self.ui.quick_access.confirm_quit() {
+                    out.push(AppCommand::Shutdown);
+                }
+            }
             Entry::Settings => {
                 self.ui.quick_access.close();
-                let section = self.ui.game_mode().then_some(SettingsSection::Game);
+                let section = self.browser.in_game_mode().then_some(SettingsSection::Game);
                 self.open_settings(section);
             }
             Entry::Enter => {
@@ -359,8 +394,7 @@ impl App {
     /// A captured gesture becomes the source a row is made for; what no row can
     /// hold is refused where it was asked for (see [`map_edit::source_of`]).
     fn map_edit_capture(&mut self, gesture: &str, keyboard: bool) {
-        let spent = self.event_handler.game_spent_pad();
-        let slot = match map_edit::source_of(gesture, keyboard, spent) {
+        let slot = match map_edit::source_of(gesture, keyboard) {
             Ok(slot) => slot,
             Err(note) => return self.ui.map_edit.stop_capture(Some(note.to_string())),
         };

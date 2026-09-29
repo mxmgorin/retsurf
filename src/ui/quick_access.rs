@@ -1,10 +1,10 @@
-//! Rendering of Quick Access (state lives in [`crate::overlay::quick_access`]):
-//! a full-height strip at the left edge, with no backdrop dim, so the page or
-//! game beside it shows what a quick row just changed. Up/Down move, A /
-//! Left/Right act on the focused row, B closes.
+//! Rendering of the edge strips (state lives in [`crate::overlay::quick_access`]):
+//! Quick Access at the right edge and Quick Menu at the left, each full height
+//! with no backdrop dim, so the page or game beside it shows what a quick row
+//! just changed. Up/Down move, A / Left/Right act on the focused row, B closes.
 
 use crate::command::{AppCommand, QuickAccessAction};
-use crate::overlay::quick_access::QuickAccess;
+use crate::overlay::quick_access::{QuickAccess, Strip};
 use crate::ui::panel::{self, ROW_GAP};
 use crate::ui::theme::{self, ACCENT, ROW_FONT};
 use egui_sdl2::egui;
@@ -29,19 +29,26 @@ pub(in crate::ui) fn add_quick_access(
         .fill(theme::PANEL_FILL.gamma_multiply(STRIP_OPACITY))
         .corner_radius(0.0);
     let margin = frame.inner_margin.sum();
-    let width = STRIP_W.min(screen.width() * MAX_SHARE) - margin.x;
+    let outer = STRIP_W.min(screen.width() * MAX_SHARE);
+    let width = outer - margin.x;
+    // Each on the side of the button that opens it.
+    let (left, title) = match panel.strip() {
+        Strip::QuickAccess => (screen.right() - outer, "QUICK ACCESS"),
+        Strip::QuickMenu => (screen.left(), "QUICK MENU"),
+    };
     egui::Area::new(egui::Id::new("quick_access"))
         .order(egui::Order::Foreground)
-        .fixed_pos(screen.left_top())
+        .fixed_pos(egui::pos2(left, screen.top()))
         .show(ctx, |ui| {
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
-                add_header(ui, panel.in_game_mode());
+                add_header(ui, title);
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
-                for (index, row) in panel.rows().iter().enumerate() {
+                for index in 0..panel.rows().len() {
                     let selected = index == panel.selected();
-                    let resp = panel::row(ui, width, selected, row.label(), panel.value(index));
+                    let label = panel.label(index);
+                    let resp = panel::row(ui, width, selected, label, panel.value(index));
                     if resp.clicked() {
                         commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
                     }
@@ -50,12 +57,8 @@ pub(in crate::ui) fn add_quick_access(
         });
 }
 
-/// The strip's title: inside the mode it says the rows are Game Mode's.
-fn add_header(ui: &mut egui::Ui, in_game_mode: bool) {
-    let title = match in_game_mode {
-        true => "GAME MODE",
-        false => "QUICK ACCESS",
-    };
+/// The strip's title, one per strip in either mode: the rows say which is on.
+fn add_header(ui: &mut egui::Ui, title: &str) {
     ui.label(
         egui::RichText::new(title)
             .color(ACCENT)

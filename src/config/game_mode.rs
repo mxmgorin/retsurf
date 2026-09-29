@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct GameModeConfig {
     /// Which input map drives the pad and the keyboard while the mode is on: a
     /// built-in's id, or the stem of an `input_maps/<id>.toml` in the data dir
-    /// (see [`crate::event::game::input_map`]). Applies at startup; the input-map
-    /// screens write a choice back here.
+    /// (see [`crate::event::game::input_map`]).
     pub input_map: String,
     /// How the page's game is shown while the mode is on (`[game_mode.view]`).
     pub view: GameViewConfig,
@@ -25,9 +24,8 @@ pub struct GameViewConfig {
 }
 
 token_enum! {
-    /// How Game Mode sizes the page's game to the screen, cut out of the page
-    /// over a black backdrop; `Off` leaves the page as it is. The labels name
-    /// what is on screen, since the row asks "View".
+    /// How Game Mode sizes the page's game to the screen, cut out over a black
+    /// backdrop; `Off` leaves the page. The labels name what is on screen.
     pub enum Scaling {
         default Off;
         Off => "off", "Page",

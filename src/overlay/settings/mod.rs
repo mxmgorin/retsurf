@@ -37,8 +37,7 @@ pub enum SettingsSection {
     Browser,
     /// The browser's own chrome (`[interface]`).
     Interface,
-    /// The input tunables, led by a door to the binding list: a list of actions,
-    /// each showing its gamepad + keyboard bindings, with add (capture) / remove.
+    /// The input tunables, and a door to the binding list.
     Controls,
     /// Game Mode's settings (`[game_mode]`).
     Game,
@@ -255,14 +254,13 @@ impl Settings {
             .map_or(SettingsSection::Browser, |draft| draft.section)
     }
 
-    /// Whether the dynamic binding list is up (driven by
-    /// [`Self::controls_rows`] / [`Self::controls_activate`] rather than [`fields::FIELDS`]).
+    /// Whether the binding list is up in place of the Controls tab's fields.
     pub fn bindings_open(&self) -> bool {
         self.draft().is_some_and(|draft| draft.bindings_open)
     }
 
-    /// A on a door row: the door, opened here when this screen owns it (the
-    /// caller opens the rest); `None` when the focused row is none.
+    /// A on a door row: its door, opened here when this screen owns it;
+    /// `None` when the focused row is none.
     pub fn open_door(&mut self) -> Option<Door> {
         let draft = self.draft_mut()?;
         let Sel::Field(i) = draft.selected else {
@@ -617,8 +615,7 @@ mod tests {
         assert!(!settings.bindings_open());
     }
 
-    /// A map chosen on the input-map screens while the draft is open survives
-    /// the close; otherwise the draft would put the old one back.
+    /// A map chosen on the input-map screens meanwhile survives the close.
     #[test]
     fn a_map_chosen_meanwhile_survives_the_close() {
         let mut settings = Settings::new();

@@ -20,7 +20,9 @@ impl App {
         // Game Mode shrinks the vocabulary to its own, so a shortcut resolved
         // under one of its overlays cannot act on the browser behind it.
         let settings_up = self.ui.settings.visible() && command.keeps_the_page();
-        if (self.ui.game_mode() || self.ui.game_screen()) && !command.in_game_mode() && !settings_up
+        if (self.browser.in_game_mode() || self.ui.game_screen())
+            && !command.in_game_mode()
+            && !settings_up
         {
             return;
         }
@@ -339,7 +341,7 @@ impl App {
         // Restoring the defaults can move the pad map under a live Game
         // Mode, so push it the same way the menu does.
         self.adopt_input_map(out);
-        let scaling = match self.ui.game_mode() {
+        let scaling = match self.browser.in_game_mode() {
             true => self.config.game_mode.view.scaling,
             false => crate::config::Scaling::Off,
         };

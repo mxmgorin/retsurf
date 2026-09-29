@@ -223,14 +223,11 @@ pub struct AppUi {
     browser_tex_id: Option<egui::TextureId>,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
-    /// Game Mode: the browser stops consuming input and the chrome hides.
-    /// [`crate::event::keyboard`] reads it to forward a key instead of binding it.
-    game_mode: bool,
     /// The notice on screen, if any (see [`toast`]).
     toast: Option<toast::Toast>,
-    /// Quick Access (the `quick_access` gesture).
+    /// The edge strips, Quick Access and Quick Menu.
     pub quick_access: QuickAccess,
-    /// Its map list and one map's rows, opened from that menu.
+    /// Game Mode's map list and one map's rows.
     pub input_maps: InputMaps,
     /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
@@ -328,7 +325,6 @@ impl AppUi {
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
             browser_viewport: (0, 0),
-            game_mode: false,
             toast: None,
             quick_access: QuickAccess::new(),
             input_maps: InputMaps::new(),
@@ -524,7 +520,7 @@ impl AppUi {
             osk_caret: self.osk.caret(),
             chrome_hidden: ChromeHidden {
                 page_fullscreen: browser.is_fullscreen(),
-                game_mode: self.game_mode,
+                game_mode: browser.in_game_mode(),
             },
         }
     }

@@ -6,6 +6,7 @@
 use crate::browser::BrowserCommand;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::{OskCommand, PadInput};
+use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
 
 #[derive(Clone)]
@@ -74,8 +75,8 @@ impl AppCommand {
 /// the focused one.
 #[derive(Clone)]
 pub enum QuickAccessAction {
-    /// Open the panel, or close it when it is up.
-    Toggle,
+    /// Open a strip, or close it when it is up.
+    Toggle(Strip),
     /// Act on the focused row.
     Activate,
     /// Focus row `index` and activate it.
@@ -279,7 +280,7 @@ mod tests {
         }
         // The mode's own controls, and what the loop needs whatever is on screen.
         for command in [
-            AppCommand::QuickAccess(QuickAccessAction::Toggle),
+            AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::QuickAccess)),
             AppCommand::QuickAccess(QuickAccessAction::Activate),
             AppCommand::Input(InputCommand::Cancel),
             AppCommand::Prompt(PromptAction::Cancel),

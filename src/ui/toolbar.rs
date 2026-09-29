@@ -4,9 +4,10 @@
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
-use crate::command::{AppCommand, MenuAction, SettingsAction};
+use crate::command::{AppCommand, MenuAction, QuickAccessAction, SettingsAction};
 use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;
+use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, Vec2};
@@ -81,7 +82,7 @@ fn add_field_button(ui: &mut egui::Ui, glyph: egui::RichText, lit: bool) -> egui
 }
 
 /// The glyph before the address: search while editing and on the start page
-/// (whose own button already shows a house), else what the loaded page is.
+/// (whose field is a search), else what the loaded page is.
 fn site_glyph(page_url: &str, editing: bool) -> (&'static str, egui::Color32) {
     match page_url {
         url if editing || url == crate::browser::HOME_URL => (bold::MAGNIFYING_GLASS, theme::MUTED),
@@ -345,10 +346,11 @@ fn toolbar_contents(
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.set_min_height(ROW_H);
-            // In the corner, the easiest place for a thumb to find.
-            if ui.add(new_toolbar_button(icon(bold::HOUSE))).clicked() {
-                commands.push(AppCommand::Menu(MenuAction::OpenUrl(
-                    crate::browser::HOME_URL.to_string(),
+            // In the corner Quick Menu opens from, the easiest place for a
+            // thumb to find.
+            if ui.add(new_toolbar_button(icon(bold::LIST))).clicked() {
+                commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
+                    Strip::QuickMenu,
                 )));
             }
             if ui.add(new_toolbar_button(icon(bold::ARROW_LEFT))).clicked() {
@@ -391,11 +393,10 @@ fn toolbar_contents(
                             SettingsSection::About,
                         )));
                     }
-                    if ui.add(new_toolbar_button(icon(bold::LIST))).clicked() {
-                        commands.push(AppCommand::Menu(MenuAction::Open));
-                    }
-                    if ui.add(new_toolbar_button(icon(bold::GEAR))).clicked() {
-                        commands.push(AppCommand::Settings(SettingsAction::Open));
+                    if ui.add(new_toolbar_button(icon(bold::DOTS_THREE))).clicked() {
+                        commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
+                            Strip::QuickAccess,
+                        )));
                     }
                     if inputs.active_downloads > 0 {
                         let label = format!("{}{}", bold::DOWNLOAD_SIMPLE, inputs.active_downloads);

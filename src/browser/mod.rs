@@ -85,6 +85,21 @@ pub struct BrowserState {
     /// Whether the page holds the Fullscreen API. Per tab, so switching tabs and
     /// closing one need no reset of their own.
     fullscreen: bool,
+    /// What the tab shows over its page.
+    mode: TabMode,
+}
+
+/// What a tab shows over its page. One field, so the views exclude each other.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub enum TabMode {
+    #[default]
+    Page,
+    /// The article swapped in for the page. Any main-frame load ends it, which
+    /// is also how it is left.
+    Reader,
+    /// Game Mode: the page owns the input and the chrome hides. Outlives
+    /// navigation, and a tab the page opens inherits it.
+    Game,
 }
 
 impl BrowserState {
@@ -113,6 +128,7 @@ impl Default for BrowserState {
             page_url: "".into(),
             loading: false,
             fullscreen: false,
+            mode: TabMode::Page,
         }
     }
 }
@@ -435,6 +451,23 @@ impl AppBrowser {
     /// The clipboard the pages share, for the chrome's own fields.
     pub fn clipboard(&self) -> &Clipboard {
         &self.inner.clipboard
+    }
+
+    /// What the active tab shows over its page.
+    pub fn mode(&self) -> TabMode {
+        self.state().mode
+    }
+
+    pub fn set_mode(&self, mode: TabMode) {
+        let active = self.inner.active.get();
+        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
+            tab.state.mode = mode;
+        }
+    }
+
+    #[inline]
+    pub fn in_game_mode(&self) -> bool {
+        self.mode() == TabMode::Game
     }
 
     /// Whether the active tab's page holds fullscreen, which hides the chrome.
