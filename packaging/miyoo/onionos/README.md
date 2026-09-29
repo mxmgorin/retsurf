@@ -18,21 +18,23 @@ Turn wifi on in Onion's settings first — the Plus keeps it off by default.
 
 | Button | Action | Held |
 |---|---|---|
-| D-pad | Move the cursor, or scroll while scroll mode is on | |
+| D-pad | Move the cursor; pushed against an edge, scroll the page | |
 | A | Click / confirm | |
-| B | Back out of an overlay | Home page |
+| B | Back out of an overlay | |
 | X | On-screen keyboard | Reader view |
 | Y | Link hints | Bookmark this page |
-| L1 / R1 | Back / forward | Zoom out / in |
-| L1 + R1 | Reset the zoom | |
-| Start | Scroll mode | Reload |
-| Select | Menu — tabs, bookmarks, history, downloads | Settings |
-| Select + Start | Settings, and **quit** when settings is already open | |
+| L1 / R1 | Back / forward | Home page / reload |
+| L2 / R2 | Zoom out / in | |
+| L2 + R2 | Reset the zoom | |
+| Start | Quick Access — reader view, Game Mode, bookmark, page theme | |
+| Start + L1 / R1 | Close the tab / open a new one | |
+| Select | Quick Menu — home, tabs, bookmarks, history, downloads, settings, quit | Address bar |
+| Select + L1 / R1 | Previous / next tab | |
 | MENU | Quit | (held with a pad it stays Onion's) |
 
-The full table is in Settings → Controls, where every one of them can be
-rebound. MENU is the exception and deliberately not a binding: it is the one way
-out that has to survive whatever the tables are edited to.
+The full table is in Settings → Controls → Button bindings, where every one of
+them can be rebound. MENU is the exception and deliberately not a binding: it is
+the one way out that has to survive whatever the tables are edited to.
 
 ## Where things go
 

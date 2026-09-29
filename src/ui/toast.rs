@@ -2,7 +2,6 @@
 //! visible effect of its own, gone again after a moment. One at a time; a new
 //! one replaces whatever is up.
 
-use super::home::HINT_BAND;
 use super::panel::ROW_RADIUS;
 use super::theme::{BORDER, INK, PANEL_FILL, ROW_FONT};
 use super::AppUi;
@@ -10,6 +9,9 @@ use crate::browser::BrowserNotice;
 use crate::config::ToolbarPosition;
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
+
+/// The toast's bottom edge above the floor; clears the overlays' bottom hint lines.
+const LIFT: f32 = 36.0;
 
 /// How long a toast stays up unless its caller asks for longer.
 pub const TOAST: Duration = Duration::from_secs(2);
@@ -70,7 +72,7 @@ impl AppUi {
         }
         egui::Area::new(egui::Id::new("toast"))
             .pivot(egui::Align2::CENTER_BOTTOM)
-            .fixed_pos(egui::pos2(screen.center().x, floor - HINT_BAND))
+            .fixed_pos(egui::pos2(screen.center().x, floor - LIFT))
             // Above every overlay: within one order egui raises whichever area
             // was last clicked, which would bury a toast under the menu.
             .order(egui::Order::Tooltip)

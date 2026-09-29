@@ -8,7 +8,7 @@ use super::theme::{self, ACCENT, DIM, HAIRLINE, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{Settings, SettingsSection, RESET_ROWS};
+use crate::overlay::settings::{Door, Kind, Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -432,12 +432,26 @@ fn add_controls(
     });
 }
 
+/// A settings tab's icon.
+fn section_icon(section: SettingsSection) -> &'static str {
+    match section {
+        SettingsSection::Browser => bold::GLOBE,
+        SettingsSection::GameMode => bold::GAME_CONTROLLER,
+        SettingsSection::Interface => bold::LAYOUT,
+        SettingsSection::Controls => bold::JOYSTICK,
+        SettingsSection::Content => bold::SHIELD_CHECK,
+        SettingsSection::System => bold::CPU,
+        SettingsSection::About => bold::INFO,
+    }
+}
+
 /// Draw the settings overlay: the section bar, a control hint, and the active
 /// section's field list. See the module docs for the controls.
 pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
     update: &UpdateState,
+    input_map_name: &str,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -448,9 +462,10 @@ pub(super) fn add_settings(
         let clicked = panel::section_bar(
             ui,
             screen,
-            SettingsSection::ALL,
+            &SettingsSection::ALL,
             active,
             SettingsSection::label,
+            section_icon,
             |_| {},
         );
         if let Some(section) = clicked {
@@ -469,12 +484,12 @@ pub(super) fn add_settings(
                 &format!("{ok} select"),
                 &format!("{back} back"),
             ])
-        } else if settings.is_controls_section() {
+        } else if settings.bindings_open() {
             theme::hint_line(&[
                 section,
                 &mv,
                 &format!("{ok} open / bind / remove"),
-                &format!("{back} save & back"),
+                &format!("{back} back"),
             ])
         } else {
             theme::hint_line(&[
@@ -498,8 +513,8 @@ pub(super) fn add_settings(
             return;
         }
 
-        // Controls is a dynamic binding list, not FIELDS.
-        if settings.is_controls_section() {
+        // The binding list is dynamic, not FIELDS.
+        if settings.bindings_open() {
             add_controls(ui, settings, screen, commands);
             return;
         }
@@ -520,7 +535,7 @@ pub(super) fn add_settings(
             ui.spacing_mut().item_spacing.y = ROW_GAP;
             let mut last_cat = "";
             for (i, field) in rows {
-                if multi_cat && field.cat != last_cat {
+                if multi_cat && field.cat != last_cat && !field.cat.is_empty() {
                     last_cat = field.cat;
                     ui.add_space(6.0);
                     ui.label(
@@ -538,10 +553,21 @@ pub(super) fn add_settings(
                     field.label.to_string()
                 };
                 let flag = settings.flag(i);
-                let value = if flag.is_some() {
-                    String::new()
-                } else {
-                    settings.value_str(i)
+                let value = match (flag, &field.kind) {
+                    (Some(_), _) => String::new(),
+                    (
+                        None,
+                        Kind::Door {
+                            door: Door::Bindings,
+                        },
+                    ) => bold::CARET_RIGHT.to_string(),
+                    (
+                        None,
+                        Kind::Door {
+                            door: Door::InputMaps,
+                        },
+                    ) => input_map_name.to_string(),
+                    (None, _) => settings.value_str(i),
                 };
                 let steppable = settings.is_steppable(i);
 

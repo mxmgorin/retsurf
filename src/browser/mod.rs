@@ -5,8 +5,9 @@
 //! [`delegate`]; address-bar text interpretation in [`url`]. Around those:
 //! [`engine`] (Servo construction and prefs), [`memory`] (reports and heap
 //! profile), [`pads`] (what the page knows of the gamepads), [`home`] /
-//! [`reader`] (the built-in pages), [`blob_download`] and [`forced_dark`]
-//! (user-content scripts), [`adblock`] and [`content_filter`] (load filtering).
+//! [`reader`] (the built-in pages), [`game_scaling`] (a game sized to the screen),
+//! [`blob_download`] and [`forced_dark`] (user-content scripts), [`adblock`] and
+//! [`content_filter`] (load filtering).
 
 pub mod adblock;
 mod blob_download;
@@ -18,6 +19,7 @@ mod delegate;
 mod engine;
 mod favicon;
 mod forced_dark;
+mod game_scaling;
 mod home;
 mod input;
 pub mod memory;
@@ -83,6 +85,21 @@ pub struct BrowserState {
     /// Whether the page holds the Fullscreen API. Per tab, so switching tabs and
     /// closing one need no reset of their own.
     fullscreen: bool,
+    /// What the tab shows over its page.
+    mode: TabMode,
+}
+
+/// What a tab shows over its page. One field, so the views exclude each other.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub enum TabMode {
+    #[default]
+    Page,
+    /// The article swapped in for the page. Any main-frame load ends it, which
+    /// is also how it is left.
+    Reader,
+    /// Game Mode: the page owns the input and the chrome hides. Outlives
+    /// navigation, and a tab the page opens inherits it.
+    Game,
 }
 
 impl BrowserState {
@@ -111,6 +128,7 @@ impl Default for BrowserState {
             page_url: "".into(),
             loading: false,
             fullscreen: false,
+            mode: TabMode::Page,
         }
     }
 }
@@ -177,6 +195,10 @@ struct AppBrowserInner {
     /// Clickable-element rects reported by the page for hint mode (see
     /// [`AppBrowser::collect_hints`]), drained once by the main loop.
     hint_rects: RefCell<Option<Vec<crate::overlay::hints::Hint>>>,
+    /// The [`game_scaling`] mode in force, so each change is applied once.
+    game_scaling: Cell<crate::config::Scaling>,
+    /// Its user script while a mode is on, kept so it can be detached again.
+    game_scaling_script: RefCell<Option<Rc<servo::UserScript>>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -202,7 +224,7 @@ struct AppBrowserInner {
     /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
     /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
-    /// `[display] page_icons`: whether tabs keep their page's icon.
+    /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
     /// The forced-dark sheet, attached to `user_content` while the theme asks
     /// for it. Kept so it can be detached again.
@@ -211,7 +233,7 @@ struct AppBrowserInner {
     /// here rather than in the event handler because every fresh document has to
     /// be told again: a `Connected` only reaches the document that is loaded.
     pads: RefCell<PadSlots>,
-    /// `[input] haptics`: whether a page may rumble the pad. Gates the requests
+    /// `[controls] haptics`: whether a page may rumble the pad. Gates the requests
     /// and what a `Connected` advertises.
     haptics: Cell<bool>,
     /// Rumble requests from pages, queued by the delegate for the main loop to
@@ -240,7 +262,7 @@ impl AppBrowserInner {
         let browser = &config.browser;
         let download_exts = config.downloads.extensions.clone();
         let content_filter = ContentFilter::from_config(&config.data_saving);
-        let haptics = config.input.haptics;
+        let haptics = config.controls.haptics;
         // Sanitize the configured zoom: Servo clamps it to [0.1, 10.0] anyway,
         // and a zero/negative/NaN default would make every tab unusable.
         let zoom = browser.page_zoom;
@@ -292,6 +314,8 @@ impl AppBrowserInner {
             adblock,
             content_filter: Cell::new(content_filter),
             hint_rects: RefCell::new(None),
+            game_scaling: Cell::new(crate::config::Scaling::Off),
+            game_scaling_script: RefCell::new(None),
             ime_control: Cell::new(None),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             dismissed_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
@@ -300,7 +324,7 @@ impl AppBrowserInner {
             hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
-            page_icons: Cell::new(config.display.page_icons),
+            page_icons: Cell::new(config.interface.page_icons),
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
@@ -429,6 +453,23 @@ impl AppBrowser {
         &self.inner.clipboard
     }
 
+    /// What the active tab shows over its page.
+    pub fn mode(&self) -> TabMode {
+        self.state().mode
+    }
+
+    pub fn set_mode(&self, mode: TabMode) {
+        let active = self.inner.active.get();
+        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
+            tab.state.mode = mode;
+        }
+    }
+
+    #[inline]
+    pub fn in_game_mode(&self) -> bool {
+        self.mode() == TabMode::Game
+    }
+
     /// Whether the active tab's page holds fullscreen, which hides the chrome.
     #[inline]
     pub fn is_fullscreen(&self) -> bool {
@@ -465,7 +506,8 @@ impl AppBrowser {
     /// Adopt an edited config's live-tunable knobs, mirroring what [`Self::new`]
     /// read at construction — one list, so a new knob cannot land in only one.
     pub fn apply_config(&self, config: &AppConfig) {
-        self.set_haptics(config.input.haptics);
+        self.set_haptics(config.controls.haptics);
+        self.inner.adblock.set_config(&config.adblock);
         // Lightweight-mode block flags take effect on the next subresource
         // load, no restart needed (unlike the engine-thread counts).
         self.set_content_filter(ContentFilter::from_config(&config.data_saving));
@@ -475,7 +517,7 @@ impl AppBrowser {
         self.set_page_theme(config.browser.page_theme);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
-        self.set_page_icons(config.display.page_icons);
+        self.set_page_icons(config.interface.page_icons);
     }
 
     /// Whether any tab is fetching, not just the shown one — a background tab's

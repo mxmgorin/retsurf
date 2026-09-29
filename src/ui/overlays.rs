@@ -23,8 +23,8 @@ pub enum Focus {
     Prompt,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
     Menu,
-    /// Game Mode's own menu, over the still-running game.
-    GameMenu,
+    /// Quick Access, beside the page or the still-running game.
+    QuickAccess,
     /// Its map list and one map's rows, opened from that menu.
     GameInputMaps,
     /// Its map editor, opened from a map.
@@ -47,7 +47,7 @@ impl Focus {
     /// Exhaustive so a new variant must place itself.
     pub fn is_game_screen(self) -> bool {
         match self {
-            Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => true,
+            Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => true,
             Focus::Osk
             | Focus::Prompt
             | Focus::Menu
@@ -63,7 +63,9 @@ impl Focus {
     /// switching, reload, back/forward — must not fire underneath them.
     pub fn takes_over(self) -> bool {
         match self {
-            Focus::Settings | Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => true,
+            Focus::Settings | Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {
+                true
+            }
             Focus::Osk
             | Focus::Prompt
             | Focus::Menu
@@ -108,8 +110,8 @@ impl AppUi {
             Focus::Prompt
         } else if self.menu.visible {
             Focus::Menu
-        } else if self.game_menu.visible {
-            Focus::GameMenu
+        } else if self.quick_access.visible {
+            Focus::QuickAccess
         } else if self.input_maps.visible() {
             Focus::GameInputMaps
         } else if self.map_edit.visible() {

@@ -8,25 +8,26 @@ zoom, reader mode, and network-level ad and tracker blocking are all built in.
 
 ## Controls
 
-D-pad / Left stick   Move the virtual cursor (or scroll the page in scroll mode)
+D-pad / Left stick   Move the virtual cursor; pushed against an edge, scroll
 Right stick          Scroll the page
-L2 / R2              Cycle tabs / drive the on-screen keyboard
 A                    Confirm (click / select)
-B                    Cancel (back / close)          Hold: go to home page
+B                    Cancel (back / close)
 X                    On-screen keyboard             Hold: reader mode
 Y                    Link hints                     Hold: bookmark the page
-L1                   Previous (menu / history back) Hold: zoom out
-R1                   Next (menu / history forward)  Hold: zoom in
-L1 + R1              Reset zoom
+L1 / R1              Back / forward                 Hold: home page / reload
+L2 / R2              Zoom out / in
+L2 + R2              Reset zoom
 Left stick click     Link hints
-Right stick click    Settings
-Start                Toggle cursor / page-scroll    Hold: reload
-Select               Menu                           Hold: settings
-Select + Start       Settings (press again while open to quit)
+Start                Quick Access (reader view, Game Mode, bookmark, page theme)
+Start + L1 / R1      Close the tab / open a new one
+Select               Quick Menu (home, tabs,        Hold: address bar
+                     bookmarks, history, downloads,
+                     settings, quit)
+Select + L1 / R1     Previous / next tab
+Select + Start       Quit (PortMaster's own)
 
-Every gesture is rebindable in-app from the settings overlay, or by editing
-`bindings.toml` in the data folder. Devices without a right analog stick use the
-Start scroll toggle.
+Every gesture is rebindable in-app (Settings → Controls → Button bindings), or
+by editing `bindings.toml` in the data folder.
 
 ## Notes
 

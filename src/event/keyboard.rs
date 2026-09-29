@@ -74,7 +74,7 @@ pub fn on_key(
     // visibility: the keyboard opens over the editor and owns the keys there.
     if ui.focus().is_game_screen() {
         if key.pressed {
-            on_game_menu_key(key, bindings, commands);
+            on_game_screen_key(key, bindings, commands);
         }
         return;
     }
@@ -124,10 +124,10 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
     }
 }
 
-/// Game Mode's menu, map list and map editor: arrows move between rows and step
+/// Quick Access, the map list and the map editor: arrows move between rows and step
 /// the focused value, Enter activates, Esc goes back. Everything else goes
 /// through the bindings, which Game Mode has already narrowed to its own.
-fn on_game_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
+fn on_game_screen_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
     if let Some((dx, dy)) = arrow_nav(key.kc) {
         commands.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
         return;
@@ -334,13 +334,24 @@ fn on_key_down(
         return;
     }
 
-    // Overlays whose navigation comes from the `nav_*` bindings, so vim hjkl
-    // works there too.
+    // Overlays whose navigation comes from the `nav_*` bindings, so a rebound
+    // key moves them too.
     let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
     let typing = browser.text_input_focused()
         || ui.address_bar_focused()
         || ui.home_field_editing()
         || ui.dial_edit_field_editing();
+    // The on-screen keyboard: Enter presses the selected key, Esc hides it. Not
+    // while a field has focus, where a real keyboard types into it.
+    if ui.focus() == Focus::Osk && !typing {
+        if enter_confirms(key, commands) {
+            return;
+        }
+        if matches!(key.kc, Keycode::Escape) {
+            commands.push(AppCommand::Input(InputCommand::Cancel));
+            return;
+        }
+    }
     if let Some(action) = lookup(key, bindings, overlay, typing) {
         action.push_tap(commands);
         return;

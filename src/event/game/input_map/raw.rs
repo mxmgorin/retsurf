@@ -238,6 +238,7 @@ impl InputMap {
             name: raw.name.clone().unwrap_or_else(|| id.to_string()),
             builtin: is_built_in(id),
             file: false,
+            fixed: false,
             pad,
             sticks,
             keys: resolved_keys,

@@ -64,7 +64,7 @@ impl AppUi {
         );
     }
 
-    /// Adopt an edited `[display] scale`; the next frame installs it.
+    /// Adopt an edited `[interface] scale`; the next frame installs it.
     pub fn set_ui_scale(&mut self, scale: f32) {
         self.ui_scale = scale;
     }

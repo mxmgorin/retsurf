@@ -103,12 +103,12 @@ pub fn new_id(name: &str, taken: &[String]) -> String {
 /// The stock maps, in the order the list shows them. They live in code, so
 /// a release that adds one offers it to everyone; a file under the same id
 /// replaces it, and deleting that file restores this.
-pub(super) const BUILT_IN: [(&str, &str); 4] = [
-    ("keys", KEYS_MAP),
-    ("wasd", WASD_MAP),
-    ("mouse", MOUSE_MAP),
-    ("pad", PAD_MAP),
-];
+pub(super) const BUILT_IN: [(&str, &str); 3] =
+    [("keys", KEYS_MAP), ("wasd", WASD_MAP), ("mouse", MOUSE_MAP)];
+
+/// The id of no map at all: everything reaches the page as it is. Built in
+/// code rather than from a file, so no file can shadow or edit it.
+pub const NO_MAP: &str = "none";
 
 /// The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
 /// js13k entries share, so most of itch.io plays with no map edit at all.
@@ -120,26 +120,24 @@ const WASD_MAP: &str = include_str!("../../../../resources/input_maps/wasd.toml"
 /// Point and click, for the games the pointer is the whole interface of.
 const MOUSE_MAP: &str = include_str!("../../../../resources/input_maps/mouse.toml");
 
-/// The whole pad reaches the page raw — no pointer — for games that read the
-/// Gamepad API themselves.
-const PAD_MAP: &str = include_str!("../../../../resources/input_maps/pad.toml");
-
-/// Every map this run offers: the built-ins, each replaced by an
-/// `input_maps/<id>.toml` that shadows it, plus whatever other files are there.
+/// Every map this run offers: no map first, then the built-ins, each replaced
+/// by an `input_maps/<id>.toml` that shadows it, then whatever other files are
+/// there.
 pub fn load_all(keys: &KeyNames) -> Vec<InputMap> {
     let mut files = read_dir();
-    let mut maps: Vec<InputMap> = BUILT_IN
-        .iter()
-        .map(|(id, text)| {
-            let (raw, file) = match files.remove(*id) {
-                Some(raw) => (raw, true),
-                None => (parse_built_in(id, text), false),
-            };
-            let mut map = InputMap::resolve(id, raw, keys);
-            map.file = file;
-            map
-        })
-        .collect();
+    if files.remove(NO_MAP).is_some() {
+        log::warn!("input map: `{NO_MAP}.toml` ignored; that id means no map");
+    }
+    let mut maps = vec![InputMap::none(keys)];
+    maps.extend(BUILT_IN.iter().map(|(id, text)| {
+        let (raw, file) = match files.remove(*id) {
+            Some(raw) => (raw, true),
+            None => (parse_built_in(id, text), false),
+        };
+        let mut map = InputMap::resolve(id, raw, keys);
+        map.file = file;
+        map
+    }));
     // Whatever else the user put there, in a stable order.
     let mut extra: Vec<(String, RawInputMap)> = files.into_iter().collect();
     extra.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -165,12 +163,12 @@ pub fn built_in(id: &str, keys: &KeyNames) -> Option<InputMap> {
         .map(|(id, text)| InputMap::resolve(id, parse_built_in(id, text), keys))
 }
 
-/// The map `id` names, or the first — the built-in `keys` unless a file
-/// shadows it, so an unknown id in the config is never a dead mode.
+/// The map `id` names, or no map: a map that is not there remaps nothing.
 pub fn pick<'a>(maps: &'a [InputMap], id: &str) -> &'a InputMap {
     maps.iter()
-        .find(|p| p.id == id)
-        .unwrap_or_else(|| maps.first().expect("the built-ins are always offered"))
+        .find(|m| m.id == id)
+        .or_else(|| maps.iter().find(|m| m.fixed))
+        .expect("load_all always offers no map")
 }
 
 /// A built-in's own text, which a test parses for every one of them.

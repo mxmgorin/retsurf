@@ -18,14 +18,14 @@ The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmark
 `servo/` and regenerable caches (the adblock engine) under `cache/` — the latter is safe
 to delete.
 
-**Settings > Advanced > Clear browsing data** wipes history, cookies, localStorage, the
+**Settings > System > Clear browsing data** wipes history, cookies, localStorage, the
 HTTP cache, the saved tab session and the finished downloads, and closes the open tabs
 back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
 speed-dial pins, settings and bindings are left alone. **IndexedDB is not cleared**: the
 engine has no category for it yet, so a site's databases under `servo/clientstorage/`
 survive until that directory is deleted by hand.
 
-**Settings > Advanced > Restore all defaults** is the other half: every settings row, the
+**Settings > System > Restore all defaults** is the other half: every settings row, the
 speed-dial pins and the control bindings go back to how they ship, and nothing you saved
 (bookmarks, history, tabs) is touched. Two presses as well. The settings and bindings are
 written when the overlay closes, the pins right away; rows marked `*` need a restart.
@@ -96,19 +96,26 @@ notification = false          # Web Notifications                    — full on
 async_clipboard = false       # Async Clipboard API                  — full only
 permissions = false           # Permissions API                      — full only
 
-[display]
-width = 640                # size the window opens at, and where it is left on exit
-height = 480               # (desktop only: a handheld's window is its panel)
+[interface]
 scale = 1.0                # UI zoom, as a factor over the fit to the panel (see below)
-use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
-software_render = false    # draw everything on the CPU, with no GL at all (see below)
-max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
-dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
-cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 toolbar_position = "top"   # which edge the toolbar sits on: "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, reveal on scroll up (floats over the page, either edge)
-page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
 home_style = "banner"      # start page header: "banner", "wordmark", or "compact" (none, more room for the dial)
+page_icons = true          # site icons on tabs, bookmarks, history and the speed dial (see below)
+cursor_linger_ms = 1500    # how long the cursor stays visible after moving
+
+[controls]
+deadzone = 0.25            # stick deflection below this is treated as centered
+cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
+scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
+trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
+osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
+osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
+osk_nav_repeat_ms = 140          # interval between auto-repeats
+hold_ms = 400              # holding a button this long fires its "hold:" gesture
+cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
+edge_scroll = true         # pushing the cursor against a window edge scrolls that way (never in Game Mode)
+haptics = true             # let a page rumble the pad (the Gamepad vibration API)
 
 [osk]
 # Built-in on-screen-keyboard layouts to enable; the keyboard's Lang key cycles
@@ -148,7 +155,7 @@ memory_profile = "auto"
 # to loads keeps the idle clock (and the battery) where it was. Needs a writable
 # `scaling_governor`, so root — the handheld launchers have it, a desktop does
 # not, and without it this goes inert after one attempt with a log line. Applies
-# live; also in the settings overlay (Advanced -> Performance).
+# live; also in the settings overlay (System -> Performance).
 cpu_boost_on_load = false
 # Servo thread counts. 0 = keep the memory profile's choice; a non-zero value
 # overrides it (handy to fine-tune a tier without switching profiles).
@@ -163,8 +170,16 @@ worker_pool_max = 0        # cap applied to every worker pool (image cache, asyn
 # it is opt-in; on `embedded`/`tight` (which switch the memory cache off, leaving
 # nothing to spill) turning this on also revives a 16-entry memory cache. Needs a
 # restart. Safe to delete the file at any time. Also in the settings overlay
-# (Advanced tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
+# (System tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
 http_disk_cache_mb = 0
+max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
+
+[display]
+width = 640                # size the window opens at, and where it is left on exit
+height = 480               # (desktop only: a handheld's window is its panel)
+use_gles = true            # request an OpenGL ES context (required on Mali handhelds)
+software_render = false    # draw everything on the CPU, with no GL at all (see below)
+dark_last_row = false      # paint the screen's last row black, for panels that show it again as the first
 
 [history]
 enabled = true             # set false to stop recording (existing entries stay viewable/clearable)
@@ -184,7 +199,7 @@ dir = ""
 extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 
 [update]
-# Which builds the in-app updater checks for (also selectable in Settings > Advanced
+# Which builds the in-app updater checks for (also selectable in Settings > System
 # > Updates). One of:
 #   release  tagged GitHub releases, stable only (the default)
 #   beta     tagged releases including pre-releases (highest semver wins)
@@ -243,47 +258,48 @@ max_decode_seconds = 300
 # Read once at startup (restart to apply).
 enabled = true
 
-[input]
-deadzone = 0.25            # stick deflection below this is treated as centered
-cursor_speed = 600.0       # cursor speed at full deflection (logical px/s)
-scroll_speed = 1600.0      # scroll speed at full deflection (device px/s)
-trigger_threshold = 0.5    # pull above which L2/R2 count as pressed
-osk_nav_threshold = 0.5    # stick deflection that counts as an on-screen-keyboard move
-osk_nav_initial_delay_ms = 350   # delay before the first auto-repeat of held nav
-osk_nav_repeat_ms = 140          # interval between auto-repeats
-hold_ms = 400              # holding a button this long fires its "hold:" gesture
-cursor_mode = "mouse"      # default D-pad/stick mode at startup: "mouse" or "scroll"
-edge_scroll = true         # pushing the cursor against a window edge scrolls that way (never in Game Mode)
-haptics = true             # let a page rumble the pad (the Gamepad vibration API)
-
 [game_mode]
 # Game Mode hands the input to the page and hides the chrome, so a web game gets
-# the keys and buttons the browser would otherwise take. The `game_mode` binding
-# (Ctrl+Alt+G, or a held Start on the pad) opens the Game Mode menu, in or out of
-# the mode; inside, the pad gesture it is bound to is mirrored and withheld from
-# the game, so rebinding it moves the way out with it. That
-# menu is the only way in and out (Enter game mode, or Exit game mode last) and its
-# Input map row is where this one is picked (written back here), which is
-# why it opens outside the mode too; it also summons the on-screen keyboard over
-# the game. Which input map drives the pad and the keyboard while the mode is on: a
-# built-in ("keys", "wasd", "mouse" or "pad") or the stem of an
-# input_maps/<id>.toml of your own.
+# the keys and buttons the browser would otherwise take. The `quick_access` binding
+# (Start on the pad, Ctrl+Alt+G) opens Quick Access, a strip at the right edge,
+# and `menu` (Select, Ctrl+M) opens Quick Menu at the left, in or out of the
+# mode. Inside it both pad gestures are mirrored as holds (a tap would take the
+# button from the game; a held one hands its press over on release), so
+# rebinding them moves the way out with them. Quick Access is the way in and out
+# (Enter game mode, or Exit game mode last); inside the mode it also steps the
+# View and the input map live and summons the on-screen keyboard over the game.
+# Over a game Quick Menu holds only Settings and Quit; Settings opens on the
+# Game Mode tab, where the Input map row picks the map (written back here).
+# Which input map drives the pad and the keyboard while the mode is on: "none"
+# for no map at all (the pad and the keyboard reach the game as they are; an id
+# no map answers to is none too), a built-in ("keys", "wasd" or "mouse"), or the
+# stem of an input_maps/<id>.toml of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
+
+[game_mode.view]
+# How the page's game is shown while the mode is on: "off" leaves the page as it
+# is; "fit" cuts the biggest canvas or iframe out of the page over a black
+# backdrop, as large as its aspect ratio allows; "integer" does the same at the
+# largest whole multiple of its pixels, drawn unsmoothed; "stretch" fills the
+# screen, aspect ratio ignored. Undone on leaving the mode, kept across pages.
+scaling = "off"
 ```
 
 ## Game Mode input maps (`input_maps/*.toml`)
 
 An input map is what each button, stick direction and key sends to the page while
-Game Mode is on. Four ship built in, named for what the game sees rather than
-for what the pad becomes; `[game_mode] input_map` picks one by id.
+Game Mode is on. Three ship built in, named for what the game sees rather than
+for what the pad becomes; `[game_mode] input_map` picks one by id, or `none`
+for no map at all, which a game that reads the Gamepad API or the keys itself
+wants: nothing is remapped, and there is no cursor and no click. `none` is not a
+file and cannot be edited; an `input_maps/none.toml` is ignored.
 
 | id | name | what the game gets |
 | --- | --- | --- |
 | `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
 | `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
 | `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
-| `pad` | Gamepad passthrough | the whole pad reaches the page raw — sticks included, no cursor and no click — for games that read the Gamepad API themselves |
 
 There is no first-person template: Servo has no Pointer Lock, so a stick cannot
 turn a camera, and only the left mouse button has a route.
@@ -336,7 +352,7 @@ table of its own. A stick has no gesture of its own, so it is taken from a push
 most of the way over — past any dead zone, since one resting off-centre must not
 bind itself. A map holds one target per source, so
 a hold, a chord or a modified key is refused on the row that asked; so is the
-button the `game_mode` gesture resolves on the press, where it is a bare tap.
+button the `quick_access` gesture resolves on the press, where it is a bare tap.
 Nothing pressed within six seconds gives up on its own — a handheld has no Esc.
 
 **A stick answers A with its own list**, like every other row — *Cursor*,
@@ -367,7 +383,7 @@ l2 = "passthrough"            # reaches the page as the gamepad button it is
 r1 = "none"                   # consumed: inert while this map is active
 l1 = "layer:aim"              # holds a layer open; sends nothing itself
 
-[stick.left]                  # four directions, through [input] deadzone
+[stick.left]                  # four directions, through [controls] deadzone
 up = "key.ArrowUp"
 down = "key.ArrowDown"
 left = "key.ArrowLeft"
@@ -413,7 +429,7 @@ read as directions keeps its whole axis, since half an axis cannot be withheld �
 which also makes `passthrough` on one direction meaningless. `analog = "none"`
 keeps the axis and sends nothing, which is how a stick is made inert.
 
-**The `game_mode` gesture's button is the map's to bind, but its press arrives
+**The `quick_access` gesture's button is the map's to bind, but its press arrives
 late.** A hold and a chord are undecided until the button is let go, so a map's
 target for it is sent on release and ended a frame later, and an unbound one
 reaches the page as the button it is. Only a bare tap resolves on the press
@@ -456,10 +472,13 @@ clicks and drags, so hold/chord gestures on its button are rejected.
 **Keyboard shortcuts**: any key with optional `ctrl`/`alt`/`shift` modifiers,
 matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
 on the page or the address bar — holds focus, so they can't hijack typing.
-Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+e` reader mode ·
-`ctrl+m` menu · `ctrl+left`/`ctrl+right` back/forward · `ctrl+f` link hints ·
-`ctrl+t`/`ctrl+shift+t` next/previous tab · `ctrl+=`/`ctrl+-`/`ctrl+0`
-zoom in/out/reset · arrows = overlay navigation.
+Every default is on Ctrl, so a page (a game) gets all plain keys:
+`ctrl+r` reload · `ctrl+b` bookmark · `ctrl+h` home · `ctrl+e` reader view ·
+`ctrl+m` menu · `ctrl+l` address · `ctrl+,` settings · `ctrl+f` link hints ·
+`ctrl+alt+g` Quick Access · `ctrl+left`/`ctrl+right` back/forward ·
+`ctrl+t`/`ctrl+w` new/close tab · `ctrl+tab`/`ctrl+shift+tab` next/previous
+tab · `ctrl+=`/`ctrl+-`/`ctrl+0` zoom in/out/reset. The arrows are bound too,
+but only as overlay navigation: with no overlay open they go to the page.
 
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
@@ -497,9 +516,9 @@ files.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
-| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[display].scale` still multiplies it. Set by the Android launcher to the display density |
+| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[interface].scale` still multiplies it. Set by the Android launcher to the display density |
 | `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
-| `RETSURF_MAX_FPS` | — | Overrides `[display].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
+| `RETSURF_MAX_FPS` | — | Overrides `[performance].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
 | `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
 | `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that hands the key over rather than spending it on a kill helper (both Miyoo packages set it) |
 | `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
@@ -525,7 +544,7 @@ and Servo's GL stacks agree) — you don't normally set it yourself.
 The chrome is drawn against a 640x480 design and zoomed to fit the panel it is
 on, so a toolbar keeps its size in thumbs rather than in pixels. A fit within a
 quarter of a whole number is rounded down to it — fractional zoom lands glyphs
-between pixels, and the spare pixels widen the page instead. `[display].scale`
+between pixels, and the spare pixels widen the page instead. `[interface].scale`
 is a factor over that fit (0.6 to 1.6), so one setting means the same thing on a
 handheld and on a desktop window. The page follows the same zoom as its device
 pixel ratio, which keeps a CSS pixel and a chrome point the same size.

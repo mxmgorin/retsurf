@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// handheld that oversubscribes the cores, with the pools competing against
 /// layout, script, and WebRender itself. `0` everywhere (the default) sizes
 /// them from the machine's core count instead.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PerformanceConfig {
     /// Memory/performance tier for the engine — JS heap ceilings, caches, and
@@ -31,6 +31,22 @@ pub struct PerformanceConfig {
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
     /// default because the writes land on the SD card. Applies at startup.
     pub http_disk_cache_mb: u32,
+    /// Frames per second the software renderer is held to (`0` uncapped,
+    /// `RETSURF_MAX_FPS` overrides); it paces the whole loop, Servo's too.
+    pub max_fps: u32,
+}
+
+impl Default for PerformanceConfig {
+    fn default() -> Self {
+        Self {
+            memory_profile: MemoryProfile::default(),
+            layout_threads: 0,
+            worker_pool_max: 0,
+            cpu_boost_on_load: false,
+            http_disk_cache_mb: 0,
+            max_fps: 30,
+        }
+    }
 }
 
 token_enum! {

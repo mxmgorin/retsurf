@@ -1,5 +1,5 @@
-//! Game Mode's slice of the chrome: the mode flag the router and keyboard
-//! read, the entry toast's wording, and the map name its menu shows.
+//! Game Mode's slice of the chrome: the screens that shrink the browser's
+//! vocabulary, the entry toast's wording, and the map name the Game Mode tab shows.
 
 use super::{drop_egui_focus, AppUi};
 use std::time::Duration;
@@ -8,30 +8,23 @@ use std::time::Duration;
 const GAME_MODE_TOAST: Duration = Duration::from_secs(4);
 
 impl AppUi {
-    #[inline]
-    pub fn game_mode(&self) -> bool {
-        self.game_mode
-    }
-
     /// Whether one of Game Mode's own screens is up. The browser's vocabulary
     /// shrinks under any of them, in or out of the mode. Visibility, not
     /// [`Focus::is_game_screen`]: it stays true with the OSK open over one.
     #[inline]
     pub fn game_screen(&self) -> bool {
-        self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()
+        self.quick_access.visible || self.input_maps.visible() || self.map_edit.visible()
     }
 
     /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
     /// Dropping egui's keyboard focus is part of it: egui is offered every key
     /// before we are, so a focused address bar would go on eating them.
     pub fn enter_game_mode(&mut self, toast: String) {
-        self.game_mode = true;
         self.toast_for(toast, GAME_MODE_TOAST);
         drop_egui_focus(&self.egui_ctx);
     }
 
     pub fn leave_game_mode(&mut self) {
-        self.game_mode = false;
         self.toast = None;
     }
 
@@ -53,7 +46,7 @@ pub fn game_mode_toast_text(pad: Option<String>, keys: &[String]) -> String {
     if !ways.is_empty() {
         text.push_str(" - ");
         text.push_str(&ways.join(" / "));
-        text.push_str(" for the menu");
+        text.push_str(" for Quick Access");
     }
     text
 }
@@ -70,16 +63,16 @@ mod tests {
         let pad = || Some("hold:start".to_string());
         assert_eq!(
             game_mode_toast_text(pad(), &keys),
-            "Game Mode - hold:start / ctrl+g for the menu"
+            "Game Mode - hold:start / ctrl+g for Quick Access"
         );
         // No pad: naming its gesture would point at a button that is not there.
         assert_eq!(
             game_mode_toast_text(None, &keys),
-            "Game Mode - ctrl+g for the menu"
+            "Game Mode - ctrl+g for Quick Access"
         );
         assert_eq!(
             game_mode_toast_text(pad(), &[]),
-            "Game Mode - hold:start for the menu"
+            "Game Mode - hold:start for Quick Access"
         );
         // Nothing to name leaves no dangling separator behind.
         assert_eq!(game_mode_toast_text(None, &[]), "Game Mode");

@@ -2,11 +2,12 @@ use crate::config::token_enum::token_enum;
 use crate::config::PadLayout;
 use serde::{Deserialize, Serialize};
 
-/// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input,
-/// plus the button bindings (see [`crate::event::bindings`]).
+/// Tunables for the gamepad-driven cursor, scroll, and on-screen-keyboard input
+/// (`[controls]` in the config). The button bindings live in their own file
+/// (see [`crate::event::bindings`]).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct InputConfig {
+pub struct ControlsConfig {
     /// Stick deflection below this (normalized 0..1) is treated as centered.
     pub deadzone: f32,
     /// Cursor speed at full stick deflection, logical px per second.
@@ -50,7 +51,7 @@ pub struct InputConfig {
     pub haptics: bool,
 }
 
-impl Default for InputConfig {
+impl Default for ControlsConfig {
     fn default() -> Self {
         Self {
             deadzone: 0.25,
@@ -72,7 +73,7 @@ impl Default for InputConfig {
     }
 }
 
-impl InputConfig {
+impl ControlsConfig {
     /// Whether the gamepad should start in scroll mode (vs the default cursor),
     /// per [`cursor_mode`](Self::cursor_mode).
     pub fn starts_in_scroll_mode(&self) -> bool {

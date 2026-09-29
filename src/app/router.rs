@@ -4,8 +4,8 @@
 //! state-agnostic and only emits intents.
 
 use super::{
-    App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand,
-    PromptAction,
+    App, AppCommand, GameInputMapsAction, GameMapEditAction, InputCommand, PromptAction,
+    QuickAccessAction,
 };
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
@@ -49,9 +49,9 @@ impl App {
                         self.menu_open_selected();
                     }
                 }
-                Focus::GameMenu => {
+                Focus::QuickAccess => {
                     if *pressed {
-                        out.push(AppCommand::GameMenu(GameMenuAction::Activate));
+                        out.push(AppCommand::QuickAccess(QuickAccessAction::Activate));
                     }
                 }
                 // A opens a map, or takes the row it is on.
@@ -83,7 +83,7 @@ impl App {
                         // selection no longer sits where the page does.
                         self.hint_press_at = None;
                     } else {
-                        let hold = Duration::from_millis(self.config.input.hold_ms);
+                        let hold = Duration::from_millis(self.config.controls.hold_ms);
                         let held_long = self
                             .hint_press_at
                             .take()
@@ -121,15 +121,19 @@ impl App {
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
                 Focus::Menu => self.ui.menu.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
-                Focus::GameMenu => self.ui.game_menu.close(),
+                Focus::QuickAccess => self.ui.quick_access.close(),
                 // B backs out one screen; the list hands the menu back.
                 Focus::GameInputMaps => {
                     out.push(AppCommand::GameInputMaps(GameInputMapsAction::Close))
                 }
                 // B saves what changed and goes back to the map it edited.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Close)),
-                // B saves the draft and closes (same as the close button).
-                Focus::Settings => self.settings_close(out),
+                // B leaves a door's screen, else saves the draft and closes.
+                Focus::Settings => {
+                    if !self.ui.settings.close_door() {
+                        self.settings_close(out);
+                    }
+                }
                 // B drops a half-typed combo first, then exits hint mode.
                 Focus::Hints => {
                     if self.ui.hints.has_typed() {
@@ -157,14 +161,14 @@ impl App {
                 // trailing "Pin settings" tile, which adds with A).
                 Focus::DialEdit => self.ui.dial_edit_remove_selected(),
                 // X is unused in settings (rows edit with A and Left/Right) and
-                // on Game Mode's menu screens (the keyboard has a row of its own).
+                // on Quick Access and Game Mode's screens (the keyboard has a row of its own).
                 Focus::Settings => {}
-                Focus::GameMenu | Focus::GameInputMaps => {}
+                Focus::QuickAccess | Focus::GameInputMaps => {}
                 // X unbinds the focused source, which is what takes its row away.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless
                 // combos are disabled, when it falls through to the OSK below).
-                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::X),
+                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::X),
                 Focus::Osk => {
                     self.osk_input(PadInput::X, out);
                 }
@@ -200,7 +204,13 @@ impl App {
                         self.ui.menu.move_sel(*dy);
                     }
                 }
-                Focus::GameMenu => self.ui.game_menu.move_sel(*dy),
+                Focus::QuickAccess => {
+                    if *dy != 0 {
+                        self.ui.quick_access.move_sel(*dy);
+                    } else if *dx != 0 {
+                        out.push(AppCommand::QuickAccess(QuickAccessAction::Adjust(*dx)));
+                    }
+                }
                 Focus::GameInputMaps => self.ui.input_maps.move_sel(*dy),
                 Focus::GameMapEdit => self.ui.map_edit.move_sel(*dy),
                 // Up/Down moves between rows, Left/Right adjusts the focused value.
@@ -219,7 +229,7 @@ impl App {
             // Discrete D-pad press: in hint mode it types a combo symbol;
             // everywhere else the D-pad already moves via the aim vector.
             InputCommand::DpadPress(dx, dy) => {
-                if focus == Focus::Hints && self.config.input.hint_badges {
+                if focus == Focus::Hints && self.config.controls.hint_badges {
                     if let Some(sym) = dpad_sym(*dx, *dy) {
                         self.hint_sym(sym);
                     }
@@ -228,7 +238,7 @@ impl App {
             // A typed letter for a keyboard-driven hint round (the keyboard handler
             // only emits it in that mode); resolve it like a gamepad combo symbol.
             InputCommand::HintKey(c) => {
-                if focus == Focus::Hints && self.config.input.hint_badges {
+                if focus == Focus::Hints && self.config.controls.hint_badges {
                     self.hint_key(*c);
                 }
             }
@@ -240,10 +250,10 @@ impl App {
                     self.osk_input(PadInput::Y, out);
                 }
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
-                Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
-                Focus::Hints if self.config.input.hint_badges => self.hint_sym(Sym::Y),
+                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::Y),
                 Focus::Hints => self.ui.hints.hide(),
                 Focus::Page => {
                     self.ui.hints_begin_collect();
@@ -261,13 +271,13 @@ impl App {
                     Focus::Settings => self.ui.settings.switch_section(*delta),
                     // No sections to switch here — and page navigation under one of
                     // Game Mode's screens would leave the game.
-                    Focus::GameMenu | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                    Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                     // In the dial editor they reorder the focused pin (Left/Right
                     // moves the selection there).
                     Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
                     // In hint mode L1/R1 are combo symbols; with combos off they fall
                     // through to the page back/forward below.
-                    Focus::Hints if self.config.input.hint_badges => {
+                    Focus::Hints if self.config.controls.hint_badges => {
                         self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                     }
                     Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
@@ -447,7 +457,7 @@ impl App {
         let dt = if dt > 0.1 { 0.0 } else { dt.min(0.05) };
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
-        let cfg = &self.config.input;
+        let cfg = &self.config.controls;
         let (cursor_speed, scroll_speed, nav_threshold, hint_badges, edge_scroll) = (
             cfg.cursor_speed,
             cfg.scroll_speed,
@@ -521,7 +531,7 @@ impl App {
                 aim.1 * cursor_speed * dt,
                 &self.window,
             );
-            if edge_scroll && !self.ui.game_mode() {
+            if edge_scroll && !self.browser.in_game_mode() {
                 self.edge_scroll(aim, clipped, scroll_speed * dt);
             }
             // Only hover the page while the cursor is over it; over the toolbar
@@ -567,7 +577,7 @@ impl App {
     /// Auto-repeat gate for held-stick overlay navigation: latches the direction
     /// and paces repeats, returning `true` on the frames a step should fire.
     fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
-        let cfg = &self.config.input;
+        let cfg = &self.config.controls;
         if dir != self.osk_nav_dir {
             self.osk_nav_dir = dir;
             if dir != (0, 0) {

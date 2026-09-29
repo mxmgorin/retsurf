@@ -15,26 +15,19 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 
 > **Work in progress.** Early development — expect bugs.
 
-## Demos
-
-| Powkiddy RGB30 | Miyoo Mini Flip |
-|:---:|:---:|
-| <img src="resources/images/retsurf-demo-rgb30.webp" alt="retsurf held in both hands on a Powkiddy RGB30, scrolling an image-heavy news site" height="250"> | <img src="resources/images/retsurf-demo-miyoo-mini-flip.webp" alt="retsurf on a Miyoo Mini Flip, scrolling servo.org with the D-pad" height="250"> |
-| <sub>OpenGL ES</sub> | <sub>`software` build, no GPU</sub> |
-
 ## Screenshots
 
 | Start page | Browsing | Link hints | Keyboard |
 |:---:|:---:|:---:|:---:|
 | ![The built-in start page: the retsurf banner over a search field and a speed-dial grid of pinned sites, tinted after their site icons](resources/images/retsurf-start-page.png) | ![Hacker News rendered by Servo in its mobile layout, the toolbar above it](resources/images/retsurf-page.png) | ![Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it](resources/images/retsurf-hints.png) | ![The on-screen keyboard raised under the start page's search field, which shows what has been typed](resources/images/retsurf-keyboard.png) |
 
-| Tabs | Downloads | Reader mode | Settings |
+| Quick Access | Quick Menu | Reader view | Settings |
 |:---:|:---:|:---:|:---:|
-| ![The menu's Tabs section: open tabs by site icon and title, each with a bookmark and close button](resources/images/retsurf-tabs.png) | ![The Downloads section: one file downloading with percentage and size, one finished](resources/images/retsurf-downloads.png) | ![A Wikipedia article stripped to its text by reader mode](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
+| ![Quick Access at the right edge over Hacker News: enter game mode, enter reader view, bookmark, page theme](resources/images/retsurf-quick-access.png) | ![Quick Menu at the left edge: home, tabs, bookmarks, history, downloads, settings and quit](resources/images/retsurf-quick-menu.png) | ![A Wikipedia article stripped to its text by reader view](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
 
 | Game mode | Input map | Controls | Forced dark |
 |:---:|:---:|:---:|:---:|
-| ![The Game mode menu over the WebGL racer HexGL mid-race, the browser chrome hidden: back to game, the input map in use, the on-screen keyboard and exit](resources/images/retsurf-game-mode.png) | ![The input map editor: each stick direction and gamepad button with the key or mouse action it sends to the game](resources/images/retsurf-input-map.png) | ![The settings Controls tab: each browser action with its gamepad and keyboard gestures](resources/images/retsurf-controls.png) | ![Lobsters, a light site with no dark theme, inverted by forced dark](resources/images/retsurf-forced-dark.png) |
+| ![Quick Access over the WebGL racer HexGL mid-race, the browser chrome hidden: view, the input map in use, the on-screen keyboard and exit](resources/images/retsurf-game-mode.png) | ![The input map editor: each stick direction and gamepad button with the key or mouse action it sends to the game](resources/images/retsurf-input-map.png) | ![The button bindings: each browser action with its gamepad and keyboard gestures](resources/images/retsurf-controls.png) | ![Lobsters, a light site with no dark theme, inverted by forced dark](resources/images/retsurf-forced-dark.png) |
 
 ## Features
 
@@ -56,7 +49,7 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 - **Real page zoom**<br>
   Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
 
-- **Reader mode**<br>
+- **Reader view**<br>
   Strips pages down to their articles using Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so it also works with logged-in and dynamically rendered pages.
 
 - **Dark web pages**<br>
@@ -124,7 +117,7 @@ If you find the project useful, here is how you can help:
   [Phosphor](https://phosphoricons.com/)
 - Blocking by Brave's [adblock-rust](https://github.com/brave/adblock-rust), over
   [EasyList](https://easylist.to/) and EasyPrivacy
-- Reader mode by Mozilla's [Readability](https://github.com/mozilla/readability)
+- Reader view by Mozilla's [Readability](https://github.com/mozilla/readability)
 - Media by [Symphonia](https://github.com/pdeljanov/Symphonia) and
   [openh264](https://github.com/ralfbiedert/openh264-rs) over Cisco's codec
 - TLS by [rustls](https://github.com/rustls/rustls)

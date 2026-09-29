@@ -193,6 +193,16 @@ fn url_tail(url: &str) -> &str {
     }
 }
 
+/// A lists-menu tab's icon, the same as the Quick Menu row that opens it.
+fn section_icon(section: Section) -> &'static str {
+    match section {
+        Section::Tabs => bold::TABS,
+        Section::Bookmarks => bold::BOOKMARKS,
+        Section::History => bold::CLOCK_COUNTER_CLOCKWISE,
+        Section::Downloads => bold::DOWNLOAD_SIMPLE,
+    }
+}
+
 /// Draw the menu overlay: the section bar over the active section's list, plus a
 /// one-line control hint. Left/Right switch section, Up/Down move, A open,
 /// X delete, B close.
@@ -210,9 +220,10 @@ pub(super) fn add_menu(
         let clicked = panel::section_bar(
             ui,
             screen,
-            Section::ALL,
+            &Section::ALL,
             menu.section(),
             Section::label,
+            section_icon,
             // Both clear actions are the top row of their list, not a bar button:
             // a gamepad can reach a row.
             |_| {},

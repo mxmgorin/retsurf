@@ -13,7 +13,7 @@ use crate::data::history::History;
 use crate::data::page_icons;
 use std::collections::HashSet;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Section {
     Tabs,
     Bookmarks,

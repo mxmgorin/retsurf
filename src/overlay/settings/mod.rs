@@ -6,9 +6,10 @@
 //!
 //! Controls mirror the menu but free up dpad for editing: L1/R1 (shoulders) switch
 //! section, up/down move between rows, left adjust the focused value, A edits, B saves
-//! and closes — all reachable without an analog stick. The Controls section is
-//! the exception: an action list where A *adds* a binding (press the button or
-//! key you want — see [`Settings::controls_activate`]) or removes one.
+//! and closes — all reachable without an analog stick. The binding list, behind
+//! the Controls tab's door row, is the exception: an action list where A *adds* a
+//! binding (press the button or key you want — see
+//! [`Settings::controls_activate`]) or removes one; B goes back to the tab.
 //! [`crate::ui::settings`] renders it.
 //!
 //! The pieces live in submodules: [`fields`] (the static config-field table and
@@ -21,7 +22,7 @@ mod fields;
 
 pub use about::about_info;
 pub use controls::RESET_ROWS;
-pub use fields::{Field, Kind, Task};
+pub use fields::{step, value_of, Door, Field, Kind, Task};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, GROUPS, SURFACES};
@@ -34,17 +35,18 @@ use inputbind::Store;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     Browser,
-    Display,
-    Input,
-    /// Rebinding: a list of actions, each showing its gamepad + keyboard bindings,
-    /// with add (capture) / remove. Built dynamically, not from [`fields::FIELDS`] —
-    /// see [`Settings::controls_rows`].
+    /// The browser's own chrome (`[interface]`).
+    Interface,
+    /// The input tunables, and a door to the binding list.
     Controls,
+    /// Game Mode's settings (`[game_mode]`).
+    GameMode,
     /// History recording, the ad blocker, and data-saving content blocking,
     /// presented under one tab — they remain separate config sections
     /// (`[history]`, `[adblock]`, `[data_saving]`), shown here as sub-groups.
     Content,
-    Advanced,
+    /// The engine and the app itself.
+    System,
     /// Read-only "about this build" tab — no editable fields; see [`about_info`].
     About,
 }
@@ -53,22 +55,22 @@ impl SettingsSection {
     /// Left-to-right order of the section bar.
     pub const ALL: [SettingsSection; 7] = [
         SettingsSection::Browser,
-        SettingsSection::Display,
-        SettingsSection::Input,
+        SettingsSection::GameMode,
+        SettingsSection::Interface,
         SettingsSection::Controls,
         SettingsSection::Content,
-        SettingsSection::Advanced,
+        SettingsSection::System,
         SettingsSection::About,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             SettingsSection::Browser => "Browser",
-            SettingsSection::Display => "Display",
-            SettingsSection::Input => "Input",
+            SettingsSection::Interface => "Interface",
             SettingsSection::Controls => "Controls",
+            SettingsSection::GameMode => "Game Mode",
             SettingsSection::Content => "Content",
-            SettingsSection::Advanced => "Advanced",
+            SettingsSection::System => "System",
             SettingsSection::About => "About",
         }
     }
@@ -97,11 +99,13 @@ struct Draft {
     config: AppConfig,
     /// The active section (one tab of the bar).
     section: SettingsSection,
-    /// Focused row, in the space its section owns (see [`Sel`]). The Controls
-    /// section keeps its own cursor inside [`Self::controls`], which spans the
+    /// Focused row, in the space its section owns (see [`Sel`]). The binding
+    /// list keeps its own cursor inside [`Self::controls`], which spans the
     /// reset rows after the editor's own.
     selected: Sel,
-    /// The bindings being edited (the Controls section), a clone of the on-disk
+    /// The Controls tab's binding list is up in place of its fields.
+    bindings_open: bool,
+    /// The bindings being edited (the binding list), a clone of the on-disk
     /// store taken on [`Settings::open`]. Kept independent of `config` so a
     /// config-only edit never rewrites `bindings.toml` and vice versa.
     bindings: Store,
@@ -112,23 +116,16 @@ struct Draft {
     /// The action row awaiting its confirming second press, as a
     /// [`fields::FIELDS`] index. Any move or section change disarms it.
     armed: Option<usize>,
-    /// The Controls section's rows and its pending capture (see [`controls`]).
+    /// The binding list's rows and its pending capture (see [`controls`]).
     controls: Controls<Action>,
     /// Why the last binding edit was refused; cleared by the next one.
     controls_note: Option<String>,
 }
 
 impl Draft {
-    /// Whether the active section is a config field list (not Controls or About).
+    /// Whether a config field list is up (not the binding list or About).
     fn is_field_section(&self) -> bool {
-        !matches!(
-            self.section,
-            SettingsSection::Controls | SettingsSection::About
-        )
-    }
-
-    fn is_controls_section(&self) -> bool {
-        matches!(self.section, SettingsSection::Controls)
+        !self.bindings_open && self.section != SettingsSection::About
     }
 
     fn is_info_section(&self) -> bool {
@@ -139,10 +136,7 @@ impl Draft {
     fn set_section(&mut self, section: SettingsSection) {
         self.section = section;
         self.armed = None;
-        if section == SettingsSection::Controls {
-            self.controls.focus_first();
-            return;
-        }
+        self.bindings_open = false;
         if section == SettingsSection::About {
             self.selected = Sel::About(0);
             return;
@@ -183,7 +177,7 @@ impl Settings {
     }
 
     /// All config field descriptors, in display order (the renderer filters by
-    /// section; the Controls section is built separately).
+    /// section; the binding list is built separately).
     pub fn fields() -> &'static [Field] {
         fields::FIELDS
     }
@@ -211,6 +205,7 @@ impl Settings {
             config: config.clone(),
             section: SettingsSection::Browser,
             selected: Sel::Field(0),
+            bindings_open: false,
             bindings_orig: bindings.clone(),
             bindings,
             armed: None,
@@ -245,7 +240,7 @@ impl Settings {
         let Some(draft) = self.draft() else {
             return 0;
         };
-        if draft.is_controls_section() {
+        if draft.bindings_open {
             return draft.controls.cursor();
         }
         match draft.selected {
@@ -260,10 +255,50 @@ impl Settings {
             .map_or(SettingsSection::Browser, |draft| draft.section)
     }
 
-    /// Whether the active section is the dynamic Controls list (driven by
-    /// [`Self::controls_rows`] / [`Self::controls_activate`] rather than [`fields::FIELDS`]).
-    pub fn is_controls_section(&self) -> bool {
-        self.draft().is_some_and(Draft::is_controls_section)
+    /// Whether the binding list is up in place of the Controls tab's fields.
+    pub fn bindings_open(&self) -> bool {
+        self.draft().is_some_and(|draft| draft.bindings_open)
+    }
+
+    /// A on a door row: its door, opened here when this screen owns it;
+    /// `None` when the focused row is none.
+    pub fn open_door(&mut self) -> Option<Door> {
+        let draft = self.draft_mut()?;
+        let Sel::Field(i) = draft.selected else {
+            return None;
+        };
+        if !draft.is_field_section() {
+            return None;
+        }
+        let Kind::Door { door } = fields::FIELDS[i].kind else {
+            return None;
+        };
+        if door == Door::Bindings {
+            draft.bindings_open = true;
+            draft.controls.focus_first();
+        }
+        Some(door)
+    }
+
+    /// Adopt a map chosen on the input-map screens while this is open, so the
+    /// close does not put the old one back.
+    pub fn adopt_input_map(&mut self, id: &str) {
+        if let Some(draft) = self.draft_mut() {
+            draft.config.game_mode.input_map = id.to_string();
+        }
+    }
+
+    /// B inside a door's screen goes back to its row; `false` when none is up.
+    pub fn close_door(&mut self) -> bool {
+        let Some(draft) = self.draft_mut() else {
+            return false;
+        };
+        if !draft.bindings_open {
+            return false;
+        }
+        draft.bindings_open = false;
+        draft.controls_note = None;
+        true
     }
 
     /// Whether the active section is the read-only [`SettingsSection::About`] page.
@@ -271,7 +306,7 @@ impl Settings {
         self.draft().is_some_and(Draft::is_info_section)
     }
 
-    /// Focus a row directly. In the Controls section `i` indexes
+    /// Focus a row directly. In the binding list `i` indexes
     /// [`Self::controls_rows`]; otherwise it's a [`fields::FIELDS`] index (and syncs
     /// the active section to it).
     pub fn set_selected(&mut self, i: usize) {
@@ -281,7 +316,7 @@ impl Settings {
         if draft.armed != Some(i) {
             draft.armed = None;
         }
-        if draft.is_controls_section() {
+        if draft.bindings_open {
             draft.controls.set_cursor(i);
         } else if let Some(field) = fields::FIELDS.get(i) {
             draft.section = field.section;
@@ -307,7 +342,7 @@ impl Settings {
     }
 
     /// Move the focus by `dy` rows within the active section (clamped, no wrap),
-    /// skipping the Controls section's non-selectable headers. `update_rows` is the
+    /// skipping the binding list's non-selectable headers. `update_rows` is the
     /// About tab's live update-block row count (ignored in other sections).
     pub fn move_sel(&mut self, dy: i32, update_rows: usize) {
         let Some(draft) = self.draft_mut() else {
@@ -324,7 +359,7 @@ impl Settings {
             draft.selected = Sel::About(to);
             return;
         }
-        if draft.is_controls_section() {
+        if draft.bindings_open {
             draft.controls.move_cursor(dy);
             return;
         }
@@ -420,7 +455,7 @@ impl Settings {
 
     /// Adjust the focused config field by `dx` (-1 left, +1 right): toggle a bool,
     /// cycle a choice, or step a number within its bounds. No-op outside config
-    /// sections (Controls edits on activate; About is read-only).
+    /// field lists (the binding list edits on activate; About is read-only).
     pub fn adjust(&mut self, dx: i32) {
         let Some(draft) = self.draft_mut() else {
             return;
@@ -431,43 +466,7 @@ impl Settings {
         if !draft.is_field_section() {
             return;
         }
-        let config = &mut draft.config;
-        match &fields::FIELDS[i].kind {
-            Kind::Text { .. } | Kind::Action { .. } => {}
-            Kind::Bool { get, set } => {
-                let v = !get(config);
-                set(config, v);
-            }
-            Kind::Choice { opts, get, set } => {
-                let cur = get(config);
-                let n = opts.len() as i32;
-                let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
-                let next = (idx + dx).rem_euclid(n) as usize;
-                set(config, opts[next].1);
-            }
-            Kind::Int {
-                min,
-                max,
-                step,
-                get,
-                set,
-                ..
-            } => {
-                let v = (get(config) + dx as i64 * step).clamp(*min, *max);
-                set(config, v);
-            }
-            Kind::Float {
-                min,
-                max,
-                step,
-                get,
-                set,
-                ..
-            } => {
-                let v = (get(config) + dx as f64 * step).clamp(*min, *max);
-                set(config, v);
-            }
-        }
+        step(&fields::FIELDS[i].kind, &mut draft.config, dx);
     }
 
     /// The display string for config row `i`'s current value; empty while the
@@ -476,40 +475,9 @@ impl Settings {
         let Some(draft) = self.draft() else {
             return String::new();
         };
-        let config = &draft.config;
         match &fields::FIELDS[i].kind {
-            Kind::Action { task } => if draft.armed == Some(i) {
-                "press again to confirm"
-            } else {
-                task.verb()
-            }
-            .to_string(),
-            Kind::Bool { get, .. } => if get(config) { "On" } else { "Off" }.to_string(),
-            Kind::Text { get, .. } => {
-                let t = get(config);
-                if t.is_empty() {
-                    "(default)".to_string()
-                } else {
-                    t
-                }
-            }
-            Kind::Choice { opts, get, .. } => {
-                let cur = get(config);
-                opts.iter()
-                    .find(|(_, v)| *v == cur)
-                    .map(|(label, _)| label.to_string())
-                    .unwrap_or(cur)
-            }
-            Kind::Int { zero, get, .. } => {
-                let v = get(config);
-                match zero {
-                    Some(label) if v == 0 => label.to_string(),
-                    _ => format!("{v}"),
-                }
-            }
-            Kind::Float { decimals, get, .. } => {
-                format!("{:.*}", decimals, get(config))
-            }
+            Kind::Action { .. } if draft.armed == Some(i) => "press again to confirm".to_string(),
+            kind => value_of(kind, &draft.config),
         }
     }
 }
@@ -579,8 +547,8 @@ mod tests {
     fn restore_defaults_resets_the_drafts() {
         let mut cfg = AppConfig::default();
         cfg.browser.home_page = "https://example.org/".to_string();
-        cfg.display.scale = 1.45;
-        cfg.input.hint_badges = !cfg.input.hint_badges;
+        cfg.interface.scale = 1.45;
+        cfg.controls.hint_badges = !cfg.controls.hint_badges;
 
         let row = row_of(Task::RestoreDefaults);
         let mut settings = Settings::new();
@@ -601,9 +569,61 @@ mod tests {
         let defaults = AppConfig::default();
         let draft = settings.draft().expect("still open");
         assert_eq!(draft.config.browser.home_page, defaults.browser.home_page);
-        assert_eq!(draft.config.display.scale, defaults.display.scale);
-        assert_eq!(draft.config.input.hint_badges, defaults.input.hint_badges);
+        assert_eq!(draft.config.interface.scale, defaults.interface.scale);
+        assert_eq!(
+            draft.config.controls.hint_badges,
+            defaults.controls.hint_badges
+        );
         assert_eq!(draft.bindings, bindings::default_store());
+    }
+
+    /// The binding list opens from its row on the Controls tab and B lands back
+    /// on that row; switching tabs also leaves it.
+    #[test]
+    fn the_binding_list_is_a_door_on_the_controls_tab() {
+        let door = fields::FIELDS
+            .iter()
+            .position(|f| {
+                matches!(
+                    f.kind,
+                    Kind::Door {
+                        door: Door::Bindings
+                    }
+                )
+            })
+            .expect("FIELDS lists the binding list's door");
+        assert!(fields::FIELDS[door].section == SettingsSection::Controls);
+
+        let mut settings = Settings::new();
+        settings.open(&AppConfig::default());
+        settings.set_selected(door);
+        assert_eq!(settings.open_door(), Some(Door::Bindings));
+        assert!(settings.bindings_open());
+        assert_eq!(
+            settings.open_door(),
+            None,
+            "a door opens from a field list only"
+        );
+
+        assert!(settings.close_door());
+        assert!(!settings.bindings_open());
+        assert_eq!(settings.selected(), door);
+        assert!(!settings.close_door(), "B past the tab closes the overlay");
+
+        settings.set_selected(door);
+        settings.open_door();
+        settings.switch_section(1);
+        assert!(!settings.bindings_open());
+    }
+
+    /// A map chosen on the input-map screens meanwhile survives the close.
+    #[test]
+    fn a_map_chosen_meanwhile_survives_the_close() {
+        let mut settings = Settings::new();
+        settings.open(&AppConfig::default());
+        settings.adopt_input_map("wasd");
+        let (config, _) = settings.close().expect("it was open");
+        assert_eq!(config.game_mode.input_map, "wasd");
     }
 
     /// Moving off the armed row cancels it — otherwise a stray A elsewhere in

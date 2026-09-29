@@ -1,4 +1,4 @@
-//! The Controls section: [`inputbind::editor::Controls`] over the bindings draft,
+//! The binding list: [`inputbind::editor::Controls`] over the bindings draft,
 //! plus the two rows restoring a table's defaults, which the editor leaves to the
 //! host. An edit that would leave the pad unable to operate the app is refused
 //! with a note — see [`bindings::REQUIRED`].

@@ -10,7 +10,7 @@
 //! `scroll_mode`, which turns the aim vector into page scrolling.
 
 use crate::command::{AppCommand, InputCommand};
-use crate::config::InputConfig;
+use crate::config::ControlsConfig;
 use crate::event::bindings::Action;
 use inputbind::sdl::{axis_value, pad_of, trigger_of};
 use inputbind::{Bindings, Cadence, Edge, Pad, PadState, Stick, Trigger};
@@ -25,7 +25,7 @@ pub struct Gamepad {
     /// Digital -1/0/1, merged with the left stick into the aim vector.
     dpad: (f32, f32),
     /// Tunables (dead zones, trigger threshold, hold) from the config file.
-    pub cfg: InputConfig,
+    pub cfg: ControlsConfig,
     pads: PadState<Action>,
     left_trigger: Trigger,
     right_trigger: Trigger,
@@ -37,7 +37,7 @@ pub struct Gamepad {
 }
 
 impl Gamepad {
-    pub fn new(cfg: InputConfig) -> Self {
+    pub fn new(cfg: ControlsConfig) -> Self {
         Self {
             left: Stick::new(cfg.deadzone),
             right: Stick::new(cfg.deadzone),
@@ -52,7 +52,7 @@ impl Gamepad {
     }
 
     /// Retuned in place, so a live edit cannot drop a gesture in flight.
-    pub fn set_config(&mut self, cfg: InputConfig) {
+    pub fn set_config(&mut self, cfg: ControlsConfig) {
         self.pads.set_timing(hold_of(&cfg), cadence_of(&cfg));
         self.left.set_deadzone(cfg.deadzone);
         self.right.set_deadzone(cfg.deadzone);
@@ -213,11 +213,11 @@ pub fn labelled_pad(button: Button, swap: bool) -> Option<Pad> {
     })
 }
 
-fn hold_of(cfg: &InputConfig) -> Duration {
+fn hold_of(cfg: &ControlsConfig) -> Duration {
     Duration::from_millis(cfg.hold_ms)
 }
 
-fn cadence_of(cfg: &InputConfig) -> Cadence {
+fn cadence_of(cfg: &ControlsConfig) -> Cadence {
     Cadence {
         initial_delay: Duration::from_millis(cfg.osk_nav_initial_delay_ms),
         interval: Duration::from_millis(cfg.osk_nav_repeat_ms),

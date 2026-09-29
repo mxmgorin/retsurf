@@ -229,6 +229,9 @@ pub struct InputMap {
     /// Whether `input_maps/<id>.toml` is there — what deleting removes, and the
     /// only thing a built-in has to delete.
     pub file: bool,
+    /// No map at all ([`store::NO_MAP`]): there is nothing to edit, rename,
+    /// copy or delete, only to use.
+    pub fixed: bool,
     pad: Vec<Option<Target>>,
     /// Left, then right.
     sticks: [StickRole; 2],
@@ -381,6 +384,13 @@ impl InputMap {
         };
         InputMap::resolve(id, raw, keys)
     }
+
+    /// No map: the pad and the keyboard reach the page as they are.
+    pub fn none(keys: &KeyNames) -> InputMap {
+        let mut map = InputMap::passthrough(store::NO_MAP, "None".to_string(), keys);
+        map.fixed = true;
+        map
+    }
 }
 
 #[cfg(test)]
@@ -398,6 +408,23 @@ mod tests {
     /// The built-ins ship in the binary, so a typo in one is a startup panic —
     /// it has to fail here instead. Each keeps the pointer path or binds
     /// nothing at all: `pad` is raw so a game reads the sticks itself.
+    #[test]
+    fn a_missing_map_is_no_map() {
+        let keys = test_key_names();
+        let built_ins = BUILT_IN
+            .iter()
+            .map(|(id, text)| InputMap::resolve(id, parse_built_in(id, text), keys));
+        let mut maps = vec![InputMap::none(keys)];
+        maps.extend(built_ins);
+        assert!(maps[0].fixed && maps[0].name == "None");
+        assert_eq!(pick(&maps, "keys").id, "keys");
+        // A map that is not there, the old built-in `pad` among them, is none.
+        assert_eq!(pick(&maps, "pad").id, "none");
+        // A file under that id is a map of the user's, and wins.
+        maps.push(InputMap::passthrough("pad", "Mine".to_string(), keys));
+        assert_eq!(pick(&maps, "pad").name, "Mine");
+    }
+
     #[test]
     fn every_built_in_keeps_the_pointer_or_is_fully_raw() {
         let keys = test_key_names();

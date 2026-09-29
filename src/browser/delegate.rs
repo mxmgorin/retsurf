@@ -4,7 +4,7 @@
 //! ad-block hook over every resource load (see [`crate::browser::adblock`]). New
 //! delegate hooks (favicons, dialogs, notifications, …) belong in this file.
 
-use super::{AppBrowserInner, BrowserState, Favicon, Tab};
+use super::{AppBrowserInner, BrowserState, Favicon, Tab, TabMode};
 use crate::event::user::UserEvent;
 use content_security_policy::Destination;
 use servo::WebView;
@@ -177,6 +177,11 @@ impl servo::WebViewDelegate for AppBrowserInner {
             parent_webview.gamepad_delegate(),
         );
 
+        // A game's popup stays in the game; a reader view is the opener's own.
+        let mode = match self.tab_index(parent_webview.id()) {
+            Some(i) if self.tabs.borrow()[i].state.mode == TabMode::Game => TabMode::Game,
+            _ => TabMode::Page,
+        };
         // Dropping a `WebView` closes it in Servo, so the tab it replaces goes
         // with it rather than lingering behind the cap.
         if replaces {
@@ -184,7 +189,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
         self.adopt_tab(Tab {
             webview,
-            state: BrowserState::default(),
+            state: BrowserState {
+                mode,
+                ..BrowserState::default()
+            },
             page_images: RefCell::default(),
             favicon: None,
         });
@@ -222,6 +230,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
                 let tab = &mut self.tabs.borrow_mut()[i];
                 tab.page_images.get_mut().clear();
                 tab.favicon = None;
+                if tab.state.mode == TabMode::Reader {
+                    tab.state.mode = TabMode::Page;
+                }
             } else if is_subresource && !block && req.destination == Destination::Image {
                 if let Some(cap) = filter.image_cap() {
                     if !self.tabs.borrow()[i].page_images.borrow_mut().allow(

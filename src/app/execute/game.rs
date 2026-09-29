@@ -1,15 +1,20 @@
-//! Game Mode's slice of command dispatch: the mode itself, its menu, the map
-//! screens and the map editor — the controller over [`crate::event::game`] and
-//! [`crate::overlay::game`]. Split from the dispatcher for size alone.
+//! Game Mode's slice of command dispatch: the mode itself, Quick Access, the map
+//! screens and the map editor — the controller over [`crate::event::game`],
+//! [`crate::overlay::quick_access`] and [`crate::overlay::game`]. Split from the
+//! dispatcher for size alone.
 
-use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction};
+use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, QuickAccessAction};
+use crate::browser::TabMode;
+use crate::config::Scaling;
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
 use crate::event::game::GameMode;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
-use crate::overlay::game::menu::GameRow;
+use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
+use crate::overlay::quick_access::{Entry, Strip};
+use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
 /// What a stick's row reads as once it is four directions.
@@ -22,20 +27,70 @@ impl App {
             .game_mut(&self.config.game_mode.input_map)
     }
 
-    /// The Game Mode gesture: the menu, always. One gesture means one screen in
-    /// either state, entering and leaving are its one row, and the map can
-    /// be set before a game rather than only under a running one.
-    pub(super) fn game_mode_gesture(&mut self) {
-        match self.ui.game_menu.visible {
-            true => self.ui.game_menu.close(),
-            false => {
-                // Read here rather than at startup: this is the first screen
-                // that names the live map, and loading one is what it costs.
-                let (_, name) = self.game_mode().live();
-                self.ui.set_input_map_name(name);
-                self.ui.game_menu.open(self.ui.game_mode());
-            }
+    /// Open `strip`, or close it when it is up; with the other strip up, swap.
+    fn toggle_strip(&mut self, strip: Strip) {
+        let panel = &mut self.ui.quick_access;
+        if panel.visible && panel.strip() == strip {
+            panel.close();
+            return;
         }
+        // The lists are what Quick Menu opens, so its gesture also closes them.
+        if strip == Strip::QuickMenu && self.ui.menu.visible {
+            self.ui.menu.close();
+            return;
+        }
+        self.ui
+            .quick_access
+            .open(strip, self.browser.mode(), &self.config);
+        let url = self.browser.state().page_url().to_string();
+        let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
+            true => "Saved",
+            false => "",
+        };
+        let tabs = self.browser.tab_count().to_string();
+        let panel = &mut self.ui.quick_access;
+        panel.set_value(Entry::Run(Action::Bookmark), saved.to_string());
+        panel.set_value(Entry::List(Section::Tabs), tabs);
+        if self.browser.in_game_mode() {
+            let (_, name) = self.game_mode().live();
+            self.ui.quick_access.set_value(Entry::InputMap, name);
+        }
+    }
+
+    /// Switch to the map `dx` places along the list, wrapping at the ends, and
+    /// run it at once, as the map screens' Use does.
+    fn step_input_map(&mut self, dx: i32, out: &mut Vec<AppCommand>) {
+        let (live, _) = self.game_mode().live();
+        let ids: Vec<String> = self
+            .game_mode()
+            .maps
+            .all()
+            .iter()
+            .map(|m| m.id.clone())
+            .collect();
+        let at = ids.iter().position(|id| *id == live).unwrap_or(0);
+        let next = ids[crate::list::wrap(at, dx, ids.len())].clone();
+        self.use_input_map(&next, out);
+        let (_, name) = self.game_mode().live();
+        self.ui.quick_access.set_value(Entry::InputMap, name);
+    }
+
+    /// Open the settings screen, on `section` when given. Reads the live map's
+    /// name for the Game Mode tab, which loads the maps.
+    pub(super) fn open_settings(&mut self, section: Option<SettingsSection>) {
+        let (_, name) = self.game_mode().live();
+        self.ui.set_input_map_name(name);
+        self.ui.settings_open(&self.config);
+        if let Some(section) = section {
+            self.ui.settings.set_section(section);
+        }
+    }
+
+    /// The input-map screens, over whatever opened them; B at their top closes
+    /// them back onto it.
+    pub(super) fn open_input_maps(&mut self) {
+        self.refresh_input_maps();
+        self.ui.input_maps.open();
     }
 
     /// Enter Game Mode, closing whatever overlay is up: the point is that the
@@ -48,9 +103,12 @@ impl App {
         // gestures named have to be the ones the tables actually hold.
         let toast = crate::ui::game_mode_toast_text(
             self.event_handler.game_exit_text(),
-            &bindings::key_gestures(Action::GameMode),
+            &bindings::key_gestures(Action::QuickAccess),
         );
+        self.browser.set_mode(TabMode::Game);
         self.ui.enter_game_mode(toast);
+        self.browser
+            .set_game_scaling(self.config.game_mode.view.scaling);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
         self.ui.menu.close();
         self.ui.hints.hide();
@@ -60,51 +118,91 @@ impl App {
         log::info!("game mode: true");
     }
 
-    /// Leave it (the menu's Exit row), taking the menu with it.
+    /// Leave it (Quick Access's Exit row), closing the panel.
     fn leave_game_mode(&mut self) {
         self.ui.leave_game_mode();
-        self.ui.game_menu.close();
+        self.browser.set_mode(TabMode::Page);
+        self.ui.quick_access.close();
+        self.browser.set_game_scaling(Scaling::Off);
         // A pad the map asked for exists only while the map runs.
         self.browser.drop_mapped_pad();
         log::info!("game mode: false");
     }
 
-    /// Apply an action on Game Mode's menu (see [`crate::overlay::game::menu`]).
-    /// It is the only screen reachable while the mode is on, so every row either
-    /// returns to the game or leaves the mode.
-    pub(super) fn game_menu_action(&mut self, action: &GameMenuAction, out: &mut Vec<AppCommand>) {
+    /// Apply an action on Quick Access (see [`crate::overlay::quick_access`]).
+    pub(super) fn quick_access_action(
+        &mut self,
+        action: &QuickAccessAction,
+        out: &mut Vec<AppCommand>,
+    ) {
         match action {
-            GameMenuAction::Activate => self.game_menu_activate(out),
-            GameMenuAction::Click(index) => {
-                self.ui.game_menu.select(*index);
-                self.game_menu_activate(out);
+            QuickAccessAction::Toggle(strip) => self.toggle_strip(*strip),
+            QuickAccessAction::Activate => self.quick_access_activate(out),
+            // Only a quick row steps; the rest act on A alone.
+            QuickAccessAction::Adjust(dx) => match self.ui.quick_access.row() {
+                Entry::Quick(field) => self.step_quick(field, *dx, out),
+                Entry::InputMap => self.step_input_map(*dx, out),
+                _ => {}
+            },
+            QuickAccessAction::Click(index) => {
+                self.ui.quick_access.select(*index);
+                self.quick_access_activate(out);
             }
         }
     }
 
-    /// A / Enter on the focused Game Mode row.
-    fn game_menu_activate(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.game_menu.row() {
-            GameRow::Back => self.ui.game_menu.close(),
-            // The maps are their own screens; the menu is what B returns to.
-            GameRow::InputMap => {
-                self.ui.game_menu.close();
-                self.refresh_input_maps();
-                self.ui.input_maps.open();
+    /// A / Enter on the focused Quick Access row.
+    fn quick_access_activate(&mut self, out: &mut Vec<AppCommand>) {
+        match self.ui.quick_access.row() {
+            Entry::Quick(field) => self.step_quick(field, 1, out),
+            Entry::InputMap => {
+                self.ui.quick_access.close();
+                self.open_input_maps();
             }
-            // The keyboard types into the page and outranks this menu, so close
+            // The keyboard types into the page and outranks this panel, so close
             // it first — the two would fight over the pad otherwise.
-            GameRow::Osk => {
-                self.ui.game_menu.close();
+            Entry::Osk => {
+                self.ui.quick_access.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
             }
-            // The menu is the only way in and the only way out.
-            GameRow::Enter => {
-                self.ui.game_menu.close();
+            // As its gesture would, once the panel is out of the way.
+            Entry::Run(action) => {
+                self.ui.quick_access.close();
+                out.extend(action.command(true));
+            }
+            Entry::List(section) => {
+                self.ui.quick_access.close();
+                self.ui.menu_open();
+                self.ui.menu.set_section(section);
+            }
+            Entry::Quit => {
+                if self.ui.quick_access.confirm_quit() {
+                    out.push(AppCommand::Shutdown);
+                }
+            }
+            Entry::Settings => {
+                self.ui.quick_access.close();
+                let section = self
+                    .browser
+                    .in_game_mode()
+                    .then_some(SettingsSection::GameMode);
+                self.open_settings(section);
+            }
+            Entry::Enter => {
+                self.ui.quick_access.close();
                 self.enter_game_mode(out);
             }
-            GameRow::Exit => self.leave_game_mode(),
+            Entry::Exit => self.leave_game_mode(),
         }
+    }
+
+    /// Step a quick row's field by `dx` and apply it at once, the way the settings
+    /// screen applies its draft on close.
+    fn step_quick(&mut self, field: usize, dx: i32, out: &mut Vec<AppCommand>) {
+        let mut config = self.config.clone();
+        settings::step(&Settings::fields()[field].kind, &mut config, dx);
+        self.apply_config(config, out);
+        self.ui.quick_access.refresh(&self.config);
     }
 
     /// Apply an action on Game Mode's map screens (see
@@ -115,11 +213,9 @@ impl App {
         out: &mut Vec<AppCommand>,
     ) {
         match action {
-            // B pops one screen; past the list there is the menu that opened it.
+            // B pops one screen; past the list, what opened it is underneath.
             GameInputMapsAction::Close => {
-                if !self.ui.input_maps.back() {
-                    self.ui.game_menu.open(self.ui.game_mode());
-                }
+                self.ui.input_maps.back();
             }
             GameInputMapsAction::Activate => self.input_maps_activate(out),
             GameInputMapsAction::Click(index) => {
@@ -136,6 +232,11 @@ impl App {
             Some(Press::New) => self.ask_new_map_name(out),
             Some(Press::Open) => self.ui.input_maps.open_selected(),
             Some(Press::Take(action)) => self.take_map_action(action, out),
+            Some(Press::UseSelected) => {
+                if let Some(id) = self.ui.input_maps.selected_row().map(|row| row.id.clone()) {
+                    self.use_input_map(&id, out);
+                }
+            }
             Some(Press::Confirm(true)) => self.remove_input_map(out),
             Some(Press::Confirm(false)) => self.ui.input_maps.close_confirm(),
             None => {}
@@ -248,6 +349,7 @@ impl App {
             .event_handler
             .game_mut(&self.config.game_mode.input_map);
         let (id, _) = game.use_map(id, &self.browser, out);
+        self.ui.settings.adopt_input_map(&id);
         self.config.game_mode.input_map = id;
         self.config.save();
         self.refresh_input_maps();
@@ -270,6 +372,7 @@ impl App {
                 in_use: map.id == live,
                 // The row takes a file away, so there is none to offer where
                 // the binary is all there is.
+                fixed: map.fixed,
                 remove: match (map.builtin, map.file) {
                     (_, false) => None,
                     (true, true) => Some(MapAction::Reset),
@@ -326,8 +429,7 @@ impl App {
     /// A captured gesture becomes the source a row is made for; what no row can
     /// hold is refused where it was asked for (see [`map_edit::source_of`]).
     fn map_edit_capture(&mut self, gesture: &str, keyboard: bool) {
-        let spent = self.event_handler.game_spent_pad();
-        let slot = match map_edit::source_of(gesture, keyboard, spent) {
+        let slot = match map_edit::source_of(gesture, keyboard) {
             Ok(slot) => slot,
             Err(note) => return self.ui.map_edit.stop_capture(Some(note.to_string())),
         };

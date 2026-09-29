@@ -6,6 +6,7 @@
 use crate::browser::BrowserCommand;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::{OskCommand, PadInput};
+use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
 
 #[derive(Clone)]
@@ -23,9 +24,8 @@ pub enum AppCommand {
     FocusAddressBar,
     /// Close the focused tab. Closing the last one leaves a fresh tab open.
     CloseTab,
-    GameMode,
-    /// An action on Game Mode's own menu (see [`crate::overlay::game::menu`]).
-    GameMenu(GameMenuAction),
+    /// An action on Quick Access (see [`crate::overlay::quick_access`]).
+    QuickAccess(QuickAccessAction),
     /// An action on its input-map screens (see [`crate::overlay::game::input_maps`]).
     GameInputMaps(GameInputMapsAction),
     /// An action on its map editor (see [`crate::overlay::game::map_edit`]).
@@ -46,10 +46,9 @@ impl AppCommand {
             | AppCommand::Resize
             | AppCommand::Input(_)
             | AppCommand::Prompt(_)
-            | AppCommand::GameMenu(_)
+            | AppCommand::QuickAccess(_)
             | AppCommand::GameInputMaps(_)
-            | AppCommand::GameMapEdit(_)
-            | AppCommand::GameMode => true,
+            | AppCommand::GameMapEdit(_) => true,
             AppCommand::Browser(_)
             | AppCommand::Menu(_)
             | AppCommand::ToggleBookmark
@@ -58,16 +57,32 @@ impl AppCommand {
             | AppCommand::Settings(_) => false,
         }
     }
+
+    /// Whether this is a settings action that keeps the page, so it may run
+    /// over a game.
+    pub fn keeps_the_page(&self) -> bool {
+        match self {
+            AppCommand::Settings(action) => !matches!(
+                action,
+                SettingsAction::OpenLink(_) | SettingsAction::QuitForUpdate
+            ),
+            _ => false,
+        }
+    }
 }
 
-/// Actions on Game Mode's menu. `Click` carries its target row; the rest act
-/// on the focused one.
+/// Actions on Quick Access. `Click` carries its target row; the rest act on
+/// the focused one.
 #[derive(Clone)]
-pub enum GameMenuAction {
+pub enum QuickAccessAction {
+    /// Open a strip, or close it when it is up.
+    Toggle(Strip),
     /// Act on the focused row.
     Activate,
     /// Focus row `index` and activate it.
     Click(usize),
+    /// Left/Right on the focused row: step its value.
+    Adjust(i32),
 }
 
 /// Actions on Game Mode's input-map screens.
@@ -123,7 +138,7 @@ pub enum SettingsAction {
     /// Follow a link on the read-only About tab: save & close the overlay, then
     /// navigate the focused tab to `url`.
     OpenLink(String),
-    /// While capturing a binding (Controls section): the gesture just performed,
+    /// While capturing a binding (the binding list): the gesture just performed,
     /// to add to the focused action. `keyboard` tells a key combo from a gamepad
     /// gesture, whose strings can collide (e.g. `"a"`).
     CaptureBinding { gesture: String, keyboard: bool },
@@ -265,8 +280,8 @@ mod tests {
         }
         // The mode's own controls, and what the loop needs whatever is on screen.
         for command in [
-            AppCommand::GameMode,
-            AppCommand::GameMenu(GameMenuAction::Activate),
+            AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::QuickAccess)),
+            AppCommand::QuickAccess(QuickAccessAction::Activate),
             AppCommand::Input(InputCommand::Cancel),
             AppCommand::Prompt(PromptAction::Cancel),
             AppCommand::Shutdown,

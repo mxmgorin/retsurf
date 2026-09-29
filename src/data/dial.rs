@@ -22,7 +22,6 @@ const DEFAULTS: &[&str] = &[
     "https://old.reddit.com/r/SBCGaming/",
     "https://github.com/mxmgorin/retsurf",
     "https://servo.org",
-    SETTINGS_PIN,
 ];
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).

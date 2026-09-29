@@ -3,6 +3,7 @@
 
 use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
+use egui_sdl2::egui::AtomExt as _;
 
 /// Shared row metrics so every overlay's list reads alike.
 pub(super) const ROW_RADIUS: f32 = 6.0;
@@ -68,15 +69,41 @@ pub(super) fn row(
     label: &str,
     value: &str,
 ) -> egui::Response {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
+    let (label, value) = row_texts(label, value);
     ui.add_sized(
         [width, ROW_H],
         egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
             .corner_radius(ROW_RADIUS)
             .truncate(),
+    )
+}
+
+/// A [`row`] whose value gives way first, for a short label beside a value of
+/// any length (a name the user chose).
+pub(super) fn named_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    value: &str,
+) -> egui::Response {
+    let (label, value) = row_texts(label, value);
+    let value = value.atom_shrink(true);
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+fn row_texts(label: &str, value: &str) -> (egui::RichText, egui::RichText) {
+    let label = egui::RichText::new(label)
+        .color(egui::Color32::WHITE)
+        .size(ROW_FONT);
+    (
+        label,
+        egui::RichText::new(value).color(ACCENT).size(ROW_FONT),
     )
 }
 
@@ -166,29 +193,52 @@ fn heading(ui: &mut egui::Ui, text: &str) {
     });
 }
 
-/// The top section bar: a selectable tab per section, with `trailing` laid out
-/// right-to-left in the room left of the tabs. Returns the clicked section.
+/// Space between two tabs of a [`section_bar`].
+const TAB_GAP: f32 = 6.0;
+
+/// A [`section_bar`] tab down to its icon: wider than the glyph, so the icons
+/// stand apart and each is a target a thumb can hit.
+const ICON_TAB_W: f32 = 40.0;
+
+/// The top section bar: a tab per section (icon and label, or just the icon on
+/// an inactive tab where not all fit), then `trailing`. Returns the clicked one.
 pub(super) fn section_bar<T: Copy + PartialEq>(
     ui: &mut egui::Ui,
     screen: egui::Rect,
-    sections: impl IntoIterator<Item = T>,
+    sections: &[T],
     active: T,
     label: fn(T) -> &'static str,
+    icon: fn(T) -> &'static str,
     trailing: impl FnOnce(&mut egui::Ui),
 ) -> Option<T> {
     let mut clicked = None;
+    let full = |section: T| format!("{}  {}", icon(section), label(section));
+    let font = egui::FontId::proportional(ROW_FONT);
+    let pad = 2.0 * ui.spacing().button_padding.x + TAB_GAP;
+    let width = |text: String| {
+        ui.fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE))
+            .size()
+            .x
+            + pad
+    };
+    let wanted: f32 = sections.iter().map(|&s| width(full(s))).sum();
+    let fits = wanted <= screen.width() - SIDES - (CLOSE_SIZE + 8.0);
     ui.horizontal(|ui| {
         // The gap turns the flush button row into a segmented control.
-        ui.spacing_mut().item_spacing.x = 6.0;
-        for section in sections {
+        ui.spacing_mut().item_spacing.x = TAB_GAP;
+        for &section in sections {
+            let (text, min_w) = match fits || section == active {
+                true => (full(section), 0.0),
+                false => (icon(section).to_string(), ICON_TAB_W),
+            };
             let tab = egui::Button::selectable(
                 section == active,
-                egui::RichText::new(label(section))
+                egui::RichText::new(text)
                     .color(egui::Color32::WHITE)
                     .size(ROW_FONT),
             )
             .corner_radius(ROW_RADIUS)
-            .min_size(egui::vec2(0.0, TAB_H));
+            .min_size(egui::vec2(min_w, TAB_H));
             if ui.add(tab).clicked() {
                 clicked = Some(section);
             }
