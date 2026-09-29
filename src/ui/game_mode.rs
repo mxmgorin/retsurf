@@ -1,5 +1,5 @@
 //! Game Mode's slice of the chrome: the screens that shrink the browser's
-//! vocabulary, the entry toast's wording, and the map name the Game Mode tab shows.
+//! vocabulary, the entry toast's wording, and the map name the Gaming tab shows.
 
 use super::{drop_egui_focus, AppUi};
 use std::time::Duration;

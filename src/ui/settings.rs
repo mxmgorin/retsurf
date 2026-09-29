@@ -436,7 +436,7 @@ fn add_controls(
 fn section_icon(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Browser => bold::GLOBE,
-        SettingsSection::GameMode => bold::GAME_CONTROLLER,
+        SettingsSection::Gaming => bold::GAME_CONTROLLER,
         SettingsSection::Interface => bold::LAYOUT,
         SettingsSection::Controls => bold::JOYSTICK,
         SettingsSection::Content => bold::SHIELD_CHECK,

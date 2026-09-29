@@ -76,7 +76,7 @@ impl App {
     }
 
     /// Open the settings screen, on `section` when given. Reads the live map's
-    /// name for the Game Mode tab, which loads the maps.
+    /// name for the Gaming tab, which loads the maps.
     pub(super) fn open_settings(&mut self, section: Option<SettingsSection>) {
         let (_, name) = self.game_mode().live();
         self.ui.set_input_map_name(name);
@@ -185,7 +185,7 @@ impl App {
                 let section = self
                     .browser
                     .in_game_mode()
-                    .then_some(SettingsSection::GameMode);
+                    .then_some(SettingsSection::Gaming);
                 self.open_settings(section);
             }
             Entry::Enter => {

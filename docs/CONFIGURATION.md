@@ -269,7 +269,7 @@ enabled = true
 # (Enter game mode, or Exit game mode last); inside the mode it also steps the
 # View and the input map live and summons the on-screen keyboard over the game.
 # Over a game Quick Menu holds only Settings and Quit; Settings opens on the
-# Game Mode tab, where the Input map row picks the map (written back here).
+# Gaming tab, where the Input map row picks the map (written back here).
 # Which input map drives the pad and the keyboard while the mode is on: "none"
 # for no map at all (the pad and the keyboard reach the game as they are; an id
 # no map answers to is none too), a built-in ("keys", "wasd" or "mouse"), or the

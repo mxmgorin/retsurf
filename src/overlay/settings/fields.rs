@@ -346,8 +346,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "Async clipboard",       flag!(experimental.async_clipboard), false),
     f(S::Browser,  "Experimental", "Permissions",           flag!(experimental.permissions), false),
 
-    f(S::GameMode, "Game Mode",   "Input map",              Kind::Door { door: Door::InputMaps }, false),
-    f(S::GameMode, "Game Mode",   "View",                   choice!(game_mode.view.scaling: Scaling), false).quick(Modes::Game),
+    f(S::Gaming, "Game Mode",   "Input map",              Kind::Door { door: Door::InputMaps }, false),
+    f(S::Gaming, "Game Mode",   "View",                   choice!(game_mode.view.scaling: Scaling), false).quick(Modes::Game),
 
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
