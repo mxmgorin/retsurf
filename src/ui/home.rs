@@ -538,7 +538,13 @@ fn letter_fill(label: &str) -> egui::Color32 {
     hash = hash.wrapping_mul(0xc2b2_ae35);
     hash ^= hash >> 16;
     let hue = (hash % HUES) as f32 / HUES as f32;
-    egui::ecolor::HsvaGamma { h: hue, s: LETTER_SAT, v: LETTER_VAL, a: 1.0 }.into()
+    egui::ecolor::HsvaGamma {
+        h: hue,
+        s: LETTER_SAT,
+        v: LETTER_VAL,
+        a: 1.0,
+    }
+    .into()
 }
 
 /// The rounded glyph square at a tile's top. `None` leaves it unfilled, for an
