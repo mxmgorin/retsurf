@@ -334,13 +334,24 @@ fn on_key_down(
         return;
     }
 
-    // Overlays whose navigation comes from the `nav_*` bindings, so vim hjkl
-    // works there too.
+    // Overlays whose navigation comes from the `nav_*` bindings, so a rebound
+    // key moves them too.
     let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
     let typing = browser.text_input_focused()
         || ui.address_bar_focused()
         || ui.home_field_editing()
         || ui.dial_edit_field_editing();
+    // The on-screen keyboard: Enter presses the selected key, Esc hides it. Not
+    // while a field has focus, where a real keyboard types into it.
+    if ui.focus() == Focus::Osk && !typing {
+        if enter_confirms(key, commands) {
+            return;
+        }
+        if matches!(key.kc, Keycode::Escape) {
+            commands.push(AppCommand::Input(InputCommand::Cancel));
+            return;
+        }
+    }
     if let Some(action) = lookup(key, bindings, overlay, typing) {
         action.push_tap(commands);
         return;

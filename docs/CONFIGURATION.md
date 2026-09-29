@@ -472,10 +472,13 @@ clicks and drags, so hold/chord gestures on its button are rejected.
 **Keyboard shortcuts**: any key with optional `ctrl`/`alt`/`shift` modifiers,
 matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
 on the page or the address bar — holds focus, so they can't hijack typing.
-Defaults: `ctrl+r` reload · `ctrl+b` bookmark · `ctrl+e` reader mode ·
-`ctrl+m` menu · `ctrl+left`/`ctrl+right` back/forward · `ctrl+f` link hints ·
-`ctrl+t`/`ctrl+shift+t` next/previous tab · `ctrl+=`/`ctrl+-`/`ctrl+0`
-zoom in/out/reset · arrows = overlay navigation.
+Every default is on Ctrl, so a page (a game) gets all plain keys:
+`ctrl+r` reload · `ctrl+b` bookmark · `ctrl+h` home · `ctrl+e` reader view ·
+`ctrl+m` menu · `ctrl+l` address · `ctrl+,` settings · `ctrl+f` link hints ·
+`ctrl+alt+g` Quick Access · `ctrl+left`/`ctrl+right` back/forward ·
+`ctrl+t`/`ctrl+w` new/close tab · `ctrl+tab`/`ctrl+shift+tab` next/previous
+tab · `ctrl+=`/`ctrl+-`/`ctrl+0` zoom in/out/reset. The arrows are bound too,
+but only as overlay navigation: with no overlay open they go to the page.
 
 **Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
 (on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·

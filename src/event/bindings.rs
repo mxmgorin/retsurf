@@ -313,8 +313,9 @@ fn default_gamepad_bindings() -> inputbind::Table {
     .collect()
 }
 
-/// The stock keyboard shortcuts. Ctrl combos always fire; the plain keys are
-/// muted while a text input holds focus, so they can't collide with typing.
+/// The stock keyboard shortcuts: all on Ctrl, so an unfocused page (a game)
+/// gets every plain key. The arrows are the one exception: `nav_*` fires only
+/// inside an overlay, never on the page.
 fn default_keyboard_bindings() -> inputbind::Table {
     [
         ("ctrl+r", Action::Reload),
@@ -324,30 +325,23 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+m", Action::Menu),
         ("ctrl+l", Action::Address),
         ("ctrl+,", Action::Settings),
+        ("ctrl+f", Action::Hints),
         // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
         // is the only key the browser still answers.
         ("ctrl+alt+g", Action::QuickAccess),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
-        ("ctrl+t", Action::TabNext),
-        ("ctrl+shift+t", Action::TabPrev),
-        ("t", Action::NewTab),
+        ("ctrl+t", Action::NewTab),
+        ("ctrl+w", Action::CloseTab),
+        ("ctrl+tab", Action::TabNext),
+        ("ctrl+shift+tab", Action::TabPrev),
         ("ctrl+=", Action::ZoomIn),
         ("ctrl+-", Action::ZoomOut),
         ("ctrl+0", Action::ZoomReset),
-        // Vimium-style plain keys (muted while typing).
-        ("f", Action::Hints),
-        ("enter", Action::Confirm),
-        ("backspace", Action::Cancel),
-        // Navigation: arrows and vim hjkl move overlays (page when none is open).
         ("up", Action::NavUp),
         ("down", Action::NavDown),
         ("left", Action::NavLeft),
         ("right", Action::NavRight),
-        ("k", Action::NavUp),
-        ("j", Action::NavDown),
-        ("h", Action::NavLeft),
-        ("l", Action::NavRight),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
