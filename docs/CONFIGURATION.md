@@ -267,14 +267,13 @@ enabled = true
 # button from the game; a held one hands its press over on release), so
 # rebinding them moves the way out with them. Quick Access is the way in and out
 # (Enter game mode, or Exit game mode last); inside the mode it also steps the
-# View and the input map live and summons the on-screen keyboard over the game. Over a game Quick
-# Menu holds only Settings and Quit; Settings opens on the Game Mode tab, where the
-# Input map row
-# picks the map (written back here). Which input map drives the pad and the
-# keyboard while the mode is on: "none" for no map at all (the pad and the
-# keyboard reach the game as they are; an id no map answers to is none too), a
-# built-in ("keys", "wasd" or "mouse"), or the stem of an input_maps/<id>.toml
-# of your own.
+# View and the input map live and summons the on-screen keyboard over the game.
+# Over a game Quick Menu holds only Settings and Quit; Settings opens on the
+# Game Mode tab, where the Input map row picks the map (written back here).
+# Which input map drives the pad and the keyboard while the mode is on: "none"
+# for no map at all (the pad and the keyboard reach the game as they are; an id
+# no map answers to is none too), a built-in ("keys", "wasd" or "mouse"), or the
+# stem of an input_maps/<id>.toml of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
 

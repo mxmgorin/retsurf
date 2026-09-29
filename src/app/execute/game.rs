@@ -155,12 +155,12 @@ impl App {
     fn quick_access_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.quick_access.row() {
             Entry::Quick(field) => self.step_quick(field, 1, out),
-            // The keyboard types into the page and outranks this panel, so close
-            // it first — the two would fight over the pad otherwise.
             Entry::InputMap => {
                 self.ui.quick_access.close();
                 self.open_input_maps();
             }
+            // The keyboard types into the page and outranks this panel, so close
+            // it first — the two would fight over the pad otherwise.
             Entry::Osk => {
                 self.ui.quick_access.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);

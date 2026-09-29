@@ -9,7 +9,7 @@ use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;
 use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
-use egui_phosphor::{bold, fill};
+use egui_phosphor::bold;
 use egui_sdl2::egui::{self, Vec2};
 
 /// Side of a toolbar icon slot (logical px), sized for a fingertip.
@@ -38,10 +38,6 @@ const FIELD_HINT: &str = "Search or enter address";
 
 fn icon(glyph: &str) -> egui::RichText {
     theme::icon(glyph).size(ICON)
-}
-
-fn icon_fill(glyph: &str) -> egui::RichText {
-    theme::icon_fill(glyph).size(ICON)
 }
 
 /// The address field's inner margin across; its rounded ends need the air.
@@ -176,15 +172,18 @@ fn add_address_field(
                         refocus = true;
                     }
                 } else {
-                    let star = match inputs.bookmarked {
-                        true => icon_fill(fill::STAR),
-                        false => icon(bold::STAR),
+                    // Disabled while loading: servo's WebView exposes no stop().
+                    // Always the same Button widget — another kind churns egui's id.
+                    let loading = state.is_loading();
+                    let glyph = match loading {
+                        true => bold::X,
+                        false => bold::ARROW_CLOCKWISE,
                     };
-                    if add_field_button(ui, star, inputs.bookmarked).clicked() {
-                        commands.push(AppCommand::ToggleBookmark);
-                    }
-                    if add_field_button(ui, icon(bold::BOOK_OPEN), false).clicked() {
-                        commands.push(AppCommand::Browser(BrowserCommand::Reader));
+                    let reload = ui
+                        .add_enabled_ui(!loading, |ui| add_field_button(ui, icon(glyph), false))
+                        .inner;
+                    if reload.clicked() {
+                        commands.push(AppCommand::Browser(BrowserCommand::Reload));
                     }
                     // Shown only off the config default, ahead of the icons so
                     // they never shift; clicking resets.
@@ -317,7 +316,6 @@ fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -
 /// What one toolbar frame shows, snapshotted by the caller — one bundle, so
 /// the panel and overlay spellings can't drift argument by argument.
 pub(super) struct ToolbarInputs {
-    pub bookmarked: bool,
     pub tab_count: usize,
     /// Downloads still in flight; a count chip that jumps to the section.
     pub active_downloads: usize,
@@ -361,21 +359,6 @@ fn toolbar_contents(
                 .clicked()
             {
                 commands.push(AppCommand::Browser(BrowserCommand::Forward));
-            }
-
-            // Disabled while loading: servo's WebView exposes no stop(). Always
-            // the same Button widget — another kind churns egui's id.
-            let loading = state.is_loading();
-            let glyph = if loading {
-                bold::X
-            } else {
-                bold::ARROW_CLOCKWISE
-            };
-            if ui
-                .add_enabled(!loading, new_toolbar_button(icon(glyph)))
-                .clicked()
-            {
-                commands.push(AppCommand::Browser(BrowserCommand::Reload));
             }
 
             ui.add_space(2.0);

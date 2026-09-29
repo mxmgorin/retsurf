@@ -613,7 +613,6 @@ impl AppUi {
                 root.set_clip_rect(ctx.content_rect());
 
                 let inputs = toolbar::ToolbarInputs {
-                    bookmarked: self.menu.is_bookmarked(&state.location),
                     tab_count,
                     active_downloads: self.menu.downloads.active_count(),
                     update_available,
