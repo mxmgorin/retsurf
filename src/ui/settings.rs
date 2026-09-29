@@ -436,11 +436,11 @@ fn add_controls(
 fn section_icon(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Browser => bold::GLOBE,
-        SettingsSection::Game => bold::GAME_CONTROLLER,
+        SettingsSection::GameMode => bold::GAME_CONTROLLER,
         SettingsSection::Interface => bold::LAYOUT,
         SettingsSection::Controls => bold::JOYSTICK,
         SettingsSection::Content => bold::SHIELD_CHECK,
-        SettingsSection::Advanced => bold::WRENCH,
+        SettingsSection::System => bold::CPU,
         SettingsSection::About => bold::INFO,
     }
 }

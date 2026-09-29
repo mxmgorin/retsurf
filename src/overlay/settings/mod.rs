@@ -40,12 +40,13 @@ pub enum SettingsSection {
     /// The input tunables, and a door to the binding list.
     Controls,
     /// Game Mode's settings (`[game_mode]`).
-    Game,
+    GameMode,
     /// History recording, the ad blocker, and data-saving content blocking,
     /// presented under one tab — they remain separate config sections
     /// (`[history]`, `[adblock]`, `[data_saving]`), shown here as sub-groups.
     Content,
-    Advanced,
+    /// The engine and the app itself.
+    System,
     /// Read-only "about this build" tab — no editable fields; see [`about_info`].
     About,
 }
@@ -54,11 +55,11 @@ impl SettingsSection {
     /// Left-to-right order of the section bar.
     pub const ALL: [SettingsSection; 7] = [
         SettingsSection::Browser,
-        SettingsSection::Game,
+        SettingsSection::GameMode,
         SettingsSection::Interface,
         SettingsSection::Controls,
         SettingsSection::Content,
-        SettingsSection::Advanced,
+        SettingsSection::System,
         SettingsSection::About,
     ];
 
@@ -67,9 +68,9 @@ impl SettingsSection {
             SettingsSection::Browser => "Browser",
             SettingsSection::Interface => "Interface",
             SettingsSection::Controls => "Controls",
-            SettingsSection::Game => "Game",
+            SettingsSection::GameMode => "Game Mode",
             SettingsSection::Content => "Content",
-            SettingsSection::Advanced => "Advanced",
+            SettingsSection::System => "System",
             SettingsSection::About => "About",
         }
     }

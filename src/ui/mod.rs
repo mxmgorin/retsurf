@@ -231,7 +231,7 @@ pub struct AppUi {
     pub input_maps: InputMaps,
     /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
-    /// The live map's name, for the Game tab's row. Empty until Settings opens:
+    /// The live map's name, for the Game Mode tab's row. Empty until Settings opens:
     /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the

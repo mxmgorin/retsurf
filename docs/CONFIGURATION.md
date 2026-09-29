@@ -18,14 +18,14 @@ The data dir keeps retsurf's own files (`config.toml`, `history.toml`, `bookmark
 `servo/` and regenerable caches (the adblock engine) under `cache/` — the latter is safe
 to delete.
 
-**Settings > Advanced > Clear browsing data** wipes history, cookies, localStorage, the
+**Settings > System > Clear browsing data** wipes history, cookies, localStorage, the
 HTTP cache, the saved tab session and the finished downloads, and closes the open tabs
 back to the home page. Two presses: the first arms the row, the second clears. Bookmarks,
 speed-dial pins, settings and bindings are left alone. **IndexedDB is not cleared**: the
 engine has no category for it yet, so a site's databases under `servo/clientstorage/`
 survive until that directory is deleted by hand.
 
-**Settings > Advanced > Restore all defaults** is the other half: every settings row, the
+**Settings > System > Restore all defaults** is the other half: every settings row, the
 speed-dial pins and the control bindings go back to how they ship, and nothing you saved
 (bookmarks, history, tabs) is touched. Two presses as well. The settings and bindings are
 written when the overlay closes, the pins right away; rows marked `*` need a restart.
@@ -155,7 +155,7 @@ memory_profile = "auto"
 # to loads keeps the idle clock (and the battery) where it was. Needs a writable
 # `scaling_governor`, so root — the handheld launchers have it, a desktop does
 # not, and without it this goes inert after one attempt with a log line. Applies
-# live; also in the settings overlay (Advanced -> Performance).
+# live; also in the settings overlay (System -> Performance).
 cpu_boost_on_load = false
 # Servo thread counts. 0 = keep the memory profile's choice; a non-zero value
 # overrides it (handy to fine-tune a tier without switching profiles).
@@ -170,7 +170,7 @@ worker_pool_max = 0        # cap applied to every worker pool (image cache, asyn
 # it is opt-in; on `embedded`/`tight` (which switch the memory cache off, leaving
 # nothing to spill) turning this on also revives a 16-entry memory cache. Needs a
 # restart. Safe to delete the file at any time. Also in the settings overlay
-# (Advanced tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
+# (System tab, "HTTP disk cache (MB)"); 0 shows there as "Off".
 http_disk_cache_mb = 0
 max_fps = 30               # frame cap for the software renderer, which nothing else paces (0 = uncapped)
 
@@ -199,7 +199,7 @@ dir = ""
 extensions = ["zip", "7z", "rar", "iso", "chd", "pdf", "gba", "sfc", "nes"]
 
 [update]
-# Which builds the in-app updater checks for (also selectable in Settings > Advanced
+# Which builds the in-app updater checks for (also selectable in Settings > System
 # > Updates). One of:
 #   release  tagged GitHub releases, stable only (the default)
 #   beta     tagged releases including pre-releases (highest semver wins)
@@ -268,7 +268,7 @@ enabled = true
 # rebinding them moves the way out with them. Quick Access is the way in and out
 # (Enter game mode, or Exit game mode last); inside the mode it also steps the
 # View and the input map live and summons the on-screen keyboard over the game. Over a game Quick
-# Menu holds only Settings and Quit; Settings opens on the Game tab, where the
+# Menu holds only Settings and Quit; Settings opens on the Game Mode tab, where the
 # Input map row
 # picks the map (written back here). Which input map drives the pad and the
 # keyboard while the mode is on: "none" for no map at all (the pad and the
