@@ -93,9 +93,10 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::List(Section::Bookmarks) => bold::BOOKMARKS,
         Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
-        Entry::Quick(field) => match Settings::fields()[field].label {
+        Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "View" => bold::FRAME_CORNERS,
             "Page theme" => bold::CIRCLE_HALF,
+            "Ad blocker" => bold::SHIELD_CHECK,
             _ => NO_ICON,
         },
     }

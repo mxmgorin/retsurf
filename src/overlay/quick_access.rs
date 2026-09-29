@@ -103,7 +103,7 @@ impl Entry {
     pub fn label(self) -> &'static str {
         match self {
             Entry::Enter => "Enter game mode",
-            Entry::Quick(i) => Settings::fields()[i].label,
+            Entry::Quick(i) => Settings::fields()[i].quick_label(),
             Entry::Run(Action::Reader) => "Enter reader view",
             Entry::Run(action) => action.label(),
             Entry::List(section) => section.label(),
@@ -278,7 +278,7 @@ mod tests {
         let mut panel = open(TabMode::Page);
         assert_eq!(panel.row(), Entry::Enter);
         panel.move_sel(-1);
-        assert_eq!(panel.label(panel.selected()), "Page theme");
+        assert_eq!(panel.label(panel.selected()), "Ad blocker");
     }
 
     #[test]

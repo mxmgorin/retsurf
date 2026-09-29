@@ -166,12 +166,24 @@ pub struct Field {
     pub restart: bool,
     /// Also a quick row, in these modes.
     pub quick: Option<Modes>,
+    /// The quick row's label, where `label` leans on its sub-header.
+    quick_label: Option<&'static str>,
 }
 
 impl Field {
     const fn quick(mut self, modes: Modes) -> Self {
         self.quick = Some(modes);
         self
+    }
+
+    const fn quick_as(mut self, modes: Modes, label: &'static str) -> Self {
+        self.quick_label = Some(label);
+        self.quick(modes)
+    }
+
+    /// What the row reads as out of its tab.
+    pub fn quick_label(&self) -> &'static str {
+        self.quick_label.unwrap_or(self.label)
     }
 }
 
@@ -299,6 +311,7 @@ const fn f(
         kind,
         restart,
         quick: None,
+        quick_label: None,
     }
 }
 
@@ -368,7 +381,7 @@ pub(super) static FIELDS: &[Field] = &[
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),
-    f(S::Content,  "Ad blocker",  "Enabled",                flag!(adblock.enabled), true),
+    f(S::Content,  "Ad blocker",  "Enabled",                flag!(adblock.enabled), false).quick_as(Modes::Browser, "Ad blocker"),
     f(S::Content,  "Ad blocker",  "Update every (days)",    int!(adblock.update_days as u64, bounds::ADBLOCK_UPDATE_DAYS, 1), false),
 
     f(S::Content, "Data saving", "Block images",         flag!(data_saving.block_images), false),

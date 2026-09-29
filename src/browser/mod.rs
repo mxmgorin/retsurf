@@ -507,6 +507,7 @@ impl AppBrowser {
     /// read at construction — one list, so a new knob cannot land in only one.
     pub fn apply_config(&self, config: &AppConfig) {
         self.set_haptics(config.controls.haptics);
+        self.inner.adblock.set_config(&config.adblock);
         // Lightweight-mode block flags take effect on the next subresource
         // load, no restart needed (unlike the engine-thread counts).
         self.set_content_filter(ContentFilter::from_config(&config.data_saving));

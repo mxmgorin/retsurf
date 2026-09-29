@@ -1,8 +1,8 @@
 //! Ad blocking. Servo's `load_web_resource` delegate hook fires for every
 //! network request with its URL, destination, and referrer — enough to run
 //! Brave's adblock-rust engine (EasyList syntax) over it; blocked loads are
-//! intercepted with an empty 200 response in [`crate::browser`]. Toggled with
-//! `[adblock] enabled` in the config.
+//! intercepted with an empty 200 response in [`crate::browser`]. Toggled live
+//! with `[adblock] enabled` in the config; off drops the engine.
 //!
 //! The engine is not thread-safe (the crate's faster single-thread build), so
 //! it never leaves the main thread: a background thread downloads the filter
@@ -21,15 +21,15 @@ use adblock::request::Request;
 use adblock::Engine;
 use content_security_policy::Destination;
 use servo::WebResourceRequest;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 pub struct Adblock {
-    enabled: bool,
-    /// The engine, present once loaded — from cache at startup, or lazily from
-    /// `fresh` once the builder thread delivers.
+    enabled: Cell<bool>,
+    /// The engine, present once loaded — from cache when switched on, or lazily
+    /// from `fresh` once the builder thread delivers.
     engine: RefCell<Option<Engine>>,
     /// Serialized engine handed over by the builder thread.
     fresh: Arc<Mutex<Option<Vec<u8>>>>,
@@ -37,33 +37,39 @@ pub struct Adblock {
 
 impl Adblock {
     pub fn new(cfg: &AdblockConfig) -> Self {
-        let fresh = Arc::new(Mutex::new(None));
-        if !cfg.enabled {
-            return Self {
-                enabled: false,
-                engine: RefCell::new(None),
-                fresh,
-            };
-        }
+        let adblock = Self {
+            enabled: Cell::new(false),
+            engine: RefCell::new(None),
+            fresh: Arc::new(Mutex::new(None)),
+        };
+        adblock.set_config(cfg);
+        adblock
+    }
 
-        let cache = cache_path();
-        let engine = load_cached(&cache);
-        if (engine.is_none() || cache_is_stale(&cache, cfg.update_days)) && !cfg.lists.is_empty() {
-            let lists = cfg.lists.clone();
-            let fresh = fresh.clone();
-            std::thread::spawn(move || build_engine(lists, cache, fresh));
+    /// Follow `cfg.enabled`: on loads the engine (building it in the background
+    /// when the cache is missing or stale), off frees it.
+    pub fn set_config(&self, cfg: &AdblockConfig) {
+        if self.enabled.replace(cfg.enabled) == cfg.enabled {
+            return;
         }
-        Self {
-            enabled: true,
-            engine: RefCell::new(engine),
-            fresh,
+        if !cfg.enabled {
+            *self.engine.borrow_mut() = None;
+            return;
+        }
+        let cache = cache_path();
+        *self.engine.borrow_mut() = load_cached(&cache);
+        let missing = self.engine.borrow().is_none();
+        if (missing || cache_is_stale(&cache, cfg.update_days)) && !cfg.lists.is_empty() {
+            let lists = cfg.lists.clone();
+            let fresh = self.fresh.clone();
+            std::thread::spawn(move || build_engine(lists, cache, fresh));
         }
     }
 
     /// Whether this request should be blocked. Lazily swaps in a freshly built
     /// engine when the builder thread has delivered one.
     pub fn should_block(&self, request: &WebResourceRequest) -> bool {
-        if !self.enabled {
+        if !self.enabled.get() {
             return false;
         }
         self.take_fresh();
