@@ -31,8 +31,8 @@ impl MapLibrary {
         self.maps.iter_mut().find(|m| m.id == id)
     }
 
-    /// The lenient read for the runtime path: an id nothing answers to falls
-    /// back to the first map, so an edited config is never a dead mode.
+    /// The lenient read for the runtime path: an id nothing answers to is no
+    /// map.
     pub fn pick(&self, id: &str) -> &InputMap {
         input_map::pick(&self.maps, id)
     }

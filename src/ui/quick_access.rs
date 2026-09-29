@@ -48,7 +48,7 @@ pub(in crate::ui) fn add_quick_access(
                 for index in 0..panel.rows().len() {
                     let selected = index == panel.selected();
                     let label = panel.label(index);
-                    let resp = panel::row(ui, width, selected, label, panel.value(index));
+                    let resp = panel::named_row(ui, width, selected, label, panel.value(index));
                     if resp.clicked() {
                         commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
                     }

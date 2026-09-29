@@ -51,6 +51,28 @@ impl App {
         let panel = &mut self.ui.quick_access;
         panel.set_value(Entry::Run(Action::Bookmark), saved.to_string());
         panel.set_value(Entry::List(Section::Tabs), tabs);
+        if self.browser.in_game_mode() {
+            let (_, name) = self.game_mode().live();
+            self.ui.quick_access.set_value(Entry::InputMap, name);
+        }
+    }
+
+    /// Switch to the map `dx` places along the list, wrapping at the ends, and
+    /// run it at once, as the map screens' Use does.
+    fn step_input_map(&mut self, dx: i32, out: &mut Vec<AppCommand>) {
+        let (live, _) = self.game_mode().live();
+        let ids: Vec<String> = self
+            .game_mode()
+            .maps
+            .all()
+            .iter()
+            .map(|m| m.id.clone())
+            .collect();
+        let at = ids.iter().position(|id| *id == live).unwrap_or(0);
+        let next = ids[crate::list::wrap(at, dx, ids.len())].clone();
+        self.use_input_map(&next, out);
+        let (_, name) = self.game_mode().live();
+        self.ui.quick_access.set_value(Entry::InputMap, name);
     }
 
     /// Open the settings screen, on `section` when given. Reads the live map's
@@ -117,11 +139,11 @@ impl App {
             QuickAccessAction::Toggle(strip) => self.toggle_strip(*strip),
             QuickAccessAction::Activate => self.quick_access_activate(out),
             // Only a quick row steps; the rest act on A alone.
-            QuickAccessAction::Adjust(dx) => {
-                if let Entry::Quick(field) = self.ui.quick_access.row() {
-                    self.step_quick(field, *dx, out);
-                }
-            }
+            QuickAccessAction::Adjust(dx) => match self.ui.quick_access.row() {
+                Entry::Quick(field) => self.step_quick(field, *dx, out),
+                Entry::InputMap => self.step_input_map(*dx, out),
+                _ => {}
+            },
             QuickAccessAction::Click(index) => {
                 self.ui.quick_access.select(*index);
                 self.quick_access_activate(out);
@@ -135,6 +157,10 @@ impl App {
             Entry::Quick(field) => self.step_quick(field, 1, out),
             // The keyboard types into the page and outranks this panel, so close
             // it first — the two would fight over the pad otherwise.
+            Entry::InputMap => {
+                self.ui.quick_access.close();
+                self.open_input_maps();
+            }
             Entry::Osk => {
                 self.ui.quick_access.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
@@ -203,6 +229,11 @@ impl App {
             Some(Press::New) => self.ask_new_map_name(out),
             Some(Press::Open) => self.ui.input_maps.open_selected(),
             Some(Press::Take(action)) => self.take_map_action(action, out),
+            Some(Press::UseSelected) => {
+                if let Some(id) = self.ui.input_maps.selected_row().map(|row| row.id.clone()) {
+                    self.use_input_map(&id, out);
+                }
+            }
             Some(Press::Confirm(true)) => self.remove_input_map(out),
             Some(Press::Confirm(false)) => self.ui.input_maps.close_confirm(),
             None => {}
@@ -338,6 +369,7 @@ impl App {
                 in_use: map.id == live,
                 // The row takes a file away, so there is none to offer where
                 // the binary is all there is.
+                fixed: map.fixed,
                 remove: match (map.builtin, map.file) {
                     (_, false) => None,
                     (true, true) => Some(MapAction::Reset),

@@ -37,8 +37,8 @@ pub struct GameMode {
 }
 
 impl GameMode {
-    /// Load the library and take the map `id` names, or the first where nothing
-    /// answers to it — an edited config is never a dead mode.
+    /// Load the library and take the map `id` names, or no map where nothing
+    /// answers to it.
     pub fn load(id: &str) -> Self {
         let maps = MapLibrary::load(&key_names());
         let live = maps.pick(id).id.clone();
@@ -154,7 +154,7 @@ impl GameMode {
         self.live()
     }
 
-    /// Run the map `id` names, or the first where nothing answers to it. What
+    /// Run the map `id` names, or no map where nothing answers to it. What
     /// the page holds under the old one is released first.
     pub fn use_map(
         &mut self,

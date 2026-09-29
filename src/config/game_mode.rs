@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct GameModeConfig {
     /// Which input map drives the pad and the keyboard while the mode is on: a
-    /// built-in's id, or the stem of an `input_maps/<id>.toml` in the data dir
-    /// (see [`crate::event::game::input_map`]).
+    /// built-in's id, the stem of an `input_maps/<id>.toml` in the data dir (see
+    /// [`crate::event::game::input_map`]), or `none`, which an unknown id is too.
     pub input_map: String,
     /// How the page's game is shown while the mode is on (`[game_mode.view]`).
     pub view: GameViewConfig,
@@ -38,7 +38,7 @@ token_enum! {
     }
 }
 
-/// The built-in the menu leads with, and what an unknown id falls back to.
+/// The map a fresh config runs.
 pub const DEFAULT_INPUT_MAP: &str = "keys";
 
 impl Default for GameModeConfig {

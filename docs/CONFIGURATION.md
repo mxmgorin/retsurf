@@ -267,11 +267,14 @@ enabled = true
 # button from the game; a held one hands its press over on release), so
 # rebinding them moves the way out with them. Quick Access is the way in and out
 # (Enter game mode, or Exit game mode last); inside the mode it also steps the
-# View live and summons the on-screen keyboard over the game. Over a game Quick
+# View and the input map live and summons the on-screen keyboard over the game. Over a game Quick
 # Menu holds only Settings and Quit; Settings opens on the Game tab, where the
-# Input map row picks the map (written back here). Which input map drives the
-# pad and the keyboard while the mode is on: a built-in ("keys", "wasd",
-# "mouse" or "pad") or the stem of an input_maps/<id>.toml of your own.
+# Input map row
+# picks the map (written back here). Which input map drives the pad and the
+# keyboard while the mode is on: "none" for no map at all (the pad and the
+# keyboard reach the game as they are; an id no map answers to is none too), a
+# built-in ("keys", "wasd" or "mouse"), or the stem of an input_maps/<id>.toml
+# of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
 
@@ -287,15 +290,17 @@ scaling = "off"
 ## Game Mode input maps (`input_maps/*.toml`)
 
 An input map is what each button, stick direction and key sends to the page while
-Game Mode is on. Four ship built in, named for what the game sees rather than
-for what the pad becomes; `[game_mode] input_map` picks one by id.
+Game Mode is on. Three ship built in, named for what the game sees rather than
+for what the pad becomes; `[game_mode] input_map` picks one by id, or `none`
+for no map at all, which a game that reads the Gamepad API or the keys itself
+wants: nothing is remapped, and there is no cursor and no click. `none` is not a
+file and cannot be edited; an `input_maps/none.toml` is ignored.
 
 | id | name | what the game gets |
 | --- | --- | --- |
 | `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
 | `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
 | `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
-| `pad` | Gamepad passthrough | the whole pad reaches the page raw — sticks included, no cursor and no click — for games that read the Gamepad API themselves |
 
 There is no first-person template: Servo has no Pointer Lock, so a stick cannot
 turn a camera, and only the left mouse button has a route.

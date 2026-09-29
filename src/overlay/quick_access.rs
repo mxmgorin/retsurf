@@ -48,6 +48,8 @@ pub enum Entry {
     Run(Action),
     /// Open the lists menu on a section.
     List(Section),
+    /// The input map the game runs.
+    InputMap,
     /// Summon the on-screen keyboard; it types into the page.
     Osk,
     /// Open the settings screen, on the tab the mode suggests.
@@ -76,6 +78,7 @@ const ACCESS_BROWSER: &[Slot] = &[
 /// Quick Access over a game: what changes it, then the way out.
 const ACCESS_GAME: &[Slot] = &[
     Slot::QuickRows,
+    Slot::Row(Entry::InputMap),
     Slot::Row(Entry::Osk),
     Slot::Row(Entry::Exit),
 ];
@@ -104,6 +107,7 @@ impl Entry {
             Entry::Run(Action::Reader) => "Enter reader view",
             Entry::Run(action) => action.label(),
             Entry::List(section) => section.label(),
+            Entry::InputMap => "Input map",
             // Not "Keyboard": a map has a `[keyboard]` table of physical keys.
             Entry::Osk => "On-screen keyboard",
             Entry::Settings => "Settings",
@@ -340,19 +344,18 @@ mod tests {
         assert!(panel.confirm_quit());
     }
 
-    /// Stepping a quick row re-reads the config; the values it does not hold
-    /// must stay.
+    /// Regression: stepping View blanked the input map's value.
     #[test]
     fn a_refresh_keeps_the_values_set_beside_it() {
-        let mut panel = open(TabMode::Page);
-        panel.set_value(Entry::Run(Action::Bookmark), "Saved".to_string());
+        let mut panel = open(TabMode::Game);
+        panel.set_value(Entry::InputMap, "Keyboard (WASD)".to_string());
         panel.refresh(&AppConfig::default());
         let at = panel
             .rows()
             .iter()
-            .position(|row| *row == Entry::Run(Action::Bookmark))
-            .expect("the browser's strip carries the bookmark");
-        assert_eq!(panel.value(at), "Saved");
+            .position(|row| *row == Entry::InputMap)
+            .expect("the game's strip carries the input map");
+        assert_eq!(panel.value(at), "Keyboard (WASD)");
     }
 
     #[test]

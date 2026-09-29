@@ -3,6 +3,7 @@
 
 use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
+use egui_sdl2::egui::AtomExt as _;
 
 /// Shared row metrics so every overlay's list reads alike.
 pub(super) const ROW_RADIUS: f32 = 6.0;
@@ -68,15 +69,41 @@ pub(super) fn row(
     label: &str,
     value: &str,
 ) -> egui::Response {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    let value = egui::RichText::new(value).color(ACCENT).size(ROW_FONT);
+    let (label, value) = row_texts(label, value);
     ui.add_sized(
         [width, ROW_H],
         egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
             .corner_radius(ROW_RADIUS)
             .truncate(),
+    )
+}
+
+/// A [`row`] whose value gives way first, for a short label beside a value of
+/// any length (a name the user chose).
+pub(super) fn named_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    value: &str,
+) -> egui::Response {
+    let (label, value) = row_texts(label, value);
+    let value = value.atom_shrink(true);
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+fn row_texts(label: &str, value: &str) -> (egui::RichText, egui::RichText) {
+    let label = egui::RichText::new(label)
+        .color(egui::Color32::WHITE)
+        .size(ROW_FONT);
+    (
+        label,
+        egui::RichText::new(value).color(ACCENT).size(ROW_FONT),
     )
 }
 

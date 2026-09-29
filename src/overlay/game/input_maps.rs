@@ -16,6 +16,9 @@ pub struct MapRow {
     /// The row that takes the file away, if it has one: a built-in no file
     /// shadows has nothing to delete.
     pub remove: Option<MapAction>,
+    /// No map at all: there is nothing to do with it but use it, so its row
+    /// does that straight from the list.
+    pub fixed: bool,
 }
 
 /// What one map's screen offers, top to bottom.
@@ -84,6 +87,8 @@ pub enum Press {
     Open,
     /// Take the highlighted action on the map that is open.
     Take(MapAction),
+    /// Use the highlighted map straight from the list: one with no screen.
+    UseSelected,
     /// Answer the confirmation: `true` removes.
     Confirm(bool),
 }
@@ -267,7 +272,15 @@ impl InputMaps {
         let Some(at) = self.selected_map() else {
             return Some(Press::New);
         };
-        self.rows.get(at).map(|_| Press::Open)
+        self.rows.get(at).map(|row| match row.fixed {
+            true => Press::UseSelected,
+            false => Press::Open,
+        })
+    }
+
+    /// The highlighted map on the list, if the highlight is on one.
+    pub fn selected_row(&self) -> Option<&MapRow> {
+        self.selected_map().and_then(|at| self.rows.get(at))
     }
 
     /// Open the highlighted map's own screen.
@@ -324,18 +337,21 @@ mod tests {
                 name: "Keyboard keys".to_string(),
                 in_use: true,
                 remove: None,
+                fixed: false,
             },
             MapRow {
                 id: "pad".to_string(),
                 name: "Gamepad".to_string(),
                 in_use: false,
                 remove: Some(MapAction::Reset),
+                fixed: false,
             },
             MapRow {
                 id: "my-game".to_string(),
                 name: "My game".to_string(),
                 in_use: false,
                 remove: Some(MapAction::Delete),
+                fixed: false,
             },
         ]
     }
@@ -465,5 +481,25 @@ mod tests {
         screens.set_rows(left);
         assert!(!screens.open_id("my-game"));
         assert_eq!(screens.press(), Some(Press::Open));
+    }
+
+    /// No map has nothing to open: A on it uses it from the list.
+    #[test]
+    fn no_map_is_used_straight_from_the_list() {
+        let mut screens = InputMaps::new();
+        screens.set_rows(vec![MapRow {
+            id: "none".to_string(),
+            name: "None".to_string(),
+            in_use: false,
+            remove: None,
+            fixed: true,
+        }]);
+        screens.open();
+        screens.move_sel(1);
+        assert_eq!(screens.press(), Some(Press::UseSelected));
+        assert_eq!(
+            screens.selected_row().map(|row| row.id.as_str()),
+            Some("none")
+        );
     }
 }
