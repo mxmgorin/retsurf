@@ -15,7 +15,7 @@ use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
 use mode::GameInput;
 
-/// What the mode reserves while `game_mode` is bound to nothing on the pad, so
+/// What the mode reserves while `quick_access` is bound to nothing on the pad, so
 /// a session is never entered without a way out.
 pub const DEFAULT_EXIT: PadGesture = PadGesture::Hold(Pad::Select);
 
@@ -41,7 +41,7 @@ pub struct GameMode {
     /// the page is left holding nothing.
     input: Option<GameInput>,
     /// The gesture a running translator reserves for the menu, mirrored from
-    /// what `game_mode` is bound to on the pad.
+    /// what `quick_access` is bound to on the pad.
     exit: PadGesture,
 }
 

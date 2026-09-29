@@ -1,4 +1,4 @@
-//! The input maps this run offers: the repository the mode's menu lists, the
+//! The input maps this run offers: the repository the map list shows, the
 //! editor writes, and the running mode adopts from. Files and built-ins are
 //! [`input_map`]'s; which map runs live stays the event handler's.
 
@@ -16,7 +16,7 @@ impl MapLibrary {
         }
     }
 
-    /// Every map, in the order the mode's menu cycles them.
+    /// Every map, in the order the map list shows them.
     pub fn all(&self) -> &[InputMap] {
         &self.maps
     }

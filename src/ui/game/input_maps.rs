@@ -31,7 +31,7 @@ pub(in crate::ui) fn add_input_maps(
 /// hint could only name them a second time.
 fn title(screens: &InputMaps) -> String {
     let Some(row) = screens.open_row() else {
-        // Plural of the menu row that opens it: this is the list of them.
+        // Plural of the settings row that opens it: this is the list of them.
         return "INPUT MAPS".to_string();
     };
     let name = row.name.to_uppercase();

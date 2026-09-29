@@ -8,7 +8,7 @@ use super::theme::{self, ACCENT, DIM, HAIRLINE, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{Kind, Settings, SettingsSection, RESET_ROWS};
+use crate::overlay::settings::{Door, Kind, Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -438,6 +438,7 @@ pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
     update: &UpdateState,
+    input_map_name: &str,
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -540,7 +541,18 @@ pub(super) fn add_settings(
                 let flag = settings.flag(i);
                 let value = match (flag, &field.kind) {
                     (Some(_), _) => String::new(),
-                    (None, Kind::Door { .. }) => bold::CARET_RIGHT.to_string(),
+                    (
+                        None,
+                        Kind::Door {
+                            door: Door::Bindings,
+                        },
+                    ) => bold::CARET_RIGHT.to_string(),
+                    (
+                        None,
+                        Kind::Door {
+                            door: Door::InputMaps,
+                        },
+                    ) => input_map_name.to_string(),
                     (None, _) => settings.value_str(i),
                 };
                 let steppable = settings.is_steppable(i);

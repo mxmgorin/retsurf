@@ -1,13 +1,13 @@
 //! Game Mode's translator: the pad and the keyboard drive the game, not the
 //! chrome. What each source sends is the active [`InputMap`]; a source with a
 //! target is withheld from the page's raw input (the `bool` returns here), so
-//! one press is never seen twice. Whatever gesture `game_mode` is bound to is
+//! one press is never seen twice. Whatever gesture `quick_access` is bound to is
 //! mirrored here, so the way out is the way in; its button is the game's again
 //! once the gesture has not happened.
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
-use crate::command::{AppCommand, InputCommand};
+use crate::command::{AppCommand, InputCommand, QuickAccessAction};
 use crate::config::ControlsConfig;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
@@ -87,7 +87,7 @@ pub struct GameInput {
     /// Gamepad buttons the page holds through this map, counted the same way.
     buttons: Vec<(Pad, u32)>,
     triggers: [Trigger; 2],
-    /// The gesture that opens the Game Mode menu.
+    /// The gesture that opens Quick Access.
     exit: PadGesture,
     /// When the exit gesture's pad went down, while that gesture is a hold.
     exit_at: Option<Instant>,
@@ -169,7 +169,7 @@ impl GameInput {
         self.active.last().copied()
     }
 
-    /// One edge of the gesture that opens the Game Mode menu; returns whether the
+    /// One edge of the gesture that opens Quick Access; returns whether the
     /// pad belongs to it, i.e. is withheld from the game. Only a tap costs the
     /// game its button: the other shapes hand the press over on release.
     fn on_exit_pad(
@@ -182,7 +182,7 @@ impl GameInput {
         match self.exit {
             PadGesture::Tap(on) if on == pad => {
                 if pressed {
-                    commands.push(AppCommand::GameMode);
+                    commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
                 }
                 true
             }
@@ -222,7 +222,7 @@ impl GameInput {
                     (true, true, _) => {
                         self.exit_second = true;
                         self.exit_fired = true;
-                        commands.push(AppCommand::GameMode);
+                        commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
                         true
                     }
                     // Whatever the leader did since, the game must not see a
@@ -548,7 +548,7 @@ impl GameInput {
             if at.elapsed() >= self.hold {
                 self.exit_at = None;
                 self.exit_fired = true;
-                commands.push(AppCommand::GameMode);
+                commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
             }
         }
         let (aim, scroll) = self.analog();

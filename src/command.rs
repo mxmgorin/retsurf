@@ -23,9 +23,8 @@ pub enum AppCommand {
     FocusAddressBar,
     /// Close the focused tab. Closing the last one leaves a fresh tab open.
     CloseTab,
-    GameMode,
-    /// An action on Game Mode's own menu (see [`crate::overlay::game::menu`]).
-    GameMenu(GameMenuAction),
+    /// An action on Quick Access (see [`crate::overlay::quick_access`]).
+    QuickAccess(QuickAccessAction),
     /// An action on its input-map screens (see [`crate::overlay::game::input_maps`]).
     GameInputMaps(GameInputMapsAction),
     /// An action on its map editor (see [`crate::overlay::game::map_edit`]).
@@ -46,10 +45,9 @@ impl AppCommand {
             | AppCommand::Resize
             | AppCommand::Input(_)
             | AppCommand::Prompt(_)
-            | AppCommand::GameMenu(_)
+            | AppCommand::QuickAccess(_)
             | AppCommand::GameInputMaps(_)
-            | AppCommand::GameMapEdit(_)
-            | AppCommand::GameMode => true,
+            | AppCommand::GameMapEdit(_) => true,
             AppCommand::Browser(_)
             | AppCommand::Menu(_)
             | AppCommand::ToggleBookmark
@@ -58,12 +56,26 @@ impl AppCommand {
             | AppCommand::Settings(_) => false,
         }
     }
+
+    /// Whether this is a settings action that keeps the page, so it may run
+    /// over a game.
+    pub fn keeps_the_page(&self) -> bool {
+        match self {
+            AppCommand::Settings(action) => !matches!(
+                action,
+                SettingsAction::OpenLink(_) | SettingsAction::QuitForUpdate
+            ),
+            _ => false,
+        }
+    }
 }
 
-/// Actions on Game Mode's menu. `Click` carries its target row; the rest act
-/// on the focused one.
+/// Actions on Quick Access. `Click` carries its target row; the rest act on
+/// the focused one.
 #[derive(Clone)]
-pub enum GameMenuAction {
+pub enum QuickAccessAction {
+    /// Open the panel, or close it when it is up.
+    Toggle,
     /// Act on the focused row.
     Activate,
     /// Focus row `index` and activate it.
@@ -267,8 +279,8 @@ mod tests {
         }
         // The mode's own controls, and what the loop needs whatever is on screen.
         for command in [
-            AppCommand::GameMode,
-            AppCommand::GameMenu(GameMenuAction::Activate),
+            AppCommand::QuickAccess(QuickAccessAction::Toggle),
+            AppCommand::QuickAccess(QuickAccessAction::Activate),
             AppCommand::Input(InputCommand::Cancel),
             AppCommand::Prompt(PromptAction::Cancel),
             AppCommand::Shutdown,

@@ -7,8 +7,9 @@
 use super::SettingsSection;
 use crate::config::{
     bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, HomeStyle, MemoryProfile, OskStyle,
-    PadLayout, PageTheme, ToolbarPosition,
+    PadLayout, PageTheme, Scaling, ToolbarPosition,
 };
+use crate::overlay::quick_access::Modes;
 
 /// How a field is displayed, edited, and reached in a config. `Choice` carries
 /// `(label, stored value)` pairs; `Int`/`Float` carry the bounds dpad steps
@@ -127,6 +128,8 @@ macro_rules! float {
 pub enum Door {
     /// The binding list (see [`super::controls`]).
     Bindings,
+    /// Game Mode's input-map screens, which the app owns; B comes back here.
+    InputMaps,
 }
 
 /// What a [`Kind::Action`] row runs; the app does the work (see
@@ -160,6 +163,88 @@ pub struct Field {
     pub label: &'static str,
     pub kind: Kind,
     pub restart: bool,
+    /// Also a quick row in Quick Access, in these modes: stepped there live.
+    pub quick: Option<Modes>,
+}
+
+impl Field {
+    const fn quick(mut self, modes: Modes) -> Self {
+        self.quick = Some(modes);
+        self
+    }
+}
+
+/// `kind`'s value in `config` as a row shows it; empty for a row with none.
+pub fn value_of(kind: &Kind, config: &AppConfig) -> String {
+    match kind {
+        Kind::Action { task } => task.verb().to_string(),
+        Kind::Door { .. } => String::new(),
+        Kind::Bool { get, .. } => if get(config) { "On" } else { "Off" }.to_string(),
+        Kind::Text { get, .. } => {
+            let t = get(config);
+            if t.is_empty() {
+                "(default)".to_string()
+            } else {
+                t
+            }
+        }
+        Kind::Choice { opts, get, .. } => {
+            let cur = get(config);
+            opts.iter()
+                .find(|(_, v)| *v == cur)
+                .map(|(label, _)| label.to_string())
+                .unwrap_or(cur)
+        }
+        Kind::Int { zero, get, .. } => {
+            let v = get(config);
+            match zero {
+                Some(label) if v == 0 => label.to_string(),
+                _ => format!("{v}"),
+            }
+        }
+        Kind::Float { decimals, get, .. } => format!("{:.*}", decimals, get(config)),
+    }
+}
+
+/// Step `kind` in `config` by `dx` (-1 left, +1 right): toggle a bool, cycle a
+/// choice, or step a number within its bounds. Rows holding no value ignore it.
+pub fn step(kind: &Kind, config: &mut AppConfig, dx: i32) {
+    match kind {
+        Kind::Text { .. } | Kind::Action { .. } | Kind::Door { .. } => {}
+        Kind::Bool { get, set } => {
+            let v = !get(config);
+            set(config, v);
+        }
+        Kind::Choice { opts, get, set } => {
+            let cur = get(config);
+            let n = opts.len() as i32;
+            let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
+            let next = (idx + dx).rem_euclid(n) as usize;
+            set(config, opts[next].1);
+        }
+        Kind::Int {
+            min,
+            max,
+            step,
+            get,
+            set,
+            ..
+        } => {
+            let v = (get(config) + dx as i64 * step).clamp(*min, *max);
+            set(config, v);
+        }
+        Kind::Float {
+            min,
+            max,
+            step,
+            get,
+            set,
+            ..
+        } => {
+            let v = (get(config) + dx as f64 * step).clamp(*min, *max);
+            set(config, v);
+        }
+    }
 }
 
 /// User-Agent presets: the keywords [`crate::config::BrowserConfig::user_agent`]
@@ -212,6 +297,7 @@ const fn f(
         label,
         kind,
         restart,
+        quick: None,
     }
 }
 
@@ -247,6 +333,9 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "Notifications",         flag!(experimental.notification), false),
     f(S::Browser,  "Experimental", "Async clipboard",       flag!(experimental.async_clipboard), false),
     f(S::Browser,  "Experimental", "Permissions",           flag!(experimental.permissions), false),
+
+    f(S::Game,     "Game Mode",   "Input map",              Kind::Door { door: Door::InputMaps }, false),
+    f(S::Game,     "Game Mode",   "View",                   choice!(game_mode.view.scaling: Scaling), false).quick(Modes::Game),
 
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
@@ -314,6 +403,17 @@ pub(super) static FIELDS: &[Field] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A label names one row per tab; a repeat is a row listed twice.
+    #[test]
+    fn labels_are_unique_within_a_tab() {
+        for (i, a) in FIELDS.iter().enumerate() {
+            for b in &FIELDS[i + 1..] {
+                let same_tab = a.section == b.section;
+                assert!(!(same_tab && a.label == b.label), "{}", a.label);
+            }
+        }
+    }
 
     /// Every accessor pair reads back what it wrote — catches a `get`/`set`
     /// wired to different config spots.

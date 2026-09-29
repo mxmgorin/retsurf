@@ -7,8 +7,8 @@ mod execute;
 mod router;
 
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, GameMenuAction, InputCommand, MenuAction,
-    PromptAction, SettingsAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, InputCommand, MenuAction, PromptAction,
+    QuickAccessAction, SettingsAction,
 };
 
 use crate::browser::{AppBrowser, Favicon};

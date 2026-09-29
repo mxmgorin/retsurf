@@ -8,7 +8,7 @@ use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
-    command::{AppCommand, GameMapEditAction, InputCommand, SettingsAction},
+    command::{AppCommand, GameMapEditAction, InputCommand, QuickAccessAction, SettingsAction},
     config::ControlsConfig,
     event::gamepad::labelled_pad,
     event::window::handle_window,
@@ -24,9 +24,9 @@ use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
 
 /// The gesture Game Mode reserves against every map. Falls back where the file
-/// binds `game_mode` to nothing on the pad, so a session always has a way out.
+/// binds `quick_access` to nothing on the pad, so a session always has a way out.
 fn game_exit_gesture(store: &Store) -> PadGesture {
-    bindings::pad_gesture(store, Action::GameMode).unwrap_or(DEFAULT_EXIT)
+    bindings::pad_gesture(store, Action::QuickAccess).unwrap_or(DEFAULT_EXIT)
 }
 
 /// Give up on an idle capture: a handheld has no Esc to cancel with.
@@ -80,7 +80,7 @@ pub struct AppEventHandler {
     game_controller_subsystem: sdl2::GameControllerSubsystem,
     /// Gesture-to-action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
-    /// The pad gesture `game_mode` answers to. Held apart from the tables because
+    /// The pad gesture `quick_access` answers to. Held apart from the tables because
     /// Game Mode bypasses them and matches this one gesture on its own.
     game_exit: PadGesture,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
@@ -191,7 +191,7 @@ impl AppEventHandler {
         game::spent_pad(self.game_exit)
     }
 
-    /// How the pad reaches the Game Mode menu, or `None` where this device has no
+    /// How the pad reaches Quick Access in Game Mode, or `None` where this device has no
     /// pad to name.
     pub fn game_exit_text(&self) -> Option<String> {
         self.has_pad().then(|| self.game_exit.to_text())
@@ -229,7 +229,7 @@ impl AppEventHandler {
         let game_on = ui.game_mode() && ui.focus() == Focus::Page && self.listening.is_none();
         if game_on != self.routing() {
             // Nothing to route through until a map screen has loaded one, and
-            // entering the mode goes through its menu.
+            // entering the mode goes through Quick Access.
             if let Some(game) = &mut self.game {
                 match game_on {
                     true => {
@@ -490,11 +490,11 @@ impl AppEventHandler {
     /// the map's own table, then the game — which is where the rest go.
     fn game_key(&mut self, key: &KeyEvent, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let code = key_code(key.kc);
-        if self.bindings.key(code, mods_for(key.kc, key.keymod)) == Some(Action::GameMode) {
+        if self.bindings.key(code, mods_for(key.kc, key.keymod)) == Some(Action::QuickAccess) {
             // Both edges while the chord holds. An up after the modifiers drop
             // leaks, as every consumed binding's up already does (measured: no-op).
             if key.pressed && !key.repeat {
-                commands.push(AppCommand::GameMode);
+                commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle));
             }
             return;
         }

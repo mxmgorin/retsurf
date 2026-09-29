@@ -17,7 +17,7 @@
 //! holds focus; see [`crate::event::keyboard`].
 
 use crate::browser::BrowserCommand;
-use crate::command::{AppCommand, InputCommand, MenuAction, SettingsAction};
+use crate::command::{AppCommand, InputCommand, MenuAction, QuickAccessAction, SettingsAction};
 use crate::config;
 use crate::overlay::osk::OskCommand;
 use inputbind::editor::{Groups, Requirement};
@@ -78,10 +78,10 @@ action_table! {
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.
         Osk => "osk", "On-screen keyboard",
-        /// Opens the Game Mode menu, and closes it again; the mode is entered and
-        /// left by a row there, not by this. Mirrored inside the mode, where the
-        /// tables are bypassed, so the way in and the way out are one gesture.
-        GameMode => "game_mode", "Game Mode",
+        /// Opens Quick Access, and closes it again; Game Mode is entered and
+        /// left by a row there. Mirrored inside the mode, where the tables are
+        /// bypassed, so the way in and the way out are one gesture.
+        QuickAccess => "quick_access", "Quick Access",
         /// Quit immediately. Unbound by default; [`default_store`] carries the
         /// stock exit.
         Quit => "quit", "Quit",
@@ -240,7 +240,7 @@ impl Action {
             Action::Menu => AppCommand::Menu(MenuAction::Open),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
-            Action::GameMode => AppCommand::GameMode,
+            Action::QuickAccess => AppCommand::QuickAccess(QuickAccessAction::Toggle),
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
             Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
@@ -295,7 +295,7 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("start", Action::Menu),
         // Matched on its own inside the mode, where these tables are bypassed, so
         // rebinding it moves the way out with it.
-        ("hold:start", Action::GameMode),
+        ("hold:start", Action::QuickAccess),
         // On a hold so stickless devices (no R3) have reader out of the box.
         ("hold:x", Action::Reader),
         ("hold:y", Action::Bookmark),
@@ -324,7 +324,7 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+,", Action::Settings),
         // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
         // is the only key the browser still answers.
-        ("ctrl+alt+g", Action::GameMode),
+        ("ctrl+alt+g", Action::QuickAccess),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
         ("ctrl+t", Action::TabNext),
@@ -368,8 +368,25 @@ fn bindings_path() -> String {
 /// merging in the ones an older file predates (see [`merge_missing_defaults`]).
 pub fn load_store() -> Store {
     let mut store = Store::load(bindings_path(), default_store);
+    rename_retired(&mut store);
     merge_missing_defaults(&mut store);
     store
+}
+
+/// Action names a file may still carry, each with the name it goes by now.
+const RETIRED: &[(&str, &str)] = &[("game_mode", "quick_access")];
+
+/// Carry a retired name over before the defaults merge: that merge never takes
+/// back a gesture the file spells, so the renamed action would end up unbound.
+fn rename_retired(store: &mut Store) {
+    for table in [&mut store.gamepad, &mut store.keyboard] {
+        for name in table.values_mut() {
+            if let Some((_, now)) = RETIRED.iter().find(|(old, _)| old == name) {
+                log::info!("bindings: `{name}` is now `{now}`");
+                *name = now.to_string();
+            }
+        }
+    }
 }
 
 /// Give back the default gestures of an action with no binding at all in that
@@ -506,11 +523,11 @@ mod tests {
     /// The one key that still fires inside Game Mode, where every other one goes
     /// to the page — so a plain key would be one the game wanted.
     #[test]
-    fn the_game_mode_key_carries_a_modifier() {
+    fn the_quick_access_key_carries_a_modifier() {
         let store = default_store();
         let mut found = 0;
         for (text, name) in &store.keyboard {
-            if Action::parse(name) != Some(Action::GameMode) {
+            if Action::parse(name) != Some(Action::QuickAccess) {
                 continue;
             }
             found += 1;
@@ -518,16 +535,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("`{text}` is not a key gesture"));
             assert!(!gesture.mods.is_plain(), "`{text}` is a plain key");
         }
-        assert_eq!(found, 1, "game_mode needs exactly one default key");
+        assert_eq!(found, 1, "quick_access needs exactly one default key");
     }
 
-    /// The case this exists for: a file written before `game_mode` existed. It
+    /// The case this exists for: a file written before `quick_access` existed. It
     /// is unreachable on both devices until the defaults are merged back.
     #[test]
     fn an_action_the_file_predates_gets_its_defaults_back() {
         let mut store = default_store();
-        store.gamepad.retain(|_, name| name != "game_mode");
-        store.keyboard.retain(|_, name| name != "game_mode");
+        store.gamepad.retain(|_, name| name != "quick_access");
+        store.keyboard.retain(|_, name| name != "quick_access");
         merge_missing_defaults(&mut store);
         assert_eq!(store, default_store());
     }
@@ -538,18 +555,20 @@ mod tests {
     #[test]
     fn a_rebound_action_is_left_alone_device_by_device() {
         let mut store = default_store();
-        store.keyboard.retain(|_, name| name != "game_mode");
-        store.keyboard.insert("ctrl+g".into(), "game_mode".into());
-        store.gamepad.retain(|_, name| name != "game_mode");
+        store.keyboard.retain(|_, name| name != "quick_access");
+        store
+            .keyboard
+            .insert("ctrl+g".into(), "quick_access".into());
+        store.gamepad.retain(|_, name| name != "quick_access");
         merge_missing_defaults(&mut store);
         assert_eq!(
             store.keyboard.get("ctrl+g").map(String::as_str),
-            Some("game_mode")
+            Some("quick_access")
         );
         assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
         assert_eq!(
             store.gamepad.get("hold:start").map(String::as_str),
-            Some("game_mode")
+            Some("quick_access")
         );
     }
 
@@ -558,13 +577,25 @@ mod tests {
     #[test]
     fn a_taken_gesture_is_never_reclaimed() {
         let mut store = default_store();
-        store.gamepad.retain(|_, name| name != "game_mode");
+        store.gamepad.retain(|_, name| name != "quick_access");
         store.gamepad.insert("hold:start".into(), "reader".into());
         merge_missing_defaults(&mut store);
         assert_eq!(
             store.gamepad.get("hold:start").map(String::as_str),
             Some("reader")
         );
+    }
+
+    /// A file bound under a retired name keeps its gestures under the new one.
+    #[test]
+    fn a_retired_name_keeps_its_gestures() {
+        let mut store = default_store();
+        store
+            .gamepad
+            .insert("hold:start".into(), "game_mode".into());
+        rename_retired(&mut store);
+        merge_missing_defaults(&mut store);
+        assert_eq!(store, default_store());
     }
 
     /// Merging the stock file changes nothing, so it cannot churn on launch.

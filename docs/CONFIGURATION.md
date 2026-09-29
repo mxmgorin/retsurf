@@ -260,18 +260,26 @@ enabled = true
 
 [game_mode]
 # Game Mode hands the input to the page and hides the chrome, so a web game gets
-# the keys and buttons the browser would otherwise take. The `game_mode` binding
-# (Ctrl+Alt+G, or a held Start on the pad) opens the Game Mode menu, in or out of
-# the mode; inside, the pad gesture it is bound to is mirrored and withheld from
-# the game, so rebinding it moves the way out with it. That
-# menu is the only way in and out (Enter game mode, or Exit game mode last) and its
-# Input map row is where this one is picked (written back here), which is
-# why it opens outside the mode too; it also summons the on-screen keyboard over
-# the game. Which input map drives the pad and the keyboard while the mode is on: a
-# built-in ("keys", "wasd", "mouse" or "pad") or the stem of an
-# input_maps/<id>.toml of your own.
+# the keys and buttons the browser would otherwise take. The `quick_access` binding
+# (Ctrl+Alt+G, or a held Start on the pad) opens Quick Access, a strip at the
+# left edge, in or out of the mode; inside, the pad gesture it is bound to is
+# mirrored and withheld from the game, so rebinding it moves the way out with it.
+# Quick Access is the way in and out (Enter game mode, or Exit game mode last);
+# inside the mode it also steps the View live, summons the on-screen keyboard
+# over the game, and opens Settings on its Game tab, where the Input map row
+# picks the map (written back here). Which input map drives the pad and the
+# keyboard while the mode is on: a built-in ("keys", "wasd", "mouse" or "pad")
+# or the stem of an input_maps/<id>.toml of your own.
 # See "Game Mode input maps" below for the format.
 input_map = "keys"
+
+[game_mode.view]
+# How the page's game is shown while the mode is on: "off" leaves the page as it
+# is; "fit" cuts the biggest canvas or iframe out of the page over a black
+# backdrop, as large as its aspect ratio allows; "integer" does the same at the
+# largest whole multiple of its pixels, drawn unsmoothed; "stretch" fills the
+# screen, aspect ratio ignored. Undone on leaving the mode, kept across pages.
+scaling = "off"
 ```
 
 ## Game Mode input maps (`input_maps/*.toml`)
@@ -338,7 +346,7 @@ table of its own. A stick has no gesture of its own, so it is taken from a push
 most of the way over — past any dead zone, since one resting off-centre must not
 bind itself. A map holds one target per source, so
 a hold, a chord or a modified key is refused on the row that asked; so is the
-button the `game_mode` gesture resolves on the press, where it is a bare tap.
+button the `quick_access` gesture resolves on the press, where it is a bare tap.
 Nothing pressed within six seconds gives up on its own — a handheld has no Esc.
 
 **A stick answers A with its own list**, like every other row — *Cursor*,
@@ -415,7 +423,7 @@ read as directions keeps its whole axis, since half an axis cannot be withheld �
 which also makes `passthrough` on one direction meaningless. `analog = "none"`
 keeps the axis and sends nothing, which is how a stick is made inert.
 
-**The `game_mode` gesture's button is the map's to bind, but its press arrives
+**The `quick_access` gesture's button is the map's to bind, but its press arrives
 late.** A hold and a chord are undecided until the button is let go, so a map's
 target for it is sent on release and ended a frame later, and an unbound one
 reaches the page as the button it is. Only a bare tap resolves on the press

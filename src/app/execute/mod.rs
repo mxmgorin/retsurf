@@ -12,14 +12,16 @@ use crate::config::AppConfig;
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::settings::Task;
+use crate::overlay::settings::{Door, Task};
 use crate::ui::Focus;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
         // Game Mode shrinks the vocabulary to its own, so a shortcut resolved
         // under one of its overlays cannot act on the browser behind it.
-        if (self.ui.game_mode() || self.ui.game_screen()) && !command.in_game_mode() {
+        let settings_up = self.ui.settings.visible() && command.keeps_the_page();
+        if (self.ui.game_mode() || self.ui.game_screen()) && !command.in_game_mode() && !settings_up
+        {
             return;
         }
         match command {
@@ -41,8 +43,7 @@ impl App {
                 self.close_tab_at(self.browser.active_tab());
                 self.ui.toast("Tab closed");
             }
-            AppCommand::GameMode => self.game_mode_gesture(),
-            AppCommand::GameMenu(action) => self.game_menu_action(action, out),
+            AppCommand::QuickAccess(action) => self.quick_access_action(action, out),
             AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),
             AppCommand::GameMapEdit(action) => self.map_edit_action(action, out),
             AppCommand::Prompt(action) => match action {
@@ -219,7 +220,7 @@ impl App {
                 if self.ui.settings.visible() {
                     self.settings_close(out);
                 } else {
-                    self.ui.settings_open(&self.config);
+                    self.open_settings(None);
                 }
             }
             SettingsAction::Close => self.settings_close(out),
@@ -268,7 +269,10 @@ impl App {
             }
         } else if self.ui.settings.bindings_open() {
             self.ui.settings.controls_activate();
-        } else if self.ui.settings.open_door() {
+        } else if let Some(door) = self.ui.settings.open_door() {
+            if door == Door::InputMaps {
+                self.open_input_maps();
+            }
         } else if let Some(task) = self.ui.settings.confirm_action() {
             match task {
                 Task::ClearData => self.clear_browsing_data(),

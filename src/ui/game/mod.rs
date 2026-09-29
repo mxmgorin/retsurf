@@ -2,4 +2,3 @@
 
 pub(super) mod input_maps;
 pub(super) mod map_edit;
-pub(super) mod menu;

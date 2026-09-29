@@ -22,7 +22,7 @@ mod fields;
 
 pub use about::about_info;
 pub use controls::RESET_ROWS;
-pub use fields::{Door, Field, Kind, Task};
+pub use fields::{step, value_of, Door, Field, Kind, Task};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, GROUPS, SURFACES};
@@ -40,6 +40,8 @@ pub enum SettingsSection {
     /// The input tunables, led by a door to the binding list: a list of actions,
     /// each showing its gamepad + keyboard bindings, with add (capture) / remove.
     Controls,
+    /// Game Mode's settings (`[game_mode]`).
+    Game,
     /// History recording, the ad blocker, and data-saving content blocking,
     /// presented under one tab — they remain separate config sections
     /// (`[history]`, `[adblock]`, `[data_saving]`), shown here as sub-groups.
@@ -51,8 +53,9 @@ pub enum SettingsSection {
 
 impl SettingsSection {
     /// Left-to-right order of the section bar.
-    pub const ALL: [SettingsSection; 6] = [
+    pub const ALL: [SettingsSection; 7] = [
         SettingsSection::Browser,
+        SettingsSection::Game,
         SettingsSection::Interface,
         SettingsSection::Controls,
         SettingsSection::Content,
@@ -65,6 +68,7 @@ impl SettingsSection {
             SettingsSection::Browser => "Browser",
             SettingsSection::Interface => "Interface",
             SettingsSection::Controls => "Controls",
+            SettingsSection::Game => "Game",
             SettingsSection::Content => "Content",
             SettingsSection::Advanced => "Advanced",
             SettingsSection::About => "About",
@@ -257,27 +261,32 @@ impl Settings {
         self.draft().is_some_and(|draft| draft.bindings_open)
     }
 
-    /// A on a door row opens its screen; `false` when the focused row is none.
-    pub fn open_door(&mut self) -> bool {
-        let Some(draft) = self.draft_mut() else {
-            return false;
-        };
+    /// A on a door row: the door, opened here when this screen owns it (the
+    /// caller opens the rest); `None` when the focused row is none.
+    pub fn open_door(&mut self) -> Option<Door> {
+        let draft = self.draft_mut()?;
         let Sel::Field(i) = draft.selected else {
-            return false;
+            return None;
         };
         if !draft.is_field_section() {
-            return false;
+            return None;
         }
         let Kind::Door { door } = fields::FIELDS[i].kind else {
-            return false;
+            return None;
         };
-        match door {
-            Door::Bindings => {
-                draft.bindings_open = true;
-                draft.controls.focus_first();
-            }
+        if door == Door::Bindings {
+            draft.bindings_open = true;
+            draft.controls.focus_first();
         }
-        true
+        Some(door)
+    }
+
+    /// Adopt a map chosen on the input-map screens while this is open, so the
+    /// close does not put the old one back.
+    pub fn adopt_input_map(&mut self, id: &str) {
+        if let Some(draft) = self.draft_mut() {
+            draft.config.game_mode.input_map = id.to_string();
+        }
     }
 
     /// B inside a door's screen goes back to its row; `false` when none is up.
@@ -458,43 +467,7 @@ impl Settings {
         if !draft.is_field_section() {
             return;
         }
-        let config = &mut draft.config;
-        match &fields::FIELDS[i].kind {
-            Kind::Text { .. } | Kind::Action { .. } | Kind::Door { .. } => {}
-            Kind::Bool { get, set } => {
-                let v = !get(config);
-                set(config, v);
-            }
-            Kind::Choice { opts, get, set } => {
-                let cur = get(config);
-                let n = opts.len() as i32;
-                let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
-                let next = (idx + dx).rem_euclid(n) as usize;
-                set(config, opts[next].1);
-            }
-            Kind::Int {
-                min,
-                max,
-                step,
-                get,
-                set,
-                ..
-            } => {
-                let v = (get(config) + dx as i64 * step).clamp(*min, *max);
-                set(config, v);
-            }
-            Kind::Float {
-                min,
-                max,
-                step,
-                get,
-                set,
-                ..
-            } => {
-                let v = (get(config) + dx as f64 * step).clamp(*min, *max);
-                set(config, v);
-            }
-        }
+        step(&fields::FIELDS[i].kind, &mut draft.config, dx);
     }
 
     /// The display string for config row `i`'s current value; empty while the
@@ -503,41 +476,9 @@ impl Settings {
         let Some(draft) = self.draft() else {
             return String::new();
         };
-        let config = &draft.config;
         match &fields::FIELDS[i].kind {
-            Kind::Action { task } => if draft.armed == Some(i) {
-                "press again to confirm"
-            } else {
-                task.verb()
-            }
-            .to_string(),
-            Kind::Door { .. } => String::new(),
-            Kind::Bool { get, .. } => if get(config) { "On" } else { "Off" }.to_string(),
-            Kind::Text { get, .. } => {
-                let t = get(config);
-                if t.is_empty() {
-                    "(default)".to_string()
-                } else {
-                    t
-                }
-            }
-            Kind::Choice { opts, get, .. } => {
-                let cur = get(config);
-                opts.iter()
-                    .find(|(_, v)| *v == cur)
-                    .map(|(label, _)| label.to_string())
-                    .unwrap_or(cur)
-            }
-            Kind::Int { zero, get, .. } => {
-                let v = get(config);
-                match zero {
-                    Some(label) if v == 0 => label.to_string(),
-                    _ => format!("{v}"),
-                }
-            }
-            Kind::Float { decimals, get, .. } => {
-                format!("{:.*}", decimals, get(config))
-            }
+            Kind::Action { .. } if draft.armed == Some(i) => "press again to confirm".to_string(),
+            kind => value_of(kind, &draft.config),
         }
     }
 }
@@ -657,9 +598,13 @@ mod tests {
         let mut settings = Settings::new();
         settings.open(&AppConfig::default());
         settings.set_selected(door);
-        assert!(settings.open_door());
+        assert_eq!(settings.open_door(), Some(Door::Bindings));
         assert!(settings.bindings_open());
-        assert!(!settings.open_door(), "a door opens from a field list only");
+        assert_eq!(
+            settings.open_door(),
+            None,
+            "a door opens from a field list only"
+        );
 
         assert!(settings.close_door());
         assert!(!settings.bindings_open());
@@ -670,6 +615,17 @@ mod tests {
         settings.open_door();
         settings.switch_section(1);
         assert!(!settings.bindings_open());
+    }
+
+    /// A map chosen on the input-map screens while the draft is open survives
+    /// the close; otherwise the draft would put the old one back.
+    #[test]
+    fn a_map_chosen_meanwhile_survives_the_close() {
+        let mut settings = Settings::new();
+        settings.open(&AppConfig::default());
+        settings.adopt_input_map("wasd");
+        let (config, _) = settings.close().expect("it was open");
+        assert_eq!(config.game_mode.input_map, "wasd");
     }
 
     /// Moving off the armed row cancels it — otherwise a stray A elsewhere in

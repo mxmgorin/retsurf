@@ -272,9 +272,7 @@ pub fn source_of(gesture: &str, keyboard: bool, spent: Option<Pad>) -> Result<Sl
     }
     match PadGesture::parse(gesture) {
         // A row for it would never fire: the menu takes that press.
-        Some(PadGesture::Tap(pad)) if Some(pad) == spent => {
-            Err("that button opens the Game Mode menu")
-        }
+        Some(PadGesture::Tap(pad)) if Some(pad) == spent => Err("that button opens Quick Access"),
         Some(PadGesture::Tap(pad)) => Ok(Slot::Button(pad)),
         _ => Err("one button at a time, tapped"),
     }

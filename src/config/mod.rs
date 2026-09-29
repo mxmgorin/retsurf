@@ -57,10 +57,10 @@ pub use video::VideoConfig;
 pub struct AppConfig {
     pub browser: BrowserConfig,
     pub experimental: ExperimentalConfig,
+    pub game_mode: GameModeConfig,
     pub interface: InterfaceConfig,
     pub controls: ControlsConfig,
     pub osk: OskConfig,
-    pub game_mode: GameModeConfig,
     pub history: HistoryConfig,
     pub adblock: AdblockConfig,
     pub data_saving: DataSavingConfig,

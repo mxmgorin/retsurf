@@ -1,4 +1,4 @@
-//! Game Mode's input maps, as two screens reached from its menu: the list of
+//! Game Mode's input maps, as two screens reached from Settings: the list of
 //! what this run offers, and what one map can be told to do — use it, edit
 //! its bindings, rename it, copy it, or throw the file away. The device this
 //! is for has no file manager, so a map it cannot add here is one it cannot

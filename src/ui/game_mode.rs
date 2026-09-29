@@ -1,5 +1,5 @@
 //! Game Mode's slice of the chrome: the mode flag the router and keyboard
-//! read, the entry toast's wording, and the map name its menu shows.
+//! read, the entry toast's wording, and the map name the Game tab shows.
 
 use super::{drop_egui_focus, AppUi};
 use std::time::Duration;
@@ -18,7 +18,7 @@ impl AppUi {
     /// [`Focus::is_game_screen`]: it stays true with the OSK open over one.
     #[inline]
     pub fn game_screen(&self) -> bool {
-        self.game_menu.visible || self.input_maps.visible() || self.map_edit.visible()
+        self.quick_access.visible || self.input_maps.visible() || self.map_edit.visible()
     }
 
     /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
@@ -53,7 +53,7 @@ pub fn game_mode_toast_text(pad: Option<String>, keys: &[String]) -> String {
     if !ways.is_empty() {
         text.push_str(" - ");
         text.push_str(&ways.join(" / "));
-        text.push_str(" for the menu");
+        text.push_str(" for Quick Access");
     }
     text
 }
@@ -70,16 +70,16 @@ mod tests {
         let pad = || Some("hold:start".to_string());
         assert_eq!(
             game_mode_toast_text(pad(), &keys),
-            "Game Mode - hold:start / ctrl+g for the menu"
+            "Game Mode - hold:start / ctrl+g for Quick Access"
         );
         // No pad: naming its gesture would point at a button that is not there.
         assert_eq!(
             game_mode_toast_text(None, &keys),
-            "Game Mode - ctrl+g for the menu"
+            "Game Mode - ctrl+g for Quick Access"
         );
         assert_eq!(
             game_mode_toast_text(pad(), &[]),
-            "Game Mode - hold:start for the menu"
+            "Game Mode - hold:start for Quick Access"
         );
         // Nothing to name leaves no dangling separator behind.
         assert_eq!(game_mode_toast_text(None, &[]), "Game Mode");

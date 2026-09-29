@@ -16,6 +16,7 @@ mod osk;
 mod overlays;
 mod panel;
 mod prompt;
+mod quick_access;
 mod scale;
 mod settings;
 mod theme;
@@ -37,12 +38,12 @@ use crate::{
     overlay::dial_edit::DialEdit,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
-    overlay::game::menu::GameMenu,
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::{Menu, Section},
     overlay::osk::Osk,
     overlay::prompt::Prompt,
+    overlay::quick_access::QuickAccess,
     overlay::settings::Settings,
     platform::window::AppWindow,
     update::{UpdateState, Updater},
@@ -227,13 +228,13 @@ pub struct AppUi {
     game_mode: bool,
     /// The notice on screen, if any (see [`toast`]).
     toast: Option<toast::Toast>,
-    /// Game Mode's own menu (the `game_mode` gesture).
-    pub game_menu: GameMenu,
+    /// Quick Access (the `quick_access` gesture).
+    pub quick_access: QuickAccess,
     /// Its map list and one map's rows, opened from that menu.
     pub input_maps: InputMaps,
     /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
-    /// The live map's name, for the menu's row. Empty until that menu opens:
+    /// The live map's name, for the Game tab's row. Empty until Settings opens:
     /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
@@ -329,7 +330,7 @@ impl AppUi {
             browser_viewport: (0, 0),
             game_mode: false,
             toast: None,
-            game_menu: GameMenu::new(),
+            quick_access: QuickAccess::new(),
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
             input_map_name: String::new(),
@@ -735,7 +736,14 @@ impl AppUi {
                     // The overlay owns its row selection; an egui-focused row
                     // would take Enter a second time and activate twice.
                     drop_egui_focus(ctx);
-                    settings::add_settings(ctx, &self.settings, &update, face, commands);
+                    settings::add_settings(
+                        ctx,
+                        &self.settings,
+                        &update,
+                        &self.input_map_name,
+                        face,
+                        commands,
+                    );
                 }
 
                 // Its own block rather than the chain below, so the keyboard can
@@ -779,10 +787,10 @@ impl AppUi {
                         face,
                         commands,
                     );
-                } else if self.game_menu.visible {
+                } else if self.quick_access.visible {
                     // Same as the menu's: a focused row would activate twice.
                     drop_egui_focus(ctx);
-                    game::menu::add_game_menu(ctx, &self.game_menu, &self.input_map_name, commands);
+                    quick_access::add_quick_access(ctx, &self.quick_access, commands);
                 } else if self.osk.visible {
                     // Clear a bottom toolbar so its address bar stays visible
                     // below the keys.
