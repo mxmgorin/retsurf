@@ -706,7 +706,6 @@ impl AppUi {
                         home::HomeView { pins, mark },
                         self.webview_rect,
                         caret_for(OskField::Home),
-                        face,
                         commands,
                     );
                 }
