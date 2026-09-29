@@ -4,9 +4,13 @@
 //! just changed. Up/Down move, A / Left/Right act on the focused row, B closes.
 
 use crate::command::{AppCommand, QuickAccessAction};
-use crate::overlay::quick_access::{QuickAccess, Strip};
+use crate::event::bindings::Action;
+use crate::overlay::menu::Section;
+use crate::overlay::quick_access::{Entry, QuickAccess, Strip};
+use crate::overlay::settings::Settings;
 use crate::ui::panel::{self, ROW_GAP};
 use crate::ui::theme::{self, ACCENT, ROW_FONT};
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 
 /// The strip's width where the screen has room for it; a narrower screen gets
@@ -47,8 +51,8 @@ pub(in crate::ui) fn add_quick_access(
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 for index in 0..panel.rows().len() {
                     let selected = index == panel.selected();
-                    let label = panel.label(index);
-                    let resp = panel::named_row(ui, width, selected, label, panel.value(index));
+                    let label = format!("{}  {}", glyph(panel.rows()[index]), panel.label(index));
+                    let resp = panel::named_row(ui, width, selected, &label, panel.value(index));
                     if resp.clicked() {
                         commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
                     }
@@ -66,4 +70,55 @@ fn add_header(ui: &mut egui::Ui, title: &str) {
             .strong(),
     );
     ui.add_space(ROW_GAP * 2.0);
+}
+
+/// What a row with no icon of its own shows; the tests keep every row off it.
+const NO_ICON: &str = bold::DOT;
+
+/// A row's icon. A quick row goes by its settings row's label, since the
+/// strips share that row rather than a copy of it.
+fn glyph(entry: Entry) -> &'static str {
+    match entry {
+        Entry::Enter => bold::GAME_CONTROLLER,
+        Entry::Exit => bold::SIGN_OUT,
+        Entry::InputMap => bold::JOYSTICK,
+        Entry::Osk => bold::KEYBOARD,
+        Entry::Settings => bold::GEAR,
+        Entry::Quit => bold::POWER,
+        Entry::Run(Action::Reader) => bold::BOOK_OPEN,
+        Entry::Run(Action::Bookmark) => bold::STAR,
+        Entry::Run(Action::Home) => bold::HOUSE,
+        Entry::Run(_) => NO_ICON,
+        Entry::List(Section::Tabs) => bold::TABS,
+        Entry::List(Section::Bookmarks) => bold::BOOKMARKS,
+        Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
+        Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
+        Entry::Quick(field) => match Settings::fields()[field].label {
+            "View" => bold::FRAME_CORNERS,
+            "Page theme" => bold::CIRCLE_HALF,
+            _ => NO_ICON,
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::browser::TabMode;
+    use crate::config::AppConfig;
+
+    /// A row added to either strip, or a newly flagged quick row, must pick
+    /// an icon of its own.
+    #[test]
+    fn every_row_has_an_icon() {
+        let mut panel = QuickAccess::new();
+        for strip in [Strip::QuickAccess, Strip::QuickMenu] {
+            for mode in [TabMode::Page, TabMode::Reader, TabMode::Game] {
+                panel.open(strip, mode, &AppConfig::default());
+                for &row in panel.rows() {
+                    assert_ne!(glyph(row), NO_ICON, "{row:?}");
+                }
+            }
+        }
+    }
 }

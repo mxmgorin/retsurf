@@ -432,6 +432,19 @@ fn add_controls(
     });
 }
 
+/// A settings tab's icon.
+fn section_icon(section: SettingsSection) -> &'static str {
+    match section {
+        SettingsSection::Browser => bold::GLOBE,
+        SettingsSection::Game => bold::GAME_CONTROLLER,
+        SettingsSection::Interface => bold::LAYOUT,
+        SettingsSection::Controls => bold::JOYSTICK,
+        SettingsSection::Content => bold::SHIELD_CHECK,
+        SettingsSection::Advanced => bold::WRENCH,
+        SettingsSection::About => bold::INFO,
+    }
+}
+
 /// Draw the settings overlay: the section bar, a control hint, and the active
 /// section's field list. See the module docs for the controls.
 pub(super) fn add_settings(
@@ -449,9 +462,10 @@ pub(super) fn add_settings(
         let clicked = panel::section_bar(
             ui,
             screen,
-            SettingsSection::ALL,
+            &SettingsSection::ALL,
             active,
             SettingsSection::label,
+            section_icon,
             |_| {},
         );
         if let Some(section) = clicked {
