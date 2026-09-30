@@ -97,6 +97,7 @@ fn glyph(entry: Entry) -> &'static str {
             "View" => bold::FRAME_CORNERS,
             "Page theme" => bold::CIRCLE_HALF,
             "Ad blocker" => bold::SHIELD_CHECK,
+            "User agent" => bold::DEVICES,
             _ => NO_ICON,
         },
     }

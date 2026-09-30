@@ -76,7 +76,7 @@ impl AppBrowser {
     /// Arm the active tab's loading flag; `Complete` clears it. Servo sends
     /// `LoadStatus::Started` only for page-initiated navigations, and back /
     /// forward reuse the session-history document with no load at all.
-    fn mark_loading(&self) {
+    pub(super) fn mark_loading(&self) {
         let active = self.inner.active.get();
         if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
             tab.state.loading = true;

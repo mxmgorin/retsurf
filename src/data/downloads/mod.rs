@@ -86,7 +86,7 @@ pub struct Downloads {
     /// Save directory, with a trailing separator (see [`DownloadsConfig`]).
     dir: String,
     /// The browser's UA string, sent by the workers' fetches.
-    user_agent: String,
+    pub user_agent: String,
     /// Highlighted row in the menu's Downloads section.
     cursor: crate::data::ListCursor,
 }

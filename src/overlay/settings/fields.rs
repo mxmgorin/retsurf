@@ -332,7 +332,7 @@ use SettingsSection as S;
 pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Home page",              text!(browser.home_page), false),
     f(S::Browser,  "Browser",     "Search URL",             text!(browser.search_page), false),
-    f(S::Browser,  "Browser",     "User agent",             ua_kind(), true),
+    f(S::Browser,  "Browser",     "User agent",             ua_kind(), false).quick(Modes::Browser),
     f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
     f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false).quick(Modes::Browser),
     f(S::Browser,  "Browser",     "Restore tabs",           flag!(browser.restore_tabs), false),

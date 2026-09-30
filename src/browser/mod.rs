@@ -40,7 +40,7 @@ use crate::data::downloads::{BlobDownload, DownloadRequest};
 use crate::platform::clipboard::Clipboard;
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{AppConfig, ExperimentalConfig, PageTheme},
+    config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
     event::user::{FrameQueue, UserEvent, UserEventSender},
 };
 use servo::profile_traits::mem::MemoryReportResult;
@@ -224,6 +224,8 @@ struct AppBrowserInner {
     /// `[browser] page_theme`. Behind a `Cell` so a settings save can retheme
     /// the open tabs and still be inherited by tabs opened later.
     page_theme: Cell<PageTheme>,
+    /// The User-Agent in force, to skip a save that leaves it unchanged.
+    user_agent: RefCell<String>,
     /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
     /// The forced-dark sheet, attached to `user_content` while the theme asks
@@ -324,6 +326,7 @@ impl AppBrowserInner {
             hidpi: Cell::new(crate::config::device_scale().unwrap_or(1.0)),
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
+            user_agent: RefCell::new(effective_user_agent(browser)),
             page_icons: Cell::new(config.interface.page_icons),
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
@@ -513,8 +516,8 @@ impl AppBrowser {
         self.set_content_filter(ContentFilter::from_config(&config.data_saving));
         // Experimental features apply live too — effective on the next page load.
         self.set_experimental_prefs(&config.experimental);
-        // The page theme needs no reload at all: open tabs restyle in place.
         self.set_page_theme(config.browser.page_theme);
+        self.set_user_agent(&config.browser);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
         self.set_page_icons(config.interface.page_icons);
@@ -607,6 +610,23 @@ impl AppBrowser {
             tab.webview.notify_theme_change(engine::theme(theme));
             tab.state.loading = true;
             tab.webview.reload();
+        }
+    }
+
+    /// Apply `config`'s User-Agent to later requests and reload the shown tab;
+    /// a no-op when unchanged.
+    fn set_user_agent(&self, config: &BrowserConfig) {
+        let ua = effective_user_agent(config);
+        if *self.inner.user_agent.borrow() == ua {
+            return;
+        }
+        self.inner
+            .servo
+            .set_preference("user_agent", servo::PrefValue::Str(ua.clone()));
+        self.inner.user_agent.replace(ua);
+        if let Some(webview) = self.inner.active_webview() {
+            self.mark_loading();
+            webview.reload();
         }
     }
 

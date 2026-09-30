@@ -369,6 +369,8 @@ impl App {
         );
         self.ui.update.set_config(&self.config.update);
         self.browser.apply_config(&self.config);
+        self.ui.menu.downloads.user_agent =
+            crate::browser::effective_user_agent(&self.config.browser);
         // Off drops the stored session now, not on the next launch.
         if !self.config.browser.restore_tabs {
             self.session.discard();

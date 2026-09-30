@@ -290,6 +290,7 @@ mod tests {
             [
                 "Enter game mode",
                 "Bookmark",
+                "User agent",
                 "Ad blocker",
                 "Reader view",
                 "Page theme"

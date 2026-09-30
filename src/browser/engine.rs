@@ -20,8 +20,8 @@ pub(super) fn build_opts(config: &BrowserConfig) -> servo::Opts {
 }
 
 /// Servo preferences sized to the hardware (see [`PerformanceConfig`]) plus the
-/// configured user agent. These must go through `ServoBuilder`: the thread pools
-/// are created at startup, so `set_preference` after `build()` is too late.
+/// configured user agent. The thread pools are created at startup, so their
+/// sizes must go through `ServoBuilder`, not `set_preference`.
 pub(super) fn build_preferences(
     config: &BrowserConfig,
     perf: &PerformanceConfig,
