@@ -9,7 +9,7 @@
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
 
-retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops, with gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
+retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops. It has gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
 
 **[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
 
@@ -32,7 +32,7 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 ## Features
 
 - **Gamepad-first navigation**<br>
-  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard (QWERTY + ЙЦУКЕН) as a key grid or a stick-driven wheel.
+  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard as a grid or a wheel.
 
 - **Customizable browser controls**<br>
   Every browser action can be rebound in-app, with support for tap, hold, and chord.
@@ -41,7 +41,7 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
   Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input.
 
 - **Web games**<br>
-  WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let PICO-8 and Emscripten exports from itch.io run.
+  WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let Emscripten exports from itch.io run.
 
 - **Tabs, bookmarks, history, and downloads**<br>
   Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation and a toolbar chip for active downloads.
@@ -107,6 +107,7 @@ If you find the project useful, here is how you can help:
 - **Tell other people about it.** Sharing the project helps it reach more users.
 - **Report bugs and request features** in [Issues](https://github.com/mxmgorin/retsurf/issues). Feedback is welcome.
 - **Star the repo.** It helps the project get noticed and keeps me motivated.
+- **[Buy me a coffee](https://ko-fi.com/mxmgorin)** on Ko-fi.
 
 ## Credits
 
