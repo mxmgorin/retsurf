@@ -8,6 +8,9 @@ impl AppBrowser {
     /// Spin the Servo event loop once, running delegate callbacks and updating paint output.
     #[inline]
     pub fn pump_event_loop(&self) {
+        if let Some(local) = &self.inner.local_site {
+            local.finish_ready();
+        }
         self.inner.servo.spin_event_loop();
     }
 

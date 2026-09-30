@@ -206,6 +206,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let req = load.request();
         let url = req.url.clone();
 
+        // Ahead of adblock and the image cap.
+        if let Some(site) = self.local_site.as_ref().filter(|site| site.owns(&url)) {
+            site.serve(load);
+            return;
+        }
+
         // The injected capture script signals a waiting file by loading this URL,
         // which names no real host; the bytes come back over `evaluate_javascript`.
         if url.as_str().starts_with(super::blob_download::PING_URL) {
@@ -294,7 +300,7 @@ pub(super) fn referer_for(location: &str) -> Option<String> {
 /// Answer an intercepted load with `body`, always sending a chunk — even an
 /// empty one. Servo marks a body `Done` only once a chunk arrived, and net's
 /// subresource-integrity check panics on a body that isn't.
-fn finish_intercepted(
+pub(super) fn finish_intercepted(
     load: servo::WebResourceLoad,
     response: servo::WebResourceResponse,
     body: Vec<u8>,

@@ -132,6 +132,15 @@ sha2 = "0.11"
 semver = "1"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
+# Local game folders (src/browser/local_site.rs); all in the tree via servo's net.
+mime_guess = "2"
+flate2 = "1"
+brotli-decompressor = "5"
+
+[dev-dependencies]
+# local_site's brotli fixtures; in the tree via servo's net.
+brotli = "8"
+
 # Android: SDL loads our cdylib and calls the C `SDL_main` we export. Logs go to
 # logcat via android_logger since there is no stderr to mirror to a file.
 [target.'cfg(target_os = "android")'.dependencies]

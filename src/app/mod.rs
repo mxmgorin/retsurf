@@ -11,7 +11,7 @@ use crate::command::{
     QuickAccessAction, SettingsAction,
 };
 
-use crate::browser::{AppBrowser, Favicon};
+use crate::browser::{AppBrowser, Favicon, LocalSite};
 use crate::data::{page_icons, session::Session};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
@@ -66,6 +66,8 @@ pub struct App {
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
     /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
     _audio: Option<sdl2::AudioSubsystem>,
+    /// Opened in place of the usual first tabs; the saved session is left alone.
+    launch_url: Option<String>,
 }
 
 /// How often the main loop flushes the deferred stores — history and the tab
@@ -90,7 +92,11 @@ const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 const SKIPPED_PASS_INTERVAL: Duration = Duration::from_millis(16);
 
 impl App {
-    pub fn new(sdl: &mut Sdl, config: AppConfig) -> Result<Self, String> {
+    pub fn new(
+        sdl: &mut Sdl,
+        config: AppConfig,
+        local_site: Option<LocalSite>,
+    ) -> Result<Self, String> {
         log::info!("init: creating window");
         let window = AppWindow::new(
             sdl,
@@ -103,10 +109,12 @@ impl App {
         log::info!("init: window ready; creating browser");
         let event_sender = UserEventSender::new();
         let clipboard = Clipboard::new(sdl.video()?.clipboard());
+        let launch_url = local_site.as_ref().map(|site| site.start_url.to_string());
         let browser = AppBrowser::new(
             window.rendering_ctx(),
             event_sender.clone(),
             clipboard,
+            local_site,
             &config,
         )?;
         log::info!("init: browser ready; creating event handler + ui");
@@ -155,6 +163,7 @@ impl App {
             last_present: Instant::now(),
             last_pass: Instant::now(),
             _audio: audio,
+            launch_url,
         })
     }
 
@@ -165,7 +174,7 @@ impl App {
         self.browser.set_screen_geometry(screen, window);
     }
 
-    pub fn run(mut self) {
+    pub fn run(mut self, game_mode: bool) {
         self.sync_screen_geometry();
         // Both before the first tab: a page reads `devicePixelRatio` and
         // `screen` while it parses, and only some read them again on resize.
@@ -174,11 +183,15 @@ impl App {
         self.event_handler.announce_pads(&self.browser);
         self.prune_page_icons();
         self.open_first_tabs();
+        let mut commands = Vec::with_capacity(4);
+        // Before the page loads: a game sizes its canvas once.
+        if game_mode {
+            self.enter_game_mode(&mut commands);
+        }
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
         self.ui.update.auto_check(&self.event_sender);
         self.running = true;
-        let mut commands = Vec::with_capacity(4);
 
         while self.running {
             self.browser.pump_event_loop();
@@ -395,6 +408,10 @@ impl App {
     /// Fill the empty tab list at startup: the saved session, or the home page
     /// when there is none. `restore_tabs` off drops the stored session instead.
     fn open_first_tabs(&mut self) {
+        if let Some(url) = &self.launch_url {
+            self.browser.open_tab(url);
+            return;
+        }
         if !self.config.browser.restore_tabs {
             self.session.discard();
         } else if self
@@ -439,7 +456,7 @@ impl App {
     /// Snapshot the open tabs for the next launch. A no-op with `restore_tabs`
     /// off, and a tab list unchanged since the last snapshot writes nothing.
     fn save_session(&mut self) {
-        if self.config.browser.restore_tabs {
+        if self.config.browser.restore_tabs && self.launch_url.is_none() {
             self.session.record(&self.browser.tabs());
         }
     }

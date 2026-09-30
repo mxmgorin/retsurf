@@ -1,5 +1,7 @@
 mod app;
 mod browser;
+#[cfg(not(target_os = "android"))]
+mod cli;
 mod clock;
 mod command;
 mod config;
@@ -35,6 +37,7 @@ pub fn run_app() {
     install_panic_hook();
 
     init_logging();
+    let args = startup_args();
 
     log::info!("Init main: retsurf {BUILD_ID}");
     rustls::crypto::ring::default_provider()
@@ -49,9 +52,35 @@ pub fn run_app() {
     ));
 
     let mut sdl = sdl2::init().unwrap();
-    let app = App::new(&mut sdl, app_config).unwrap();
+    let app = App::new(&mut sdl, app_config, args.local_site).unwrap();
 
-    app.run();
+    app.run(args.game_mode);
+}
+
+/// The command line, with PATH already opened as a site.
+#[derive(Default)]
+struct StartupArgs {
+    local_site: Option<browser::LocalSite>,
+    game_mode: bool,
+}
+
+/// Exits on help, version or a bad PATH, before a window opens.
+#[cfg(not(target_os = "android"))]
+fn startup_args() -> StartupArgs {
+    let args = cli::from_env(BUILD_ID);
+    let local_site = args
+        .path
+        .map(|path| browser::LocalSite::open(&path).unwrap_or_else(|err| cli::fail(&err)));
+    StartupArgs {
+        local_site,
+        game_mode: args.game_mode,
+    }
+}
+
+/// Android passes no arguments.
+#[cfg(target_os = "android")]
+fn startup_args() -> StartupArgs {
+    StartupArgs::default()
 }
 
 #[cfg(target_os = "android")]

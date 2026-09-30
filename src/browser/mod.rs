@@ -22,6 +22,7 @@ mod forced_dark;
 mod game_scaling;
 mod home;
 mod input;
+mod local_site;
 pub mod memory;
 mod reader;
 mod tabs;
@@ -31,6 +32,8 @@ pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
 pub use favicon::Favicon;
 pub use home::HOME_URL;
+use local_site::LocalServer;
+pub use local_site::LocalSite;
 pub use url::try_into_url;
 
 mod pads;
@@ -250,6 +253,8 @@ struct AppBrowserInner {
     mem_report: Arc<Mutex<Option<MemoryReportResult>>>,
     /// Shared with every webview, so page fields and the chrome copy to one place.
     clipboard: Rc<Clipboard>,
+    /// A folder served under its own origin.
+    local_site: Option<LocalServer>,
 }
 
 impl AppBrowserInner {
@@ -259,6 +264,7 @@ impl AppBrowserInner {
         event_sender: UserEventSender,
         adblock: Adblock,
         clipboard: Clipboard,
+        local_site: Option<LocalSite>,
         config: &AppConfig,
     ) -> Self {
         let browser = &config.browser;
@@ -335,6 +341,7 @@ impl AppBrowserInner {
             screen: Cell::new(servo::ScreenGeometry::default()),
             mem_report: Arc::new(Mutex::new(None)),
             clipboard: Rc::new(clipboard),
+            local_site: local_site.map(|site| LocalServer::new(site, event_sender.clone())),
             event_sender,
         }
     }
@@ -416,6 +423,7 @@ impl AppBrowser {
         rendering_ctx: Rc<dyn RenderingContext>,
         event_sender: UserEventSender,
         clipboard: Clipboard,
+        local_site: Option<LocalSite>,
         config: &AppConfig,
     ) -> Result<Self, String> {
         // Path B: Servo renders into an FBO in SDL2's shared GL context
@@ -435,6 +443,7 @@ impl AppBrowser {
             event_sender.clone(),
             Adblock::new(&config.adblock),
             clipboard,
+            local_site,
             config,
         );
 

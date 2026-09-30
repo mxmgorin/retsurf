@@ -508,6 +508,25 @@ action you rebound is not missing, so your layout stands. The one consequence:
 clearing an action's last gesture doesn't stick — to make an action inert, bind
 it to a gesture you never press rather than removing it.
 
+## Command line
+
+```
+retsurf [--game-mode] [PATH]
+```
+
+| Argument | Effect |
+| --- | --- |
+| `PATH` | Open a local game folder (its `index.html`) or an HTML file in one, instead of the usual first tabs. The saved tab session is left untouched. |
+| `--game-mode` | Start in Game Mode, before the page loads, so the game sizes itself to the full screen. |
+| `-h`, `--help` / `-V`, `--version` | Print the usage or the version. |
+
+The folder is served as `http://<folder-name>.localhost/`, with no network server:
+each folder gets an origin of its own, so its saves (localStorage, IndexedDB) stay
+separate from other games' and survive restarts and moving the folder. Two folders
+with the same name share them. Files ending in `.br` or `.gz` are decompressed
+before the page sees them, and a request for `game.wasm` finds `game.wasm.br`, which
+is what Unity's compressed builds expect of a server. Missing files are logged.
+
 ## Environment variables
 
 Set at launch; they override paths and control logging without touching the config
