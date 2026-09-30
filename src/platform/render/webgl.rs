@@ -62,9 +62,9 @@ impl FrontBuffers {
     /// and surfman loads its GL entry points from it. `None` costs WebGL only.
     pub fn new(get_proc: impl Fn(&str) -> *const c_void) -> Option<Self> {
         let get_current_surface: EglGetCurrentSurface =
-            unsafe { mem::transmute(non_null(get_proc("eglGetCurrentSurface"))?) };
+            unsafe { mem::transmute(required_egl_symbol(&get_proc, "eglGetCurrentSurface")?) };
         let make_current: EglMakeCurrent =
-            unsafe { mem::transmute(non_null(get_proc("eglMakeCurrent"))?) };
+            unsafe { mem::transmute(required_egl_symbol(&get_proc, "eglMakeCurrent")?) };
         let egl = EglState::current(&get_proc)?;
         egl.log_image_extensions(&get_proc);
         // surfman panics rather than fails when Android's buffer import is
@@ -193,7 +193,7 @@ impl EglState {
         const EGL_VERSION: i32 = 0x3054;
         const EGL_EXTENSIONS: i32 = 0x3055;
 
-        let Some(query) = non_null(get_proc("eglQueryString")) else {
+        let Some(query) = egl_symbol(get_proc, "eglQueryString") else {
             log::warn!("gl: no eglQueryString; cannot report EGL extensions");
             return;
         };
@@ -239,16 +239,14 @@ impl EglState {
         }
     }
 
-    /// `None` when SDL is not on EGL (desktop GLX). Goes through SDL's loader
-    /// because it falls back to `dlsym`: EGL 1.4 promises `eglGetProcAddress`
-    /// for extensions only.
+    /// `None` when SDL is not on EGL (desktop GLX).
     fn current(get_proc: &dyn Fn(&str) -> *const c_void) -> Option<Self> {
         let display: EglGetCurrent =
-            unsafe { mem::transmute(non_null(get_proc("eglGetCurrentDisplay"))?) };
+            unsafe { mem::transmute(required_egl_symbol(get_proc, "eglGetCurrentDisplay")?) };
         let context: EglGetCurrent =
-            unsafe { mem::transmute(non_null(get_proc("eglGetCurrentContext"))?) };
+            unsafe { mem::transmute(required_egl_symbol(get_proc, "eglGetCurrentContext")?) };
         let surface: EglGetCurrentSurface =
-            unsafe { mem::transmute(non_null(get_proc("eglGetCurrentSurface"))?) };
+            unsafe { mem::transmute(required_egl_symbol(get_proc, "eglGetCurrentSurface")?) };
 
         let state = unsafe {
             Self {
@@ -349,6 +347,67 @@ unsafe fn wrap_native_context(
     native: NativeContext,
 ) -> Result<Context, surfman::Error> {
     unsafe { device.create_context_from_native_context(native) }
+}
+
+/// An EGL entry point. On EGL 1.4 SDL's loader searches only the GLES library,
+/// which exports no `egl*` where libEGL is a library of its own (PowerVR).
+fn egl_symbol(get_proc: &dyn Fn(&str) -> *const c_void, name: &str) -> Option<*const c_void> {
+    non_null(get_proc(name)).or_else(|| libegl_symbol(name))
+}
+
+/// [`egl_symbol`] for an entry point the composite path cannot start without.
+fn required_egl_symbol(
+    get_proc: &dyn Fn(&str) -> *const c_void,
+    name: &str,
+) -> Option<*const c_void> {
+    let symbol = egl_symbol(get_proc, name);
+    if symbol.is_none() {
+        log::warn!("gl: no {name}; WebGL disabled");
+    }
+    symbol
+}
+
+/// `name` from the libEGL SDL already loaded; never loads one itself.
+#[cfg(target_os = "linux")]
+fn libegl_symbol(name: &str) -> Option<*const c_void> {
+    use std::ffi::{c_int, CString};
+    use std::sync::OnceLock;
+
+    /// `dlfcn.h` flags.
+    const RTLD_NOW: c_int = 2;
+    const RTLD_NOLOAD: c_int = 4;
+    /// SDL's default library names, in the order it tries them.
+    const LIBEGL_NAMES: [&CStr; 2] = [c"libEGL.so.1", c"libEGL.so"];
+
+    extern "C" {
+        fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    // Held open for the process: the entry points it yields live as long.
+    static LIBEGL: OnceLock<usize> = OnceLock::new();
+    let handle = *LIBEGL.get_or_init(|| {
+        let handle = LIBEGL_NAMES
+            .iter()
+            .map(|lib| unsafe { dlopen(lib.as_ptr(), RTLD_NOW | RTLD_NOLOAD) } as usize)
+            .find(|&handle| handle != 0)
+            .unwrap_or(0);
+        if handle != 0 {
+            log::info!("gl: SDL's loader missed EGL entry points; resolving them from libEGL");
+        }
+        handle
+    });
+    if handle == 0 {
+        return None;
+    }
+    let name = CString::new(name).ok()?;
+    non_null(unsafe { dlsym(handle as *mut c_void, name.as_ptr()) })
+}
+
+/// Android's SDL resolves every EGL entry point itself.
+#[cfg(target_os = "android")]
+fn libegl_symbol(_name: &str) -> Option<*const c_void> {
+    None
 }
 
 fn non_null(ptr: *const c_void) -> Option<*const c_void> {
