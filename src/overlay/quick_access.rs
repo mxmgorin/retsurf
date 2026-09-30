@@ -60,19 +60,22 @@ pub enum Entry {
     Quit,
 }
 
-/// A table row: an entry, or where the mode's `quick` settings rows go.
+/// A table row: an entry, a `quick` settings row by its quick label, or the
+/// mode's remaining `quick` rows.
 #[derive(Clone, Copy)]
 enum Slot {
     Row(Entry),
+    Quick(&'static str),
     QuickRows,
 }
 
 /// Quick Access in the browser. B closes a strip, so no row goes back.
 const ACCESS_BROWSER: &[Slot] = &[
     Slot::Row(Entry::Enter),
-    Slot::Row(Entry::Run(Action::Reader)),
     Slot::Row(Entry::Run(Action::Bookmark)),
     Slot::QuickRows,
+    Slot::Row(Entry::Run(Action::Reader)),
+    Slot::Quick("Page theme"),
 ];
 
 /// Quick Access over a game: what changes it, then the way out.
@@ -104,7 +107,7 @@ impl Entry {
         match self {
             Entry::Enter => "Enter game mode",
             Entry::Quick(i) => Settings::fields()[i].quick_label(),
-            Entry::Run(Action::Reader) => "Enter reader view",
+            Entry::Run(Action::Reader) => "Reader view",
             Entry::Run(action) => action.label(),
             Entry::List(section) => section.label(),
             Entry::InputMap => "Input map",
@@ -131,13 +134,24 @@ fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
             .quick
             .is_some_and(|modes| modes.includes(mode))
     };
+    let named = |i: usize| {
+        let label = Settings::fields()[i].quick_label();
+        layout
+            .iter()
+            .any(|slot| matches!(slot, Slot::Quick(l) if *l == label))
+    };
     let mut rows = Vec::new();
     for &slot in layout {
         match slot {
             Slot::Row(entry) => rows.push(entry),
+            Slot::Quick(label) => rows.extend(
+                (0..Settings::fields().len())
+                    .filter(|&i| quick(i) && Settings::fields()[i].quick_label() == label)
+                    .map(Entry::Quick),
+            ),
             Slot::QuickRows => rows.extend(
                 (0..Settings::fields().len())
-                    .filter(|&i| quick(i))
+                    .filter(|&i| quick(i) && !named(i))
                     .map(Entry::Quick),
             ),
         }
@@ -148,7 +162,6 @@ fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
 pub struct QuickAccess {
     pub visible: bool,
     strip: Strip,
-    mode: TabMode,
     rows: Vec<Entry>,
     /// Each row's value as last read from the config (empty for rows with none).
     values: Vec<String>,
@@ -162,7 +175,6 @@ impl QuickAccess {
         Self {
             visible: false,
             strip: Strip::QuickAccess,
-            mode: TabMode::Page,
             rows: Vec::new(),
             values: Vec::new(),
             selected: 0,
@@ -174,12 +186,13 @@ impl QuickAccess {
     pub fn open(&mut self, strip: Strip, mode: TabMode, config: &AppConfig) {
         self.visible = true;
         self.strip = strip;
-        self.mode = mode;
         self.rows = entries(strip, mode);
         self.selected = 0;
         self.quit_armed = false;
         self.values = vec![String::new(); self.rows.len()];
         self.refresh(config);
+        let reader = settings::on_off(mode == TabMode::Reader);
+        self.set_value(Entry::Run(Action::Reader), reader.to_string());
     }
 
     /// Show `value` beside `entry`, for a row whose state the config does not
@@ -235,14 +248,8 @@ impl QuickAccess {
         &self.rows
     }
 
-    /// Row `index`'s label: [`Entry::label`], but a view the tab is in reads as
-    /// the way out.
     pub fn label(&self, index: usize) -> &'static str {
-        match self.rows.get(index) {
-            Some(Entry::Run(Action::Reader)) if self.mode == TabMode::Reader => "Exit reader view",
-            Some(row) => row.label(),
-            None => "",
-        }
+        self.rows.get(index).map_or("", |row| row.label())
     }
 
     pub fn value(&self, index: usize) -> &str {
@@ -277,8 +284,19 @@ mod tests {
         assert_eq!(panel.label(panel.selected()), "View");
         let mut panel = open(TabMode::Page);
         assert_eq!(panel.row(), Entry::Enter);
+        let labels: Vec<_> = (0..panel.rows().len()).map(|i| panel.label(i)).collect();
+        assert_eq!(
+            labels,
+            [
+                "Enter game mode",
+                "Bookmark",
+                "Ad blocker",
+                "Reader view",
+                "Page theme"
+            ]
+        );
         panel.move_sel(-1);
-        assert_eq!(panel.label(panel.selected()), "Ad blocker");
+        assert_eq!(panel.label(panel.selected()), "Page theme");
     }
 
     #[test]
@@ -315,18 +333,21 @@ mod tests {
     }
 
     #[test]
-    fn inside_the_reader_view_its_row_leaves_it() {
+    fn the_reader_row_shows_whether_the_tab_is_in_it() {
         let reader_row = |panel: &QuickAccess| {
             let at = panel
                 .rows()
                 .iter()
                 .position(|row| *row == Entry::Run(Action::Reader))
                 .expect("the browser rows carry the reader view");
-            panel.label(at)
+            (panel.label(at), panel.value(at).to_string())
         };
-        assert_eq!(reader_row(&open(TabMode::Page)), "Enter reader view");
+        assert_eq!(
+            reader_row(&open(TabMode::Page)),
+            ("Reader view", "Off".into())
+        );
         let panel = open(TabMode::Reader);
-        assert_eq!(reader_row(&panel), "Exit reader view");
+        assert_eq!(reader_row(&panel), ("Reader view", "On".into()));
         assert_eq!(panel.rows(), open(TabMode::Page).rows());
     }
 

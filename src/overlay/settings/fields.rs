@@ -187,12 +187,21 @@ impl Field {
     }
 }
 
+/// A switch's state as a row shows it.
+pub fn on_off(on: bool) -> &'static str {
+    if on {
+        "On"
+    } else {
+        "Off"
+    }
+}
+
 /// `kind`'s value in `config` as a row shows it; empty for a row with none.
 pub fn value_of(kind: &Kind, config: &AppConfig) -> String {
     match kind {
         Kind::Action { task } => task.verb().to_string(),
         Kind::Door { .. } => String::new(),
-        Kind::Bool { get, .. } => if get(config) { "On" } else { "Off" }.to_string(),
+        Kind::Bool { get, .. } => on_off(get(config)).to_string(),
         Kind::Text { get, .. } => {
             let t = get(config);
             if t.is_empty() {

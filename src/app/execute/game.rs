@@ -138,10 +138,11 @@ impl App {
         match action {
             QuickAccessAction::Toggle(strip) => self.toggle_strip(*strip),
             QuickAccessAction::Activate => self.quick_access_activate(out),
-            // Only a quick row steps; the rest act on A alone.
+            // Rows with a value step; the rest act on A alone.
             QuickAccessAction::Adjust(dx) => match self.ui.quick_access.row() {
                 Entry::Quick(field) => self.step_quick(field, *dx, out),
                 Entry::InputMap => self.step_input_map(*dx, out),
+                Entry::Run(Action::Reader) => self.quick_access_activate(out),
                 _ => {}
             },
             QuickAccessAction::Click(index) => {

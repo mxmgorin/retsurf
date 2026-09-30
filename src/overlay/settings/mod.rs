@@ -22,7 +22,7 @@ mod fields;
 
 pub use about::about_info;
 pub use controls::RESET_ROWS;
-pub use fields::{step, value_of, Door, Field, Kind, Task};
+pub use fields::{on_off, step, value_of, Door, Field, Kind, Task};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, GROUPS, SURFACES};
