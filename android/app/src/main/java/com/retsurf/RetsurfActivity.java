@@ -1,5 +1,7 @@
 package com.retsurf;
 
+import android.net.ConnectivityManager;
+import android.net.ProxyInfo;
 import android.os.Bundle;
 import android.os.Environment;
 import android.system.ErrnoException;
@@ -43,7 +45,59 @@ public class RetsurfActivity extends SDLActivity {
         // No stderr on Android — keep a panic log alongside our data.
         setEnv("RETSURF_PANIC_FILE", new File(getFilesDir(), "retsurf-panic.log").getAbsolutePath());
 
+        exportSystemProxy();
+
         super.onCreate(savedInstanceState);
+    }
+
+    /**
+     * Passes the system proxy to Servo through the http_proxy/https_proxy/no_proxy
+     * variables its default preferences read. A PAC proxy arrives as the local
+     * port Android's PAC service listens on, so it needs no handling here.
+     */
+    private void exportSystemProxy() {
+        ProxyInfo proxy;
+        try {
+            ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+            proxy = cm == null ? null : cm.getDefaultProxy();
+        } catch (RuntimeException e) {
+            Log.w("retsurf", "could not read the system proxy: " + e.getMessage());
+            return;
+        }
+        // Port stays -1 while the PAC service has not started its local proxy.
+        if (proxy == null || proxy.getHost() == null || proxy.getHost().isEmpty()
+                || proxy.getPort() <= 0) {
+            return;
+        }
+
+        String host = proxy.getHost();
+        if (host.indexOf(':') >= 0) {
+            host = "[" + host + "]";
+        }
+        // HTTPS goes through the same proxy as a CONNECT tunnel.
+        String uri = "http://" + host + ":" + proxy.getPort();
+        setEnv("http_proxy", uri);
+        setEnv("https_proxy", uri);
+
+        StringBuilder bypass = new StringBuilder();
+        for (String entry : proxy.getExclusionList()) {
+            // hyper-util matches subdomains from a leading dot; `*` alone is its only wildcard.
+            String rule = entry.trim();
+            if (rule.startsWith("*.")) {
+                rule = rule.substring(1);
+            }
+            if (rule.isEmpty()) {
+                continue;
+            }
+            if (bypass.length() > 0) {
+                bypass.append(',');
+            }
+            bypass.append(rule);
+        }
+        if (bypass.length() > 0) {
+            setEnv("no_proxy", bypass.toString());
+        }
+        Log.i("retsurf", "using system proxy " + uri);
     }
 
     private void setEnv(String key, String value) {
