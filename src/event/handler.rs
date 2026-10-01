@@ -680,9 +680,9 @@ impl AppEventHandler {
             } => {
                 let (w, h) = window.size();
                 let (px, py) = (x * w as f32, y * h as f32);
-                // Toolbar touches are egui's, and a gesture started for one would
+                // Chrome touches are egui's, and a gesture started for one would
                 // leak: egui consumes its up, so the gesture never resolves.
-                if ui.point_over_webview(py) {
+                if ui.point_over_webview(px, py) {
                     self.touch.down(finger_id, px, py);
                 }
             }

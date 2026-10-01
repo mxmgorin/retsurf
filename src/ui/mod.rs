@@ -474,8 +474,8 @@ impl AppUi {
     pub fn handle_event(&mut self, window: &mut AppWindow, event: &sdl2::event::Event) -> bool {
         let resp = window.on_event(event);
         self.repaint_pending |= resp.repaint;
-        // don't consume when pointer over browser area
-        resp.consumed & self.is_pointer_over_toolbar(window)
+        // egui reports pointer events consumed over the page too, which needs them.
+        resp.consumed & self.is_pointer_over_chrome(window)
     }
 
     /// Fold the idle-repaint sources into `repaint_delay` so the blocking wait
@@ -792,7 +792,8 @@ impl AppUi {
                         ToolbarPosition::Bottom => self.toolbar_height,
                         ToolbarPosition::Top => 0.0,
                     };
-                    let drawn = osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset);
+                    let drawn =
+                        osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset, commands);
                     let screen = ctx.content_rect();
                     self.osk_height = screen.bottom() - drawn.top();
                     if osk::keep_on_screen(&mut self.osk, drawn, screen) {

@@ -7,6 +7,7 @@ use crate::browser::AppBrowser;
 use crate::config::ToolbarPosition;
 use crate::platform::window::AppWindow;
 use crate::ui::Focus;
+use egui_sdl2::egui;
 
 impl AppUi {
     /// Move the toolbar to a window edge (live config change).
@@ -98,19 +99,23 @@ impl AppUi {
         }
     }
 
-    #[inline]
-    pub(super) fn is_pointer_over_toolbar(&self, window: &AppWindow) -> bool {
+    /// Whether the pointer is on the toolbar or an overlay rather than the page.
+    pub(super) fn is_pointer_over_chrome(&self, window: &AppWindow) -> bool {
         let Some(pos) = window.pointer_pos_in_points() else {
             return false;
         };
-        self.toolbar_rect.contains(pos)
+        self.toolbar_rect.contains(pos) || self.is_over_overlay(pos)
     }
 
-    /// Whether a *pixel*-space y (raw SDL finger events) lands in the web view:
-    /// touches over the toolbar are egui's, and start no page gesture.
-    #[inline]
-    pub fn point_over_webview(&self, y_px: f32) -> bool {
-        let y = y_px / self.egui_ctx.pixels_per_point();
-        !self.toolbar_rect.y_range().contains(y)
+    /// Whether a *pixel*-space point (raw SDL finger events) lands on the page,
+    /// not the chrome.
+    pub fn point_over_webview(&self, x_px: f32, y_px: f32) -> bool {
+        let pos = egui::pos2(x_px, y_px) / self.egui_ctx.pixels_per_point();
+        !self.toolbar_rect.y_range().contains(pos.y) && !self.is_over_overlay(pos)
+    }
+
+    /// Whether an interactable area covers `pos`; the page is a panel, not an area.
+    fn is_over_overlay(&self, pos: egui::Pos2) -> bool {
+        self.egui_ctx.layer_id_at(pos).is_some()
     }
 }

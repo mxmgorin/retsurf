@@ -2,8 +2,9 @@
 //! [`crate::overlay::osk`]).
 
 use super::theme::{ACCENT, SCRIM};
+use crate::command::{AppCommand, InputCommand};
 use crate::config::PadLayout;
-use crate::overlay::osk::{Key, Osk};
+use crate::overlay::osk::{Key, Osk, OskCommand};
 use egui_sdl2::egui;
 
 mod wheel;
@@ -83,13 +84,14 @@ pub(super) fn keep_on_screen(osk: &mut Osk, drawn: egui::Rect, screen: egui::Rec
 }
 
 /// Draw the on-screen keyboard: a dark rounded overlay anchored to the bottom.
-/// `bottom_inset` lifts it off that edge, to clear a bottom toolbar. Returns the
-/// drawn rect.
+/// `bottom_inset` lifts it off that edge, to clear a bottom toolbar. A clicked
+/// key is pressed through `commands`. Returns the drawn rect.
 pub(super) fn add_osk(
     ctx: &egui::Context,
     osk: &Osk,
     layout: PadLayout,
     bottom_inset: f32,
+    commands: &mut Vec<AppCommand>,
 ) -> egui::Rect {
     // The auto-hide toolbar is a Foreground area too, and egui stacks those by
     // last interaction, which the button-less wheel never has.
@@ -140,6 +142,11 @@ pub(super) fn add_osk(
                         .corner_radius(6.0)
                         .min_size(size);
                         let response = ui.add(button);
+                        if response.clicked() {
+                            commands.push(AppCommand::Input(InputCommand::Osk(OskCommand::Press(
+                                *key,
+                            ))));
+                        }
                         // Physical-keyboard style: the shifted symbol sits
                         // small in the corner, and the two swap under Shift.
                         if let Key::Char(ch) = key {
