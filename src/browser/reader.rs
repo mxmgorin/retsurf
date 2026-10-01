@@ -44,7 +44,12 @@ impl AppBrowser {
                     }
                     // Already in reader view — the original DOM is gone, so
                     // leaving is a reload.
-                    "reader" => webview.reload(),
+                    "reader" => {
+                        if let Some(i) = inner.tab_index(webview.id()) {
+                            inner.tabs.borrow_mut()[i].state.loading = true;
+                        }
+                        webview.reload();
+                    }
                     "no-article" => log::info!("reader mode: no article found on this page"),
                     other => log::warn!("reader mode: {other}"),
                 },

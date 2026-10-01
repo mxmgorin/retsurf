@@ -62,12 +62,13 @@ impl servo::WebViewDelegate for AppBrowserInner {
             servo::LoadStatus::Complete => false,
             servo::LoadStatus::HeadParsed => return,
         };
-        if let Some(i) = self.tab_index(webview.id()) {
-            self.tabs.borrow_mut()[i].state.loading = loading;
-        }
-        // A `Connected` only reaches the document loaded when it was sent, so
-        // each new one is told again.
-        if !loading {
+        let was_loading = match self.tab_index(webview.id()) {
+            Some(i) => std::mem::replace(&mut self.tabs.borrow_mut()[i].state.loading, loading),
+            None => true,
+        };
+        // A `Connected` reaches only the document loaded when it was sent, and each
+        // one adds a pad, so it is repeated only for a `Complete` that ends a load.
+        if was_loading && !loading {
             for (slot, name) in self.pads.borrow().live() {
                 webview.notify_input_event(servo::InputEvent::Gamepad(
                     crate::event::gamepad_api::connected(slot, name, self.haptics.get()),
