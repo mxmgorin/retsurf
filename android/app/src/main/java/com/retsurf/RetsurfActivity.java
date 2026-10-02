@@ -1,7 +1,11 @@
 package com.retsurf;
 
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.ProxyInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.system.ErrnoException;
@@ -9,6 +13,7 @@ import android.system.Os;
 import android.util.Log;
 
 import java.io.File;
+import java.util.ArrayList;
 
 import org.libsdl.app.SDLActivity;
 
@@ -17,6 +22,9 @@ import org.libsdl.app.SDLActivity;
  * and then calls the {@code SDL_main} we export from the Rust cdylib.
  */
 public class RetsurfActivity extends SDLActivity {
+
+    /** Must match `COMMAND_SHARE_LOGS` in src/platform/android.rs. */
+    private static final int COMMAND_SHARE_LOGS = COMMAND_USER + 1;
 
     @Override
     protected String[] getLibraries() {
@@ -44,6 +52,7 @@ public class RetsurfActivity extends SDLActivity {
 
         // No stderr on Android — keep a panic log alongside our data.
         setEnv("RETSURF_PANIC_FILE", new File(getFilesDir(), "retsurf-panic.log").getAbsolutePath());
+        setEnv("RETSURF_LOG_FILE", rotateLog().getAbsolutePath());
 
         exportSystemProxy();
 
@@ -98,6 +107,56 @@ public class RetsurfActivity extends SDLActivity {
             setEnv("no_proxy", bypass.toString());
         }
         Log.i("retsurf", "using system proxy " + uri);
+    }
+
+    /**
+     * Moves the last session's log aside, so a crash's log survives the relaunch.
+     * Returns the path this session logs to.
+     */
+    private File rotateLog() {
+        File log = new File(getFilesDir(), "retsurf.log");
+        File prev = new File(getFilesDir(), "retsurf.prev.log");
+        if (log.exists() && !log.renameTo(prev)) {
+            Log.w("retsurf", "could not keep the previous log");
+        }
+        return log;
+    }
+
+    @Override
+    protected boolean onUnhandledMessage(int command, Object param) {
+        if (command == COMMAND_SHARE_LOGS) {
+            shareLogs();
+            return true;
+        }
+        return super.onUnhandledMessage(command, param);
+    }
+
+    private void shareLogs() {
+        ArrayList<Uri> uris = new ArrayList<>();
+        for (String name : LogProvider.FILES) {
+            if (new File(getFilesDir(), name).exists()) {
+                uris.add(LogProvider.uriFor(this, name));
+            }
+        }
+        if (uris.isEmpty()) {
+            return;
+        }
+        Intent send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, "retsurf logs");
+        send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+        // The read grant travels with the ClipData, not with EXTRA_STREAM.
+        ClipData clip = ClipData.newRawUri("retsurf logs", uris.get(0));
+        for (int i = 1; i < uris.size(); i++) {
+            clip.addItem(new ClipData.Item(uris.get(i)));
+        }
+        send.setClipData(clip);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(send, "Share logs"));
+        } catch (ActivityNotFoundException e) {
+            Log.w("retsurf", "no app to share the logs with");
+        }
     }
 
     private void setEnv(String key, String value) {

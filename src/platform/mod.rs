@@ -2,8 +2,10 @@
 //! context, the text [`clipboard`], the surfman/Servo rendering-context glue ([`render`]), the embedded
 //! resource provider Servo loads its support files from ([`resources`]), the
 //! allocator's own [`heap`], the CPU governor ([`cpufreq`]), and per-thread cost
-//! accounting ([`threads`]).
+//! accounting ([`threads`]). On Android, the glue SDL has no API for ([`android`]).
 
+#[cfg(target_os = "android")]
+pub mod android;
 pub mod clipboard;
 pub mod cpufreq;
 pub mod heap;

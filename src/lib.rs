@@ -85,12 +85,39 @@ fn startup_args() -> StartupArgs {
 
 #[cfg(target_os = "android")]
 fn init_logging() {
-    // No stderr on Android; route `log` to logcat (filter via `adb logcat -s retsurf`).
-    android_logger::init_once(
+    let level = log::LevelFilter::Info;
+    // No stderr on Android: logcat (`adb logcat -s retsurf`), plus the file the
+    // share sheet sends, since logcat needs adb or root to read.
+    let logcat = android_logger::AndroidLogger::new(
         android_logger::Config::default()
-            .with_max_level(log::LevelFilter::Info)
+            .with_max_level(level)
             .with_tag("retsurf"),
     );
+    let mut open_error = None;
+    let file = std::env::var("RETSURF_LOG_FILE").ok().and_then(|path| {
+        std::fs::File::create(&path)
+            .map_err(|e| {
+                open_error = Some(format!("failed to open RETSURF_LOG_FILE `{path}`: {e}"))
+            })
+            .ok()
+    });
+    let mirror = file.map(|file| {
+        env_logger::Builder::new()
+            .filter_level(level)
+            .write_style(env_logger::WriteStyle::Never)
+            .target(env_logger::Target::Pipe(Box::new(file)))
+            .build()
+    });
+    let tee = platform::android::LogTee {
+        logcat,
+        file: mirror,
+    };
+    if log::set_boxed_logger(Box::new(tee)).is_ok() {
+        log::set_max_level(level);
+    }
+    if let Some(e) = open_error {
+        log::warn!("{e}");
+    }
 }
 
 #[cfg(not(target_os = "android"))]

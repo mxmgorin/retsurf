@@ -279,6 +279,12 @@ impl App {
             match task {
                 Task::ClearData => self.clear_browsing_data(),
                 Task::RestoreDefaults => self.restore_defaults(),
+                #[cfg(target_os = "android")]
+                Task::ShareLogs => {
+                    if !crate::platform::android::share_logs() {
+                        self.ui.toast("Could not open the share sheet");
+                    }
+                }
             }
         } else if self.ui.settings.selected_is_text() {
             self.ui.osk(OskCommand::Show, &self.browser, out);

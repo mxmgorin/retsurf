@@ -422,8 +422,8 @@ impl Settings {
     }
 
     /// A on the focused row: `Some` when it is an action row pressed a second
-    /// time — the first press only arms it (and [`Self::adjust`], which the
-    /// caller falls through to, is a no-op on this kind).
+    /// time, or once for a task that needs no confirm. An arming press returns
+    /// `None`, and [`Self::adjust`], which the caller falls through to, is a no-op.
     pub fn confirm_action(&mut self) -> Option<Task> {
         let draft = self.draft_mut()?;
         let Sel::Field(i) = draft.selected else {
@@ -435,7 +435,7 @@ impl Settings {
         let Kind::Action { task } = &fields::FIELDS[i].kind else {
             return None;
         };
-        if draft.armed.replace(i) == Some(i) {
+        if !task.needs_confirm() || draft.armed.replace(i) == Some(i) {
             draft.armed = None;
             return Some(*task);
         }

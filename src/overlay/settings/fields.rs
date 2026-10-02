@@ -143,14 +143,28 @@ pub enum Task {
     /// Every settings row, the speed-dial pins and the control bindings back to
     /// how they ship. The user's own content is [`Task::ClearData`]'s business.
     RestoreDefaults,
+    /// Hand the log files to the system share sheet.
+    #[cfg(target_os = "android")]
+    ShareLogs,
 }
 
 impl Task {
-    /// The verb shown as the row's value — what the second press will do.
+    /// The verb shown as the row's value — what the confirmed press will do.
     pub fn verb(self) -> &'static str {
         match self {
             Task::ClearData => "Clear",
             Task::RestoreDefaults => "Restore",
+            #[cfg(target_os = "android")]
+            Task::ShareLogs => "Share",
+        }
+    }
+
+    /// Whether the task destroys something and so waits for a second press.
+    pub fn needs_confirm(self) -> bool {
+        match self {
+            Task::ClearData | Task::RestoreDefaults => true,
+            #[cfg(target_os = "android")]
+            Task::ShareLogs => false,
         }
     }
 }
@@ -417,6 +431,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::System,   "Updates",     "Auto-check on startup",  flag!(update.auto_check), false),
     f(S::System,   "Diagnostics", "Memory overlay",         flag!(debug.memory_overlay), false),
     f(S::System,   "Diagnostics", "Memory to log",          flag!(debug.memory_log), false),
+    #[cfg(target_os = "android")]
+    f(S::System,   "Diagnostics", "Logs",                   Kind::Action { task: Task::ShareLogs }, false),
     // Last row: it rewrites every other one.
     f(S::System,   "Reset",       "Restore all defaults",   Kind::Action { task: Task::RestoreDefaults }, true),
 ];
