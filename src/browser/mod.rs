@@ -382,9 +382,10 @@ impl AppBrowserInner {
             webview.set_page_zoom(self.default_zoom);
         }
         webview.notify_theme_change(engine::theme(self.page_theme.get()));
-        // Servo builds a webview shown, and every shown webview on the shared
-        // context is composited, in map order: a tab stays hidden until shown.
+        // Servo builds a webview shown and focused, and every shown webview on the shared
+        // context is composited, in map order: a tab stays hidden and unfocused until shown.
         webview.hide();
+        webview.set_focused(false);
         webview
     }
 
@@ -393,9 +394,10 @@ impl AppBrowserInner {
     fn adopt_tab(&self, tab: Tab) {
         if let Some(cur) = self.active_webview() {
             cur.hide();
+            cur.set_focused(false);
         }
         tab.webview.show();
-        tab.webview.focus();
+        tab.webview.set_focused(true);
         let mut tabs = self.tabs.borrow_mut();
         tabs.push(tab);
         self.active.set(tabs.len() - 1);

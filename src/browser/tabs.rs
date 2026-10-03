@@ -150,7 +150,7 @@ impl AppBrowser {
         let mut tabs = self.inner.tabs.borrow_mut();
         tabs.extend(built.into_iter().map(Tab::loading));
         tabs[shown].webview.show();
-        tabs[shown].webview.focus();
+        tabs[shown].webview.set_focused(true);
         drop(tabs);
         self.inner.active.set(shown);
         self.inner.repaint_pending.set(true);
@@ -174,10 +174,11 @@ impl AppBrowser {
         }
         if let Some(cur) = tabs.get(active) {
             cur.webview.hide();
+            cur.webview.set_focused(false);
         }
         let target = &tabs[index];
         target.webview.show();
-        target.webview.focus();
+        target.webview.set_focused(true);
         drop(tabs);
         self.inner.active.set(index);
         self.inner.repaint_pending.set(true);
@@ -239,7 +240,7 @@ impl AppBrowser {
         if was_active {
             let tab = &tabs[new_active];
             tab.webview.show();
-            tab.webview.focus();
+            tab.webview.set_focused(true);
         }
         drop(tabs);
         self.inner.repaint_pending.set(true);
