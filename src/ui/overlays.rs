@@ -21,6 +21,8 @@ pub enum Focus {
     Osk,
     /// A modal page prompt (select picker / JS dialog) with no keyboard over it.
     Prompt,
+    /// The startup notice of a newer build.
+    UpdateNotice,
     /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
     Menu,
     /// Quick Access, beside the page or the still-running game.
@@ -50,6 +52,7 @@ impl Focus {
             Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => true,
             Focus::Osk
             | Focus::Prompt
+            | Focus::UpdateNotice
             | Focus::Menu
             | Focus::Settings
             | Focus::Hints
@@ -63,9 +66,11 @@ impl Focus {
     /// switching, reload, back/forward — must not fire underneath them.
     pub fn takes_over(self) -> bool {
         match self {
-            Focus::Settings | Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {
-                true
-            }
+            Focus::Settings
+            | Focus::UpdateNotice
+            | Focus::QuickAccess
+            | Focus::GameInputMaps
+            | Focus::GameMapEdit => true,
             Focus::Osk
             | Focus::Prompt
             | Focus::Menu
@@ -108,6 +113,8 @@ impl AppUi {
     fn focus_below_osk(&self) -> Focus {
         if self.prompt.visible() {
             Focus::Prompt
+        } else if self.update_notice.visible() {
+            Focus::UpdateNotice
         } else if self.menu.visible {
             Focus::Menu
         } else if self.quick_access.visible {

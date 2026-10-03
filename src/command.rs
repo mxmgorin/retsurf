@@ -8,6 +8,7 @@ use crate::overlay::menu::Section;
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
+use crate::overlay::update_notice::Choice;
 
 #[derive(Clone)]
 pub enum AppCommand {
@@ -19,6 +20,7 @@ pub enum AppCommand {
     Browser(BrowserCommand),
     Input(InputCommand),
     Menu(MenuAction),
+    UpdateNotice(UpdateNoticeAction),
     ToggleBookmark,
     /// Put the caret in the address bar, with the keyboard up for a pad.
     FocusAddressBar,
@@ -46,6 +48,7 @@ impl AppCommand {
             | AppCommand::Resize
             | AppCommand::Input(_)
             | AppCommand::Prompt(_)
+            | AppCommand::UpdateNotice(_)
             | AppCommand::QuickAccess(_)
             | AppCommand::GameInputMaps(_)
             | AppCommand::GameMapEdit(_) => true,
@@ -163,6 +166,17 @@ pub enum PromptAction {
     Cancel,
     /// Focus and activate slot `index`.
     ClickSlot(usize),
+}
+
+/// Actions on the startup update notice (see [`crate::overlay::update_notice`]).
+#[derive(Clone)]
+pub enum UpdateNoticeAction {
+    /// Press the focused button.
+    Activate,
+    /// Press `choice` directly, as a click does.
+    Choose(Choice),
+    /// Dismiss, as Later does.
+    Cancel,
 }
 
 /// Actions on the full-screen menu (Tabs / Bookmarks / History / Downloads).

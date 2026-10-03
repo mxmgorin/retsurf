@@ -22,6 +22,7 @@ mod settings;
 mod theme;
 mod toast;
 mod toolbar;
+mod update_notice;
 
 pub use self::game_mode::game_mode_toast_text;
 pub use self::overlays::Focus;
@@ -45,8 +46,9 @@ use crate::{
     overlay::prompt::Prompt,
     overlay::quick_access::QuickAccess,
     overlay::settings::Settings,
+    overlay::update_notice::UpdateNotice,
     platform::window::AppWindow,
-    update::{UpdateState, Updater},
+    update::Updater,
 };
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
@@ -263,6 +265,8 @@ pub struct AppUi {
     /// Self-update manager (About tab): in-place on PortMaster / desktop
     /// installs, "open the release page" elsewhere. See [`crate::update`].
     pub update: Updater,
+    /// The startup notice of what [`Updater::take_startup_offer`] found.
+    pub update_notice: UpdateNotice,
     /// The built-in start page overlay's selection / search-field state.
     pub home: Home,
     /// The standalone speed-dial editor overlay (opened from the start page).
@@ -348,6 +352,7 @@ impl AppUi {
             menu: Menu::new(history, downloads, user_agent),
             settings: Settings::new(),
             update: Updater::new(update),
+            update_notice: UpdateNotice::default(),
             home: Home::new(),
             dial_edit: DialEdit::new(),
             home_active: false,
@@ -580,6 +585,12 @@ impl AppUi {
         #[cfg(target_os = "android")]
         window.set_system_fullscreen(snapshot.chrome_hidden.any());
         self.clamp_overlay_selections();
+        // A startup find waits for a calm screen: nothing open over the page, no game.
+        if matches!(self.focus(), Focus::Page | Focus::Home) && !browser.in_game_mode() {
+            if let Some(version) = self.update.take_startup_offer() {
+                self.update_notice.show(version);
+            }
+        }
 
         {
             let mut state = browser.get_state_mut();
@@ -601,8 +612,6 @@ impl AppUi {
             } = self.toolbar_layout(chrome_hidden);
             // The `self.update` borrow can't overlap the `self`-borrowing closure.
             let update = self.update.snapshot();
-            // Toolbar update chip: shown only once a check has found a newer build.
-            let update_available = matches!(update, UpdateState::Available { .. });
             window.run_ui(|ctx| {
                 let ppp = ctx.pixels_per_point();
                 let mut root = egui::Ui::new(
@@ -615,7 +624,6 @@ impl AppUi {
                 let inputs = toolbar::ToolbarInputs {
                     tab_count,
                     active_downloads: self.menu.downloads.active_count(),
-                    update_available,
                     zoom_pct,
                     osk_caret: caret_for(OskField::AddressBar),
                     position,
@@ -769,6 +777,12 @@ impl AppUi {
                         face,
                         commands,
                     );
+                }
+
+                // Below the page's prompt, whose layer order is higher.
+                if self.update_notice.visible() {
+                    drop_egui_focus(ctx);
+                    update_notice::add_update_notice(ctx, &self.update_notice, face, commands);
                 }
 
                 if self.menu.visible {

@@ -40,9 +40,9 @@ pub fn on_key(
         return;
     }
 
-    // A modal page prompt captures the keyboard first, muting everything but
-    // Enter, Esc and the `nav_*` bindings, so no shortcut fires under it.
-    if ui.focus() == Focus::Prompt {
+    // A modal page prompt or the update notice captures the keyboard first, muting
+    // everything but Enter, Esc and the `nav_*` bindings, so no shortcut fires under it.
+    if matches!(ui.focus(), Focus::Prompt | Focus::UpdateNotice) {
         if key.pressed {
             match key.kc {
                 Keycode::Return | Keycode::KpEnter => {

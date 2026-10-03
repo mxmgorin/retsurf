@@ -4,11 +4,10 @@
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
-use crate::command::{AppCommand, MenuAction, QuickAccessAction, SettingsAction};
+use crate::command::{AppCommand, MenuAction, QuickAccessAction};
 use crate::config::ToolbarPosition;
 use crate::overlay::menu::Section;
 use crate::overlay::quick_access::Strip;
-use crate::overlay::settings::SettingsSection;
 use egui_phosphor::bold;
 use egui_sdl2::egui::{self, Vec2};
 
@@ -293,21 +292,6 @@ fn add_zoom_pill(ui: &mut egui::Ui, pct: u16) -> egui::Response {
     ui.add(pill)
 }
 
-/// "Update available" chip: a painted accent dot (can't tofu). Brightens on hover.
-fn add_update_dot(ui: &mut egui::Ui) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2 { x: SLOT, y: SLOT }, egui::Sense::click());
-    let color = theme::ACCENT;
-    let color = if resp.hovered() {
-        color.gamma_multiply(1.25)
-    } else {
-        color
-    };
-    // Half-pixel center keeps the dot's edge crisp and symmetric.
-    let c = rect.center().floor() + egui::vec2(0.5, 0.5);
-    ui.painter().circle_filled(c, 4.5, color);
-    resp
-}
-
 #[inline]
 fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -> bool {
     response.lost_focus() && ui.input(|i| i.key_pressed(key))
@@ -319,8 +303,6 @@ pub(super) struct ToolbarInputs {
     pub tab_count: usize,
     /// Downloads still in flight; a count chip that jumps to the section.
     pub active_downloads: usize,
-    /// A newer build was found; an "Update" chip that opens Settings->About.
-    pub update_available: bool,
     /// Page zoom percent; `None` at the config default, where no chip shows.
     pub zoom_pct: Option<u16>,
     /// The OSK's caret, when it types here; egui's caret is parked on it.
@@ -370,12 +352,6 @@ fn toolbar_contents(
                 |ui| {
                     // A freshly allocated ui does not inherit the row's floor.
                     ui.set_min_height(ROW_H);
-                    if inputs.update_available && add_update_dot(ui).clicked() {
-                        commands.push(AppCommand::Settings(SettingsAction::Open));
-                        commands.push(AppCommand::Settings(SettingsAction::SetSection(
-                            SettingsSection::About,
-                        )));
-                    }
                     if ui.add(new_toolbar_button(icon(bold::DOTS_THREE))).clicked() {
                         commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
                             Strip::QuickAccess,

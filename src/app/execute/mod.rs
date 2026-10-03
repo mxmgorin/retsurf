@@ -6,13 +6,16 @@
 
 mod game;
 
-use super::{App, AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction};
+use super::{
+    App, AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction, UpdateNoticeAction,
+};
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
 use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::settings::{Door, Task};
+use crate::overlay::settings::{Door, SettingsSection, Task};
+use crate::overlay::update_notice::Choice;
 use crate::ui::Focus;
 
 impl App {
@@ -57,6 +60,7 @@ impl App {
                 }
             },
             AppCommand::Settings(action) => self.settings_action(action, out),
+            AppCommand::UpdateNotice(action) => self.update_notice_action(action, out),
         };
 
         // Commands drain after `ui.update` built the frame, so a UI change needs
@@ -290,6 +294,23 @@ impl App {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         } else {
             self.ui.settings.adjust(1);
+        }
+    }
+
+    /// Close the notice; Update goes on to the About tab, which holds the notes
+    /// and the install row.
+    fn update_notice_action(&mut self, action: &UpdateNoticeAction, out: &mut Vec<AppCommand>) {
+        let choice = match action {
+            UpdateNoticeAction::Activate => self.ui.update_notice.selected(),
+            UpdateNoticeAction::Choose(choice) => *choice,
+            UpdateNoticeAction::Cancel => Choice::Later,
+        };
+        self.ui.update_notice.close();
+        if choice == Choice::Update {
+            out.push(AppCommand::Settings(SettingsAction::Open));
+            out.push(AppCommand::Settings(SettingsAction::SetSection(
+                SettingsSection::About,
+            )));
         }
     }
 

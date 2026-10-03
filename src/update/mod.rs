@@ -19,6 +19,7 @@ mod install;
 use crate::clock::now_unix;
 use crate::config::{Channel, UpdateConfig};
 use crate::event::user::{UserEvent, UserEventSender};
+use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -108,6 +109,8 @@ pub struct Updater {
     channel: Channel,
     /// Run a throttled background check at startup (see [`Self::auto_check`]).
     auto_check: bool,
+    /// The running check is the startup one, whose find is announced once.
+    announce: Cell<bool>,
 }
 
 impl Updater {
@@ -117,6 +120,7 @@ impl Updater {
             kind: resolve_kind(),
             channel: cfg.channel,
             auto_check: cfg.auto_check,
+            announce: Cell::new(false),
         }
     }
 
@@ -175,7 +179,27 @@ impl Updater {
             return;
         }
         write_last_check(now);
+        self.announce.set(true);
         self.check(sender);
+    }
+
+    /// The version the startup check found, handed out once; `None` while it
+    /// runs and after a manual check.
+    pub fn take_startup_offer(&self) -> Option<String> {
+        if !self.announce.get() {
+            return None;
+        }
+        let state = self
+            .state
+            .lock()
+            .expect("no update worker panics holding the state");
+        let offer = match &*state {
+            UpdateState::Checking => return None,
+            UpdateState::Available { version, .. } => Some(version.clone()),
+            _ => None,
+        };
+        self.announce.set(false);
+        offer
     }
 
     /// Download + verify + swap the available release on a background thread. Only

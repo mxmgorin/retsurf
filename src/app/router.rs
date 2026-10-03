@@ -5,7 +5,7 @@
 
 use super::{
     App, AppCommand, GameInputMapsAction, GameMapEditAction, InputCommand, PromptAction,
-    QuickAccessAction,
+    QuickAccessAction, UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
@@ -42,6 +42,11 @@ impl App {
                 Focus::Prompt => {
                     if *pressed {
                         out.push(AppCommand::Prompt(PromptAction::Activate));
+                    }
+                }
+                Focus::UpdateNotice => {
+                    if *pressed {
+                        out.push(AppCommand::UpdateNotice(UpdateNoticeAction::Activate));
                     }
                 }
                 Focus::Menu => {
@@ -119,6 +124,9 @@ impl App {
                     self.osk_input(PadInput::B, out);
                 }
                 Focus::Prompt => out.push(AppCommand::Prompt(PromptAction::Cancel)),
+                Focus::UpdateNotice => {
+                    out.push(AppCommand::UpdateNotice(UpdateNoticeAction::Cancel))
+                }
                 Focus::Menu => self.ui.menu.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
                 Focus::QuickAccess => self.ui.quick_access.close(),
@@ -162,7 +170,7 @@ impl App {
                 Focus::DialEdit => self.ui.dial_edit_remove_selected(),
                 // X is unused in settings (rows edit with A and Left/Right) and
                 // on Quick Access and Game Mode's screens (the keyboard has a row of its own).
-                Focus::Settings => {}
+                Focus::Settings | Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps => {}
                 // X unbinds the focused source, which is what takes its row away.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
@@ -197,6 +205,7 @@ impl App {
                     self.osk_input(PadInput::Nav(*dx, *dy), out);
                 }
                 Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
+                Focus::UpdateNotice => self.ui.update_notice.move_sel(*dx),
                 Focus::Menu => {
                     if *dx != 0 {
                         self.ui.menu.switch_section(*dx);
@@ -250,6 +259,7 @@ impl App {
                     self.osk_input(PadInput::Y, out);
                 }
                 Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
+                Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
                 // off it keeps its old meaning of hiding the hints.
@@ -272,6 +282,7 @@ impl App {
                     // No sections to switch here — and page navigation under one of
                     // Game Mode's screens would leave the game.
                     Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
+                    Focus::UpdateNotice => {}
                     // In the dial editor they reorder the focused pin (Left/Right
                     // moves the selection there).
                     Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
