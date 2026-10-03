@@ -4,10 +4,18 @@
 
 <div align="center">
   <a href="https://github.com/mxmgorin/retsurf/releases/latest"><img src="https://img.shields.io/github/v/release/mxmgorin/retsurf?style=flat-square&labelColor=16171a&color=3fb8a0&label=release&cacheSeconds=180" alt="Latest release"></a>
+  <a href="https://github.com/mxmgorin/retsurf/releases/tag/nightly"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fmxmgorin%2Fretsurf%2Freleases%2Ftags%2Fnightly&search=%22published_at%22%3A%22(%5Cd%7B4%7D-%5Cd%7B2%7D-%5Cd%7B2%7D)&replace=%241&label=nightly&style=flat-square&labelColor=16171a&color=3fb8a0&cacheSeconds=3600" alt="Nightly build date"></a>
   <a href="https://github.com/mxmgorin/retsurf/releases"><img src="https://img.shields.io/github/downloads/mxmgorin/retsurf/total?style=flat-square&labelColor=16171a&color=3fb8a0&label=downloads&cacheSeconds=180" alt="Downloads"></a>
   <!-- The check workflow, not a platform build: it is the one a push and a pull request run, and it carries the tests and clippy. -->
   <a href="https://github.com/mxmgorin/retsurf/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/mxmgorin/retsurf/check.yml?branch=main&style=flat-square&labelColor=16171a&color=3fb8a0&logo=githubactions&logoColor=white&label=ci&cacheSeconds=180" alt="CI"></a>
 </div>
+
+<p align="center">
+  <a href="https://retsurf.mxmgorin.dev/">Website</a> &middot;
+  <a href="#install">Install</a> &middot;
+  <a href="docs/CONFIGURATION.md">Docs</a> &middot;
+  <a href="https://github.com/mxmgorin/retsurf/discussions">Discussions</a>
+</p>
 
 retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops. It has gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
 
