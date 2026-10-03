@@ -118,6 +118,14 @@ impl Entry {
             Entry::Quit => "Quit retsurf",
         }
     }
+
+    /// Whether Left/Right step the row's value.
+    pub fn steps(self) -> bool {
+        matches!(
+            self,
+            Entry::Quick(_) | Entry::InputMap | Entry::Run(Action::Reader)
+        )
+    }
 }
 
 /// The entries `strip` shows in `mode`, in its table's order.

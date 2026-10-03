@@ -88,7 +88,9 @@ impl AppUi {
     pub(super) fn toolbar_layout(&self, chrome_hidden: ChromeHidden) -> ToolbarLayout {
         // Game Mode is the exception: nothing it opens types into the chrome,
         // so an overlay of its own must not bring the bar back over the game.
-        let typing = self.focus() != Focus::Page && !chrome_hidden.game_mode;
+        // Nor do the edge strips.
+        let typing =
+            !matches!(self.focus(), Focus::Page | Focus::QuickAccess) && !chrome_hidden.game_mode;
         ToolbarLayout {
             position: self.toolbar_position,
             // Typing still wins: auto-hide forces the bar up for a focused field,

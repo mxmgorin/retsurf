@@ -137,6 +137,7 @@ impl App {
     ) {
         match action {
             QuickAccessAction::Toggle(strip) => self.toggle_strip(*strip),
+            QuickAccessAction::Close => self.ui.quick_access.close(),
             QuickAccessAction::Activate => self.quick_access_activate(out),
             // Rows with a value step; the rest act on A alone.
             QuickAccessAction::Adjust(dx) => match self.ui.quick_access.row() {

@@ -80,6 +80,8 @@ impl AppCommand {
 pub enum QuickAccessAction {
     /// Open a strip, or close it when it is up.
     Toggle(Strip),
+    /// Close the strip.
+    Close,
     /// Act on the focused row.
     Activate,
     /// Focus row `index` and activate it.

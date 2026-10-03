@@ -1,14 +1,15 @@
 //! Rendering of the edge strips (state lives in [`crate::overlay::quick_access`]):
 //! Quick Access at the right edge and Quick Menu at the left, each full height
 //! with no backdrop dim, so the page or game beside it shows what a quick row
-//! just changed. Up/Down move, A / Left/Right act on the focused row, B closes.
+//! just changed. Up/Down move, A / Left/Right act on the focused row, B or a tap
+//! beside the strip closes.
 
 use crate::command::{AppCommand, QuickAccessAction};
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
 use crate::overlay::quick_access::{Entry, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
-use crate::ui::panel::{self, ROW_GAP};
+use crate::ui::panel::{self, center_selected, ROW_GAP};
 use crate::ui::theme::{self, ACCENT, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -40,24 +41,63 @@ pub(in crate::ui) fn add_quick_access(
         Strip::QuickAccess => (screen.right() - outer, "QUICK ACCESS"),
         Strip::QuickMenu => (screen.left(), "QUICK MENU"),
     };
+    add_backdrop(ctx, screen, commands);
     egui::Area::new(egui::Id::new("quick_access"))
         .order(egui::Order::Foreground)
         .fixed_pos(egui::pos2(left, screen.top()))
+        // A fit shift would feed back into the list's height bound below.
+        .constrain(false)
         .show(ctx, |ui| {
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
                 add_header(ui, title);
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
-                for index in 0..panel.rows().len() {
-                    let selected = index == panel.selected();
-                    let label = format!("{}  {}", glyph(panel.rows()[index]), panel.label(index));
-                    let resp = panel::named_row(ui, width, selected, &label, panel.value(index));
-                    if resp.clicked() {
-                        commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
-                    }
-                }
+                // The area auto-sizes, so the list scrolls only under a set bound.
+                let max_h = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .max_height(max_h.max(0.0))
+                    .show(ui, |ui| add_rows(ui, width, panel, commands));
             });
+        });
+}
+
+fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut Vec<AppCommand>) {
+    for (index, &entry) in panel.rows().iter().enumerate() {
+        let selected = index == panel.selected();
+        let label = format!("{}  {}", glyph(entry), panel.label(index));
+        let value = match selected && entry.steps() {
+            true => format!(
+                "{} {} {}",
+                bold::CARET_LEFT,
+                panel.value(index),
+                bold::CARET_RIGHT
+            ),
+            false => panel.value(index).to_string(),
+        };
+        let resp = panel::named_row(ui, width, selected, &label, &value);
+        if selected {
+            center_selected(&resp);
+        }
+        if resp.clicked() {
+            commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
+        }
+    }
+}
+
+/// An unpainted layer under the strip: a tap beside it closes the strip and
+/// never reaches the page.
+fn add_backdrop(ctx: &egui::Context, screen: egui::Rect, commands: &mut Vec<AppCommand>) {
+    egui::Area::new(egui::Id::new("quick_access_backdrop"))
+        .order(egui::Order::Middle)
+        .fixed_pos(screen.min)
+        .constrain(false)
+        .show(ctx, |ui| {
+            let resp = ui.allocate_response(screen.size(), egui::Sense::click());
+            if resp.clicked() {
+                commands.push(AppCommand::QuickAccess(QuickAccessAction::Close));
+            }
         });
 }
 
