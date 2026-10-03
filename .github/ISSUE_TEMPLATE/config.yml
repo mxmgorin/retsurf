@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+
+contact_links:
+  - name: Questions and help
+    url: https://github.com/mxmgorin/retsurf/discussions/categories/q-a
+    about: Installing, configuring, or "does it run on my device?" Ask in Discussions.
+  - name: Device report
+    url: https://github.com/mxmgorin/retsurf/discussions/78
+    about: How retsurf runs on your handheld and firmware.
+  - name: Feature idea
+    url: https://github.com/mxmgorin/retsurf/discussions/categories/ideas
+    about: Suggest and upvote features in Discussions.

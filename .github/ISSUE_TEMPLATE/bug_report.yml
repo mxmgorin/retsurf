@@ -1,0 +1,75 @@
+name: Bug report
+description: Something crashes, renders wrong, or stopped working.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What went wrong and what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The page URL and what you did, if applicable.
+      placeholder: |
+        1. Open https://...
+        2. Press ...
+        3. ...
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: e.g. Anbernic RG35XX Plus, Miyoo Mini Flip, Pixel 8, Windows 11 PC
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware or OS
+      placeholder: e.g. muOS 2508.1, Knulli Gladiator, OnionOS 4.3.1-1, Android 14
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - PortMaster
+        - OnionOS
+        - Allium
+        - Android
+        - Linux
+        - Windows
+        - macOS
+        - Built from source
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: retsurf version
+      description: Shown in Settings > About.
+      placeholder: e.g. 0.9.0, or nightly from 2026-10-01
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Drag the files here, or paste the relevant part.
+
+        - PortMaster: `log.txt` in the retsurf port folder.
+        - OnionOS / Allium: `log.txt` in `App/Retsurf/` or `Apps/Retsurf.pak/`.
+        - Android: Settings > System > Diagnostics > Logs > Share.
+
+        After a crash, also attach `retsurf-panic.log`.
