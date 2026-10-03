@@ -146,8 +146,9 @@ brotli = "8"
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-# The engine is our Servo fork: upstream `main` plus the patches in `patches/`.
-# Pinned by tag — a branch could be rewritten under us. See docs/SERVO_PATCH.md.
+# The engine is our Servo fork: upstream `main` plus our commits, on a new branch per
+# sync (`retsurf-main-<minor>-<upstream>`), pinned by tag. Our diff against upstream:
+# https://github.com/servo/servo/compare/main...mxmgorin:servo:<tag>
 [patch.crates-io]
 # Every entry names the same source: the Servo crates depend on each other by path,
 # so a mixed graph ends up with two of every crate. Catches transitive refs only.

@@ -72,6 +72,17 @@ WebGL on EGL 1.4 too — measured on a Mali-G31 blob, with the surfman fork supp
 GLES config bit — so every aarch64 build ships `webgl` (retsurf's own feature, which
 enables `servo/webgl`); only the armhf/software targets turn it off, having no EGL at all.
 
+### EGL 1.4 on PowerVR: missing entry points
+
+The TrimUI Smart Pro (PowerVR, EGL 1.4) left two function lookups empty:
+
+- SDL resolves `egl*` functions only from the GLES library, which on PowerVR exports none
+  of them. `src/platform/render/webgl.rs` looks them up in `libEGL` when SDL returns null.
+- surfman loads all of GL through `eglGetProcAddress`, which EGL 1.4 only has to answer
+  for extensions. PowerVR returns null for core GL, and surfman panicked with
+  `called glGetString but it was not loaded`. Our surfman fork looks them up in
+  `libGLESv2` instead.
+
 ## Rendering without a GPU
 
 The `software` cargo feature (on for the armhf build, off everywhere else) replaces both
