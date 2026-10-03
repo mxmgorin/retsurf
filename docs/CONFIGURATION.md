@@ -1,12 +1,11 @@
-# Configuration & bindings
+# Configuration
 
-retsurf reads two TOML files from the user data dir: `config.toml` (settings) and
-`bindings.toml` (gamepad/keyboard mappings). Templates with the defaults are written
-on first run. Most settings are also editable in-app from the ⚙ settings overlay.
-A handful of [environment variables](#environment-variables) override paths and
-control logging at launch.
+retsurf reads its settings from `config.toml` in the user data dir. A template with the
+defaults is written on first run, and most settings are also editable in-app from the
+settings overlay. Gamepad and keyboard mappings and Game Mode input maps are in
+[Controls](CONTROLS.md); environment variables in [Command line](CLI.md#environment-variables).
 
-## Configuration (`config.toml`)
+## `config.toml`
 
 Settings live in `config.toml` in the user data dir (`SDL_GetPrefPath`, e.g.
 `~/.local/share/mxmgorin/retsurf/config.toml` on Linux), or wherever `RETSURF_CONFIG`
@@ -274,7 +273,7 @@ enabled = true
 # for no map at all (the pad and the keyboard reach the game as they are; an id
 # no map answers to is none too), a built-in ("keys", "wasd" or "mouse"), or the
 # stem of an input_maps/<id>.toml of your own.
-# See "Game Mode input maps" below for the format.
+# See CONTROLS.md for the input map format.
 input_map = "keys"
 
 [game_mode.view]
@@ -285,259 +284,6 @@ input_map = "keys"
 # screen, aspect ratio ignored. Undone on leaving the mode, kept across pages.
 scaling = "off"
 ```
-
-## Game Mode input maps (`input_maps/*.toml`)
-
-An input map is what each button, stick direction and key sends to the page while
-Game Mode is on. Three ship built in, named for what the game sees rather than
-for what the pad becomes; `[game_mode] input_map` picks one by id, or `none`
-for no map at all, which a game that reads the Gamepad API or the keys itself
-wants: nothing is remapped, and there is no cursor and no click. `none` is not a
-file and cannot be edited; an `input_maps/none.toml` is ignored.
-
-| id | name | what the game gets |
-| --- | --- | --- |
-| `keys` | Keyboard (arrows and Z/X) | the retro convention PICO-8 exports and js13k entries share — most of itch.io plays with no edit at all |
-| `wasd` | Keyboard (WASD) | WASD on the left stick, with Space / E / R / F / Shift / Control round it |
-| `mouse` | Mouse only | the left stick moves the cursor, A presses, the right stick scrolls |
-
-There is no first-person template: Servo has no Pointer Lock, so a stick cannot
-turn a camera, and only the left mouse button has a route.
-
-The built-ins live in the binary and are always offered, so a later release can
-add one without touching your files. Put an `input_maps/<id>.toml` in the data dir
-to add a map of your own, or name it after a built-in to replace that one —
-deleting the file restores it. A file is read at startup; a typo costs its own
-binding and is logged, not the whole map.
-
-**The Game Mode menu's "Input map" row** is all of this without a keyboard or a
-file manager, which is the only way to do it on a handheld. It opens the list of
-maps, marked with the one in use and led by **+ Add**; **A** on any map
-opens its own screen:
-
-| row | what it does |
-| --- | --- |
-| Use this map | hands it to Game Mode and writes `[game_mode] input_map` |
-| Edit | the editor below |
-| Rename... | the on-screen keyboard types a new name; the file's stem stays as it is |
-| Duplicate... | a copy under a name you type, bindings and all |
-| Delete | throws the file away, after a confirmation |
-| Reset to default | the same, on a built-in: the binary's own version comes back |
-
-**+ Add**, the row above them, types a name and adds a map that binds nothing, which is
-passthrough: the whole pad reaches the page raw, with no cursor and no click
-until the editor gives it one. It opens on the new map, since that is what it
-was made for. A built-in the binary carries and no file shadows has nothing to
-remove, so it offers neither of the last two.
-
-**The editor** is a row per source the map binds, under a heading per device —
-*Sticks*, *Gamepad*, *Keyboard*, which is what names a row's table, so the row
-itself is just `a`, `q` or `left.up`. A stick is a source like the rest: a row
-once it is bound, and none before. **A** opens what that source can send, **X**
-unbinds it
-(its row goes, and the source reaches the page as itself again), **B** saves. For
-a button or a key that is *Keyboard*, *Mouse*, *Gamepad*, *Passthrough* or
-*Ignore*. *Mouse* and *Gamepad* open their own lists — the three buttons and the
-four cursor and four scroll steps (or *Cursor* and *Scroll* over a stick), and
-the pad's sixteen buttons — and *Keyboard* hands over to the on-screen keyboard, dimmed behind so
-it reads as a question rather than a keyboard. Its **Fn** key swaps to the keys no
-character grid carries — Escape, F1-F12, the navigation cluster, and Shift /
-Control / Alt / Meta on their own, which is what a game wanting a run or crouch
-key binds.
-
-**+ Add**, the editor's last row, listens: press the button or key you want to
-map, or push the stick, and its list opens straight away, so a keyboard key is
-bound the way a pad button is and a pad this build has never heard of needs no
-table of its own. A stick has no gesture of its own, so it is taken from a push
-most of the way over — past any dead zone, since one resting off-centre must not
-bind itself. A map holds one target per source, so
-a hold, a chord or a modified key is refused on the row that asked; so is the
-button the `quick_access` gesture resolves on the press, where it is a bare tap.
-Nothing pressed within six seconds gives up on its own — a handheld has no Esc.
-
-**A stick answers A with its own list**, like every other row — *Cursor*,
-*Scroll*, *Passthrough*, *Ignore*, or *Four directions*, which seeds the arrows
-and puts a `stick.<side>.<direction>` row under it for each, edited like a
-button. The file is one form or the other, so picking either takes the other
-away. A direction is offered no Passthrough: a stick read as directions withholds
-the whole axis, so the page would see nothing either way.
-
-Editing a built-in writes the `input_maps/<id>.toml` that replaces it, so deleting
-that file is still how you get the original back. The layers below are the file's:
-they need names the screen has no room to pick.
-
-```toml
-name = "Vampire Survivors"    # what the menu shows; the file name is the id
-
-[pad]                         # buttons and the D-pad, by the bindings.toml names
-up = "key.ArrowUp"
-a = "key.Space"
-b = "key.z"
-x = { to = "key.x", code = "KeyY", shift = true }   # when key and code differ
-y = "key.Shift"               # a bare modifier: takes the left-hand `code`
-r2 = "mouse.left"             # a mouse button at the cursor; also .right/.middle
-l3 = "mouse.scroll.down"      # scrolls a step per frame while it is held
-down = "mouse.cursor.down"    # moves the cursor a step per frame while it is held
-select = "pad.start"          # a button of the page's own Gamepad API
-l2 = "passthrough"            # reaches the page as the gamepad button it is
-r1 = "none"                   # consumed: inert while this map is active
-l1 = "layer:aim"              # holds a layer open; sends nothing itself
-
-[stick.left]                  # four directions, through [controls] deadzone
-up = "key.ArrowUp"
-down = "key.ArrowDown"
-left = "key.ArrowLeft"
-right = "key.ArrowRight"
-
-[stick.right]
-analog = "mouse.cursor"       # or mouse.scroll — the whole stick, not a direction
-
-[key]                         # physical keys; unlisted ones reach the game as-is
-w = "key.ArrowUp"
-
-[layer.aim.pad]               # while l1 is held
-a = "key.Shift"
-[layer.aim.key]
-w = "key.ArrowDown"
-```
-
-Sources and targets alike name the device they belong to, and the editor's rows
-are named the same way: a row is `pad.a`, `key.w` or `stick.left.up`, which TOML
-also reads as the line of the file it stands for.
-
-**Targets** are `key.<name>`, `pad.<button>`, one of the mouse's, or
-`passthrough`, `none`, `layer:<name>`. A `pad.<button>` target is the page's
-Gamepad API rather than a key: it rides the pad the source came from, so a map
-can deal a pad's own buttons out again, and a source that is no pad — a keyboard
-key — gets one the browser announces for the purpose (`retsurf mapped pad`,
-listed only while the mode runs a map that asks for it). The mouse's are `mouse.left` / `mouse.right` / `mouse.middle` (a
-button at the cursor), `mouse.scroll.up` / `.down` / `.left` / `.right` and
-`mouse.cursor.up` / `.down` / `.left` / `.right` (a held source scrolling the
-page or moving the cursor a step per frame, at a fully-deflected stick's rate),
-and `mouse.cursor` / `mouse.scroll` for a whole stick — the directional pair is
-what points on a device whose sticks are the game's, or that has none. A key's name
-is one character (`key.z`), `key.Space`, or a standard spelling (`key.ArrowUp`,
-`key.Enter`, `key.Escape`, `key.Shift`); the `code` games branch on is derived
-from it, and the table form `{ to = …, code = …, shift/ctrl/alt = true,
-speed = 1.5 }` says it out loud where they differ. `speed` scales every one of
-these, the steps included. A target that names no device is refused, so a misspelled
-`passthrough` cannot quietly become a key.
-
-**A bound source is withheld from the page's raw input**, so a button mapped to a
-key is not also delivered as a gamepad button — only `passthrough` is. A stick
-read as directions keeps its whole axis, since half an axis cannot be withheld —
-which also makes `passthrough` on one direction meaningless. `analog = "none"`
-keeps the axis and sends nothing, which is how a stick is made inert.
-
-**The `quick_access` gesture's button is the map's to bind, but its press arrives
-late.** A hold and a chord are undecided until the button is let go, so a map's
-target for it is sent on release and ended a frame later, and an unbound one
-reaches the page as the button it is. Only a bare tap resolves on the press
-itself: that button opens the menu and never reaches the game, in any map or
-layer, and the editor refuses a row for it.
-
-**Layers** are held, not toggled: the activator sends nothing of its own, and a
-button the layer leaves alone still means what `[pad]` says. What a source sends
-is decided when it goes down, so releasing the activator never strands a key that
-is still held. Layers carry buttons and keys, not sticks, and cannot open other
-layers.
-
-## Bindings (`bindings.toml`)
-
-Gamepad and keyboard layouts live in their own file, `bindings.toml`, next to
-`config.toml` (a template with the defaults is written on first run). Each
-entry maps a *gesture* to an *action*:
-
-```toml
-[gamepad]
-a = "confirm"              # tap: fires on press
-"hold:r1" = "reload"       # hold the button for hold_ms
-"l2+r2" = "zoom_reset"     # chord: press one while holding the other
-y = "none"                 # explicitly unbind
-
-[keyboard]
-"ctrl+r" = "reload"        # modifier shortcuts always fire
-f = "hints"                # plain keys fire only while no text input has focus
-k = "nav_up"               # overlay navigation can move to vim-style keys
-```
-
-**Gamepad gestures**: a tap (`a`), a hold (`"hold:a"`), or a button chord
-(`"a+b"`). Buttons: `a b x y l1 r1 l2 r2 l3 r3 start select` (the D-pad aims
-the cursor and is not bindable; L2/R2 double as Shift and Enter (on the wheel,
-Shift and the held digits layer), but only while the on-screen keyboard is open). A
-button with a hold or chord gesture fires its tap on release instead of press
-(the gesture is ambiguous until then); `confirm` needs the press edge for
-clicks and drags, so hold/chord gestures on its button are rejected.
-
-**Keyboard shortcuts**: any key with optional `ctrl`/`alt`/`shift` modifiers,
-matched strictly. Plain keys (no Ctrl/Alt) are muted whenever a text input —
-on the page or the address bar — holds focus, so they can't hijack typing.
-Every default is on Ctrl, so a page (a game) gets all plain keys:
-`ctrl+r` reload · `ctrl+b` bookmark · `ctrl+h` home · `ctrl+e` reader view ·
-`ctrl+m` menu · `ctrl+l` address · `ctrl+,` settings · `ctrl+f` link hints ·
-`ctrl+alt+g` Quick Access · `ctrl+left`/`ctrl+right` back/forward ·
-`ctrl+t`/`ctrl+w` new/close tab · `ctrl+tab`/`ctrl+shift+tab` next/previous
-tab · `ctrl+=`/`ctrl+-`/`ctrl+0` zoom in/out/reset. The arrows are bound too,
-but only as overlay navigation: with no overlay open they go to the page.
-
-**Actions**: `confirm` (click/select) · `cancel` (close/back) · `osk`
-(on-screen keyboard) · `reload` · `prev` / `next` (menu section or history) ·
-`hints` (link hints) · `bookmark` · `reader` (reader mode) · `menu` ·
-`settings` (settings overlay; pressed again while it's open, closes it) · `home`
-(go to the home page) · `quit` (quit the app) · `tab_next` / `tab_prev` /
-`new_tab` / `close_tab` ·
-`zoom_in` / `zoom_out` / `zoom_reset` (page zoom along a Firefox-style 50–300%
-ladder / back to the config default) ·
-`nav_up` / `nav_down` / `nav_left` / `nav_right` (one step in whatever overlay
-is open — menu, on-screen keyboard, or link hints; with none open the key goes
-to the page) · `scroll` (gamepad-only: toggle the D-pad / left stick between
-cursor and page scroll; unbound by default, since pushing the cursor against
-an edge scrolls too) · `none`.
-
-Also `game_mode` (hand the input to the page for a web game — see `[game_mode]`
-above — the gesture opens that mode's menu, which carries the way in and out).
-
-Invalid buttons, keys, actions, or gestures are logged and skipped at startup —
-check the log if a binding doesn't respond.
-
-**Upgrades.** The file is written only when it is missing, so an action added in a
-later release would be unreachable in a file written before it. At startup any
-action with *nothing* bound on a device gets its default gestures back there (one
-log line each); a gesture the file already spells is never taken back, and an
-action you rebound is not missing, so your layout stands. The one consequence:
-clearing an action's last gesture doesn't stick — to make an action inert, bind
-it to a gesture you never press rather than removing it.
-
-## Environment variables
-
-Set at launch; they override paths and control logging without touching the config
-files.
-
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
-| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[interface].scale` still multiplies it. Set by the Android launcher to the display density |
-| `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
-| `RETSURF_MAX_FPS` | — | Overrides `[performance].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
-| `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
-| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that hands the key over rather than spending it on a kill helper (both Miyoo packages set it) |
-| `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
-| `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
-| `RETSURF_MEMORY_DETAIL` | `0` | `1` logs the 20 largest whole memory-report paths beside the rolled-up groups |
-| `RETSURF_PARTIAL_PRESENT` | `0` | `1` sends the panel only the part of the software frame that changed; the Miyoo driver misplaces a partial copy, which is why it is off |
-| `RETSURF_ROUNDING` | `0` on the software renderer | `1` puts the chrome's rounded corners back there, to compare what they cost |
-| `RETSURF_FEATHERING` | follows the renderer | `0`/`1` overrides egui's edge smoothing, which is off on the software renderer |
-| `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
-| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) |
-| `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
-| `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
-| `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
-| `RETSURF_LOG_FILE` | — | Write logs to this file |
-| `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
-| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`, or whatever the firmware's SDL ships); auto-set to `wayland` on a Wayland desktop |
-
-retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
-and Servo's GL stacks agree) — you don't normally set it yourself.
 
 ## Interface scale
 
@@ -562,7 +308,8 @@ renderer, so nothing needs a GL driver. It exists for devices that have no GPU �
 the Miyoo Mini family — and needs a build with the `software` cargo feature; a
 build without it logs a warning and stays on GL. Builds that do have it fall back
 to software on their own when no GL context can be created, so the switch is only
-for forcing it on a machine that has both.
+for forcing it on a machine that has both. [`RENDERING.md`](RENDERING.md) has how
+it works.
 
 ## Page icons
 

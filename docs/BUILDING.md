@@ -57,16 +57,74 @@ set by the workflows, not by `Cargo.toml`.
 
 ## Android
 
-With the Android SDK/NDK installed:
+The toolchain:
+
+- NDK r27c (`27.2.12479018`), pinned in `.github/workflows/build-android.yml`.
+- API level 29 (Android 10), for reliable JIT executable mappings and GLES 3.x.
+- Rust target `aarch64-linux-android` (rustup honors the pinned channel in
+  `rust-toolchain.toml`).
+- [`cargo-ndk`](https://github.com/bbqsrc/cargo-ndk), which cross-compiles the cdylib per
+  ABI and drops the `.so` files into `jniLibs/<abi>/`. Not cargo-apk, which can't drive our
+  custom `SDLActivity` Gradle project.
+- JDK 17 plus Android SDK platform 34 and build-tools 34 for Gradle (AGP 8.5.2, Gradle 8.7).
+
+The SDK pieces come from Android Studio or `sdkmanager`:
 
 ```sh
 rustup target add aarch64-linux-android
 cargo install cargo-ndk --locked
-./android/scripts/build.sh release   # android/app/build/outputs/apk/release/app-release.apk
-adb install -r android/app/build/outputs/apk/release/app-release.apk
+sdkmanager --install "ndk;27.2.12479018" "platforms;android-34" "build-tools;34.0.0"
+export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
 ```
 
-See [`docs/ANDROID_PORT.md`](ANDROID_PORT.md) for how the port is put together.
+`android/scripts/build.sh` then does everything: it builds `libSDL2.so` (first run only),
+cross-compiles the Rust cdylib, and assembles the APK.
+
+```sh
+./android/scripts/build.sh           # debug APK  -> app/build/outputs/apk/debug/app-debug.apk
+./android/scripts/build.sh release   # release APK (LTO, slower)
+```
+
+It auto-detects the SDK and the newest installed NDK (override with `ANDROID_SDK_ROOT` or
+`ANDROID_NDK_HOME`). The first build compiles SpiderMonkey from C++ source (roughly 30 to
+60 minutes); later builds are incremental.
+
+Install to a connected device with
+`adb install -r android/app/build/outputs/apk/debug/app-debug.apk`. Debug and release sign
+with the same `app/debug.keystore`, so `-r` updates in place and no uninstall is needed.
+Test on a device with a release build: a debug build has been seen to never start the
+first page load, which leaves a white page.
+
+### In Android Studio
+
+`build.sh` is still needed once to produce `libretsurf.so` and `libSDL2.so` in
+`app/src/main/jniLibs/`, since Android Studio doesn't build Rust. After that, open the
+`android/` folder in Android Studio and use Run to deploy or debug on a device or emulator;
+Gradle just packages the prebuilt `.so` files. Re-run `build.sh` (or just the `cargo ndk`
+step) whenever the Rust code changes.
+
+### Manual (what build.sh automates)
+
+```sh
+cargo fetch && bash android/scripts/sync-sdl.sh    # SDL glue + libSDL2.so
+tc="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"   # or darwin-x86_64
+export ANDROID_NDK="$ANDROID_NDK_HOME" ANDROID_NDK_VERSION="$(basename "$ANDROID_NDK_HOME")"
+export ANDROID_VERSION=29 ANDROID_TOOLCHAIN_DIR="$tc"
+export ANDROID_CLANG="$tc/bin/aarch64-linux-android29-clang"
+# bindgen (mozjs_sys/mozangle/sdl2-sys) must use the NDK libclang — host clang-15+
+# dropped builtins these need (same trap as the desktop LIBCLANG llvm-14 pin).
+# NDK r27 keeps libclang.so under musl/lib (not lib/, which has only libclang_rt.*).
+export LIBCLANG_PATH="$tc/musl/lib" BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$tc/sysroot"
+# NDK r23+ dropped libgcc but rustc still emits -lgcc; stub it to libunwind. The
+# -L paths (stub + jniLibs for libSDL2.so) are in .cargo/config.toml under
+# [target.aarch64-linux-android], so no RUSTFLAGS needed.
+mkdir -p target/ndk-libgcc-stub && echo 'INPUT(-lunwind)' > target/ndk-libgcc-stub/libgcc.a
+# WebGL stays ON (do NOT pass --no-default-features).
+cargo ndk -t arm64-v8a -P 29 -o android/app/src/main/jniLibs build --release
+cd android && ./gradlew assembleRelease
+```
+
+[`docs/ANDROID_PORT.md`](ANDROID_PORT.md) covers how the port is put together.
 
 ## Tests
 
@@ -93,5 +151,7 @@ tools/armhf/build.sh                 # Miyoo Mini (armv7) binary
 ```
 
 [`tools/arm64/README.md`](../tools/arm64/README.md) covers the per-core binaries,
-the caches, and why the base image is what it is.
-[`docs/HANDHELD_PORT.md`](HANDHELD_PORT.md) covers the port itself.
+the caches, and why the base image is what it is;
+[`tools/armhf/README.md`](../tools/armhf/README.md) the Miyoo Mini toolchain.
+[`docs/HANDHELD_PORT.md`](HANDHELD_PORT.md) lists the devices and packages, and
+[`docs/RENDERING.md`](RENDERING.md) how the picture gets on screen.

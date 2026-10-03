@@ -98,7 +98,7 @@ Android, and the handheld cross-builds.
 ## Configuration
 
 Files are stored in the user data directory (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
-Templates with the defaults are written on first run. See **[Configuration & bindings](docs/CONFIGURATION.md)** for all options and the bindings reference.
+Templates with the defaults are written on first run. See **[Configuration](docs/CONFIGURATION.md)** for all options, **[Controls](docs/CONTROLS.md)** for bindings and Game Mode input maps, and **[Command line](docs/CLI.md)** for arguments and environment variables.
 
 ## How to help
 

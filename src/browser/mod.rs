@@ -432,7 +432,7 @@ impl AppBrowser {
         local_site: Option<LocalSite>,
         config: &AppConfig,
     ) -> Result<Self, String> {
-        // Path B: Servo renders into an FBO in SDL2's shared GL context
+        // Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
         let servo = servo::ServoBuilder::default()
             .opts(engine::build_opts(&config.browser))
