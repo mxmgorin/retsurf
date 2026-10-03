@@ -10,56 +10,46 @@ retsurf [--game-mode] [PATH]
 | `--game-mode` | Start in Game Mode, before the page loads. |
 | `-h`, `--help` / `-V`, `--version` | Print the usage or the version. |
 
-The folder is served as `http://<folder-name>.localhost/`, with its own saves
-(localStorage, IndexedDB). Folders whose names differ only in case or punctuation
-share them. `.br` and `.gz` files are decompressed.
+A folder is served as `http://<folder-name>.localhost/`, with its own saves (localStorage,
+IndexedDB); names differing only in case or punctuation share them. `.br` and `.gz` files
+are decompressed.
 
 ## Examples
 
 ```sh
-# a game folder: opens its index.html
-retsurf ~/games/hexgl
-
-# the same, straight into Game Mode
-retsurf --game-mode ~/games/hexgl
-
-# an HTML file inside a folder
-retsurf ~/games/carts/cart.html
-
-# Game Mode over the usual first tabs
-retsurf --game-mode
+retsurf ~/games/hexgl                 # a game folder: opens its index.html
+retsurf --game-mode ~/games/hexgl     # the same, straight into Game Mode
+retsurf ~/games/carts/cart.html       # an HTML file inside a folder
+retsurf --game-mode                   # Game Mode over the usual first tabs
 ```
 
-A PATH starting with `-` goes after `--`: `retsurf -- -name/`. A bad PATH or an
-unknown option prints the usage and exits with status 64.
+A PATH starting with `-` goes after `--`: `retsurf -- -name/`. A bad PATH or an unknown
+option prints the usage and exits with status 64.
 
 ## Environment variables
 
-Set at launch; they override paths and control logging without touching the config
-files.
-
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `RETSURF_GLES` | `1` | `0` uses desktop OpenGL instead of GLES (debugging) |
-| `RETSURF_SCALE` | — | Pin the UI zoom the panel would otherwise be fitted to; `[interface].scale` still multiplies it. Set by the Android launcher to the display density |
-| `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering (`[display].software_render`) |
-| `RETSURF_MAX_FPS` | — | Overrides `[performance].max_fps`, the cap the software renderer is paced by (`0` uncapped) |
-| `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware's SDL2 sends instead of a controller, `desktop` never does; detected from the video driver otherwise |
-| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit the app, for a launcher that hands the key over rather than spending it on a kill helper (both Miyoo packages set it) |
-| `RETSURF_SERVO_PREFS` | — | Engine prefs the config does not expose, `name=value` comma-separated (e.g. `expose_servointernals_globally=true`) |
-| `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides whether the allocator is tuned for a small process; the memory tier decides otherwise |
-| `RETSURF_MEMORY_DETAIL` | `0` | `1` logs the 20 largest whole memory-report paths beside the rolled-up groups |
-| `RETSURF_PARTIAL_PRESENT` | `0` | `1` sends the panel only the part of the software frame that changed; the Miyoo driver misplaces a partial copy, which is why it is off |
-| `RETSURF_ROUNDING` | `0` on the software renderer | `1` puts the chrome's rounded corners back there, to compare what they cost |
-| `RETSURF_FEATHERING` | follows the renderer | `0`/`1` overrides egui's edge smoothing, which is off on the software renderer |
-| `RETSURF_CONFIG` | — | Path to the config file (overrides the default in the data dir) |
-| `RETSURF_DATA_DIR` | — | Override the user data dir (config, history, bookmarks, plus `servo/` for cookies and `cache/` for the adblock engine) |
-| `RETSURF_DOWNLOAD_DIR` | — | Override where downloads are saved (created on demand). Takes precedence over the system download folder; the `[downloads].dir` config setting still wins over it. Falls back to `downloads/` in the data dir |
-| `RETSURF_LOG_LEVEL` | `info` | Log verbosity (`error`/`warn`/`info`/`debug`/`trace`) |
-| `RETSURF_LOG_STYLE` | `always` | Log coloring (`always`/`auto`/`never`) |
-| `RETSURF_LOG_FILE` | — | Write logs to this file |
-| `RETSURF_PANIC_FILE` | `retsurf-panic.log` | File for a panic's message + backtrace |
-| `SDL_VIDEODRIVER` | auto | SDL video backend (`wayland`/`x11`, or whatever the firmware's SDL ships); auto-set to `wayland` on a Wayland desktop |
+| `RETSURF_CONFIG` | — | Config file path |
+| `RETSURF_DATA_DIR` | — | User data dir |
+| `RETSURF_DOWNLOAD_DIR` | — | Download folder; `[downloads] dir` still wins |
+| `RETSURF_LOG_LEVEL` | `info` | `error`, `warn`, `info`, `debug` or `trace` |
+| `RETSURF_LOG_STYLE` | `always` | Log colors: `always`, `auto` or `never` |
+| `RETSURF_LOG_FILE` | — | Write the log to this file |
+| `RETSURF_PANIC_FILE` | `retsurf-panic.log` | Where a panic's message and backtrace go |
+| `RETSURF_GLES` | `1` | `0` uses desktop OpenGL (debugging) |
+| `RETSURF_SOFTWARE` | `0` | `1` forces CPU rendering |
+| `RETSURF_SCALE` | — | UI zoom in place of the fit to the screen; `[interface] scale` still applies |
+| `RETSURF_MAX_FPS` | — | Overrides `[performance] max_fps` |
+| `RETSURF_KEYMAP` | auto | `miyoo` reads the pad from the keys that firmware sends, `desktop` never does |
+| `RETSURF_MENU_QUIT` | `0` | `1` lets MENU quit, for launchers that hand the key over |
+| `RETSURF_MAIN_NICE` | — | Main-thread niceness; a negative value needs root or `CAP_SYS_NICE` |
+| `RETSURF_SERVO_PREFS` | — | Extra engine prefs, `name=value,...` |
+| `RETSURF_HEAP_TUNE` | — | `0`/`1` overrides the memory tier's allocator tuning |
+| `RETSURF_MEMORY_DETAIL` | `0` | `1` logs the 20 largest memory-report paths |
+| `RETSURF_PARTIAL_PRESENT` | `0` | `1` presents only the changed part of a software frame (misplaced on Miyoo) |
+| `RETSURF_ROUNDING` | `0` in software | `1` restores rounded corners on the software renderer |
+| `RETSURF_FEATHERING` | by renderer | `0`/`1` overrides egui's edge smoothing |
+| `SDL_VIDEODRIVER` | auto | SDL video backend; set to `wayland` on a Wayland desktop |
 
-retsurf also sets `SURFMAN_FORCE_GLES=1` automatically when GLES is in use (so SDL's
-and Servo's GL stacks agree) — you don't normally set it yourself.
+retsurf sets `SURFMAN_FORCE_GLES=1` itself when GLES is on.

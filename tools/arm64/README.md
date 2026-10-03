@@ -1,10 +1,8 @@
 # Building the aarch64 handheld binaries locally
 
-CI builds these natively on free arm64 runners (`.github/workflows/build-linux-arm.yml`),
-which is the right way when the whole tree is pushed. This exists for when it is
-not: the engine is a git dependency pinned by revision, so a fix that still lives
-in a local Servo checkout is invisible to a runner. `RETSURF_SERVO_SRC` is the
-whole point of the tool.
+CI builds these on arm64 runners (`.github/workflows/build-linux-arm.yml`). This cross-build
+from x86_64 is for when the engine fix is still in a local Servo checkout, which a runner
+cannot see: that is what `RETSURF_SERVO_SRC` is for.
 
 ```
 tools/arm64/build.sh                      # a35 a53 a55 -> dist/arm64/
@@ -16,101 +14,46 @@ tools/arm64/package-portmaster.sh -n      # package what is already built
 RETSURF_SERVO_SRC=~/Repos/servo tools/arm64/build.sh a53   # against a local fork
 ```
 
-Caches live in `~/.cache/retsurf-arm64` (`RETSURF_ARM64_CACHE`), outside the repo
-so container-root files never mix with host builds. `RETSURF_ARM64_LTO=thin`
-trades a slower binary for a link that fits in less RAM.
+Caches live in `~/.cache/retsurf-arm64` (`RETSURF_ARM64_CACHE`). `RETSURF_ARM64_LTO=thin`
+links in less RAM for a slower binary. The `target/` cache belongs to one base image: after
+changing the image, delete it, or every cached build script dies on `GLIBC_2.34 not found`.
 
-The `target/` half of that cache belongs to one base image: it holds *host*
-build-script binaries, cargo fingerprints nothing about the glibc they were
-linked against, and a run under an older base then dies on `GLIBC_2.34 not
-found` from every cached script at once. Changing the image means starting that
-directory over.
+## Ubuntu 20.04, for the glibc floor
 
-## Why cross, and why Ubuntu 20.04
+A binary needs a glibc at least as new as the one it was built against. focal's 2.31 keeps
+the link at `glibc-floor` (2.30, what ArkOS ships); jammy's 2.35 would not. `build.sh` fails
+if the binary drifts above the floor. CI uses the same base (`.github/actions/arm-build-env`).
 
-Cross rather than qemu: a Servo build under emulation is a working day.
+What follows from the old base:
 
-The base is focal because glibc is a one-way ratchet: a binary links whatever
-symbol versions the build host offers, and the loader on the device refuses
-anything newer than its own. focal's 2.31 puts the link within reach of
-`glibc-floor` (2.30, what ArkOS ships) where jammy's 2.35 sat two years of
-symbols above it — 33 from the libpthread/libdl merge alone. Nothing is given up
-to sit there: the graph's own highest reference is `gettid@GLIBC_2.30`, so 2.30
-is where it lands anyway. The check at the end of `build.sh` fails the build if
-that stops being true. CI runs the same base as a container on its arm64 runner
-(`.github/actions/arm-build-env`).
+- **GCC 10, libstdc++ linked statically.** SpiderMonkey needs GCC 10.1; GCC 12's libstdc++
+  needs glibc 2.32; the devices carry a GCC 9 runtime.
+- **libclang 19 and Python 3.11 from outside the archive**, for `mozjs_sys` and Servo's
+  WebIDL codegen.
+- **`MOZJS_FROM_SOURCE=1`.** The prebuilt SpiderMonkey is built on 22.04, above the floor
+  and against libstdc++ 11.
+- **Debian multiarch, not a sysroot**: set `PKG_CONFIG_LIBDIR` and `PKG_CONFIG_ALLOW_CROSS`,
+  and leave `PKG_CONFIG_SYSROOT_DIR` unset. apt's existing sources are pinned to
+  `[arch=amd64]` before arm64 is added.
 
-Two consequences of the old base, both worth knowing before touching the image:
+## Three binaries
 
-- **GCC 10 on both sides.** SpiderMonkey wants GCC >= 10.1 and
-  `_GLIBCXX_RELEASE >= 10`, where focal's default is 9.3; GCC 12 would clear that
-  but its libstdc++ references `__libc_single_threaded`, a glibc 2.32 symbol.
-  libstdc++ is then linked statically, because the devices at the floor carry a
-  GCC-9 runtime that has none of GCC 10's symbols.
-- **libclang 19 and Python 3.11 come from outside the archive**, since focal
-  stops at clang 10 and Python 3.9. `mozjs_sys` 153 names clang 19 itself;
-  Python has two floors, SpiderMonkey's tree at 3.9 and Servo's WebIDL codegen
-  at 3.11 (it is written in `match`), so a portable CPython is unpacked into
-  `/opt` rather than trusting a third-party archive for a distro this old.
+Cortex-A55 code (ARMv8.2) crashes on v8.0 cores, so `Retsurf.sh` picks one by
+`/proc/cpuinfo`:
 
-`MOZJS_FROM_SOURCE=1` is what makes any of the above matter. Left unset,
-`mozjs_sys` downloads a prebuilt SpiderMonkey instead of compiling one, and that
-archive is built on Ubuntu 22.04: it was both the bulk of the symbols above the
-floor and a libstdc++ 11 the GCC 10 runtime cannot answer
-(`std::__throw_bad_array_new_length` at link time). The compilers configured
-here went unused until it was set.
-
-The arm64 side is Debian multiarch, not a hand-assembled sysroot: headers are
-shared with the host and the libraries land in `/usr/lib/aarch64-linux-gnu`, so
-`PKG_CONFIG_SYSROOT_DIR` must stay **unset** (setting it would double every
-`-I`). Only `PKG_CONFIG_LIBDIR` and `PKG_CONFIG_ALLOW_CROSS` are needed. This is
-far less work than the armhf image next door, which unpacks a dozen Debian `.deb`
-files by hand — there the toolchain is the device's own and there is no archive
-to ask.
-
-`apt` needs the existing sources pinned to `[arch=amd64]` before arm64 is added,
-or it tries to fetch arm64 indexes from the main archive (which does not carry
-them) and fails the whole update.
-
-## Three binaries, not one
-
-Cortex-A55 is ARMv8.2 — LSE atomics, fp16, dotprod — and code built for it
-SIGILLs on the v8.0 cores. `Retsurf.sh` reads `/proc/cpuinfo` and execs the
-matching one:
-
-| | cores | flags |
+| | cores | panic |
 |---|---|---|
-| `a35` | RK3326; runs on A53 too, same ISA | `panic=abort` |
-| `a53` | H700, Allwinner A133 Plus (crypto off) | same |
-| `a55` | RK3566, Allwinner A523/T527 | same |
-| `universal` | any ARMv8.0+, non-PortMaster installs | `panic=unwind` |
+| `a35` | RK3326, A53 | abort |
+| `a53` | H700, A133 Plus | abort |
+| `a55` | RK3566, A523/T527 | abort |
+| `universal` | any ARMv8.0, non-PortMaster | unwind |
 
-All four build with default features, webgl included. `panic=abort` costs the
-per-core binaries their unwind tables, so a Servo worker's panic ends the
-process; the universal binary declines that trade, hence its own build.
+Each core's `RUSTFLAGS` rebuild the whole Rust graph; SpiderMonkey (~20 minutes) is reused.
 
-`RUSTFLAGS` differs per core, and that invalidates the whole dependency graph,
-not just our crate: expect a near-full Rust rebuild per binary. SpiderMonkey is
-a build script's output and survives that, which is what keeps this to tens of
-minutes rather than hours — it is the one thing here that costs ~20 minutes on
-twelve cores by itself.
+## Not failures
 
-## Two things that will look like failures and are not
-
-**`patch ... was not used in the crate graph`**, once per patched Servo crate,
-naming the git revision and pointing at the local path. This is cargo saying the
-*git* source is no longer in the graph — because the `[patch]` replaced it with
-the path. The patch worked. To confirm rather than trust it, look for a string
-that only exists in the local checkout:
-
-```
-strings -a dist/arm64/retsurf.a53 | grep 'could not define the SpiderMonkey testing functions'
-```
-
-**A missing `.pc` an hour into the build.** The workflow's apt list is what a
-*native* runner needed, and its dependency closure differs from what
-`--no-install-recommends` gives here: fontconfig's `-dev` is pulled in for free
-there and has to be named here (as `libfontconfig1-dev` — the unsuffixed alias
-postdates focal), which cost one full build to discover. The image now asks
-pkg-config for all nine packages the graph probes as its last build step, so the
-next missing one fails in a minute instead.
+- **`patch ... was not used in the crate graph`** under `RETSURF_SERVO_SRC`: the path patch
+  replaced the git source, as intended. To confirm, `strings` the binary for text only the
+  local checkout has.
+- **A missing `.pc` late in the build**: a `-dev` package the native runner got for free. The
+  image now asks pkg-config for every package the graph probes, so this fails early.
