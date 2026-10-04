@@ -11,7 +11,7 @@
 </div>
 
 <p align="center">
-  <a href="https://retsurf.mxmgorin.dev/">Website</a> &middot;
+  <a href="https://retsurf.app/">Website</a> &middot;
   <a href="#install">Install</a> &middot;
   <a href="docs/CONFIGURATION.md">Docs</a> &middot;
   <a href="https://github.com/mxmgorin/retsurf/discussions">Discussions</a>
