@@ -4,11 +4,13 @@
 //! so retsurf registers its own before Servo installs the dummy. The audio graph is
 //! backend-independent, so WebAudio only needed somewhere for the rendered blocks to
 //! go (see [`sink`]) and a decoder for `decodeAudioData` (see [`decoder`]);
-//! `<audio>` gets a demuxing [`Player`] on symphonia (see [`player`]). MediaStream/
+//! `<audio>` gets a demuxing [`Player`] on symphonia (see [`player`]). Both reach
+//! the speakers through one SDL device per sample rate (see [`mixer`]). MediaStream/
 //! WebRTC would need a capture stack, not SDL2's job — those keep the dummy types.
 
 mod decoder;
 mod device;
+mod mixer;
 mod player;
 mod sink;
 

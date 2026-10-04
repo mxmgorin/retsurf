@@ -1,4 +1,4 @@
-//! WebAudio output: a servo-media [`AudioSink`] backed by an SDL2 audio device.
+//! WebAudio output: a servo-media [`AudioSink`] playing through the mixer.
 //!
 //! Servo's render thread parks as soon as [`AudioSink::has_enough_data`] is true and
 //! only [`AudioRenderThreadMsg::SinkNeedData`] wakes it, so draining the queue must
@@ -6,7 +6,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::ffi::{c_int, c_void};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
@@ -16,14 +15,15 @@ use servo_media::audio::render_thread::{AudioRenderThreadMsg, SinkEosCallback};
 use servo_media::audio::sink::{AudioSink, AudioSinkError};
 use servo_media::streams::MediaSocket;
 
-use super::device::{lock, Device, BUFFER_FRAMES, CHANNELS};
+use super::device::{lock, BUFFER_FRAMES, CHANNELS};
+use super::mixer::{self, mix_from, Attachment, MixSource};
 
 /// Queue depth ahead of the device: the render thread idles above this mark and is
 /// woken below it. Four device buffers (~93 ms) rides out a slow render pass.
 const QUEUE_TARGET_SAMPLES: usize = 4 * BUFFER_FRAMES as usize * CHANNELS as usize;
 
 /// Shared between Servo's render thread and SDL's audio thread. One mutex covers
-/// both fields: the callback needs them together and each section is a memcpy.
+/// both fields: the mixer needs them together and each section is a memcpy.
 #[derive(Default)]
 struct Queue {
     /// Interleaved stereo samples waiting to be played.
@@ -32,23 +32,17 @@ struct Queue {
     notify: Option<Sender<AudioRenderThreadMsg>>,
 }
 
-/// SDL's audio thread: drains the queue into the device buffer and wakes the render
-/// thread once the queue falls below target.
-///
-/// # Safety
-///
-/// `userdata` is the `Arc<Mutex<Queue>>` handed to [`Device::open`]; the sink
-/// outlives the device, so it is live for every call.
-unsafe extern "C" fn audio_callback(userdata: *mut c_void, stream: *mut u8, len: c_int) {
-    let queue = unsafe { &*(userdata as *const Mutex<Queue>) };
-    let out = unsafe { super::device::out_slice(stream, len) };
+/// Drains the queue into the mix and wakes the render thread once the queue falls
+/// below target.
+impl MixSource for Mutex<Queue> {
+    fn mix_into(&self, out: &mut [f32]) {
+        let mut queue = lock(self);
+        mix_from(out, &mut queue.samples, 1.0);
 
-    let mut queue = lock(queue);
-    super::device::drain_into(out, &mut queue.samples, 1.0);
-
-    if queue.samples.len() < QUEUE_TARGET_SAMPLES {
-        if let Some(notify) = &queue.notify {
-            let _ = notify.send(AudioRenderThreadMsg::SinkNeedData);
+        if queue.samples.len() < QUEUE_TARGET_SAMPLES {
+            if let Some(notify) = &queue.notify {
+                let _ = notify.send(AudioRenderThreadMsg::SinkNeedData);
+            }
         }
     }
 }
@@ -56,10 +50,9 @@ unsafe extern "C" fn audio_callback(userdata: *mut c_void, stream: *mut u8, len:
 /// The sink servo-media pushes rendered audio into. One per `AudioContext`.
 #[derive(Default)]
 pub struct SdlAudioSink {
-    /// Opened on the first [`AudioSink::play`]: a page may build an `AudioContext`
+    /// Attached on the first [`AudioSink::play`]: a page may build an `AudioContext`
     /// and never start it, and an idle open device keeps the hardware powered.
-    device: RefCell<Option<Device>>,
-    /// Shared with SDL's audio thread; its address is the callback's userdata.
+    attachment: RefCell<Option<Attachment>>,
     queue: Arc<Mutex<Queue>>,
     /// Set by [`AudioSink::init`], always before the render thread plays the sink.
     sample_rate: Cell<f32>,
@@ -72,14 +65,6 @@ impl SdlAudioSink {
     /// Nowhere to put audio: a `MediaStreamDestinationNode`, or output off in config.
     fn silent(&self) -> bool {
         self.stream_only.get() || !crate::media::settings().output
-    }
-}
-
-impl Drop for SdlAudioSink {
-    fn drop(&mut self) {
-        // Close the device before `queue` is released: SDL holds that allocation's
-        // address as the callback's userdata.
-        *self.device.borrow_mut() = None;
     }
 }
 
@@ -105,28 +90,24 @@ impl AudioSink for SdlAudioSink {
         if self.silent() {
             return Ok(());
         }
-        let mut device = self.device.borrow_mut();
-        if device.is_none() {
-            // SDL keeps `queue`'s address as the callback userdata; the sink's `Drop`
-            // closes the device before that `Arc` can go away.
-            let userdata = Arc::as_ptr(&self.queue) as *mut c_void;
-            *device = Some(
-                Device::open(self.sample_rate.get(), audio_callback, userdata).map_err(|e| {
-                    log::warn!("audio: could not open playback device: {e}");
-                    AudioSinkError::Backend(e)
-                })?,
-            );
+        let mut attachment = self.attachment.borrow_mut();
+        if attachment.is_none() {
+            let source: Arc<dyn MixSource> = self.queue.clone();
+            *attachment = Some(mixer::attach(self.sample_rate.get(), source).map_err(|e| {
+                log::warn!("audio: could not open playback device: {e}");
+                AudioSinkError::Backend(e)
+            })?);
         }
-        device
+        attachment
             .as_ref()
-            .expect("opened just above, or already present")
-            .set_paused(false);
+            .expect("attached just above, or already present")
+            .set_active(true);
         Ok(())
     }
 
     fn stop(&self) -> Result<(), AudioSinkError> {
-        if let Some(device) = self.device.borrow().as_ref() {
-            device.set_paused(true);
+        if let Some(attachment) = self.attachment.borrow().as_ref() {
+            attachment.set_active(false);
         }
         Ok(())
     }

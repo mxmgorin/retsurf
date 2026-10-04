@@ -1,4 +1,3 @@
-use std::ffi::c_void;
 use std::io;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -19,10 +18,11 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{MetadataOptions, StandardTag};
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
-use super::shared::{lock, player_callback, wait, Pcm, Shared, POSITION_EVENT_SECONDS};
+use super::shared::{lock, wait, Pcm, Shared, POSITION_EVENT_SECONDS};
 use super::source::ByteReader;
 use super::video::VideoPipeline;
-use crate::media::device::{Device, CHANNELS};
+use crate::media::device::CHANNELS;
+use crate::media::mixer::{self, Attachment};
 use crate::media::{triage_decode, DecodeFailure};
 
 /// Decoded PCM buffered ahead of the device; rides out refetch latency.
@@ -66,8 +66,6 @@ fn decoder_thread(
             }
         }
     }
-    // The device (owned inside run_pipeline) is already closed here, so the SDL
-    // callback can no longer observe `shared`.
 }
 
 /// Audio-track half of the pipeline.
@@ -277,8 +275,7 @@ fn run_pipeline(
         .send(PlayerEvent::StateChanged(PlaybackState::Paused));
     shared.probed.store(true, Ordering::SeqCst);
 
-    let mut device: Option<Device> = None;
-    let mut device_paused = true;
+    let mut attachment: Option<Attachment> = None;
     let mut open_failed = false;
     // The demuxer ran dry for good; cleared only by a seek (`loop` attribute).
     let mut at_eof = false;
@@ -321,15 +318,14 @@ fn run_pipeline(
             shared.events.send(PlayerEvent::SeekDone(target));
         }
 
-        // The device follows the flags, and nothing left to play pauses it too:
-        // an ended element would keep the hardware ticking silence.
+        // Mixing follows the flags, and nothing left to play stops it too: an ended
+        // element would keep the hardware ticking silence.
         if let Some(a) = &audio {
             let queue_empty = lock(&shared.pcm).queue.is_empty();
             let want_play = !(shared.paused.load(Ordering::SeqCst) || (at_eof && queue_empty));
-            if want_play && device.is_none() && !open_failed {
-                let userdata = Arc::as_ptr(shared) as *mut c_void;
-                match Device::open(a.rate as f32, player_callback, userdata) {
-                    Ok(opened) => device = Some(opened),
+            if want_play && attachment.is_none() && !open_failed {
+                match mixer::attach(a.rate as f32, shared.clone()) {
+                    Ok(attached) => attachment = Some(attached),
                     Err(e) => {
                         // Decoding continues; the queue fills and everything parks.
                         log::warn!("audio: could not open playback device: {e}");
@@ -337,11 +333,8 @@ fn run_pipeline(
                     }
                 }
             }
-            if device_paused == want_play {
-                if let Some(device) = &device {
-                    device.set_paused(!want_play);
-                    device_paused = !want_play;
-                }
+            if let Some(attachment) = &attachment {
+                attachment.set_active(want_play);
             }
         }
 
@@ -478,9 +471,6 @@ fn run_pipeline(
         pcm.decoded_secs = pkt_start + frames as f64 / f64::from(a.rate);
     }
 
-    // Close (joins SDL's audio thread) before `shared`'s Arc can drop: the
-    // callback userdata points into it.
-    drop(device);
     Ok(())
 }
 

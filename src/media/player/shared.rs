@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::ffi::{c_int, c_void};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Instant;
@@ -8,6 +7,7 @@ use servo_base::generic_channel::GenericCallback;
 use servo_media::player::PlayerEvent;
 
 use crate::media::device::CHANNELS;
+use crate::media::mixer::{mix_from, MixSource};
 
 /// `push_data` refuses bytes past this much buffered input; the element cancels
 /// the fetch and the decoder requests a refetch when it runs dry. Bounds what a
@@ -260,34 +260,24 @@ impl Shared {
     }
 }
 
-/// SDL's audio thread: drain the PCM queue scaled by volume, zero-fill the rest,
-/// and wake the decoder to refill.
-///
-/// # Safety
-///
-/// `userdata` is the `Arc<Shared>` the decoder thread holds until after it closed
-/// the device, so it is live for every call.
-pub(super) unsafe extern "C" fn player_callback(
-    userdata: *mut c_void,
-    stream: *mut u8,
-    len: c_int,
-) {
-    let shared = unsafe { &*(userdata as *const Shared) };
-    let out = unsafe { crate::media::device::out_slice(stream, len) };
+/// Drains the PCM queue into the mix scaled by volume, and wakes the decoder to
+/// refill. Muted still drains, so the audio clock keeps running.
+impl MixSource for Shared {
+    fn mix_into(&self, out: &mut [f32]) {
+        let silent =
+            self.muted.load(Ordering::Relaxed) || !self.track_enabled.load(Ordering::Relaxed);
+        let factor = if silent {
+            0.0
+        } else {
+            f64::from_bits(self.volume.load(Ordering::Relaxed)) as f32
+        };
 
-    let silent =
-        shared.muted.load(Ordering::Relaxed) || !shared.track_enabled.load(Ordering::Relaxed);
-    let factor = if silent {
-        0.0
-    } else {
-        f64::from_bits(shared.volume.load(Ordering::Relaxed)) as f32
-    };
+        let mut pcm = lock(&self.pcm);
+        mix_from(out, &mut pcm.queue, factor);
+        drop(pcm);
 
-    let mut pcm = lock(&shared.pcm);
-    crate::media::device::drain_into(out, &mut pcm.queue, factor);
-    drop(pcm);
-
-    // Every tick, not just below a low-water mark: the decoder also paces
-    // PositionChanged events off these wakes.
-    shared.work_cv.notify_all();
+        // Every tick, not just below a low-water mark: the decoder also paces
+        // PositionChanged events off these wakes.
+        self.work_cv.notify_all();
+    }
 }

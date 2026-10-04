@@ -1,4 +1,4 @@
-//! Raw-SDL playback device, shared by the WebAudio sink and the `<audio>` player.
+//! Raw-SDL playback device, opened by the mixer once per sample rate.
 //!
 //! Runs through `sdl2::sys` because rust-sdl2's safe `AudioDevice` owns an `!Send`
 //! `AudioSubsystem`, while both users live on threads other than main. Keeping
@@ -79,18 +79,4 @@ pub(crate) fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, 
 /// `stream`/`len` must be an SDL audio callback's arguments for an f32 device.
 pub(crate) unsafe fn out_slice<'a>(stream: *mut u8, len: c_int) -> &'a mut [f32] {
     unsafe { std::slice::from_raw_parts_mut(stream as *mut f32, len as usize / size_of::<f32>()) }
-}
-
-/// Fill a callback's `out` from `queue`, scaled by `factor`. The tail past what
-/// the queue held plays silence, not whatever the driver left in the buffer.
-pub(crate) fn drain_into(
-    out: &mut [f32],
-    queue: &mut std::collections::VecDeque<f32>,
-    factor: f32,
-) {
-    let available = queue.len().min(out.len());
-    for (dst, sample) in out.iter_mut().zip(queue.drain(..available)) {
-        *dst = sample * factor;
-    }
-    out[available..].fill(0.0);
 }
