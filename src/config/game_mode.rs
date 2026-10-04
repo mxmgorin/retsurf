@@ -25,16 +25,16 @@ pub struct GameViewConfig {
 
 token_enum! {
     /// How Game Mode sizes the page's game to the screen, cut out over a black
-    /// backdrop; `Off` leaves the page. The labels name what is on screen.
+    /// backdrop; `Off` leaves the page.
     pub enum Scaling {
         default Off;
-        Off => "off", "Page",
+        Off => "off", "Off",
         /// The largest size that keeps the game's aspect ratio.
-        Fit => "fit", "Game (fit)",
+        Fit => "fit", "Fit",
         /// The largest whole multiple of the game's pixels, drawn unsmoothed.
-        Integer => "integer", "Game (integer)",
+        Integer => "integer", "Integer",
         /// The whole screen, aspect ratio ignored.
-        Stretch => "stretch", "Game (stretch)",
+        Stretch => "stretch", "Stretch",
     }
 }
 

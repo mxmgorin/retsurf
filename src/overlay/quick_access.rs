@@ -285,11 +285,11 @@ mod tests {
     #[test]
     fn the_highlight_starts_on_the_first_row_and_wraps_at_the_ends() {
         let mut panel = open(TabMode::Game);
-        assert_eq!(panel.label(0), "View");
+        assert_eq!(panel.label(0), "Scaling");
         panel.move_sel(-1);
         assert_eq!(panel.row(), Entry::Exit);
         panel.move_sel(1);
-        assert_eq!(panel.label(panel.selected()), "View");
+        assert_eq!(panel.label(panel.selected()), "Scaling");
         let mut panel = open(TabMode::Page);
         assert_eq!(panel.row(), Entry::Enter);
         let labels: Vec<_> = (0..panel.rows().len()).map(|i| panel.label(i)).collect();
@@ -316,7 +316,7 @@ mod tests {
         assert!(browser.contains(&Entry::Enter) && !browser.contains(&Entry::Exit));
         assert!(!browser.contains(&Entry::Osk));
         let has = |rows: &[Entry], label| rows.iter().any(|row| row.label() == label);
-        assert!(has(&game, "View") && !has(&browser, "View"));
+        assert!(has(&game, "Scaling") && !has(&browser, "Scaling"));
         assert!(has(&browser, "Page theme") && !has(&game, "Page theme"));
         assert!(!game
             .iter()
@@ -374,7 +374,7 @@ mod tests {
         assert!(panel.confirm_quit());
     }
 
-    /// Regression: stepping View blanked the input map's value.
+    /// Regression: stepping Scaling blanked the input map's value.
     #[test]
     fn a_refresh_keeps_the_values_set_beside_it() {
         let mut panel = open(TabMode::Game);
@@ -394,8 +394,8 @@ mod tests {
         let at = panel
             .rows()
             .iter()
-            .position(|row| row.label() == "View")
-            .expect("the view is a quick row in the mode");
-        assert_eq!(panel.value(at), "Page");
+            .position(|row| row.label() == "Scaling")
+            .expect("scaling is a quick row in the mode");
+        assert_eq!(panel.value(at), "Off");
     }
 }
