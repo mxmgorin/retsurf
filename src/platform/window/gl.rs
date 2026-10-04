@@ -250,6 +250,10 @@ impl WindowBackend for GlBackend {
         Some(self.browser_tex)
     }
 
+    fn page_gl_texture(&self) -> Option<glow::NativeTexture> {
+        Some(self.rendering_ctx.color_texture())
+    }
+
     fn destroy(&mut self) {
         self.egui.destroy();
     }

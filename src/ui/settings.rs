@@ -524,7 +524,7 @@ pub(super) fn add_settings(
         let rows: Vec<(usize, &_)> = Settings::fields()
             .iter()
             .enumerate()
-            .filter(|(_, f)| f.section == active)
+            .filter(|(_, f)| f.section == active && f.shown())
             .collect();
         let multi_cat = rows.iter().any(|(_, f)| f.cat != rows[0].1.cat);
 

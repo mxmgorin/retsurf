@@ -15,12 +15,24 @@ pub struct GameModeConfig {
 }
 
 /// Everything visual about a game (`[game_mode.view]`).
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GameViewConfig {
     /// How the game is cut out of its page and sized to the screen (see
     /// [`crate::browser::AppBrowser::set_game_scaling`]).
     pub scaling: Scaling,
+    /// Shader id: `off`, a built-in or a `shaders/<id>.glsl` (see
+    /// [`crate::platform::render::shaders`]).
+    pub shader: String,
+}
+
+impl Default for GameViewConfig {
+    fn default() -> Self {
+        Self {
+            scaling: Scaling::default(),
+            shader: crate::platform::render::shaders::OFF.to_string(),
+        }
+    }
 }
 
 token_enum! {

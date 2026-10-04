@@ -14,6 +14,7 @@ mod memory;
 mod menu;
 mod osk;
 mod overlays;
+mod page_shader;
 mod panel;
 mod prompt;
 mod quick_access;
@@ -223,6 +224,10 @@ pub struct AppUi {
     /// egui handle to Servo's FBO color texture (rendered directly by WebRender).
     /// `None` in software mode, where the window composites the page itself.
     browser_tex_id: Option<egui::TextureId>,
+    /// The page drawn through [`Self::shader`]; `None` where `browser_tex_id` is.
+    page_shader: Option<page_shader::PageShader>,
+    /// The shader id Game Mode draws the page through.
+    shader: String,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
     /// The notice on screen, if any (see [`toast`]).
@@ -328,6 +333,8 @@ impl AppUi {
             repaint_pending: false,
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
+            page_shader: window.page_gl_texture().map(page_shader::PageShader::new),
+            shader: crate::platform::render::shaders::OFF.to_string(),
             browser_viewport: (0, 0),
             toast: None,
             quick_access: QuickAccess::new(),
@@ -579,6 +586,12 @@ impl AppUi {
         self.schedule_idle_repaints(cursor_visible);
 
         let snapshot = self.frame_snapshot(browser);
+        let shaded = snapshot.chrome_hidden.game_mode
+            && self.page_shader.is_some()
+            && !self.shader.is_empty()
+            && self.shader != crate::platform::render::shaders::OFF;
+        // Read before the state borrow below, which holds the tab list.
+        let game_geometry = shaded.then(|| browser.game_geometry()).flatten();
         let face = self.pad_layout.labels();
         // Android's system bars follow the chrome: whatever hides the toolbar
         // wants the whole panel.
@@ -660,13 +673,22 @@ impl AppUi {
 
                         // In software mode the page is composited under the chrome
                         // by the window itself, and this rect stays empty.
-                        if let Some(tex) = self.browser_tex_id {
-                            // WebRender renders bottom-up into the FBO, so flip V.
-                            let uv = egui::Rect::from_min_max(
-                                egui::pos2(0.0, 1.0),
-                                egui::pos2(1.0, 0.0),
-                            );
-                            ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+                        match (&self.page_shader, self.browser_tex_id) {
+                            (Some(pass), _) if shaded => {
+                                pass.paint(ui, rect, &self.shader, game_geometry);
+                            }
+                            (pass, Some(tex)) => {
+                                if let Some(pass) = pass {
+                                    pass.reset();
+                                }
+                                // WebRender renders bottom-up into the FBO, so flip V.
+                                let uv = egui::Rect::from_min_max(
+                                    egui::pos2(0.0, 1.0),
+                                    egui::pos2(1.0, 0.0),
+                                );
+                                ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+                            }
+                            _ => {}
                         }
                     });
 

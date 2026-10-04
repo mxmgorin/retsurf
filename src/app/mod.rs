@@ -122,7 +122,7 @@ impl App {
         // nice, so earlier would renice all 59 of them instead of one.
         crate::platform::priority::prioritize_main();
         let event_handler = AppEventHandler::new(sdl, config.controls.clone())?;
-        let ui = AppUi::new(
+        let mut ui = AppUi::new(
             &window,
             &config.interface,
             &config.history,
@@ -133,6 +133,7 @@ impl App {
             &config.update,
             crate::browser::effective_user_agent(&config.browser),
         );
+        ui.set_shader(&config.game_mode.view.shader);
         log::info!("init: app constructed");
 
         // Read before `config` moves into the struct below.

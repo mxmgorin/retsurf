@@ -3,6 +3,7 @@
 //! swgl, for devices with no GPU at all.
 
 mod sdl;
+pub mod shaders;
 #[cfg(feature = "software")]
 mod swgl;
 /// The composite path is EGL-only: free unix and Android have an EGL backend in

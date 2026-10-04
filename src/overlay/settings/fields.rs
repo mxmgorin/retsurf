@@ -10,6 +10,7 @@ use crate::config::{
     PadLayout, PageTheme, Scaling, ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
+use crate::platform::render::shaders;
 
 /// How a field is displayed, edited, and reached in a config. `Choice` carries
 /// `(label, stored value)` pairs; `Int`/`Float` carry the bounds dpad steps
@@ -33,7 +34,7 @@ pub enum Kind {
         get_mut: fn(&mut AppConfig) -> &mut String,
     },
     Choice {
-        opts: &'static [(&'static str, &'static str)],
+        opts: Opts,
         get: fn(&AppConfig) -> String,
         set: fn(&mut AppConfig, &str),
     },
@@ -54,6 +55,38 @@ pub enum Kind {
         get: fn(&AppConfig) -> f64,
         set: fn(&mut AppConfig, f64),
     },
+}
+
+/// A choice row's `(label, stored value)` pairs.
+pub enum Opts {
+    Fixed(&'static [(&'static str, &'static str)]),
+    /// Listed when stepped; `label` names a value without listing.
+    Listed {
+        list: fn() -> Vec<(String, String)>,
+        label: fn(&str) -> String,
+    },
+}
+
+impl Opts {
+    fn list(&self) -> Vec<(String, String)> {
+        match self {
+            Opts::Fixed(opts) => opts
+                .iter()
+                .map(|(l, v)| (l.to_string(), v.to_string()))
+                .collect(),
+            Opts::Listed { list, .. } => list(),
+        }
+    }
+
+    fn label(&self, value: &str) -> String {
+        match self {
+            Opts::Fixed(opts) => opts
+                .iter()
+                .find(|(_, v)| *v == value)
+                .map_or_else(|| value.to_string(), |(l, _)| l.to_string()),
+            Opts::Listed { label, .. } => label(value),
+        }
+    }
 }
 
 /// `Kind::Bool` over a config path.
@@ -81,7 +114,7 @@ macro_rules! text {
 macro_rules! choice {
     ($($seg:ident).+: $ty:ty) => {
         Kind::Choice {
-            opts: <$ty>::CHOICES,
+            opts: Opts::Fixed(<$ty>::CHOICES),
             get: |c| c.$($seg).+.as_str().to_string(),
             set: |c, v| c.$($seg).+ = <$ty>::from_value(v),
         }
@@ -182,12 +215,23 @@ pub struct Field {
     pub quick: Option<Modes>,
     /// The quick row's label, where `label` leans on its sub-header.
     quick_label: Option<&'static str>,
+    /// Shown only where the page draws through shaders.
+    shaders: bool,
 }
 
 impl Field {
     const fn quick(mut self, modes: Modes) -> Self {
         self.quick = Some(modes);
         self
+    }
+
+    const fn shaders(mut self) -> Self {
+        self.shaders = true;
+        self
+    }
+
+    pub fn shown(&self) -> bool {
+        !self.shaders || crate::platform::window::page_shaders()
     }
 
     const fn quick_as(mut self, modes: Modes, label: &'static str) -> Self {
@@ -224,13 +268,7 @@ pub fn value_of(kind: &Kind, config: &AppConfig) -> String {
                 t
             }
         }
-        Kind::Choice { opts, get, .. } => {
-            let cur = get(config);
-            opts.iter()
-                .find(|(_, v)| *v == cur)
-                .map(|(label, _)| label.to_string())
-                .unwrap_or(cur)
-        }
+        Kind::Choice { opts, get, .. } => opts.label(&get(config)),
         Kind::Int { zero, get, .. } => {
             let v = get(config);
             match zero {
@@ -253,10 +291,11 @@ pub fn step(kind: &Kind, config: &mut AppConfig, dx: i32) {
         }
         Kind::Choice { opts, get, set } => {
             let cur = get(config);
+            let opts = opts.list();
             let n = opts.len() as i32;
             let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
             let next = (idx + dx).rem_euclid(n) as usize;
-            set(config, opts[next].1);
+            set(config, &opts[next].1);
         }
         Kind::Int {
             min,
@@ -297,18 +336,28 @@ const UA_CHOICES: &[(&str, &str)] = &[
 /// when adjusted.
 const fn ua_kind() -> Kind {
     Kind::Choice {
-        opts: UA_CHOICES,
+        opts: Opts::Fixed(UA_CHOICES),
         get: |c| c.browser.user_agent.clone(),
         set: |c, v| c.browser.user_agent = v.to_string(),
     }
 }
+
+/// The page shader; its options include the user's files.
+const SHADER: Kind = Kind::Choice {
+    opts: Opts::Listed {
+        list: shaders::list,
+        label: shaders::label,
+    },
+    get: |c| c.game_mode.view.shader.clone(),
+    set: |c, v| c.game_mode.view.shader = v.to_string(),
+};
 
 /// The Web-features preset choice — derived from the experimental bools (shows
 /// "Custom" when they match no preset); picking a preset rewrites all of them
 /// (the bools are the source of truth, see [`ExperimentalPreset`]).
 const fn web_features_kind() -> Kind {
     Kind::Choice {
-        opts: ExperimentalPreset::CHOICES,
+        opts: Opts::Fixed(ExperimentalPreset::CHOICES),
         get: |c| {
             ExperimentalPreset::detect(&c.experimental)
                 .as_str()
@@ -335,6 +384,7 @@ const fn f(
         restart,
         quick: None,
         quick_label: None,
+        shaders: false,
     }
 }
 
@@ -371,6 +421,7 @@ pub(super) static FIELDS: &[Field] = &[
 
     f(S::Gaming, "Game Mode",   "Input map",              Kind::Door { door: Door::InputMaps }, false),
     f(S::Gaming, "Game Mode",   "Scaling",                choice!(game_mode.view.scaling: Scaling), false).quick(Modes::Game),
+    f(S::Gaming, "Game Mode",   "Shader",                 SHADER, false).shaders().quick(Modes::Game),
 
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
@@ -472,8 +523,9 @@ mod tests {
                     assert_eq!(get(&c), "roundtrip", "{}", field.label);
                 }
                 Kind::Choice { opts, get, set } => {
+                    let opts = opts.list();
                     assert!(!opts.is_empty(), "{}", field.label);
-                    for (_, token) in *opts {
+                    for (_, token) in &opts {
                         set(&mut c, token);
                         assert_eq!(get(&c), *token, "{}", field.label);
                     }

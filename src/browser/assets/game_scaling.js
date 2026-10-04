@@ -91,6 +91,21 @@
         return [(bw * n) / dpr / w, (bh * n) / dpr / h];
     }
 
+    // For the embedder, in device px: [source w, source h, x, y, w, h].
+    function report(target, w, h) {
+        const dpr = devicePixelRatio || 1;
+        const canvas = target instanceof HTMLCanvasElement && target.width > 0 && target.height > 0;
+        const r = target.getBoundingClientRect();
+        root[KEY].game = [
+            canvas ? target.width : w * dpr,
+            canvas ? target.height : h * dpr,
+            r.left * dpr,
+            r.top * dpr,
+            r.width * dpr,
+            r.height * dpr,
+        ];
+    }
+
     // Fit the largest game-sized element; returns what undoes it, or null
     // when the page has none.
     function fitGame() {
@@ -155,6 +170,7 @@
                 "z-index": String(Z_TOP),
             });
             if (MODE === "integer") set(target, { "image-rendering": "pixelated" });
+            report(target, w, h);
             applied = target.getAttribute("style");
             observer.takeRecords();
             watch();

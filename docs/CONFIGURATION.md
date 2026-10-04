@@ -146,6 +146,8 @@ input_map = "keys"
 # "off", "fit" (the game's canvas, aspect kept), "integer" (whole multiples, sharp) or
 # "stretch".
 scaling = "off"
+# "off", a built-in or the id of a shaders/<id>.glsl (see SHADERS.md).
+shader = "off"
 
 [debug]
 memory_overlay = false     # show the engine's memory use on screen

@@ -4,6 +4,7 @@ use sdl2::video::WindowBuilder;
 use sdl2::{Sdl, VideoSubsystem};
 use servo::RenderingContext;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 mod gl;
@@ -67,6 +68,10 @@ trait WindowBackend {
     fn browser_texture(&self) -> Option<egui::TextureId> {
         None
     }
+    /// The page's GL texture; `None` where the backend composites the page.
+    fn page_gl_texture(&self) -> Option<glow::NativeTexture> {
+        None
+    }
     /// Adopt an edited frame cap; a backend the swap interval paces ignores it.
     fn set_max_fps(&mut self, _max_fps: u32) {}
     /// Full-frame buffers kept in RAM; zero where they live in the driver.
@@ -84,6 +89,14 @@ pub struct AppWindow {
     initial_size: (u32, u32),
 }
 
+/// Set at window creation; false on the software renderer.
+static PAGE_SHADERS: AtomicBool = AtomicBool::new(false);
+
+/// Whether the renderer can draw the page through a shader.
+pub fn page_shaders() -> bool {
+    PAGE_SHADERS.load(Ordering::Relaxed)
+}
+
 impl AppWindow {
     /// Build the window with the renderer `config` asks for, the software one
     /// paced to `max_fps`. `ctx_init` styles each [`egui::Context`] this window
@@ -96,6 +109,7 @@ impl AppWindow {
     ) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
         let backend = build_backend(&video_subsystem, config, max_fps, ctx_init)?;
+        PAGE_SHADERS.store(backend.page_gl_texture().is_some(), Ordering::Relaxed);
         let mut window = Self {
             video_subsystem,
             backend,
@@ -120,6 +134,11 @@ impl AppWindow {
     /// composites the page itself.
     pub fn browser_texture(&self) -> Option<egui::TextureId> {
         self.backend.browser_texture()
+    }
+
+    /// The page's GL texture; `None` on the software backend.
+    pub fn page_gl_texture(&self) -> Option<glow::NativeTexture> {
+        self.backend.page_gl_texture()
     }
 
     pub fn egui_ctx(&self) -> &egui::Context {

@@ -138,9 +138,8 @@ fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
         (Strip::QuickMenu, true) => MENU_GAME,
     };
     let quick = |i: usize| {
-        Settings::fields()[i]
-            .quick
-            .is_some_and(|modes| modes.includes(mode))
+        let field = &Settings::fields()[i];
+        field.shown() && field.quick.is_some_and(|modes| modes.includes(mode))
     };
     let named = |i: usize| {
         let label = Settings::fields()[i].quick_label();

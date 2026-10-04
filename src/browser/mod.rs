@@ -31,6 +31,7 @@ mod url;
 pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
 pub use favicon::Favicon;
+pub use game_scaling::GameGeometry;
 pub use home::HOME_URL;
 use local_site::LocalServer;
 pub use local_site::LocalSite;
@@ -204,6 +205,10 @@ struct AppBrowserInner {
     game_scaling: Cell<crate::config::Scaling>,
     /// Its user script while a mode is on, kept so it can be detached again.
     game_scaling_script: RefCell<Option<Rc<servo::UserScript>>>,
+    /// The scaled game's last reported geometry (see [`AppBrowser::game_geometry`]).
+    game_geometry: Cell<Option<game_scaling::GameGeometry>>,
+    /// When the page was last asked for it.
+    game_geometry_asked: Cell<Option<std::time::Instant>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -330,6 +335,8 @@ impl AppBrowserInner {
             hint_rects: RefCell::new(None),
             game_scaling: Cell::new(crate::config::Scaling::Off),
             game_scaling_script: RefCell::new(None),
+            game_geometry: Cell::new(None),
+            game_geometry_asked: Cell::new(None),
             ime_control: Cell::new(None),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             dismissed_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),

@@ -143,7 +143,7 @@ impl Draft {
         }
         let first = fields::FIELDS
             .iter()
-            .position(|f| f.section == section)
+            .position(|f| f.section == section && f.shown())
             .unwrap_or(0);
         self.selected = Sel::Field(first);
     }
@@ -153,7 +153,7 @@ impl Draft {
         fields::FIELDS
             .iter()
             .enumerate()
-            .filter(|(_, f)| f.section == self.section)
+            .filter(|(_, f)| f.section == self.section && f.shown())
             .map(|(i, _)| i)
             .collect()
     }

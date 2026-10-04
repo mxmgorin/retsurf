@@ -48,6 +48,9 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 - **Game mode**<br>
   Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input.
 
+- **Game scaling and shaders**<br>
+  Cuts the game out of its page and fits it to the screen, in whole pixels or stretched, then draws it through CRT, LCD, or upscaling shaders. Takes RetroArch's single-pass GLSL shaders, ten built in. See [Shaders](docs/SHADERS.md).
+
 - **Web games**<br>
   WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let Emscripten exports from itch.io run.
 
@@ -106,7 +109,7 @@ Android, and the handheld cross-builds.
 ## Configuration
 
 Files are stored in the user data directory (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
-Templates with the defaults are written on first run. See **[Configuration](docs/CONFIGURATION.md)** for all options, **[Controls](docs/CONTROLS.md)** for bindings and Game Mode input maps, and **[Command line](docs/CLI.md)** for arguments and environment variables.
+Templates with the defaults are written on first run. See **[Configuration](docs/CONFIGURATION.md)** for all options, **[Controls](docs/CONTROLS.md)** for bindings and Game Mode input maps, **[Command line](docs/CLI.md)** for arguments and environment variables, and **[Shaders](docs/SHADERS.md)** for Game Mode shaders.
 
 ## How to help
 
@@ -131,3 +134,7 @@ If you find the project useful, here is how you can help:
   [openh264](https://github.com/ralfbiedert/openh264-rs) over Cisco's codec
 - TLS by [rustls](https://github.com/rustls/rustls)
 - SDL2 for the Miyoo Mini by [Steward Fu](https://github.com/steward-fu/sdl2)
+- Game Mode shaders from libretro's [glsl-shaders](https://github.com/libretro/glsl-shaders):
+  zfast_crt by Greg Hogan, crt-pi by davej, crt-lottes by Timothy Lottes, xBR by Hyllian
+  and sharp-bilinear by rsn8887; OmniScale and the LCD shaders from
+  [SameBoy](https://github.com/LIJI32/SameBoy) by Lior Halphon

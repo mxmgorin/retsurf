@@ -135,6 +135,7 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
         Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "Scaling" => bold::FRAME_CORNERS,
+            "Shader" => bold::TELEVISION_SIMPLE,
             "Page theme" => bold::CIRCLE_HALF,
             "Ad blocker" => bold::SHIELD_CHECK,
             "User agent" => bold::DEVICES,

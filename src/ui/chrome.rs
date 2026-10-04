@@ -10,6 +10,11 @@ use crate::ui::Focus;
 use egui_sdl2::egui;
 
 impl AppUi {
+    /// The filter Game Mode draws the page through (live config change).
+    pub fn set_shader(&mut self, shader: &str) {
+        self.shader = shader.to_string();
+    }
+
     /// Move the toolbar to a window edge (live config change).
     #[inline]
     pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {
