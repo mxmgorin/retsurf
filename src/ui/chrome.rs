@@ -116,8 +116,11 @@ impl AppUi {
         !self.toolbar_rect.y_range().contains(pos.y) && !self.is_over_overlay(pos)
     }
 
-    /// Whether an interactable area covers `pos`; the page is a panel, not an area.
+    /// Whether an interactable area covers `pos`. The page's panel sits on the
+    /// background layer, which egui registers as a full-screen area every pass.
     fn is_over_overlay(&self, pos: egui::Pos2) -> bool {
-        self.egui_ctx.layer_id_at(pos).is_some()
+        self.egui_ctx
+            .layer_id_at(pos)
+            .is_some_and(|layer| layer.order != egui::Order::Background)
     }
 }
