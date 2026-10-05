@@ -103,6 +103,13 @@ pub fn icon_fill(glyph: &str) -> egui::RichText {
         .family(egui::FontFamily::Name(FILL_FAMILY.into()))
 }
 
+/// Component-wise sRGB lerp. Fine for a subtle brand tint (no need for linear space).
+pub fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    egui::Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
 /// Join control hints (`"A open"`, ...) into one line, a small dot between each.
 pub fn hint_line(hints: &[&str]) -> String {
     hints.join(&format!("  {}  ", egui_phosphor::bold::DOT))

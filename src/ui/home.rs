@@ -4,7 +4,7 @@
 //! Navigation is routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::favicon::{Icon, PageIcons};
-use super::theme::{ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
+use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
 use crate::data::dial::SETTINGS_PIN;
@@ -294,13 +294,6 @@ fn add_wordmark(ui: &mut egui::Ui) {
         pts,
         egui::Stroke::new(WAVE_STROKE, ACCENT),
     ));
-}
-
-/// Component-wise sRGB lerp. Fine for a subtle brand tint (no need for linear space).
-fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
-    let t = t.clamp(0.0, 1.0);
-    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    egui::Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
 }
 
 /// The hero search / URL field. Editable directly (desktop keyboard); on the

@@ -2,14 +2,16 @@
 //! Quick Access at the right edge and Quick Menu at the left, each full height
 //! with no backdrop dim, so the page or game beside it shows what a quick row
 //! just changed. Up/Down move, A / Left/Right act on the focused row, B or a tap
-//! beside the strip closes.
+//! beside the strip closes. The brand horizon sits at the strip's bottom
+//! wherever the rows leave it room.
 
 use crate::command::{AppCommand, QuickAccessAction};
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
 use crate::overlay::quick_access::{Entry, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
-use crate::ui::panel::{self, center_selected, ROW_GAP};
+use crate::ui::brand;
+use crate::ui::panel::{self, center_selected, ROW_GAP, ROW_H};
 use crate::ui::theme::{self, ACCENT, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -23,6 +25,18 @@ const MAX_SHARE: f32 = 0.5;
 
 /// Opacity of the strip's fill: enough to read rows over any page.
 const STRIP_OPACITY: f32 = 0.92;
+
+/// The brand horizon's sun: a third set, and pulled toward the panel so it
+/// reads as a mark rather than a picture.
+const SUN: brand::Horizon = brand::Horizon {
+    radius: 18.0,
+    sink: 0.3,
+    dim: 0.3,
+};
+/// The sun's center as a fraction of the strip's width from its left edge.
+const SUN_AT: f32 = 0.2;
+/// Clearance between the last row and the top of the sun's halo.
+const HORIZON_GAP: f32 = ROW_GAP * 3.0;
 
 pub(in crate::ui) fn add_quick_access(
     ctx: &egui::Context,
@@ -53,12 +67,20 @@ pub(in crate::ui) fn add_quick_access(
                 ui.set_min_height(screen.height() - margin.y);
                 add_header(ui, title);
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
+                let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
+                let rows = panel.rows().len() as f32;
+                let list_h = rows * ROW_H + (rows - 1.0).max(0.0) * ROW_GAP;
+                let horizon_h = HORIZON_GAP + SUN.height();
+                let horizon = list_h + horizon_h <= room;
+                let footer_h = if horizon { horizon_h } else { 0.0 };
                 // The area auto-sizes, so the list scrolls only under a set bound.
-                let max_h = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
-                    .max_height(max_h.max(0.0))
+                    .max_height((room - footer_h).max(0.0))
                     .show(ui, |ui| add_rows(ui, width, panel, commands));
+                if horizon {
+                    add_horizon(ui, width, frame.inner_margin);
+                }
             });
         });
 }
@@ -84,6 +106,29 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
             commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
         }
     }
+}
+
+/// The app icon's sun setting on its waves. The waves run under `margin` to
+/// the strip's edges, so they read as a horizon.
+fn add_horizon(ui: &mut egui::Ui, width: f32, margin: egui::Margin) {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(width, HORIZON_GAP + SUN.height()),
+        egui::Sense::hover(),
+    );
+    let x_range = egui::Rangef::new(
+        rect.left() - margin.left as f32,
+        rect.right() + margin.right as f32,
+    );
+    let bottom = rect.bottom() + margin.bottom as f32;
+    let clip = egui::Rect::from_x_y_ranges(x_range, rect.top()..=bottom);
+    brand::paint_horizon(
+        &ui.painter_at(clip),
+        x_range,
+        rect.bottom() - brand::Horizon::depth(),
+        bottom,
+        rect.left() + rect.width() * SUN_AT,
+        &SUN,
+    );
 }
 
 /// An unpainted layer under the strip: a tap beside it closes the strip and

@@ -2,6 +2,7 @@
 //! lays the chrome out over the page; the widgets live in the submodules. egui
 //! itself belongs to [`crate::platform::window::AppWindow`].
 
+mod brand;
 mod chrome;
 mod cursor;
 mod dial_edit;
