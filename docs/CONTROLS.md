@@ -35,7 +35,7 @@ is on Ctrl, so pages get all plain keys:
 | `ctrl+e` | reader view | `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in / out / reset |
 | `ctrl+m` | Quick Menu | `ctrl+f` | link hints |
 | `ctrl+l` | address bar | `ctrl+,` | settings |
-| `ctrl+alt+g` | Quick Access | arrows | overlay navigation |
+| `ctrl+alt+a` | Quick Access | arrows | overlay navigation |
 
 **Actions**: `confirm`, `cancel`, `menu` (Quick Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`

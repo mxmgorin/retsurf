@@ -297,12 +297,11 @@ fn default_gamepad_bindings() -> inputbind::Table {
         // Held inside the mode, where these tables are bypassed, so rebinding it
         // moves the way out with it; the game keeps Start's tap.
         ("start", Action::QuickAccess),
-        // On a hold so stickless devices (no R3) have reader out of the box.
-        ("hold:x", Action::Reader),
+        // X's hold stays with typing.
+        ("hold:x", Action::Address),
         ("hold:y", Action::Bookmark),
         // Defers: the menu opens on release.
         ("select", Action::Menu),
-        ("hold:select", Action::Address),
         ("select+l1", Action::TabPrev),
         ("select+r1", Action::TabNext),
         ("start+l1", Action::CloseTab),
@@ -328,7 +327,7 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+f", Action::Hints),
         // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
         // is the only key the browser still answers.
-        ("ctrl+alt+g", Action::QuickAccess),
+        ("ctrl+alt+a", Action::QuickAccess),
         ("ctrl+left", Action::Prev),
         ("ctrl+right", Action::Next),
         ("ctrl+t", Action::NewTab),
@@ -561,7 +560,7 @@ mod tests {
             store.keyboard.get("ctrl+g").map(String::as_str),
             Some("quick_access")
         );
-        assert_eq!(store.keyboard.get("ctrl+alt+g"), None);
+        assert_eq!(store.keyboard.get("ctrl+alt+a"), None);
         assert_eq!(
             store.gamepad.get("start").map(String::as_str),
             Some("quick_access")
