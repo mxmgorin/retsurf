@@ -25,17 +25,18 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 
 ## Screenshots
 
-| Start page | Browsing | Link hints | Keyboard |
-|:---:|:---:|:---:|:---:|
-| ![The built-in start page: the retsurf banner over a search field and a speed-dial grid of pinned sites, tinted after their site icons](resources/images/retsurf-start-page.png) | ![Hacker News rendered by Servo in its mobile layout, the toolbar above it](resources/images/retsurf-page.png) | ![Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it](resources/images/retsurf-hints.png) | ![The on-screen keyboard raised under the start page's search field, which shows what has been typed](resources/images/retsurf-keyboard.png) |
+<table>
+  <tr>
+    <td width="50%"><img src="resources/images/retsurf-game-mode.png" alt="Quick Access over the WebGL racer HexGL on the start line through the zfast CRT shader, the browser chrome hidden: reload, scaling, shader, the input map in use, the on-screen keyboard and exit"></td>
+    <td width="50%"><img src="resources/images/retsurf-hints.png" alt="Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="The built-in start page: the retsurf banner over a search field and a speed-dial grid of pinned sites, tinted after their site icons"></td>
+    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News: enter game mode, bookmark, user agent, ad blocker and reader view switches, page theme"></td>
+  </tr>
+</table>
 
-| Quick Access | Quick Menu | Reader view | Settings |
-|:---:|:---:|:---:|:---:|
-| ![Quick Access at the right edge over Hacker News: enter game mode, enter reader view, bookmark, page theme](resources/images/retsurf-quick-access.png) | ![Quick Menu at the left edge: home, tabs, bookmarks, history, downloads, settings and quit](resources/images/retsurf-quick-menu.png) | ![A Wikipedia article stripped to its text by reader view](resources/images/retsurf-reader.png) | ![The settings overlay on its Browser tab: home page, search URL, user agent, zoom, theme and the experimental web features](resources/images/retsurf-settings.png) |
-
-| Game mode | Input map | Controls | Forced dark |
-|:---:|:---:|:---:|:---:|
-| ![Quick Access over the WebGL racer HexGL mid-race, the browser chrome hidden: view, the input map in use, the on-screen keyboard and exit](resources/images/retsurf-game-mode.png) | ![The input map editor: each stick direction and gamepad button with the key or mouse action it sends to the game](resources/images/retsurf-input-map.png) | ![The button bindings: each browser action with its gamepad and keyboard gestures](resources/images/retsurf-controls.png) | ![Lobsters, a light site with no dark theme, inverted by forced dark](resources/images/retsurf-forced-dark.png) |
+More screenshots and device photos are on the [website](https://retsurf.app/).
 
 ## Features
 
