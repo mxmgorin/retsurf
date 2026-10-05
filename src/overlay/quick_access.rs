@@ -54,9 +54,11 @@ pub enum Entry {
     Osk,
     /// Open the settings screen, on the tab the mode suggests.
     Settings,
+    /// Reload the game's page, on a second press.
+    Reload,
     /// Turn Game Mode off.
     Exit,
-    /// Close retsurf, on a second press (see [`QuickAccess::confirm_quit`]).
+    /// Close retsurf, on a second press (see [`QuickAccess::confirm`]).
     Quit,
 }
 
@@ -78,8 +80,9 @@ const ACCESS_BROWSER: &[Slot] = &[
     Slot::Quick("Page theme"),
 ];
 
-/// Quick Access over a game: what changes it, then the way out.
+/// Quick Access over a game: reload first, what changes it, then the way out.
 const ACCESS_GAME: &[Slot] = &[
+    Slot::Row(Entry::Reload),
     Slot::QuickRows,
     Slot::Row(Entry::InputMap),
     Slot::Row(Entry::Osk),
@@ -114,8 +117,19 @@ impl Entry {
             // Not "Keyboard": a map has a `[keyboard]` table of physical keys.
             Entry::Osk => "On-screen keyboard",
             Entry::Settings => "Settings",
+            Entry::Reload => "Reload",
             Entry::Exit => "Exit game mode",
             Entry::Quit => "Quit retsurf",
+        }
+    }
+
+    /// What the row shows once armed, for a row that acts on a second press
+    /// (see [`QuickAccess::confirm`]); `None` for a row that acts at once.
+    pub fn confirm_hint(self) -> Option<&'static str> {
+        match self {
+            Entry::Quit => Some("press again to quit"),
+            Entry::Reload => Some("press again to reload"),
+            _ => None,
         }
     }
 
@@ -173,8 +187,8 @@ pub struct QuickAccess {
     /// Each row's value as last read from the config (empty for rows with none).
     values: Vec<String>,
     selected: usize,
-    /// The Quit row was pressed once; any move disarms it.
-    quit_armed: bool,
+    /// A two-press row pressed once; any move disarms it.
+    armed: Option<Entry>,
 }
 
 impl QuickAccess {
@@ -185,7 +199,7 @@ impl QuickAccess {
             rows: Vec::new(),
             values: Vec::new(),
             selected: 0,
-            quit_armed: false,
+            armed: None,
         }
     }
 
@@ -195,7 +209,7 @@ impl QuickAccess {
         self.strip = strip;
         self.rows = entries(strip, mode);
         self.selected = 0;
-        self.quit_armed = false;
+        self.armed = None;
         self.values = vec![String::new(); self.rows.len()];
         self.refresh(config);
         let reader = settings::on_off(mode == TabMode::Reader);
@@ -232,19 +246,19 @@ impl QuickAccess {
     /// are short enough that the far row is nearer the other way round.
     pub fn move_sel(&mut self, dy: i32) {
         self.selected = crate::list::wrap(self.selected, dy, self.rows.len());
-        self.quit_armed = false;
+        self.armed = None;
     }
 
     pub fn select(&mut self, index: usize) {
         if index < self.rows.len() && index != self.selected {
             self.selected = index;
-            self.quit_armed = false;
+            self.armed = None;
         }
     }
 
-    /// A on the Quit row: arms it, or `true` when it already was.
-    pub fn confirm_quit(&mut self) -> bool {
-        std::mem::replace(&mut self.quit_armed, true)
+    /// A on a two-press row: arms it, or `true` when it already was.
+    pub fn confirm(&mut self, row: Entry) -> bool {
+        self.armed.replace(row) == Some(row)
     }
 
     pub fn selected(&self) -> usize {
@@ -260,8 +274,12 @@ impl QuickAccess {
     }
 
     pub fn value(&self, index: usize) -> &str {
-        if self.quit_armed && self.rows.get(index) == Some(&Entry::Quit) {
-            return "press again to quit";
+        if let Some(hint) = self.rows.get(index).and_then(|row| {
+            (self.armed == Some(*row))
+                .then(|| row.confirm_hint())
+                .flatten()
+        }) {
+            return hint;
         }
         self.values.get(index).map_or("", String::as_str)
     }
@@ -284,11 +302,12 @@ mod tests {
     #[test]
     fn the_highlight_starts_on_the_first_row_and_wraps_at_the_ends() {
         let mut panel = open(TabMode::Game);
-        assert_eq!(panel.label(0), "Scaling");
+        assert_eq!(panel.row(), Entry::Reload);
+        assert_eq!(panel.label(1), "Scaling");
         panel.move_sel(-1);
         assert_eq!(panel.row(), Entry::Exit);
         panel.move_sel(1);
-        assert_eq!(panel.label(panel.selected()), "Scaling");
+        assert_eq!(panel.row(), Entry::Reload);
         let mut panel = open(TabMode::Page);
         assert_eq!(panel.row(), Entry::Enter);
         let labels: Vec<_> = (0..panel.rows().len()).map(|i| panel.label(i)).collect();
@@ -365,12 +384,24 @@ mod tests {
         panel.open(Strip::QuickMenu, TabMode::Page, &AppConfig::default());
         panel.move_sel(-1);
         assert_eq!(panel.row(), Entry::Quit);
-        assert!(!panel.confirm_quit());
+        assert!(!panel.confirm(Entry::Quit));
         assert_eq!(panel.value(panel.selected()), "press again to quit");
         panel.move_sel(-1);
         panel.move_sel(1);
-        assert!(!panel.confirm_quit());
-        assert!(panel.confirm_quit());
+        assert!(!panel.confirm(Entry::Quit));
+        assert!(panel.confirm(Entry::Quit));
+    }
+
+    /// Reload arms like Quit, and arming one row never confirms another.
+    #[test]
+    fn reloading_takes_a_second_press_of_its_own() {
+        let mut panel = open(TabMode::Game);
+        assert_eq!(panel.row(), Entry::Reload);
+        assert!(!panel.confirm(Entry::Reload));
+        assert_eq!(panel.value(panel.selected()), "press again to reload");
+        assert!(!panel.confirm(Entry::Quit));
+        assert!(!panel.confirm(Entry::Reload));
+        assert!(panel.confirm(Entry::Reload));
     }
 
     /// Regression: stepping Scaling blanked the input map's value.

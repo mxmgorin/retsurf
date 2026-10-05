@@ -4,7 +4,7 @@
 //! dispatcher for size alone.
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, QuickAccessAction};
-use crate::browser::TabMode;
+use crate::browser::{BrowserCommand, TabMode};
 use crate::config::Scaling;
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
@@ -172,13 +172,21 @@ impl App {
                 self.ui.quick_access.close();
                 out.extend(action.command(true));
             }
+            // Direct, not queued: the mode's command filter drops browser commands.
+            Entry::Reload => {
+                if self.ui.quick_access.confirm(Entry::Reload) {
+                    self.ui.quick_access.close();
+                    self.browser
+                        .execute_command(&BrowserCommand::Reload, &self.config.browser);
+                }
+            }
             Entry::List(section) => {
                 self.ui.quick_access.close();
                 self.ui.menu_open();
                 self.ui.menu.set_section(section);
             }
             Entry::Quit => {
-                if self.ui.quick_access.confirm_quit() {
+                if self.ui.quick_access.confirm(Entry::Quit) {
                     out.push(AppCommand::Shutdown);
                 }
             }

@@ -165,6 +165,7 @@ const NO_ICON: &str = bold::DOT;
 fn glyph(entry: Entry) -> &'static str {
     match entry {
         Entry::Enter => bold::GAME_CONTROLLER,
+        Entry::Reload => bold::ARROW_CLOCKWISE,
         Entry::Exit => bold::SIGN_OUT,
         Entry::InputMap => bold::JOYSTICK,
         Entry::Osk => bold::KEYBOARD,
