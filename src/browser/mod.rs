@@ -333,7 +333,7 @@ impl AppBrowserInner {
             adblock,
             content_filter: Cell::new(content_filter),
             hint_rects: RefCell::new(None),
-            game_scaling: Cell::new(crate::config::Scaling::Off),
+            game_scaling: Cell::new(crate::config::Scaling::None),
             game_scaling_script: RefCell::new(None),
             game_geometry: Cell::new(None),
             game_geometry_asked: Cell::new(None),

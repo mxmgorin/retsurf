@@ -1,7 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, PANEL_FILL, ROW_FONT};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
 
@@ -9,6 +9,11 @@ use egui_sdl2::egui::AtomExt as _;
 pub(super) const ROW_RADIUS: f32 = 6.0;
 pub(super) const ROW_GAP: f32 = 4.0;
 pub(super) const ROW_H: f32 = 30.0;
+
+/// An on/off switch's track (logical px); the knob is inset by `SWITCH_INSET`.
+const SWITCH_W: f32 = 34.0;
+const SWITCH_H: f32 = 18.0;
+const SWITCH_INSET: f32 = 3.0;
 
 /// Panel inner padding; the sides get more room than the top and bottom.
 /// [`SIDES`] is the pair, subtracted from the screen width for row widths.
@@ -76,6 +81,29 @@ pub(super) fn row(
             .corner_radius(ROW_RADIUS)
             .truncate(),
     )
+}
+
+/// An on/off switch at the trailing edge of `row`, where a value would sit.
+pub(super) fn paint_switch(ui: &egui::Ui, row: egui::Rect, on: bool) {
+    let right = row.right() - ui.spacing().button_padding.x;
+    let track = egui::Rect::from_min_size(
+        egui::pos2(right - SWITCH_W, row.center().y - SWITCH_H / 2.0),
+        egui::vec2(SWITCH_W, SWITCH_H),
+    );
+    let (fill, knob_fill) = if on {
+        (ACCENT, egui::Color32::WHITE)
+    } else {
+        (HAIRLINE, DIM)
+    };
+    let painter = ui.painter();
+    painter.rect_filled(track, SWITCH_H / 2.0, fill);
+    let r = SWITCH_H / 2.0 - SWITCH_INSET;
+    let x = if on {
+        track.right() - SWITCH_H / 2.0
+    } else {
+        track.left() + SWITCH_H / 2.0
+    };
+    painter.circle_filled(egui::pos2(x, track.center().y), r, knob_fill);
 }
 
 /// A [`row`] whose value gives way first, for a short label beside a value of

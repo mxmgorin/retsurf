@@ -89,16 +89,21 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
     for (index, &entry) in panel.rows().iter().enumerate() {
         let selected = index == panel.selected();
         let label = format!("{}  {}", glyph(entry), panel.label(index));
-        let value = match selected && entry.steps() {
-            true => format!(
+        let flag = panel.flag(index);
+        let value = match (flag, selected && entry.steps()) {
+            (Some(_), _) => String::new(),
+            (None, true) => format!(
                 "{} {} {}",
                 bold::CARET_LEFT,
                 panel.value(index),
                 bold::CARET_RIGHT
             ),
-            false => panel.value(index).to_string(),
+            (None, false) => panel.value(index).to_string(),
         };
         let resp = panel::named_row(ui, width, selected, &label, &value);
+        if let Some(on) = flag {
+            panel::paint_switch(ui, resp.rect, on);
+        }
         if selected {
             center_selected(&resp);
         }

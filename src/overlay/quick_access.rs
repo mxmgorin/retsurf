@@ -9,7 +9,7 @@ use crate::browser::TabMode;
 use crate::config::AppConfig;
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
-use crate::overlay::settings::{self, Settings};
+use crate::overlay::settings::{self, Kind, Settings};
 
 /// Which strip is up.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -186,6 +186,8 @@ pub struct QuickAccess {
     rows: Vec<Entry>,
     /// Each row's value as last read from the config (empty for rows with none).
     values: Vec<String>,
+    /// Each on/off row's state, drawn as a switch in place of its value.
+    flags: Vec<Option<bool>>,
     selected: usize,
     /// A two-press row pressed once; any move disarms it.
     armed: Option<Entry>,
@@ -198,6 +200,7 @@ impl QuickAccess {
             strip: Strip::QuickAccess,
             rows: Vec::new(),
             values: Vec::new(),
+            flags: Vec::new(),
             selected: 0,
             armed: None,
         }
@@ -211,25 +214,35 @@ impl QuickAccess {
         self.selected = 0;
         self.armed = None;
         self.values = vec![String::new(); self.rows.len()];
+        self.flags = vec![None; self.rows.len()];
         self.refresh(config);
-        let reader = settings::on_off(mode == TabMode::Reader);
-        self.set_value(Entry::Run(Action::Reader), reader.to_string());
+        if let Some(at) = self.position(Entry::Run(Action::Reader)) {
+            self.flags[at] = Some(mode == TabMode::Reader);
+        }
     }
 
     /// Show `value` beside `entry`, for a row whose state the config does not
     /// hold (a page's bookmark, the tab count).
     pub fn set_value(&mut self, entry: Entry, value: String) {
-        if let Some(at) = self.rows.iter().position(|row| *row == entry) {
+        if let Some(at) = self.position(entry) {
             self.values[at] = value;
         }
+    }
+
+    fn position(&self, entry: Entry) -> Option<usize> {
+        self.rows.iter().position(|row| *row == entry)
     }
 
     /// Re-read the quick rows' values from `config`; values from
     /// [`Self::set_value`] stay.
     pub fn refresh(&mut self, config: &AppConfig) {
-        for (row, value) in self.rows.iter().zip(&mut self.values) {
+        for (at, row) in self.rows.iter().enumerate() {
             if let Entry::Quick(i) = *row {
-                *value = settings::value_of(&Settings::fields()[i].kind, config);
+                let kind = &Settings::fields()[i].kind;
+                self.values[at] = settings::value_of(kind, config);
+                if let Kind::Bool { get, .. } = kind {
+                    self.flags[at] = Some(get(config));
+                }
             }
         }
     }
@@ -282,6 +295,11 @@ impl QuickAccess {
             return hint;
         }
         self.values.get(index).map_or("", String::as_str)
+    }
+
+    /// The row's on/off state, or `None` for a row with a text value.
+    pub fn flag(&self, index: usize) -> Option<bool> {
+        self.flags.get(index).copied().flatten()
     }
 
     pub fn row(&self) -> Entry {
@@ -367,14 +385,14 @@ mod tests {
                 .iter()
                 .position(|row| *row == Entry::Run(Action::Reader))
                 .expect("the browser rows carry the reader view");
-            (panel.label(at), panel.value(at).to_string())
+            (panel.label(at), panel.flag(at))
         };
         assert_eq!(
             reader_row(&open(TabMode::Page)),
-            ("Reader view", "Off".into())
+            ("Reader view", Some(false))
         );
         let panel = open(TabMode::Reader);
-        assert_eq!(reader_row(&panel), ("Reader view", "On".into()));
+        assert_eq!(reader_row(&panel), ("Reader view", Some(true)));
         assert_eq!(panel.rows(), open(TabMode::Page).rows());
     }
 
@@ -390,6 +408,22 @@ mod tests {
         panel.move_sel(1);
         assert!(!panel.confirm(Entry::Quit));
         assert!(panel.confirm(Entry::Quit));
+    }
+
+    /// A config bool shows as a switch, a choice keeps its text.
+    #[test]
+    fn on_off_rows_carry_a_flag_and_choices_do_not() {
+        let panel = open(TabMode::Page);
+        let flag_of = |label| {
+            let at = (0..panel.rows().len()).find(|&i| panel.label(i) == label);
+            panel.flag(at.expect("a browser quick row"))
+        };
+        assert_eq!(
+            flag_of("Ad blocker"),
+            Some(AppConfig::default().adblock.enabled)
+        );
+        assert_eq!(flag_of("User agent"), None);
+        assert_eq!(flag_of("Bookmark"), None);
     }
 
     /// Reload arms like Quit, and arming one row never confirms another.
@@ -426,6 +460,6 @@ mod tests {
             .iter()
             .position(|row| row.label() == "Scaling")
             .expect("scaling is a quick row in the mode");
-        assert_eq!(panel.value(at), "Off");
+        assert_eq!(panel.value(at), "None");
     }
 }

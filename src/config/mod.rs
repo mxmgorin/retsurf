@@ -6,6 +6,7 @@
 //! through [`AppConfig::save`]. Path/scale resolution shared across the crate
 //! ([`data_dir`], [`device_scale`], …) lives in [`paths`].
 
+use crate::platform::render::shaders;
 use serde::{Deserialize, Serialize};
 
 mod adblock;
@@ -224,6 +225,12 @@ impl AppConfig {
             &mut self.performance.http_disk_cache_mb,
             b::HTTP_DISK_CACHE_MB,
         );
+
+        let shader = &mut self.game_mode.view.shader;
+        if !shaders::exists(shader) {
+            log::warn!("config: game_mode.view.shader = {shader} unknown; using none");
+            *shader = shaders::NONE.to_string();
+        }
     }
 }
 
@@ -270,7 +277,7 @@ fn fix_usize(name: &str, v: &mut usize, b: bounds::IntBounds) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Channel, CursorMode, MemoryProfile, ToolbarPosition};
+    use super::{shaders, AppConfig, Channel, CursorMode, MemoryProfile, Scaling, ToolbarPosition};
 
     // Per-variant round-trips live in each `token_enum!` invocation's own
     // generated test; this only covers what the macro cannot know.
@@ -291,5 +298,15 @@ mod tests {
         // the nightly release must not silently fall back to stable.
         assert_eq!(Channel::from_value(" CI "), Channel::Nightly);
         assert_eq!(Channel::Nightly.as_str(), "nightly");
+    }
+
+    /// The retired `off` and any other unknown value read as none.
+    #[test]
+    fn an_unknown_scaling_or_shader_falls_back_to_none() {
+        assert_eq!(Scaling::from_value("off"), Scaling::None);
+        let mut config = AppConfig::default();
+        config.game_mode.view.shader = "off".to_string();
+        config.sanitize();
+        assert_eq!(config.game_mode.view.shader, shaders::NONE);
     }
 }

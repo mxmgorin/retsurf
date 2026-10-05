@@ -335,7 +335,7 @@ impl AppUi {
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
             page_shader: window.page_gl_texture().map(page_shader::PageShader::new),
-            shader: crate::platform::render::shaders::OFF.to_string(),
+            shader: crate::platform::render::shaders::NONE.to_string(),
             browser_viewport: (0, 0),
             toast: None,
             quick_access: QuickAccess::new(),
@@ -590,7 +590,7 @@ impl AppUi {
         let shaded = snapshot.chrome_hidden.game_mode
             && self.page_shader.is_some()
             && !self.shader.is_empty()
-            && self.shader != crate::platform::render::shaders::OFF;
+            && self.shader != crate::platform::render::shaders::NONE;
         // Read before the state borrow below, which holds the tab list.
         let game_geometry = shaded.then(|| browser.game_geometry()).flatten();
         let face = self.pad_layout.labels();

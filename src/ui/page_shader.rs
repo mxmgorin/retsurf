@@ -99,7 +99,7 @@ impl PageShader {
     }
 
     /// Draw the page over `rect` and the game through shader `id`;
-    /// [`shaders::OFF`] is the caller's to draw as a plain image.
+    /// [`shaders::NONE`] is the caller's to draw as a plain image.
     pub(super) fn paint(
         &self,
         ui: &egui::Ui,

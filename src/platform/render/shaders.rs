@@ -7,7 +7,7 @@ use crate::config;
 use std::borrow::Cow;
 
 /// The id that draws the page without a shader.
-pub const OFF: &str = "off";
+pub const NONE: &str = "none";
 
 pub const VERTEX: &str = include_str!("assets/page.vert");
 pub const HEADER: &str = include_str!("assets/header.frag");
@@ -97,10 +97,10 @@ const IMITATED_ROWS: f32 = 240.0;
 /// The narrowest guessed game pixel, so a shader still has rows to work with.
 const MIN_PERIOD: f32 = 2.0;
 
-/// Every pickable shader as `(label, id)`: [`OFF`], the built-ins, then the
+/// Every pickable shader as `(label, id)`: [`NONE`], the built-ins, then the
 /// user's by id. Reads the shader folder.
 pub fn list() -> Vec<(String, String)> {
-    let mut out = vec![("Off".to_string(), OFF.to_string())];
+    let mut out = vec![("None".to_string(), NONE.to_string())];
     out.extend(
         BUILT_INS
             .iter()
@@ -108,7 +108,7 @@ pub fn list() -> Vec<(String, String)> {
     );
     let user = user_ids()
         .into_iter()
-        .filter(|id| id != OFF && builtin(id).is_none());
+        .filter(|id| id != NONE && builtin(id).is_none());
     out.extend(user.map(|id| (id.clone(), id)));
     out
 }
@@ -117,9 +117,14 @@ pub fn list() -> Vec<(String, String)> {
 pub fn label(id: &str) -> String {
     match builtin(id) {
         Some(b) => b.label.to_string(),
-        None if id == OFF || id.is_empty() => "Off".to_string(),
+        None if id == NONE || id.is_empty() => "None".to_string(),
         None => id.to_string(),
     }
+}
+
+/// Whether `id` names a shader that can be drawn, or [`NONE`].
+pub fn exists(id: &str) -> bool {
+    id == NONE || source(id).is_some()
 }
 
 /// A shader's text and how it samples the game.
@@ -129,11 +134,11 @@ pub struct Source {
     pub linear: bool,
 }
 
-/// `id`'s source, the user's file before a built-in; `None` for [`OFF`] and
+/// `id`'s source, the user's file before a built-in; `None` for [`NONE`] and
 /// for an id with neither.
 pub fn source(id: &str) -> Option<Source> {
     // An id names a file in the folder, never a path out of it.
-    if id == OFF || id.is_empty() || id.contains(['/', '\\']) {
+    if id == NONE || id.is_empty() || id.contains(['/', '\\']) {
         return None;
     }
     match std::fs::read_to_string(user_path(id)) {
@@ -184,7 +189,7 @@ mod tests {
     #[test]
     fn off_and_every_built_in_are_listed_once() {
         let ids: Vec<String> = list().into_iter().map(|(_, id)| id).collect();
-        assert_eq!(ids[0], OFF);
+        assert_eq!(ids[0], NONE);
         for b in BUILT_INS {
             assert_eq!(ids.iter().filter(|id| *id == b.id).count(), 1, "{}", b.id);
         }
@@ -193,8 +198,8 @@ mod tests {
     #[test]
     fn an_unknown_id_reads_as_itself_and_has_no_source() {
         assert_eq!(label("my-crt"), "my-crt");
-        assert_eq!(label(OFF), "Off");
-        assert!(source(OFF).is_none());
+        assert_eq!(label(NONE), "None");
+        assert!(source(NONE).is_none());
         assert!(source("../config").is_none());
     }
 

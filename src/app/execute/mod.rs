@@ -370,7 +370,7 @@ impl App {
         self.adopt_input_map(out);
         let scaling = match self.browser.in_game_mode() {
             true => self.config.game_mode.view.scaling,
-            false => crate::config::Scaling::Off,
+            false => crate::config::Scaling::None,
         };
         self.browser.set_game_scaling(scaling);
         // The router reads cursor/scroll speeds from the config each frame, but

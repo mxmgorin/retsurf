@@ -21,7 +21,7 @@ pub struct GameViewConfig {
     /// How the game is cut out of its page and sized to the screen (see
     /// [`crate::browser::AppBrowser::set_game_scaling`]).
     pub scaling: Scaling,
-    /// Shader id: `off`, a built-in or a `shaders/<id>.glsl` (see
+    /// Shader id: `none`, a built-in or a `shaders/<id>.glsl` (see
     /// [`crate::platform::render::shaders`]).
     pub shader: String,
 }
@@ -30,17 +30,17 @@ impl Default for GameViewConfig {
     fn default() -> Self {
         Self {
             scaling: Scaling::default(),
-            shader: crate::platform::render::shaders::OFF.to_string(),
+            shader: crate::platform::render::shaders::NONE.to_string(),
         }
     }
 }
 
 token_enum! {
     /// How Game Mode sizes the page's game to the screen, cut out over a black
-    /// backdrop; `Off` leaves the page.
+    /// backdrop; `None` leaves the page.
     pub enum Scaling {
-        default Off;
-        Off => "off", "Off",
+        default None;
+        None => "none", "None",
         /// The largest size that keeps the game's aspect ratio.
         Fit => "fit", "Fit",
         /// The largest whole multiple of the game's pixels, drawn unsmoothed.

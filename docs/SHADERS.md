@@ -29,12 +29,12 @@ Shaders are single-pass RetroArch GLSL, so most single-pass files from glsl-shad
 as they are. Put `<id>.glsl` in the `shaders` folder of the data directory (next to `config.toml`) and
 pick it by `<id>`. A file named after a built-in replaces it; the built-ins' sources are
 in [`resources/shaders`](../resources/shaders). To reload an edited file, switch the row
-to Off and back. A shader that fails to compile is logged and the game is drawn
+to None and back. A shader that fails to compile is logged and the game is drawn
 unfiltered. Multi-pass presets (`.glslp`) are not supported, and `#pragma parameter`
 values stay at their defaults.
 
 The shader sees the game at its own resolution, as in an emulator: the game's canvas
-with Scaling on, exact at Integer; with Scaling Off, the whole page at 240 rows per
+with Scaling on, exact at Integer; with Scaling None, the whole page at 240 rows per
 screen height.
 
 | Uniform | Value |

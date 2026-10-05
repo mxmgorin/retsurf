@@ -51,7 +51,7 @@ fn script(scaling: Scaling) -> String {
 
 impl AppBrowser {
     /// Scale the game on every open tab and on each document loaded from now
-    /// on, or put every page back with [`Scaling::Off`]. Idempotent.
+    /// on, or put every page back with [`Scaling::None`]. Idempotent.
     pub fn set_game_scaling(&self, scaling: Scaling) {
         if self.inner.game_scaling.replace(scaling) == scaling {
             return;
@@ -61,7 +61,7 @@ impl AppBrowser {
         if let Some(old) = self.inner.game_scaling_script.take() {
             self.inner.user_content.remove_script(old);
         }
-        if scaling != Scaling::Off {
+        if scaling != Scaling::None {
             let user_script = Rc::new(servo::UserScript::new(script(scaling), None));
             self.inner.user_content.add_script(user_script.clone());
             self.inner.game_scaling_script.replace(Some(user_script));
@@ -78,9 +78,9 @@ impl AppBrowser {
     }
 
     /// The scaled game's last reported geometry, asked again every
-    /// [`GEOMETRY_POLL`]; `None` with scaling off or before the page has a game.
+    /// [`GEOMETRY_POLL`]; `None` without scaling or before the page has a game.
     pub fn game_geometry(&self) -> Option<GameGeometry> {
-        if self.inner.game_scaling.get() == Scaling::Off {
+        if self.inner.game_scaling.get() == Scaling::None {
             return None;
         }
         let now = Instant::now();

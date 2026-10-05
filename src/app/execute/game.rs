@@ -123,7 +123,7 @@ impl App {
         self.ui.leave_game_mode();
         self.browser.set_mode(TabMode::Page);
         self.ui.quick_access.close();
-        self.browser.set_game_scaling(Scaling::Off);
+        self.browser.set_game_scaling(Scaling::None);
         // A pad the map asked for exists only while the map runs.
         self.browser.drop_mapped_pad();
         log::info!("game mode: false");
