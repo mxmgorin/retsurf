@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Rebuild even if the last nightly is already this commit"
+        description: "Build even if this commit is already the nightly or has not passed Check"
         type: boolean
         default: false
   schedule:
@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 # Never two at once: they would race for the tag.
 concurrency:
@@ -23,11 +24,14 @@ concurrency:
 
 jobs:
   changed:
+    # Forks must not publish nightlies.
+    if: github.repository == 'mxmgorin/retsurf'
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.check.outputs.build }}
       sha: ${{ steps.check.outputs.sha }}
       short: ${{ steps.check.outputs.short }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -39,6 +43,9 @@ jobs:
           sha="$(git rev-parse HEAD)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          # Must match build.rs's nightly version.
+          crate="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+          echo "version=$crate-nightly.$(git show -s --format=%cd --date=format:%Y%m%d HEAD)" >> "$GITHUB_OUTPUT"
           # The published nightly records the commit it was built from, so a quiet
           # day costs nothing. No release yet means there is nothing to compare to.
           last="$(gh release view nightly --json body --jq .body 2>/dev/null \
@@ -50,8 +57,16 @@ jobs:
             echo "no commits since the last nightly ($last)"
             echo "build=false" >> "$GITHUB_OUTPUT"
           else
-            echo "building $sha (last was ${last:-none})"
-            echo "build=true" >> "$GITHUB_OUTPUT"
+            # A red or unfinished Check waits for a green commit on a later night.
+            check="$(gh run list --workflow check.yml --commit "$sha" --event push \
+                     --json conclusion --jq '.[0].conclusion // ""')"
+            if [ "$check" = "success" ]; then
+              echo "building $sha (last was ${last:-none})"
+              echo "build=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skipping $sha: Check is '${check:-not finished}'"
+              echo "build=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   linux:
@@ -139,13 +154,13 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
-          name: Nightly
+          name: v${{ needs.changed.outputs.version }}
           draft: true
           prerelease: true
           make_latest: false
           files: out/*
           body: |
-            Automated build from the latest commit on main. Expect bugs.
+            Untested automated build from the latest commit on main.
 
             commit: ${{ needs.changed.outputs.sha }}
 

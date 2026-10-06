@@ -17,11 +17,11 @@ mod update;
 
 use crate::app::App;
 
-/// Build identity for the startup log and the panic file: crate version, plus the
+/// Build identity for the startup log and the panic file: the version, plus the
 /// `HEAD` short hash and its committer date stamped in by `build.rs`. Both fall
 /// back to `unknown` when built without a git checkout.
 const BUILD_ID: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
+    env!("RETSURF_VERSION"),
     " (",
     env!("RETSURF_GIT_HASH"),
     ", ",

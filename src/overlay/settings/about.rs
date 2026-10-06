@@ -24,7 +24,7 @@ pub struct AboutInfo {
 /// Build the About tab's content from the `RETSURF_*` env vars `build.rs` emits.
 pub fn about_info() -> AboutInfo {
     AboutInfo {
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("RETSURF_VERSION"),
         git_hash: env!("RETSURF_GIT_HASH"),
         build_date: env!("RETSURF_BUILD_DATE"),
         description: &[

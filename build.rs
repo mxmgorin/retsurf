@@ -4,6 +4,8 @@
 //!
 //! * `RETSURF_GIT_HASH` / `RETSURF_BUILD_DATE` — the short hash and committer
 //!   date of `HEAD`, pinning the exact source the build came from.
+//! * `RETSURF_VERSION` — the crate version, plus `-nightly.<commit date>` on a
+//!   nightly build; must match the release name `nightly.yml` gives it.
 //! * `RETSURF_VER_*` — the *resolved* versions of the headline components, read
 //!   from `Cargo.lock` so they track the actual dependency graph rather than the
 //!   looser semver ranges in `Cargo.toml`.
@@ -12,6 +14,9 @@
 //! fail to compile, on a git checkout or a source tarball alike.
 
 use std::process::Command;
+
+/// Found in `GITHUB_WORKFLOW_REF`, which names the caller even in a called workflow.
+const NIGHTLY_WORKFLOW: &str = "/.github/workflows/nightly.yml@";
 
 /// Components surfaced on the About tab, as `(Cargo.lock package name, env-var
 /// suffix)`. The display label lives next to `about_info()` in the overlay.
@@ -27,6 +32,8 @@ fn main() {
     let date = git(&["show", "-s", "--format=%cs", "HEAD"]);
     println!("cargo:rustc-env=RETSURF_GIT_HASH={hash}");
     println!("cargo:rustc-env=RETSURF_BUILD_DATE={date}");
+    println!("cargo:rustc-env=RETSURF_VERSION={}", version(&date));
+    println!("cargo:rerun-if-env-changed=GITHUB_WORKFLOW_REF");
 
     let lock = std::fs::read_to_string("Cargo.lock").unwrap_or_default();
     for (pkg, suffix) in COMPONENTS {
@@ -46,6 +53,17 @@ fn main() {
         rerun_if_exists(&format!(".git/{git_ref}"));
         // Where the tip lives once the ref is packed away.
         rerun_if_exists(".git/packed-refs");
+    }
+}
+
+/// The crate version, with the commit date on a nightly build.
+fn version(commit_date: &str) -> String {
+    let crate_version =
+        std::env::var("CARGO_PKG_VERSION").expect("cargo sets it for build scripts");
+    let nightly = std::env::var("GITHUB_WORKFLOW_REF").is_ok_and(|r| r.contains(NIGHTLY_WORKFLOW));
+    match nightly && commit_date != "unknown" {
+        true => format!("{crate_version}-nightly.{}", commit_date.replace('-', "")),
+        false => crate_version,
     }
 }
 

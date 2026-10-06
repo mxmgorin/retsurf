@@ -10,6 +10,9 @@ const NIGHTLY_TAG: &str = "nightly";
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,
+    /// The release title; a nightly's is `v<version>`.
+    #[serde(default)]
+    name: String,
     /// The release's web page — shown as a "View on GitHub" link beside the notes.
     #[serde(default)]
     html_url: String,
@@ -149,8 +152,11 @@ pub(super) fn latest_nightly(asset: Option<&str>) -> Result<UpdateState, String>
         return Ok(up_to_date(current_sha()));
     }
 
-    let version = format!("nightly {}", sha.get(..7).unwrap_or(sha));
-    Ok(available(&release, asset, version))
+    Ok(available(
+        &release,
+        asset,
+        nightly_version(&release.name, sha),
+    ))
 }
 
 /// The commit a nightly was built from — the workflow writes it as a `commit: <sha>`
@@ -160,6 +166,15 @@ fn nightly_commit(body: &str) -> Option<&str> {
         .find_map(|l| l.trim().strip_prefix("commit:"))
         .map(str::trim)
         .filter(|s| !s.is_empty())
+}
+
+/// The version in a nightly's title, else its short commit.
+fn nightly_version(name: &str, sha: &str) -> String {
+    let version = name.trim().trim_start_matches('v');
+    match semver::Version::parse(version) {
+        Ok(v) if !v.pre.is_empty() => version.to_string(),
+        _ => format!("nightly {}", sha.get(..7).unwrap_or(sha)),
+    }
 }
 
 fn current_sha() -> &'static str {
@@ -277,7 +292,7 @@ mod tests {
     /// The body the nightly workflow writes, prose and all.
     #[test]
     fn nightly_commit_reads_the_recorded_sha() {
-        let body = "Automated build from the latest commit on main. Expect bugs.\n\n\
+        let body = "Untested automated build from the latest commit on main.\n\n\
                     commit: 0123456789abcdef0123456789abcdef01234567\n";
         assert_eq!(
             nightly_commit(body),
@@ -290,5 +305,15 @@ mod tests {
     fn nightly_commit_absent_or_empty_is_none() {
         assert_eq!(nightly_commit("no marker here"), None);
         assert_eq!(nightly_commit("commit:   \n"), None);
+    }
+
+    #[test]
+    fn nightly_version_reads_the_title() {
+        let sha = "0123456789abcdef";
+        assert_eq!(
+            nightly_version("v0.9.0-nightly.20261006", sha),
+            "0.9.0-nightly.20261006"
+        );
+        assert_eq!(nightly_version("Nightly", sha), "nightly 0123456");
     }
 }
