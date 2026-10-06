@@ -2,17 +2,22 @@
 //! moves it, the render pass paints it (or the scroll-mode indicator) via
 //! [`paint_cursor`].
 
+use super::theme::{ACCENT, DEEP_TEAL};
 use super::AppUi;
 use crate::platform::window::AppWindow;
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
 
-/// Gamepad cursor overlay: circle radius and outline width (logical px).
-const CURSOR_RADIUS: f32 = 5.0;
-const CURSOR_STROKE: f32 = 1.5;
+/// Gamepad cursor (logical px): an accent disc whose deep-teal rim reads on
+/// light pages and whose white dot reads on accent-colored ones. The scroll
+/// indicators share the fill and rim.
+const CURSOR_RADIUS: f32 = 6.5;
+const CURSOR_RIM: f32 = 1.0;
+const CURSOR_DOT: f32 = 1.75;
+const CURSOR_DOT_FILL: egui::Color32 = egui::Color32::WHITE;
 /// The cursor's full painted half-extent — how far it reaches from its center,
 /// used to keep the whole glyph (not just the center) inside the web view.
-const CURSOR_EXTENT: f32 = CURSOR_RADIUS + CURSOR_STROKE / 2.0;
+const CURSOR_EXTENT: f32 = CURSOR_RADIUS;
 
 impl AppUi {
     /// Move the gamepad cursor by a logical-px delta and mark it visible, returning
@@ -114,7 +119,7 @@ impl AppUi {
     }
 }
 
-/// Gamepad cursor overlay, always on top: the circle, the scroll-mode indicator
+/// Gamepad cursor overlay, always on top: the disc, the scroll-mode indicator
 /// while D-pad scroll is latched, or edge-scroll arrows toward `edge_scroll`.
 /// `pos` is in logical px, which equals egui points at the handheld's 1.0 scale.
 pub(super) fn paint_cursor(
@@ -133,20 +138,17 @@ pub(super) fn paint_cursor(
         // Same linger/auto-hide as the cursor: shown while scrolling, then fades.
         add_scroll_indicator(&painter, pos);
     } else {
-        painter.circle_filled(pos, CURSOR_RADIUS, egui::Color32::from_white_alpha(235));
-        painter.circle_stroke(
-            pos,
-            CURSOR_RADIUS,
-            egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK),
-        );
+        painter.circle_filled(pos, CURSOR_RADIUS, DEEP_TEAL);
+        painter.circle_filled(pos, CURSOR_RADIUS - CURSOR_RIM, ACCENT);
+        painter.circle_filled(pos, CURSOR_DOT, CURSOR_DOT_FILL);
     }
 }
 
 /// The D-pad scroll-mode indicator at the parked cursor position: a center dot
 /// with up/down arrowheads, like a browser's middle-click autoscroll marker.
 fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
-    let fill = egui::Color32::from_white_alpha(235);
-    let stroke = egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK);
+    let fill = ACCENT;
+    let stroke = egui::Stroke::new(CURSOR_RIM, DEEP_TEAL);
     painter.circle_filled(pos, 2.5, fill);
     painter.circle_stroke(pos, 2.5, stroke);
     for dir in [-1.0f32, 1.0] {
@@ -164,9 +166,9 @@ fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
 /// Edge-scroll arrows: one arrowhead per scrolling axis, pointing the way the
 /// page moves. Sized to the circle's extent, which the edge clamp keeps on screen.
 fn add_edge_arrows(painter: &egui::Painter, pos: egui::Pos2, (dx, dy): (i8, i8)) {
-    let fill = egui::Color32::from_white_alpha(235);
-    let stroke = egui::Stroke::new(CURSOR_STROKE, egui::Color32::BLACK);
-    let reach = CURSOR_EXTENT - CURSOR_STROKE;
+    let fill = ACCENT;
+    let stroke = egui::Stroke::new(CURSOR_RIM, DEEP_TEAL);
+    let reach = CURSOR_EXTENT - CURSOR_RIM;
     for dir in [egui::vec2(dx as f32, 0.0), egui::vec2(0.0, dy as f32)] {
         if dir == egui::Vec2::ZERO {
             continue;

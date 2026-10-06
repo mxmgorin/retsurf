@@ -129,7 +129,7 @@ fn add_horizon(ui: &mut egui::Ui, width: f32, margin: egui::Margin) {
     brand::paint_horizon(
         &ui.painter_at(clip),
         x_range,
-        rect.bottom() - brand::Horizon::depth(),
+        rect.bottom() - SUN.depth(),
         bottom,
         rect.left() + rect.width() * SUN_AT,
         &SUN,

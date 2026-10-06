@@ -98,12 +98,15 @@ impl App {
         local_site: Option<LocalSite>,
     ) -> Result<Self, String> {
         log::info!("init: creating window");
-        let window = AppWindow::new(
+        let mut window = AppWindow::new(
             sdl,
             &config.display,
             config.performance.max_fps,
             crate::ui::init_egui_ctx,
         )?;
+        // Before the engine, whose startup blocks this thread.
+        window.run_ui(crate::ui::add_splash);
+        window.paint((0, 0), false);
         // Before the browser: whichever media backend lands first is the one that sticks.
         let audio = crate::media::init(sdl, &config.audio, &config.video);
         log::info!("init: window ready; creating browser");

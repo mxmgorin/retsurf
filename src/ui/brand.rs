@@ -4,7 +4,7 @@
 //! `resources/retsurf.svg`; the sea under the first wave occludes the sun, so
 //! it sets behind a real wave rather than a flat cut.
 
-use super::theme::{lerp_color, ACCENT, PANEL_FILL, SURF_WARM};
+use super::theme::{lerp_color, ACCENT, DEEP_TEAL, PANEL_FILL, SURF_WARM};
 use egui_sdl2::egui;
 
 /// The icon gradient's top stop, warmer than [`SURF_WARM`].
@@ -13,8 +13,7 @@ const SUN_TOP: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb8, 0x70);
 /// Where the gradient reaches [`SURF_WARM`], as a fraction of the diameter.
 const WARM_STOP: f32 = 0.3;
 
-/// The icon's two far waves.
-const WAVE_FAR: egui::Color32 = egui::Color32::from_rgb(0x26, 0x57, 0x50);
+/// The icon's middle wave; the far one is [`DEEP_TEAL`].
 const WAVE_MID: egui::Color32 = egui::Color32::from_rgb(0x33, 0x88, 0x78);
 
 /// The sea under the horizon wave, a shade of the far wave over the panel.
@@ -44,8 +43,10 @@ const FEATHER_PX: f32 = 1.0;
 const WAVE_SEGMENTS: usize = 48;
 const HALO_SEGMENTS: usize = 32;
 
-/// Periods of each wave across the band, and their crest height over the stroke.
+/// Periods of each wave across the band.
 const WAVE_PERIODS: f32 = 1.5;
+/// Wave metrics for a sun of [`WAVE_REF_RADIUS`]; a larger sun scales them.
+const WAVE_REF_RADIUS: f32 = 18.0;
 const WAVE_AMP: f32 = 3.0;
 const WAVE_STROKE: f32 = 2.0;
 /// The near wave's drop under the horizon.
@@ -61,8 +62,12 @@ pub(super) struct Horizon {
 
 impl Horizon {
     /// From the horizon line down to the near wave's lowest edge.
-    pub fn depth() -> f32 {
-        WAVE_SPACING + WAVE_AMP + WAVE_STROKE / 2.0
+    pub fn depth(&self) -> f32 {
+        (WAVE_SPACING + WAVE_AMP + WAVE_STROKE / 2.0) * self.wave_scale()
+    }
+
+    fn wave_scale(&self) -> f32 {
+        self.radius / WAVE_REF_RADIUS
     }
 
     /// From the halo's top down to the horizon line.
@@ -72,7 +77,7 @@ impl Horizon {
 
     /// The mark's full height, halo top to near wave bottom.
     pub fn height(&self) -> f32 {
-        self.rise() + Self::depth()
+        self.rise() + self.depth()
     }
 
     fn center(&self, horizon: f32, sun_x: f32) -> egui::Pos2 {
@@ -98,25 +103,21 @@ pub(super) fn paint_horizon(
     let center = sun.center(horizon, sun_x);
     painter.add(egui::Shape::mesh(halo_mesh(center, sun)));
     painter.add(egui::Shape::mesh(sun_mesh(ppp, center, sun)));
-    let far = wave_points(x_range, horizon, 0.0);
+    let k = sun.wave_scale();
+    let stroke = |color| egui::Stroke::new(WAVE_STROKE * k, color);
+    let far = wave_points(x_range, horizon, WAVE_AMP * k, 0.0);
     painter.add(egui::Shape::mesh(sea_mesh(&far, bottom)));
-    painter.add(egui::Shape::line(
-        far,
-        egui::Stroke::new(WAVE_STROKE, WAVE_FAR),
-    ));
-    let near = wave_points(x_range, horizon + WAVE_SPACING, 0.25);
-    painter.add(egui::Shape::line(
-        near,
-        egui::Stroke::new(WAVE_STROKE, WAVE_MID),
-    ));
+    painter.add(egui::Shape::line(far, stroke(DEEP_TEAL)));
+    let near = wave_points(x_range, horizon + WAVE_SPACING * k, WAVE_AMP * k, 0.25);
+    painter.add(egui::Shape::line(near, stroke(WAVE_MID)));
 }
 
-fn wave_points(x_range: egui::Rangef, y: f32, phase: f32) -> Vec<egui::Pos2> {
+fn wave_points(x_range: egui::Rangef, y: f32, amp: f32, phase: f32) -> Vec<egui::Pos2> {
     (0..=WAVE_SEGMENTS)
         .map(|i| {
             let t = i as f32 / WAVE_SEGMENTS as f32;
             let a = (t * WAVE_PERIODS + phase) * std::f32::consts::TAU;
-            egui::pos2(x_range.min + x_range.span() * t, y + WAVE_AMP * a.sin())
+            egui::pos2(x_range.min + x_range.span() * t, y + amp * a.sin())
         })
         .collect()
 }
@@ -256,6 +257,6 @@ mod tests {
             dim: 0.0,
         };
         assert_eq!(sun.rise(), 10.0 * (1.0 + HALO_SCALE));
-        assert_eq!(sun.height(), sun.rise() + Horizon::depth());
+        assert_eq!(sun.height(), sun.rise() + sun.depth());
     }
 }

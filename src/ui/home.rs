@@ -107,8 +107,8 @@ pub(super) const GAP: f32 = 12.0;
 /// Wordmark type size (logical px); the wave band and the reserved height
 /// derive from it.
 const WORDMARK_SIZE: f32 = 36.0;
-/// Letter spacing, matching the SVG wordmark's tracking.
-const WORDMARK_TRACKING: f32 = WORDMARK_SIZE * 0.1;
+/// Letter spacing as a share of the type size, matching the SVG wordmark.
+const WORDMARK_TRACKING: f32 = 0.1;
 /// The wave band below the text. Ratios track the SVG, nudged up so the thin
 /// stroke stays legible on a handheld.
 const WAVE_GAP: f32 = WORDMARK_SIZE * 0.2; // text bottom to wave centerline
@@ -212,44 +212,75 @@ pub(super) fn add_home(
 /// The brand wordmark: "ret" in ink, "surf" in the brand gradient. egui has no
 /// gradient text fill, so the `surf` glyphs are tagged with a marker color
 /// ([`ACCENT`]), tessellated here, and recolored by height.
-fn wordmark_job() -> egui::text::LayoutJob {
+fn wordmark_job(size: f32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
     // body `font()` (Ubuntu-Light).
     let fmt = |color: egui::Color32| egui::TextFormat {
-        font_id: egui::FontId::monospace(WORDMARK_SIZE),
+        font_id: egui::FontId::monospace(size),
         color,
-        extra_letter_spacing: WORDMARK_TRACKING,
+        extra_letter_spacing: size * WORDMARK_TRACKING,
         ..Default::default()
     };
     job.append("ret", 0.0, fmt(INK));
     // epaint skips extra_letter_spacing on a section's first glyph, so the
     // ret/surf joint needs it back. ACCENT is a marker recolored below.
-    job.append("surf", WORDMARK_TRACKING, fmt(ACCENT));
+    job.append("surf", size * WORDMARK_TRACKING, fmt(ACCENT));
     job
 }
 
 /// The mark's laid-out height, wave band included — the layout needs it before
 /// anything is drawn.
 fn wordmark_height(ui: &egui::Ui) -> f32 {
-    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job()));
-    galley.size().y + WAVE_BAND
+    wordmark_text_size(ui, WORDMARK_SIZE).y + WAVE_BAND
 }
 
 fn add_wordmark(ui: &mut egui::Ui) {
-    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job()));
-    let gsize = galley.size();
+    let gsize = wordmark_text_size(ui, WORDMARK_SIZE);
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(gsize.x, gsize.y + WAVE_BAND),
         egui::Sense::hover(),
     );
+    paint_wordmark_text(ui, rect.min, WORDMARK_SIZE);
+
+    // The brand wave: a solid-teal sine under the text, ~3 periods, starting on
+    // the centerline and dipping down first — the SVG path's phase.
+    const N: usize = 120;
+    const PERIODS: f32 = 3.0;
+    let over = gsize.x * 0.02;
+    let (x0, x1) = (rect.min.x - over, rect.max.x + over);
+    let cy = rect.min.y + gsize.y + WAVE_GAP;
+    let pts: Vec<egui::Pos2> = (0..=N)
+        .map(|i| {
+            let t = i as f32 / N as f32;
+            let y = cy + WAVE_AMP * (t * PERIODS * std::f32::consts::TAU).sin();
+            egui::pos2(x0 + (x1 - x0) * t, y)
+        })
+        .collect();
+    ui.painter().add(egui::Shape::line(
+        pts,
+        egui::Stroke::new(WAVE_STROKE, ACCENT),
+    ));
+}
+
+/// The laid-out size of the wordmark's text at type `size`, wave band excluded.
+pub(super) fn wordmark_text_size(ui: &egui::Ui, size: f32) -> egui::Vec2 {
+    ui.ctx()
+        .fonts_mut(|f| f.layout_job(wordmark_job(size)))
+        .size()
+}
+
+/// Paint the wordmark's text at type `size` with its top-left at `pos`,
+/// allocating nothing.
+pub(super) fn paint_wordmark_text(ui: &egui::Ui, pos: egui::Pos2, size: f32) {
+    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job(size)));
 
     // Recolor the marker-colored `surf` vertices by height: teal over the lower
     // ~55%, warming to coral — the stops of `_surf_gradient` in the brand SVGs.
     let ppp = ui.ctx().pixels_per_point();
     let tex = ui.ctx().fonts(|f| f.font_image_size());
     let mut mesh = egui::epaint::Mesh::default();
-    let shape = egui::epaint::TextShape::new(rect.min, galley, INK);
+    let shape = egui::epaint::TextShape::new(pos, galley, INK);
     let opts = egui::epaint::TessellationOptions::default();
     egui::epaint::Tessellator::new(ppp, opts, tex, Vec::new()).tessellate_text(&shape, &mut mesh);
 
@@ -275,25 +306,6 @@ fn add_wordmark(ui: &mut egui::Ui) {
         v.color = lerp_color(ACCENT, SURF_WARM, t);
     }
     ui.painter().add(egui::Shape::mesh(mesh));
-
-    // The brand wave: a solid-teal sine under the text, ~3 periods, starting on
-    // the centerline and dipping down first — the SVG path's phase.
-    const N: usize = 120;
-    const PERIODS: f32 = 3.0;
-    let over = gsize.x * 0.02;
-    let (x0, x1) = (rect.min.x - over, rect.max.x + over);
-    let cy = rect.min.y + gsize.y + WAVE_GAP;
-    let pts: Vec<egui::Pos2> = (0..=N)
-        .map(|i| {
-            let t = i as f32 / N as f32;
-            let y = cy + WAVE_AMP * (t * PERIODS * std::f32::consts::TAU).sin();
-            egui::pos2(x0 + (x1 - x0) * t, y)
-        })
-        .collect();
-    ui.painter().add(egui::Shape::line(
-        pts,
-        egui::Stroke::new(WAVE_STROKE, ACCENT),
-    ));
 }
 
 /// The hero search / URL field. Editable directly (desktop keyboard); on the

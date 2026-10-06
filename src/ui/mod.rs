@@ -21,6 +21,7 @@ mod prompt;
 mod quick_access;
 mod scale;
 mod settings;
+mod splash;
 mod theme;
 mod toast;
 mod toolbar;
@@ -28,6 +29,7 @@ mod update_notice;
 
 pub use self::game_mode::game_mode_toast_text;
 pub use self::overlays::Focus;
+pub use self::splash::add_splash;
 pub use self::toast::notice_text;
 
 use crate::{

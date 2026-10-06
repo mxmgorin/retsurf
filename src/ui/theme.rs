@@ -26,6 +26,9 @@ pub const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x1e, 0x20, 0x24);
 pub const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2d, 0x33);
 pub const INK: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xea);
 pub const MUTED: egui::Color32 = egui::Color32::from_rgb(0x8a, 0x8f, 0x98);
+/// The icon's far wave: the accent darkened, for edges that must read on light
+/// pages without the weight of black.
+pub const DEEP_TEAL: egui::Color32 = egui::Color32::from_rgb(0x26, 0x57, 0x50);
 /// The wordmark gradient's warm (coral) end, paired with [`ACCENT`].
 pub const SURF_WARM: egui::Color32 = egui::Color32::from_rgb(0xff, 0x8c, 0x69);
 
