@@ -221,10 +221,15 @@ impl servo::WebViewDelegate for AppBrowserInner {
             return;
         }
 
-        let is_home = req.is_for_main_frame && super::home::is_home(&url);
+        // Built-in pages, answered here and never fetched.
+        let builtin = match req.is_for_main_frame {
+            true if super::home::is_home(&url) => Some(super::home::render()),
+            true if super::junk_surfer::is_junk_surfer(&url) => Some(super::junk_surfer::render()),
+            _ => None,
+        };
 
         let filter = self.content_filter.get();
-        let is_subresource = !is_home && !req.is_for_main_frame;
+        let is_subresource = builtin.is_none() && !req.is_for_main_frame;
         // Block ads and any lightweight-mode content categories (images / media
         // / fonts). Never the main document itself — only its subresources.
         let mut block =
@@ -254,8 +259,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
             }
         }
 
-        if is_home {
-            let html = super::home::render().into_bytes();
+        if let Some(html) = builtin {
+            let html = html.into_bytes();
             let mut headers = http::HeaderMap::new();
             headers.insert(
                 http::header::CONTENT_TYPE,

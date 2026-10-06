@@ -1,8 +1,11 @@
 <html>
 <head>
   <title>Error loading page</title>
+  <style>#junk-surfer { display: block; margin-top: 16px; border-radius: 10px; user-select: none; }</style>
 </head>
 <body>
   <p>Could not load the requested page: ${reason}</p>
+  <canvas id="junk-surfer" data-title="Surf while you wait" aria-label="Junk Surfer: press A or Space to jump"></canvas>
+  <script>${retsurf_game}</script>
 </body>
 </html>

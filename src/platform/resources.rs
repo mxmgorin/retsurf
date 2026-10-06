@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use servo::resources::Resource;
+
 #[derive(rust_embed::Embed)]
 #[folder = "resources/servo"]
 pub struct ServoResources;
@@ -16,12 +18,16 @@ impl servo::resources::ResourceReaderMethods for ServoResources {
         let name = file.filename();
         // Degrade gracefully instead of aborting the browser: a servo version bump
         // can add a Resource variant we haven't vendored into resources/servo.
-        match ServoResources::get(name) {
-            Some(resource) => resource.data.to_vec(),
-            None => {
-                log::error!("missing embedded servo resource: {name}");
-                Vec::new()
-            }
+        let Some(resource) = ServoResources::get(name) else {
+            log::error!("missing embedded servo resource: {name}");
+            return Vec::new();
+        };
+        if !matches!(file, Resource::NetErrorHTML) {
+            return resource.data.to_vec();
+        }
+        match std::str::from_utf8(&resource.data) {
+            Ok(page) => crate::browser::inline_game(page).into_bytes(),
+            Err(_) => resource.data.to_vec(),
         }
     }
 
