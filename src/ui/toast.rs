@@ -54,13 +54,14 @@ impl AppUi {
 
     /// Draw the toast as a snackbar: bottom centre, clear of the hint bars and
     /// of whatever holds the bottom edge (a bottom toolbar, the keyboard).
-    pub(super) fn add_toast(&self, ctx: &egui::Context) {
+    /// Returns whether a toast was drawn.
+    pub(super) fn add_toast(&self, ctx: &egui::Context) -> bool {
         let Some(toast) = self
             .toast
             .as_ref()
             .filter(|_| self.toast_visible_for().is_some())
         else {
-            return;
+            return false;
         };
         let screen = ctx.content_rect();
         let mut floor = screen.bottom();
@@ -88,6 +89,7 @@ impl AppUi {
                         ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
                     });
             });
+        true
     }
 }
 

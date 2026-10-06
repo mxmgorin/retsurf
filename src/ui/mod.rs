@@ -201,6 +201,13 @@ impl ChromeHidden {
     }
 }
 
+/// Overlays shown for a while and then dropped without an event of their own.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct Transients {
+    cursor: bool,
+    toast: bool,
+}
+
 pub struct AppUi {
     /// Cached so focus/scale queries don't each need the window; refreshed every
     /// frame, because a software resize builds a fresh context.
@@ -252,6 +259,10 @@ pub struct AppUi {
     cursor_last_move: Option<Instant>,
     /// How long the cursor stays visible after a move (from the interface config).
     cursor_linger: Duration,
+    /// What the frame last built, and the one last drawn, show of the overlays
+    /// that expire on a timer: the frame that hides one has to reach the panel.
+    transients_built: Transients,
+    transients_drawn: Transients,
     /// `[interface] scale`: the user's factor over the fit to the panel.
     ui_scale: f32,
     /// `RETSURF_SCALE`, standing in for the panel's own fit where a launcher
@@ -352,6 +363,8 @@ impl AppUi {
             },
             cursor_last_move: None,
             cursor_linger: Duration::from_millis(interface.cursor_linger_ms),
+            transients_built: Transients::default(),
+            transients_drawn: Transients::default(),
             ui_scale: interface.scale,
             forced_scale: crate::config::device_scale(),
             toolbar_position: interface.toolbar_position,
@@ -443,6 +456,7 @@ impl AppUi {
             || self.repaint_pending
             || window.repaint_delay() < Duration::MAX
             || self.cursor_visible_for().is_some()
+            || self.transients_built != self.transients_drawn
             || self.toast_visible_for().is_some()
     }
 
@@ -810,6 +824,7 @@ impl AppUi {
                     update_notice::add_update_notice(ctx, &self.update_notice, face, commands);
                 }
 
+                self.transients_built.cursor = false;
                 if self.menu.visible {
                     drop_egui_focus(ctx);
                     menu::add_menu(
@@ -846,11 +861,12 @@ impl AppUi {
                         hints::add_hints(ctx, &self.hints, self.webview_rect, badges);
                     }
                 } else if cursor_visible.is_some() {
+                    self.transients_built.cursor = true;
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
                     cursor::paint_cursor(ctx, pos, self.scroll_mode, self.edge_scroll);
                 }
 
-                self.add_toast(ctx);
+                self.transients_built.toast = self.add_toast(ctx);
 
                 // Drawn last so it sits above everything; non-interactive, so it
                 // never blocks input.
@@ -899,6 +915,7 @@ impl AppUi {
         );
         let timing = window.paint(page_at, page_painted);
         self.repaint_pending = false;
+        self.transients_drawn = self.transients_built;
         timing
     }
 }
