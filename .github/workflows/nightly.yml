@@ -120,10 +120,11 @@ jobs:
           mkdir -p out
           cp art/retsurf-allium/retsurf-allium.zip out/
           cp art/retsurf-onionos/retsurf-onionos.zip out/
+          cp art/retsurf-spruceos-armhf/retsurf-spruceos-armhf.zip out/
           cp art/retsurf-macos-aarch64/*.dmg out/retsurf-macos-aarch64.dmg
           cp art/retsurf-android-arm64/*.apk out/retsurf-android-arm64.apk
           for a in retsurf-linux-x86_64 retsurf-linux-aarch64 retsurf-portmaster \
-                   retsurf-windows-x86_64; do
+                   retsurf-spruceos-aarch64 retsurf-windows-x86_64; do
             (cd "art/$a" && zip -r "../../out/$a.zip" .)
           done
           # Sidecars for the three the updater installs in place; it verifies the

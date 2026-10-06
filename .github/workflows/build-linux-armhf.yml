@@ -5,8 +5,8 @@ name: Linux ARMhf
 # cross-compiles from x86_64, so they share no runner, no cache and no wall
 # clock. Nothing here can slow the aarch64 build down.
 #
-# Three artifacts: the bare binary, and the Allium and OnionOS card layouts
-# around it — the same binary in both.
+# Four artifacts: the bare binary, and the Allium, OnionOS and spruceOS card
+# layouts around it — the same binary in all three.
 #
 # Kept in step with tools/armhf/, which builds the same thing locally; the
 # reasoning behind the toolchain choice lives in that Dockerfile.
@@ -359,9 +359,9 @@ jobs:
 
       # The same script that packages locally, minus its container: the toolchain
       # and the trust store are already on this runner, so it takes the runtime
-      # libraries the direct way (tools/armhf/runtime-libs.sh). Both card layouts
+      # libraries the direct way (tools/armhf/runtime-libs.sh). All card layouts
       # in one run, over one copy of the payload they share.
-      - name: Package for Allium and OnionOS
+      - name: Package for Allium, OnionOS and spruceOS
         env:
           RETSURF_NO_DOCKER: "1"
           RETSURF_ARM_BIN: ${{ github.workspace }}/dist/retsurf-linux-armhf
@@ -383,7 +383,14 @@ jobs:
           path: dist/retsurf-onionos.zip
           retention-days: 14
 
-      # No checksum sidecars beside these two: on armhf the in-app updater is
+      - name: Upload the spruceOS package
+        uses: actions/upload-artifact@v7
+        with:
+          name: retsurf-spruceos-armhf
+          path: dist/retsurf-spruceos-armhf.zip
+          retention-days: 14
+
+      # No checksum sidecars beside these: on armhf the in-app updater is
       # Kind::Manual (src/update), so nothing ever downloads them to verify.
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
@@ -392,3 +399,4 @@ jobs:
           files: |
             dist/retsurf-allium.zip
             dist/retsurf-onionos.zip
+            dist/retsurf-spruceos-armhf.zip

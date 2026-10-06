@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Assemble a Miyoo Mini card layout around a freshly cross-built binary.
 #
-#   tools/armhf/package-miyoo.sh [-n] [allium|onionos ...]
+#   tools/armhf/package-miyoo.sh [-n] [allium|onionos|spruceos ...]
 #
-# `-n` skips the build; naming no firmware does both. Produces dist/<firmware>/
-# (the SD-card tree) and dist/retsurf-<firmware>.zip. Only the card layout
+# `-n` skips the build; naming no firmware does all. Produces dist/<firmware>/
+# (the SD-card tree) and its zip in dist/. Only the card layout
 # differs, so the payload is collected once and copied into each.
 #
 # Three sets of files come from outside this repo, none of them ours to vendor:
@@ -14,7 +14,7 @@
 #   the toolchain     libstdc++/libgcc_s from the build image, so they match the
 #                     compiler that built the binary
 #   Debian buster     fontconfig and its two dependencies, that being the
-#                     glibc-2.28 era; neither firmware ships any of it
+#                     glibc-2.28 era; no firmware ships any of it
 #
 # Fonts come from the host's DejaVu install, which every distro packages.
 set -euo pipefail
@@ -24,11 +24,11 @@ firmwares=()
 for arg in "$@"; do
   case $arg in
     -n) build=no ;;
-    allium | onionos) firmwares+=("$arg") ;;
-    *) echo "usage: $(basename "$0") [-n] [allium|onionos ...]" >&2; exit 2 ;;
+    allium | onionos | spruceos) firmwares+=("$arg") ;;
+    *) echo "usage: $(basename "$0") [-n] [allium|onionos|spruceos ...]" >&2; exit 2 ;;
   esac
 done
-[ ${#firmwares[@]} -gt 0 ] || firmwares=(allium onionos)
+[ ${#firmwares[@]} -gt 0 ] || firmwares=(allium onionos spruceos)
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -89,6 +89,7 @@ done
 
 for fw in "${firmwares[@]}"; do
   dist=$repo/dist/$fw
+  zip_name=retsurf-$fw
   case $fw in
     # Allium scales the icon it finds, so that one is the 256px source.
     allium)
@@ -103,6 +104,15 @@ for fw in "${firmwares[@]}"; do
       app=$dist/App/Retsurf
       root=App
       icon=$src/icon.png
+      ;;
+    # Its own folder: a spruce card is shared with the aarch64 handhelds, whose
+    # package takes `App/Retsurf/`.
+    spruceos)
+      src=$pkg/spruceos/App/RetsurfMini
+      app=$dist/App/RetsurfMini
+      root=App
+      icon=$pkg/onionos/App/Retsurf/icon.png
+      zip_name=retsurf-spruceos-armhf
       ;;
   esac
 
@@ -122,7 +132,7 @@ for fw in "${firmwares[@]}"; do
     chmod 755 "$app/ports"/*/launch.sh
   fi
 
-  zip_out=$repo/dist/retsurf-$fw.zip
+  zip_out=$repo/dist/$zip_name.zip
   rm -f "$zip_out"
   if command -v zip >/dev/null 2>&1; then
     (cd "$dist" && zip -qr "$zip_out" "$root")

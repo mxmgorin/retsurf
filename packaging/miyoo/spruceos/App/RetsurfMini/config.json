@@ -1,0 +1,11 @@
+{
+  "label": "Retsurf",
+  "icon": "icon.png",
+  "launch": "launch.sh",
+  "description": "Gamepad-first web browser (Servo)",
+  "hideInSimpleMode": false,
+  "devices": [
+    "MIYOO_MINI_PLUS",
+    "MIYOO_MINI_FLIP"
+  ]
+}

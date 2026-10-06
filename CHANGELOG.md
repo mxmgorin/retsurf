@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **spruceOS packages**: `retsurf-spruceos-aarch64.zip`, the PortMaster port as an app under
+  Apps on the Miyoo Flip and spruce's other aarch64 handhelds, and
+  `retsurf-spruceos-armhf.zip` for the Miyoo Mini Plus and Mini Flip.
+
 ## [0.9.0] - 2026-09-23
 
 ### Added

@@ -16,7 +16,8 @@ source "$controlfolder/control.txt"
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 get_controls
 
-GAMEDIR=/$directory/ports/retsurf/
+# RETSURF_GAMEDIR overrides the location for installs outside ports/.
+GAMEDIR="${RETSURF_GAMEDIR:-/$directory/ports/retsurf/}"
 
 # An unrecognized part falls through to the A53 build, which runs on any ARMv8.0+
 # core. These SoCs are homogeneous, so the first core's part id speaks for all.

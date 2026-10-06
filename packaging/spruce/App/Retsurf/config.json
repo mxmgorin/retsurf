@@ -1,0 +1,18 @@
+{
+  "label": "Retsurf",
+  "icon": "icon.png",
+  "launch": "launch.sh",
+  "description": "Gamepad-first web browser (Servo)",
+  "hideInSimpleMode": false,
+  "devices": [
+    "MIYOO_FLIP",
+    "TRIMUI_BRICK",
+    "TRIMUI_BRICK_PRO",
+    "TRIMUI_SMART_PRO",
+    "TRIMUI_SMART_PRO_S",
+    "GKD_PIXEL2",
+    "ANBERNIC_RGXX",
+    "DARKMOSS",
+    "MAGICX_A133P"
+  ]
+}

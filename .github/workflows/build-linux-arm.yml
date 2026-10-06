@@ -207,11 +207,30 @@ jobs:
           done
           ls -laR "$pm"
 
+      - name: Package for spruceOS
+        run: |
+          set -eux
+          # The port as an app; launch.sh points Retsurf.sh at the gamedir beside it.
+          app=spruce-dist/App/Retsurf
+          rm -rf spruce-dist
+          mkdir -p "$app"
+          cp -r portmaster-dist/. "$app/"
+          cp packaging/spruce/App/Retsurf/config.json packaging/spruce/App/Retsurf/launch.sh "$app/"
+          cp packaging/miyoo/onionos/App/Retsurf/icon.png "$app/"
+          chmod +x "$app/launch.sh"
+
       - name: Upload PortMaster artifact
         uses: actions/upload-artifact@v7
         with:
           name: retsurf-portmaster
           path: portmaster-dist
+          retention-days: 14
+
+      - name: Upload spruceOS artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: retsurf-spruceos-aarch64
+          path: spruce-dist
           retention-days: 14
 
       - name: Zip for release
@@ -220,6 +239,7 @@ jobs:
           set -eux
           cd portmaster-dist && zip -r ../retsurf-portmaster.zip .
           cd ..
+          (cd spruce-dist && zip -r ../retsurf-spruceos-aarch64.zip .)
           # Checksum sidecar the in-app updater verifies against (src/update). Format
           # is `<hex>  <filename>`; the updater takes the first field.
           sha256sum retsurf-portmaster.zip > retsurf-portmaster.zip.sha256
@@ -231,6 +251,7 @@ jobs:
           files: |
             retsurf-portmaster.zip
             retsurf-portmaster.zip.sha256
+            retsurf-spruceos-aarch64.zip
 
   build-universal:
     # Nightly builds its own release; publishing it must not start a second build.
