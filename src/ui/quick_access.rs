@@ -26,6 +26,14 @@ const MAX_SHARE: f32 = 0.5;
 /// Opacity of the strip's fill: enough to read rows over any page.
 const STRIP_OPACITY: f32 = 0.92;
 
+/// Sets the strip off a page as dark as its fill.
+const STRIP_SHADOW: egui::Shadow = egui::Shadow {
+    offset: [0, 0],
+    blur: 24,
+    spread: 0,
+    color: egui::Color32::from_black_alpha(160),
+};
+
 /// The brand horizon's sun: a third set, and pulled toward the panel so it
 /// reads as a mark rather than a picture.
 const SUN: brand::Horizon = brand::Horizon {
@@ -44,8 +52,12 @@ pub(in crate::ui) fn add_quick_access(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
+    // A shadow rather than a line: the edges on the screen's border cast it off
+    // screen, so only the one facing the page shows.
     let frame = theme::card_frame()
         .fill(theme::PANEL_FILL.gamma_multiply(STRIP_OPACITY))
+        .stroke(egui::Stroke::NONE)
+        .shadow(STRIP_SHADOW)
         .corner_radius(0.0);
     let margin = frame.inner_margin.sum();
     let outer = STRIP_W.min(screen.width() * MAX_SHARE);
