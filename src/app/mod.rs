@@ -325,6 +325,7 @@ impl App {
             let page_painted = self.browser.paint();
             self.frame_timer.page_done(at);
 
+            let update_changed = self.ui.update.take_changed();
             let at = self.frame_timer.mark();
             self.ui
                 .update(&mut self.window, &mut self.browser, &mut commands);
@@ -348,10 +349,9 @@ impl App {
                 self.ui.request_repaint();
             }
 
-            // Collected rects arrive on a pass no input woke, so nothing else
-            // marks the frame dirty and the badges would sit unpainted until the
-            // next press.
-            if hints_changed {
+            // Hint rects and update progress arrive on a pass no input woke, so
+            // nothing else marks the frame dirty until the next press.
+            if hints_changed || update_changed {
                 self.ui.request_repaint();
             }
 

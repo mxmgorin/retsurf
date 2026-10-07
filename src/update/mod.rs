@@ -19,7 +19,7 @@ mod install;
 use crate::clock::now_unix;
 use crate::config::{Channel, UpdateConfig};
 use crate::event::user::{UserEvent, UserEventSender};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -34,7 +34,7 @@ const AUTO_CHECK_INTERVAL: u64 = 24 * 60 * 60;
 const PORTMASTER_ASSET: &str = "retsurf-portmaster.zip";
 
 /// The self-update lifecycle. Cloned out through [`Updater::snapshot`] for the UI.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum UpdateState {
     Idle,
     Checking,
@@ -61,7 +61,7 @@ pub enum UpdateState {
 }
 
 /// How the About tab offers an available update.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Offer {
     /// In-place install (PortMaster / single-binary desktop): the release asset.
     Install {
@@ -111,6 +111,8 @@ pub struct Updater {
     auto_check: bool,
     /// The running check is the startup one, whose find is announced once.
     announce: Cell<bool>,
+    /// The state as of the last [`Self::take_changed`].
+    seen: RefCell<UpdateState>,
 }
 
 impl Updater {
@@ -121,6 +123,7 @@ impl Updater {
             channel: cfg.channel,
             auto_check: cfg.auto_check,
             announce: Cell::new(false),
+            seen: RefCell::new(UpdateState::Idle),
         }
     }
 
@@ -137,6 +140,16 @@ impl Updater {
     /// Snapshot the current state for the UI (lock, clone the small enum, release).
     pub fn snapshot(&self) -> UpdateState {
         self.state.lock().unwrap().clone()
+    }
+
+    /// Whether the state moved since the last call.
+    pub fn take_changed(&self) -> bool {
+        let now = self.snapshot();
+        let changed = *self.seen.borrow() != now;
+        if changed {
+            *self.seen.borrow_mut() = now;
+        }
+        changed
     }
 
     /// Query GitHub for the latest release on a background thread. Works on every
