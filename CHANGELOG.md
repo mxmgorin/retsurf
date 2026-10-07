@@ -13,6 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Apps on the Miyoo Flip and spruce's other aarch64 handhelds, and
   `retsurf-spruceos-armhf.zip` for the Miyoo Mini Plus and Mini Flip.
 
+### Changed
+
+- **Swap tuning moved from the PortMaster launcher into the browser**, as
+  `[performance] swap_tuning` (also in Settings, and `swap-tuning.on` still
+  works). A guard process reverts the changes however the browser ends, an OOM
+  kill included. It is milder too: the zram it adds is a quarter of RAM instead
+  of two thirds, and swappiness is left alone on boards up to 1 GB, where the
+  larger device froze the board under memory pressure instead of letting the
+  browser be killed.
+
+### Fixed
+
+- **Fonts on firmwares that ship fontconfig without a config** (spruceOS): the
+  PortMaster launcher now writes its own whenever `/etc/fonts/fonts.conf` is
+  missing.
+
 ## [0.9.0] - 2026-09-23
 
 ### Added

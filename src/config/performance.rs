@@ -26,6 +26,10 @@ pub struct PerformanceConfig {
     /// a Miyoo Flip). Needs a writable `scaling_governor`, so root in practice;
     /// without one it is skipped with a log line. Applies live.
     pub cpu_boost_on_load: bool,
+    /// On boards up to 1.5 GB, add a zram device and tune the swap sysctls while
+    /// the browser runs (Linux, needs root). A guard process reverts them however
+    /// the browser ends. `RETSURF_SWAP_TUNING` overrides. Applies at startup.
+    pub swap_tuning: bool,
     /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
     /// A spill store, not a second level: it takes what the in-memory cache
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
@@ -43,6 +47,7 @@ impl Default for PerformanceConfig {
             layout_threads: 0,
             worker_pool_max: 0,
             cpu_boost_on_load: false,
+            swap_tuning: false,
             http_disk_cache_mb: 0,
             max_fps: 30,
         }

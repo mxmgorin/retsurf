@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <!--
-  Used only where the firmware ships no fontconfig, so there is no /etc/fonts and
+  Used only where the firmware ships no /etc/fonts/fonts.conf, so there are
   none of the alias rules a desktop keeps in conf.d: the families pages ask for
   are written out below. System directories come first — a device that has fonts
   keeps its own — and the port's copies are the fallback under them.

@@ -143,6 +143,9 @@ brotli = "8"
 
 # Android: SDL loads our cdylib and calls the C `SDL_main` we export. Logs go to
 # logcat via android_logger since there is no stderr to mirror to a file.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 

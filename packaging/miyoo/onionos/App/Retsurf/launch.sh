@@ -7,11 +7,11 @@ cd "$gamedir" || exit 1
 
 mkdir -p "$gamedir/data" "$gamedir/downloads"
 
-# `data/` is the user's, so the shipped defaults are installed, never over.
+# Shipped defaults never overwrite the user's.
 [ -f "$gamedir/data/config.toml" ] || cp "$gamedir/etc/config.toml" "$gamedir/data/config.toml"
 
-# Ours first: no upstream SDL2 reaches the SigmaStar panel. `fallback` goes last
-# and is unused on an Onion card, which has what it stubs (lib/README.md).
+# Ours first: no upstream SDL2 reaches the SigmaStar panel. `fallback` last:
+# stubs an Onion card does not need (lib/README.md).
 export LD_LIBRARY_PATH="$gamedir/lib:$sysdir/lib/parasyte:$sysdir/lib:$miyoodir/lib:/lib:/config/lib:/customer/lib:$gamedir/lib/fallback"
 export LD_PRELOAD="$gamedir/lib/libSDL2-2.0.so.0"
 export SDL_VIDEODRIVER=Mini
@@ -30,15 +30,14 @@ export RETSURF_PANIC_FILE="$gamedir/retsurf-panic.log"
 export RETSURF_SOFTWARE=1 # no GPU on the SSD202
 # The pad arrives as keys, and detection expects the driver name `mmiyoo`.
 export RETSURF_KEYMAP=miyoo
-# MENU is the app's, not `pressMenu2Kill`'s: this one has a session to write.
+# MENU is the app's: `pressMenu2Kill` is a SIGKILL, and quitting writes the session.
 export RETSURF_MENU_QUIT=1
 #export RETSURF_LOG_LEVEL=debug
 
 # Servo panics when the platform store holds no CA bundle, which is every Miyoo.
 export SSL_CERT_FILE="$gamedir/etc/ssl/cacert.pem"
 
-# Onion ships no fontconfig. The install path is only known here, so it is baked
-# in when the template is newer or the card has moved since.
+# Onion ships no fontconfig; the template is rebaked when it or the path changes.
 fonts_in="$gamedir/etc/fonts/fonts.conf.in"
 fonts_conf="$gamedir/data/fonts.conf"
 if [ ! -s "$fonts_conf" ] || [ "$fonts_in" -nt "$fonts_conf" ] ||
@@ -48,24 +47,21 @@ fi
 export FONTCONFIG_FILE="$fonts_conf"
 
 # A clock behind a certificate's `notBefore` fails every https page, and the Mini
-# Plus has no RTC; Onion's own sync can land later than the first handshake.
+# Plus has no RTC.
 NTP_PEER=pool.ntp.org
 clock=ok
 if [ "${RETSURF_CLOCK_FIX:-1}" != 0 ]; then
   floor=0
   # keymon rewrites system.json on any volume or brightness change, so it tracks
-  # when the device was last used rather than when the browser last ran.
+  # the device's last use.
   for f in /appconfigs/system.json /mnt/SDCARD/Saves/CurrentProfile \
            "$gamedir/log.txt" "$gamedir/data/session.toml" "$gamedir/retsurf"; do
     t=$(date -r "$f" +%s 2>/dev/null) || continue
     [ "$t" -gt "$floor" ] && floor=$t
   done
-  # Only when the clock is behind something known to have happened, so a right
-  # one costs nothing.
   if [ "$(date +%s)" -lt "$floor" ]; then
     date -s "@$floor" >/dev/null 2>&1 && clock=floor
-    # No TLS here, so it works from the wrong year; backgrounded because the wifi
-    # may not have associated yet.
+    # No TLS, so it works from the wrong year; backgrounded while wifi associates.
     (
       timeout -t 20 ntpd -q -n -p "$NTP_PEER" >/dev/null 2>&1 &&
         echo "retsurf: clock = ntp ($(date -u))" >> "$gamedir/log.txt"
@@ -74,8 +70,7 @@ if [ "${RETSURF_CLOCK_FIX:-1}" != 0 ]; then
   fi
 fi
 
-# 128 MB against a working set of hundreds: with nowhere to page anonymous
-# memory the kernel kills the browser instead of swapping it.
+# 128 MB of RAM against a working set of hundreds: without swap it gets killed.
 ZRAM_MB=96
 SWAPFILE_MB=512
 
@@ -98,8 +93,7 @@ if [ "$swap_ready" = no ]; then
   fi
 fi
 
-# vfat implements `bmap`, so a file on the card is swapped on directly — no loop
-# device, which this kernel has not got either. The `dd` is ~40 s, once.
+# vfat has `bmap`, so a card file swaps with no loop device. The `dd` is ~40 s, once.
 if [ "$swap_ready" = no ]; then
   [ -s "$swapfile" ] || dd if=/dev/zero of="$swapfile" bs=1M count="$SWAPFILE_MB" 2>/dev/null
   mkswap "$swapfile" >/dev/null 2>&1 && swapon "$swapfile" 2>/dev/null && swap_ready=file
@@ -118,8 +112,7 @@ release_swap() {
   free 2>/dev/null || head -3 /proc/meminfo
 } > "$gamedir/log.txt" 2>&1
 
-# Not `exec`: the shell stays to release the swap and to pass SIGTERM on, which
-# is the browser's clean shutdown — cookies and the open tabs are written on it.
+# Not `exec`: the shell releases the swap and forwards SIGTERM, the clean shutdown.
 ./retsurf >> "$gamedir/log.txt" 2>&1 &
 app=$!
 trap 'kill -TERM "$app" 2>/dev/null' TERM INT HUP

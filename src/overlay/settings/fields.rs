@@ -471,6 +471,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::System,   "Performance", "Layout threads (0=auto)", int!(performance.layout_threads as u32, bounds::LAYOUT_THREADS, 1), true),
     f(S::System,   "Performance", "Worker pool max (0=auto)", int!(performance.worker_pool_max as u32, bounds::WORKER_POOL_MAX, 1), true),
     f(S::System,   "Performance", "CPU boost on load",       flag!(performance.cpu_boost_on_load), false),
+    f(S::System,   "Performance", "Swap tuning",             flag!(performance.swap_tuning), true),
     f(S::System,   "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::System,   "Performance", "Frame cap (fps)",        int!(performance.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
     f(S::System,   "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),

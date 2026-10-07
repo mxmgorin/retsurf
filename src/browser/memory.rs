@@ -106,7 +106,7 @@ fn suggest(ram_mb: u64) -> MemoryProfile {
 /// Total system RAM in MB, read from `/proc/meminfo` (Linux/Android). Desktop
 /// Windows/macOS never reach the size decision (their tier is chosen by
 /// `target_os` in [`for_target`]), so a parse miss just yields a mid-range guess.
-fn detect_ram_mb() -> u64 {
+pub(crate) fn detect_ram_mb() -> u64 {
     const FALLBACK_MB: u64 = 2048;
     let Ok(text) = std::fs::read_to_string("/proc/meminfo") else {
         return FALLBACK_MB;

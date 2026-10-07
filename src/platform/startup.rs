@@ -13,6 +13,9 @@ pub fn prepare(config: &mut AppConfig) {
     if let Some(software) = config::env_flag("RETSURF_SOFTWARE") {
         config.display.software_render = software;
     }
+    if let Some(swap_tuning) = config::env_flag("RETSURF_SWAP_TUNING") {
+        config.performance.swap_tuning = swap_tuning;
+    }
     // A launcher's way to try a frame cap without editing the config — and the
     // way to compare two of them in one sitting.
     if let Some(fps) = std::env::var("RETSURF_MAX_FPS")

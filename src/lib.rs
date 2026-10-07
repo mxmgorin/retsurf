@@ -32,6 +32,10 @@ const BUILD_ID: &str = concat!(
 /// Shared startup for the desktop and Android entry points. Everything
 /// platform-specific is `cfg`-gated here.
 pub fn run_app() {
+    // The guard is this binary under a hidden flag, and must not become a browser.
+    #[cfg(all(target_os = "linux", not(target_os = "android")))]
+    platform::swap_guard::run_if_guard();
+
     // Before anything else can panic: the handheld launcher discards stderr, so
     // a bare panic leaves no trace beyond exit code 101.
     install_panic_hook();
@@ -45,6 +49,8 @@ pub fn run_app() {
         .expect("Error initializing crypto provider");
     let mut app_config = config::AppConfig::load();
     platform::startup::prepare(&mut app_config);
+    #[cfg(all(target_os = "linux", not(target_os = "android")))]
+    platform::swap_guard::start(app_config.performance.swap_tuning, &config::data_dir());
 
     // Before SDL and Servo allocate anything: the knobs only bind what comes after.
     platform::heap::tune(browser::memory::resolve(
