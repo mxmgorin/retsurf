@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# For the updater, which replaces this file; resolved before any `cd`.
+export RETSURF_LAUNCHER="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
 XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 
 if [ -d "/opt/system/Tools/PortMaster/" ]; then

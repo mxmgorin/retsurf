@@ -281,18 +281,20 @@ fn resolve_kind() -> Kind {
 }
 
 /// PortMaster gate, returning `(gamedir, launcher)`: Linux, `RETSURF_DATA_DIR`
-/// set, and a sibling `Retsurf.sh`. The last part is what tells a real port from
-/// a desktop user with a portable profile.
+/// set, and a launcher on disk, which tells a real port from a portable profile.
 fn portmaster_paths() -> Option<(PathBuf, PathBuf)> {
     if !cfg!(target_os = "linux") {
         return None;
     }
     std::env::var_os("RETSURF_DATA_DIR")?;
-    // The launcher execs an absolute `$GAMEDIR/retsurf.a53`, so the exe's parent is
-    // the gamedir and its parent holds Retsurf.sh.
+    // Exec'd by absolute path from the gamedir.
     let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
     let gamedir = exe.parent()?.to_path_buf();
-    let launcher = gamedir.parent()?.join("Retsurf.sh");
+    // Some firmwares keep scripts apart from gamedirs; PortMaster puts it beside one.
+    let launcher = match std::env::var_os("RETSURF_LAUNCHER") {
+        Some(path) => PathBuf::from(path),
+        None => gamedir.parent()?.join("Retsurf.sh"),
+    };
     launcher.is_file().then_some((gamedir, launcher))
 }
 

@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PortMaster launcher now writes its own whenever `/etc/fonts/fonts.conf` is
   missing.
 
+- **In-app update on firmwares that keep port scripts apart from their files**
+  (CrossMix-OS): the launcher now tells the updater where it is. Without that the
+  updater missed it and swapped in the generic aarch64 binary instead.
+
 ## [0.9.0] - 2026-09-23
 
 ### Added
