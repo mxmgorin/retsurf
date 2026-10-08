@@ -4,6 +4,7 @@
 //! [`router`].
 
 mod execute;
+mod memory_guard;
 mod router;
 
 use crate::command::{
@@ -51,6 +52,10 @@ pub struct App {
     last_memory_report: Instant,
     /// When to hand the allocator's free memory back (see [`HEAP_TRIM_DELAY`]).
     heap_trim_at: Option<Instant>,
+    /// `None` where system memory cannot be read.
+    memory_guard: Option<crate::platform::memory_guard::MemoryGuard>,
+    /// When a trip requested the report naming the tab to close.
+    memory_guard_asked: Option<Instant>,
     /// Last time the report was written to the log (see [`MEMORY_LOG_INTERVAL`]).
     last_memory_log: Instant,
     /// Paint timing for `[debug] frame_timing`; inert unless that is on.
@@ -144,6 +149,10 @@ impl App {
         let thread_cpu = crate::platform::thread_cpu::ThreadCpu::new(config.debug.thread_cpu);
         let cpu_boost =
             crate::platform::cpufreq::LoadBoost::new(config.performance.cpu_boost_on_load);
+        let memory_guard = crate::platform::memory_guard::MemoryGuard::start(
+            event_sender.clone(),
+            config.performance.memory_guard_floor_mb,
+        );
         Ok(Self {
             config,
             window,
@@ -161,6 +170,8 @@ impl App {
             last_memory_report: Instant::now(),
             last_memory_log: Instant::now(),
             heap_trim_at: None,
+            memory_guard,
+            memory_guard_asked: None,
             frame_timer,
             thread_cpu,
             cpu_boost,
@@ -232,6 +243,8 @@ impl App {
                 self.save_session();
                 self.last_flush = Instant::now();
             }
+
+            self.poll_memory_guard();
 
             // Ask Servo for a report on a throttle, and adopt the latest one to
             // have arrived — it comes back async, a frame or two later.

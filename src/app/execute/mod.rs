@@ -120,7 +120,7 @@ impl App {
 
     /// Close the tab at `index`, resync the menu's row count, and reclaim what
     /// the torn-down document frees.
-    fn close_tab_at(&mut self, index: usize) {
+    pub(super) fn close_tab_at(&mut self, index: usize) {
         self.browser
             .close_tab(index, &self.config.browser.home_page);
         self.ui.menu.set_tab_count(self.browser.tab_count());

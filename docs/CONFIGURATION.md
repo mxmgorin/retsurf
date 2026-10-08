@@ -93,6 +93,8 @@ layouts = ["en", "ru"]     # cycled by the Lang key
 memory_profile = "auto"
 cpu_boost_on_load = false  # full CPU speed while a page loads (needs root)
 swap_tuning = false        # zram + swap sysctls on boards up to 1.5 GB (Linux, root); restart
+memory_guard = true        # close the heaviest tab when the system runs out of memory (Linux)
+memory_guard_floor_mb = 0  # free RAM + swap that trips it, 0 = a fifth of RAM (max 512); restart
 layout_threads = 0         # 0 = the memory profile's choice
 worker_pool_max = 0        # 0 = the memory profile's choice
 http_disk_cache_mb = 0     # keep cached pages on disk across restarts, 0 = off; restart

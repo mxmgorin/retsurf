@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A CrossMix-OS package**, `retsurf-crossmix.zip`: the PortMaster port as an
   app under Apps on the TrimUI Smart Pro.
 
+- **Memory guard**, `[performance] memory_guard` (on by default, also in
+  Settings): when the system runs out of memory, or starts thrashing its swap,
+  the tab holding the most memory is closed with a notice, instead of the
+  device freezing or the browser being killed. The closed page is dropped from
+  the saved session, so the next start does not reopen it.
+
 - **A NextUI and NX Redux package**, `retsurf-nextui.zip`: a pak under Tools on
   the TrimUI Smart Pro, Smart Pro S and Brick, with no PortMaster needed.
 

@@ -30,6 +30,12 @@ pub struct PerformanceConfig {
     /// the browser runs (Linux, needs root). A guard process reverts them however
     /// the browser ends. `RETSURF_SWAP_TUNING` overrides. Applies at startup.
     pub swap_tuning: bool,
+    /// Close the heaviest tab when the system runs out of memory (Linux).
+    /// `RETSURF_MEMORY_GUARD` overrides. Applies live.
+    pub memory_guard: bool,
+    /// RAM plus free swap, in MB, under which the guard trips; `0` (the default)
+    /// is a fifth of RAM, at most 512 MB. Applies at startup.
+    pub memory_guard_floor_mb: u32,
     /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
     /// A spill store, not a second level: it takes what the in-memory cache
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
@@ -48,6 +54,8 @@ impl Default for PerformanceConfig {
             worker_pool_max: 0,
             cpu_boost_on_load: false,
             swap_tuning: false,
+            memory_guard: true,
+            memory_guard_floor_mb: 0,
             http_disk_cache_mb: 0,
             max_fps: 30,
         }

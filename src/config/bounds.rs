@@ -107,3 +107,4 @@ pub const LAYOUT_THREADS: IntBounds = IntBounds { min: 0, max: 8 };
 pub const WORKER_POOL_MAX: IntBounds = IntBounds { min: 0, max: 16 };
 /// Ceiling is deliberately modest: the store lives on the same card as the games.
 pub const HTTP_DISK_CACHE_MB: IntBounds = IntBounds { min: 0, max: 512 };
+pub const MEMORY_GUARD_FLOOR_MB: IntBounds = IntBounds { min: 0, max: 4096 };
