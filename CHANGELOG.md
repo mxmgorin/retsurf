@@ -7,43 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-08
+
 ### Added
 
-- **spruceOS packages**: `retsurf-spruceos-aarch64.zip`, the PortMaster port as an app under
-  Apps on the Miyoo Flip and spruce's other aarch64 handhelds, and
-  `retsurf-spruceos-armhf.zip` for the Miyoo Mini Plus and Mini Flip.
-
-- **A CrossMix-OS package**, `retsurf-crossmix.zip`: the PortMaster port as an
-  app under Apps on the TrimUI Smart Pro.
-
-- **Memory guard**, `[performance] memory_guard` (on by default, also in
-  Settings): when the system runs out of memory, or starts thrashing its swap,
-  the tab holding the most memory is closed with a notice, instead of the
-  device freezing or the browser being killed. The closed page is dropped from
-  the saved session, so the next start does not reopen it.
-
-- **A NextUI and NX Redux package**, `retsurf-nextui.zip`: a pak under Tools on
-  the TrimUI Smart Pro, Smart Pro S and Brick, with no PortMaster needed.
+- Game scaling in Game Mode: fit, integer or stretch (`[game_mode.view] scaling`)
+- Game Mode shaders: RetroArch single-pass GLSL, ten built in, user files in `shaders/` (`[game_mode.view] shader`)
+- Quick Access panel on `start`: Game Mode, bookmark, user agent, ad blocker, reader view, page theme, settings
+- Wheel on-screen keyboard (`[osk] style = "wheel"`)
+- Pad layout labels and face-button swap (`[controls] pad_layout`, `swap_face_buttons`)
+- Edge scrolling: the cursor at a window edge scrolls the page (`[controls] edge_scroll`)
+- Page icons in tabs, bookmarks, history and the speed dial (`[interface] page_icons`)
+- Start page styles (`[interface] home_style`)
+- `retsurf [--game-mode] [PATH]` opens a local game folder or HTML file
+- Update notice at startup
+- Toast notices, e.g. when a tab is closed at `max_tabs`
+- `hold:x` focuses the address bar; reload button in the address field
+- Android: share logs from Settings > System
+- Splash screen, branded cursor, Junk Surfer on the offline page
+- Memory guard: closes the heaviest tab when the system runs out of memory (`[performance] memory_guard`)
+- spruceOS, CrossMix-OS, NextUI and NX Redux packages
 
 ### Changed
 
-- **Swap tuning moved from the PortMaster launcher into the browser**, as
-  `[performance] swap_tuning` (also in Settings, and `swap-tuning.on` still
-  works). A guard process reverts the changes however the browser ends, an OOM
-  kill included. It is milder too: the zram it adds is a quarter of RAM instead
-  of two thirds, and swappiness is left alone on boards up to 1 GB, where the
-  larger device froze the board under memory pressure instead of letting the
-  browser be killed.
+- Config sections renamed, old values reset to defaults: `[input]` is `[controls]`; `scale`, `toolbar_*`, `cursor_linger_ms` moved to `[interface]`, `max_fps` to `[performance]`
+- Settings regrouped into Interface, Controls, Gaming and System tabs, with switches
+- The Game Mode menu replaced by Quick Access and Settings > Gaming
+- Default pad gestures: `start` Quick Access, `select` Quick Menu, `hold:x` address bar, `scroll` unbound; Settings pressed again closes it
+- Default keyboard shortcuts moved onto Ctrl
+- Taller toolbar
+- Swap tuning moved from the launcher into the app (`[performance] swap_tuning`), milder
+- CSS Grid always on, `[experimental] grid` removed
+- Engine on Servo `main` as of 2026-10-08, with WebGL 2 fixes for Unity and Emscripten games
 
 ### Fixed
 
-- **Fonts on firmwares that ship fontconfig without a config** (spruceOS): the
-  PortMaster launcher now writes its own whenever `/etc/fonts/fonts.conf` is
-  missing.
-
-- **In-app update on firmwares that keep port scripts apart from their files**
-  (CrossMix-OS): the launcher now tells the updater where it is. Without that the
-  updater missed it and swapped in the generic aarch64 binary instead.
+- "Too many open audio devices" on pages with many sounds
+- WebGL on PowerVR (TrimUI Smart Pro)
+- A panic in canvas `measureText` with no fonts on the system
+- Android: connections through the system proxy
+- Pages listening for `gamepadconnected` late never saw the pad; phantom pads after reader view
+- Emscripten games stalling on IDBIndex cursors and WebAssembly streaming
+- Android: page taps, WebGL after resume, system keyboard under the OSK
+- On-screen keyboard: page lift, trigger zoom, pointer clicks
+- Cursor and toasts stayed on screen after expiring
+- `Ctrl+=`/`Ctrl+-` zoom the page
+- Update download progress not redrawn
+- Fonts on firmware with fontconfig but no config (spruceOS)
+- In-app update on CrossMix-OS installed the generic binary
 
 ## [0.9.0] - 2026-09-23
 
@@ -130,11 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   either order resets), which frees `hold:l1` for home and `hold:r1` for reload;
   tabs went onto chords — `select+l1` / `select+r1` step them, `start+l1` closes
   one and `start+r1` opens one, through a new `close_tab` action. `hold:start`
-  opens the Game Mode menu, `start` opens the menu and `select` opens settings;
-  `scroll` has no default gesture, since pushing the cursor against an edge now
-  scrolls, and `r3`, `hold:b`, `hold:select`, `select+y` and `select+start` are
-  free. Settings pressed again while open closes it rather than quitting, so the
-  pad has no quit gesture by default; bind `quit` for one. A `bindings.toml` written
+  opens the Game Mode menu, Settings keeps `hold:select` to itself, and `r3`,
+  `hold:b`, `select+y` and `select+start` are free. A `bindings.toml` written
   before this release keeps every gesture it spells; the new actions still arrive
   bound, since an action with nothing on a device gets its defaults back at
   startup. The game keeps the button the gesture sits on: a hold and a chord are
@@ -893,6 +901,7 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
+[0.10.0]: https://github.com/mxmgorin/retsurf/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mxmgorin/retsurf/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mxmgorin/retsurf/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mxmgorin/retsurf/compare/v0.6.0...v0.7.0
