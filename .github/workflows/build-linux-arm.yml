@@ -231,6 +231,20 @@ jobs:
             packaging/crossmix/Apps/Retsurf/icon.png "$app/"
           chmod +x "$app/launch.sh"
 
+      - name: Package for NextUI and NX Redux
+        run: |
+          set -eux
+          # The gamedir is the tg5040 pak; the tg5050 one hands over to it.
+          rm -rf nextui-dist
+          mkdir -p nextui-dist/Tools
+          cp -r packaging/nextui/Tools/. nextui-dist/Tools/
+          cp -r portmaster-dist/retsurf/. nextui-dist/Tools/tg5040/Retsurf.pak/
+          # No TrimUI board has an A35.
+          rm nextui-dist/Tools/tg5040/Retsurf.pak/retsurf.a35
+          mkdir -p nextui-dist/Tools/tg5040/Retsurf.pak/etc/ssl
+          cp /etc/ssl/certs/ca-certificates.crt nextui-dist/Tools/tg5040/Retsurf.pak/etc/ssl/cacert.pem
+          chmod +x nextui-dist/Tools/*/Retsurf.pak/launch.sh
+
       - name: Upload PortMaster artifact
         uses: actions/upload-artifact@v7
         with:
@@ -252,6 +266,13 @@ jobs:
           path: crossmix-dist
           retention-days: 14
 
+      - name: Upload NextUI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: retsurf-nextui
+          path: nextui-dist
+          retention-days: 14
+
       - name: Zip for release
         if: github.event_name == 'release'
         run: |
@@ -260,6 +281,7 @@ jobs:
           cd ..
           (cd spruce-dist && zip -r ../retsurf-spruceos-aarch64.zip .)
           (cd crossmix-dist && zip -r ../retsurf-crossmix.zip .)
+          (cd nextui-dist && zip -r ../retsurf-nextui.zip .)
           # Checksum sidecar the in-app updater verifies against (src/update). Format
           # is `<hex>  <filename>`; the updater takes the first field.
           sha256sum retsurf-portmaster.zip > retsurf-portmaster.zip.sha256
@@ -273,6 +295,7 @@ jobs:
             retsurf-portmaster.zip.sha256
             retsurf-spruceos-aarch64.zip
             retsurf-crossmix.zip
+            retsurf-nextui.zip
 
   build-universal:
     # Nightly builds its own release; publishing it must not start a second build.

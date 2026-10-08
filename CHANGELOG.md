@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A CrossMix-OS package**, `retsurf-crossmix.zip`: the PortMaster port as an
   app under Apps on the TrimUI Smart Pro.
 
+- **A NextUI and NX Redux package**, `retsurf-nextui.zip`: a pak under Tools on
+  the TrimUI Smart Pro, Smart Pro S and Brick, with no PortMaster needed.
+
 ### Changed
 
 - **Swap tuning moved from the PortMaster launcher into the browser**, as

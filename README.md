@@ -19,7 +19,7 @@
 
 retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops. It has gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
 
-**[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, or CrossMix-OS, and on Android, Linux, Windows, or macOS.
+**[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, CrossMix-OS, NextUI, or NX Redux, and on Android, Linux, Windows, or macOS.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -95,6 +95,7 @@ the same file names under the rolling
 | [OnionOS](https://onionui.github.io/) | [`retsurf-onionos.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-onionos.zip) | `App/Retsurf/` on the SD card |
 | [Allium](https://github.com/goweiwen/Allium) | [`retsurf-allium.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-allium.zip) | `Apps/Retsurf.pak/` on the SD card |
 | [spruceOS](https://github.com/spruceUI/spruceOS) | [`retsurf-spruceos-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-aarch64.zip), [`retsurf-spruceos-armhf.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-armhf.zip) (Miyoo Mini) | root of the SD card |
+| [NextUI](https://github.com/LoveRetro/NextUI), [NX Redux](https://github.com/mohammadsyuhada/nx-redux) | [`retsurf-nextui.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-nextui.zip) | root of the SD card, lands in `Tools/` |
 | [CrossMix-OS](https://github.com/cizia64/CrossMix-OS) | [`retsurf-crossmix.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-crossmix.zip) | root of the SD card |
 | Android | [`retsurf-android-arm64.apk`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-android-arm64.apk) | sideload it |
 | Linux | [`retsurf-linux-x86_64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-x86_64.zip), [`retsurf-linux-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-aarch64.zip) | unpack and run |
