@@ -407,7 +407,6 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "WebGL 2",               flag!(experimental.webgl2), false),
     f(S::Browser,  "Experimental", "WebGPU",                flag!(experimental.webgpu), false),
     f(S::Browser,  "Experimental", "OffscreenCanvas",       flag!(experimental.offscreen_canvas), false),
-    f(S::Browser,  "Experimental", "CSS Grid",              flag!(experimental.grid), false),
     f(S::Browser,  "Experimental", "CSS columns",           flag!(experimental.columns), false),
     f(S::Browser,  "Experimental", "Container queries",     flag!(experimental.container_queries), false),
     f(S::Browser,  "Experimental", "Web fonts",              flag!(experimental.fontface), false),

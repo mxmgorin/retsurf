@@ -205,7 +205,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// Dropping the load means "do not intercept".
     fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
         let req = load.request();
-        let url = req.url.clone();
+        let url = req.url.as_url().clone();
 
         // Ahead of adblock and the image cap.
         if let Some(site) = self.local_site.as_ref().filter(|site| site.owns(&url)) {
@@ -249,7 +249,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
                 if let Some(cap) = filter.image_cap() {
                     if !self.tabs.borrow()[i].page_images.borrow_mut().allow(
                         &url,
-                        req.referrer_url.as_ref(),
+                        req.referrer_url.as_ref().map(servo::ServoUrl::as_url),
                         cap,
                     ) {
                         log::debug!("image cap: blocked {url}");

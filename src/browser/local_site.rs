@@ -121,7 +121,7 @@ impl LocalServer {
             let Some(load) = self.waiting.borrow_mut().remove(&id) else {
                 continue;
             };
-            let url = load.request().url.clone();
+            let url = load.request().url.as_url().clone();
             let response = servo::WebResourceResponse::new(url)
                 .status_code(reply.status)
                 .headers(reply.headers);

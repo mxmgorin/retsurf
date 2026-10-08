@@ -42,7 +42,6 @@ page_theme = "light"
 # Web features Servo ships off. The settings overlay's "Web features" row sets them as a
 # preset: off, minimal, balanced (the default) or full. On 1 GB devices prefer minimal.
 # Applies on the next page load.
-grid = true                   # CSS Grid                         minimal
 columns = true                # CSS multi-column                 minimal
 container_queries = true      # CSS @container                   minimal
 fontface = true               # web fonts                        minimal

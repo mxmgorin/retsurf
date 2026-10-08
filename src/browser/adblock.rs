@@ -85,7 +85,7 @@ impl Adblock {
         let source = request
             .referrer_url
             .as_ref()
-            .map(url::Url::as_str)
+            .map(servo::ServoUrl::as_str)
             .unwrap_or(url);
         let Ok(req) = Request::new(
             url,

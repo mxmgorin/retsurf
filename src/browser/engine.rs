@@ -179,14 +179,13 @@ fn resolve_user_agent(value: &str) -> Option<String> {
 
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
-fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
+fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 13] {
     // Destructured without `..` so a new feature fails to compile here rather
     // than shipping unapplied.
     let ExperimentalConfig {
         webgl2,
         webgpu,
         offscreen_canvas,
-        grid,
         columns,
         container_queries,
         fontface,
@@ -202,7 +201,6 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         ("dom_webgl2_enabled", *webgl2),
         ("dom_webgpu_enabled", *webgpu),
         ("dom_offscreen_canvas_enabled", *offscreen_canvas),
-        ("layout_grid_enabled", *grid),
         ("layout_columns_enabled", *columns),
         ("layout_container_queries_enabled", *container_queries),
         ("dom_fontface_enabled", *fontface),

@@ -12,8 +12,6 @@ pub struct ExperimentalConfig {
     pub webgpu: bool,
     /// OffscreenCanvas (`dom_offscreen_canvas_enabled`) — canvas off the main thread.
     pub offscreen_canvas: bool,
-    /// CSS Grid (`layout_grid_enabled`) — `display: grid`.
-    pub grid: bool,
     /// CSS multi-column (`layout_columns_enabled`).
     pub columns: bool,
     /// CSS container queries (`layout_container_queries_enabled`).
@@ -53,7 +51,7 @@ impl Default for ExperimentalConfig {
 pub enum ExperimentalPreset {
     /// All features off — most stable, but breaks most modern sites.
     Off,
-    /// Layout + compatibility essentials only (Grid, columns, container queries,
+    /// Layout + compatibility essentials only (columns, container queries,
     /// web fonts, Intersection/ResizeObserver, IndexedDB, navigator.storage);
     /// graphics and niche DOM APIs off.
     Minimal,
@@ -111,7 +109,6 @@ impl ExperimentalPreset {
             webgl2: on,
             webgpu: on,
             offscreen_canvas: on,
-            grid: on,
             columns: on,
             container_queries: on,
             fontface: on,
@@ -128,7 +125,6 @@ impl ExperimentalPreset {
             ExperimentalPreset::Off => uniform(false),
             // Layout + compat essentials; graphics + niche DOM APIs off.
             ExperimentalPreset::Minimal => ExperimentalConfig {
-                grid: true,
                 columns: true,
                 container_queries: true,
                 fontface: true,
@@ -166,7 +162,7 @@ mod tests {
     #[test]
     fn default_is_balanced() {
         let c = ExperimentalConfig::default();
-        assert!(c.grid && c.fontface && c.intersection_observer);
+        assert!(c.columns && c.fontface && c.intersection_observer);
         assert!(c.indexeddb && c.storage_manager);
         assert!(c.webgl2 && c.offscreen_canvas);
         assert!(!c.webgpu && !c.notification && !c.permissions && !c.async_clipboard);
@@ -187,7 +183,7 @@ mod tests {
     #[test]
     fn hand_toggle_is_custom() {
         let mut c = ExperimentalPreset::Full.features();
-        c.grid = false;
+        c.columns = false;
         assert_eq!(ExperimentalPreset::detect(&c), ExperimentalPreset::Custom);
     }
 
