@@ -1,0 +1,7 @@
+{
+  "label": "Retsurf",
+  "icon": "icon.png",
+  "iconsel": "icon.png",
+  "launch": "launch.sh",
+  "description": "Gamepad-first web browser (Servo)"
+}

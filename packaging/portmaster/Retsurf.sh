@@ -74,7 +74,8 @@ fi
 
 export HOME="$GAMEDIR"
 export XDG_DATA_HOME="$GAMEDIR"
-export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+# A launcher that knows its pad better than PortMaster names the mapping itself.
+export SDL_GAMECONTROLLERCONFIG="${RETSURF_GAMECONTROLLERCONFIG:-$sdl_controllerconfig}"
 
 export RETSURF_DATA_DIR="$GAMEDIR/data"
 export RETSURF_DOWNLOAD_DIR="$GAMEDIR/downloads"

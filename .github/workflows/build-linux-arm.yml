@@ -219,6 +219,18 @@ jobs:
           cp packaging/miyoo/onionos/App/Retsurf/icon.png "$app/"
           chmod +x "$app/launch.sh"
 
+      - name: Package for CrossMix-OS
+        run: |
+          set -eux
+          # The port as an app; launch.sh points Retsurf.sh at the gamedir beside it.
+          app=crossmix-dist/Apps/Retsurf
+          rm -rf crossmix-dist
+          mkdir -p "$app"
+          cp -r portmaster-dist/. "$app/"
+          cp packaging/crossmix/Apps/Retsurf/config.json packaging/crossmix/Apps/Retsurf/launch.sh \
+            packaging/crossmix/Apps/Retsurf/icon.png "$app/"
+          chmod +x "$app/launch.sh"
+
       - name: Upload PortMaster artifact
         uses: actions/upload-artifact@v7
         with:
@@ -233,6 +245,13 @@ jobs:
           path: spruce-dist
           retention-days: 14
 
+      - name: Upload CrossMix-OS artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: retsurf-crossmix
+          path: crossmix-dist
+          retention-days: 14
+
       - name: Zip for release
         if: github.event_name == 'release'
         run: |
@@ -240,6 +259,7 @@ jobs:
           cd portmaster-dist && zip -r ../retsurf-portmaster.zip .
           cd ..
           (cd spruce-dist && zip -r ../retsurf-spruceos-aarch64.zip .)
+          (cd crossmix-dist && zip -r ../retsurf-crossmix.zip .)
           # Checksum sidecar the in-app updater verifies against (src/update). Format
           # is `<hex>  <filename>`; the updater takes the first field.
           sha256sum retsurf-portmaster.zip > retsurf-portmaster.zip.sha256
@@ -252,6 +272,7 @@ jobs:
             retsurf-portmaster.zip
             retsurf-portmaster.zip.sha256
             retsurf-spruceos-aarch64.zip
+            retsurf-crossmix.zip
 
   build-universal:
     # Nightly builds its own release; publishing it must not start a second build.

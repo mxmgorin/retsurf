@@ -19,7 +19,7 @@
 
 retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops. It has gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
 
-**[Install](#install)** on a PortMaster handheld, a Miyoo Mini, Android, Linux, Windows, or macOS.
+**[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, or CrossMix-OS, and on Android, Linux, Windows, or macOS.
 
 > **Work in progress.** Early development — expect bugs.
 
@@ -89,19 +89,19 @@ Download the latest release for your platform below. All builds are available on
 the same file names under the rolling
 [`nightly`](https://github.com/mxmgorin/retsurf/releases/tag/nightly) tag.
 
-| Device | Package | Where it goes |
+| OS | Package | Where it goes |
 | --- | --- | --- |
-| [PortMaster handhelds](https://portmaster.games/supported-devices.html) | [`retsurf-portmaster.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-portmaster.zip) | ports folder, e.g. `/roms/ports/` |
+| [PortMaster](https://portmaster.games/supported-devices.html) | [`retsurf-portmaster.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-portmaster.zip) | ports folder, e.g. `/roms/ports/` |
 | [OnionOS](https://onionui.github.io/) | [`retsurf-onionos.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-onionos.zip) | `App/Retsurf/` on the SD card |
 | [Allium](https://github.com/goweiwen/Allium) | [`retsurf-allium.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-allium.zip) | `Apps/Retsurf.pak/` on the SD card |
-| aarch64 handhelds on [spruceOS](https://github.com/spruceUI/spruceOS) | [`retsurf-spruceos-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-aarch64.zip) | root of the SD card, lands in `App/Retsurf/` |
-| Miyoo Mini Plus and Mini Flip on [spruceOS](https://github.com/spruceUI/spruceOS) | [`retsurf-spruceos-armhf.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-armhf.zip) | root of the SD card, lands in `App/RetsurfMini/` |
+| [spruceOS](https://github.com/spruceUI/spruceOS) | [`retsurf-spruceos-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-aarch64.zip), [`retsurf-spruceos-armhf.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-spruceos-armhf.zip) (Miyoo Mini) | root of the SD card |
+| [CrossMix-OS](https://github.com/cizia64/CrossMix-OS) | [`retsurf-crossmix.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-crossmix.zip) | root of the SD card |
 | Android | [`retsurf-android-arm64.apk`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-android-arm64.apk) | sideload it |
 | Linux | [`retsurf-linux-x86_64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-x86_64.zip), [`retsurf-linux-aarch64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-linux-aarch64.zip) | unpack and run |
 | Windows | [`retsurf-windows-x86_64.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-windows-x86_64.zip) | unpack and run |
 | macOS | [`retsurf-macos-aarch64.dmg`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-macos-aarch64.dmg) | open it and run `Retsurf.app` |
 
-On the Miyoo Mini firmwares, spruceOS included, the app shows up in the Apps menu, and **MENU quits** it. On spruceOS's aarch64 handhelds it is under Apps too, and **Select + Start** quits it.
+On the Miyoo Mini firmwares, spruceOS included, the app shows up in the Apps menu, and **MENU quits** it. On spruceOS's aarch64 handhelds and CrossMix-OS it is under Apps too, and **Select + Start** quits it.
 
 ## Building
 

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Apps on the Miyoo Flip and spruce's other aarch64 handhelds, and
   `retsurf-spruceos-armhf.zip` for the Miyoo Mini Plus and Mini Flip.
 
+- **A CrossMix-OS package**, `retsurf-crossmix.zip`: the PortMaster port as an
+  app under Apps on the TrimUI Smart Pro.
+
 ### Changed
 
 - **Swap tuning moved from the PortMaster launcher into the browser**, as
