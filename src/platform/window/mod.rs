@@ -62,6 +62,7 @@ trait WindowBackend {
     fn pointer_pos_in_points(&self) -> Option<egui::Pos2>;
     fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming>;
     fn frame_interval(&self) -> Option<Duration>;
+    /// Frees native resources before an exit that skips drops; the backend is dead after.
     fn destroy(&mut self);
     /// egui's handle to the page texture; `None` where the backend composites
     /// the page itself.

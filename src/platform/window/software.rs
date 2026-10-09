@@ -304,6 +304,11 @@ impl WindowBackend for SoftwareBackend {
 
     fn destroy(&mut self) {
         self.egui.destroy();
+        // MI_SYS keeps panel buffers past exit; the Miyoo driver frees them only in DestroyWindow.
+        unsafe {
+            sdl2::sys::SDL_DestroyRenderer(self.canvas.raw());
+            sdl2::sys::SDL_DestroyWindow(self.canvas.window().raw());
+        }
     }
 }
 
