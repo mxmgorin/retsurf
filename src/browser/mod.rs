@@ -215,6 +215,9 @@ struct AppBrowserInner {
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
     ime_control: Cell<Option<servo::EmbedderControlId>>,
+    /// Whether that request may raise a keyboard: false for a field focused
+    /// before the user interacted with the page (autofocus).
+    ime_allows_keyboard: Cell<bool>,
     /// Select pickers and JS dialogs the page opened (see [`delegate`]),
     /// drained once per frame by the main loop into the prompt overlay.
     embedder_controls: FrameQueue<servo::EmbedderControl>,
@@ -340,6 +343,7 @@ impl AppBrowserInner {
             game_geometry: Cell::new(None),
             game_geometry_asked: Cell::new(None),
             ime_control: Cell::new(None),
+            ime_allows_keyboard: Cell::new(false),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             dismissed_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
             user_content,
@@ -675,6 +679,12 @@ impl AppBrowser {
     #[inline]
     pub fn text_input_focused(&self) -> bool {
         self.inner.ime_control.get().is_some()
+    }
+
+    /// Whether the focused editable element may raise an on-screen keyboard.
+    #[inline]
+    pub fn text_input_wants_keyboard(&self) -> bool {
+        self.text_input_focused() && self.inner.ime_allows_keyboard.get()
     }
 
     /// Clear every site's cookies and web storage, and the HTTP cache. The

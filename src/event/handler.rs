@@ -64,6 +64,9 @@ const CAPTURE_DEFLECTION: f32 = 0.7;
 /// to send is paid at this rate; a delivered frame returns the wait at once.
 const ANIMATION_WAIT: Duration = Duration::from_millis(16);
 
+/// `SDL_TOUCH_MOUSEID`: the `which` of mouse events SDL synthesizes from touch.
+const SDL_TOUCH_MOUSE_ID: u32 = u32::MAX;
+
 /// Longest an idle pass waits. Bounded because sdl2's unbounded `wait_event`
 /// panics when SDL reports a failed wait, which an interrupted poll is enough for.
 const IDLE_WAIT: Duration = Duration::from_millis(500);
@@ -125,9 +128,35 @@ pub struct AppEventHandler {
     game: Option<GameMode>,
     /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
     touch: super::touch::TouchState,
+    /// Whether the finger now down landed outside the on-screen keyboard, and
+    /// whether on the chrome rather than the page.
+    touch_outside_osk: bool,
+    touch_on_chrome: bool,
+    tapped: bool,
+    hardware_input: bool,
 }
 
 impl AppEventHandler {
+    /// Whether a tap outside the on-screen keyboard ended since the last call.
+    pub fn take_tap(&mut self) -> bool {
+        std::mem::take(&mut self.tapped)
+    }
+
+    /// Whether the latest press came from a physical keyboard or a mouse.
+    pub fn hardware_input(&self) -> bool {
+        self.hardware_input
+    }
+
+    fn note_input_source(&mut self, event: &Event) {
+        self.hardware_input = match event {
+            Event::KeyDown { .. } => !self.is_pad_as_keys(event),
+            // SDL's mouse synthesized from touch is not a mouse.
+            Event::MouseButtonDown { which, .. } => *which != SDL_TOUCH_MOUSE_ID,
+            Event::FingerDown { .. } | Event::ControllerButtonDown { .. } => false,
+            _ => return,
+        };
+    }
+
     pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: ControlsConfig) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
@@ -160,6 +189,10 @@ impl AppEventHandler {
             listening: None,
             game: None,
             touch: super::touch::TouchState::new(),
+            touch_outside_osk: false,
+            touch_on_chrome: false,
+            tapped: false,
+            hardware_input: false,
         })
     }
 
@@ -617,6 +650,7 @@ impl AppEventHandler {
         browser: &mut AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) {
+        self.note_input_source(&event);
         if self.listening.is_some()
             && self.on_capture_event(&event, ui.map_edit.capturing(), commands)
         {
@@ -680,9 +714,11 @@ impl AppEventHandler {
             } => {
                 let (w, h) = window.size();
                 let (px, py) = (x * w as f32, y * h as f32);
+                self.touch_outside_osk = ui.focus() != crate::ui::Focus::Osk;
+                self.touch_on_chrome = !ui.point_over_webview(px, py);
                 // Chrome touches are egui's, and a gesture started for one would
                 // leak: egui consumes its up, so the gesture never resolves.
-                if ui.point_over_webview(px, py) {
+                if !self.touch_on_chrome {
                     self.touch.down(finger_id, px, py);
                 }
             }
@@ -700,7 +736,12 @@ impl AppEventHandler {
                 }
             }
             Event::FingerUp { finger_id, .. } => {
-                if let super::touch::TouchEnd::Tap(px, py) = self.touch.up(finger_id) {
+                let outside_osk = std::mem::take(&mut self.touch_outside_osk);
+                let end = self.touch.up(finger_id);
+                // A drag scrolled the page; only a tap may ask for the keyboard.
+                let page_tap = matches!(end, super::touch::TouchEnd::Tap(..));
+                self.tapped |= outside_osk && (self.touch_on_chrome || page_tap);
+                if let super::touch::TouchEnd::Tap(px, py) = end {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
                     for down in [true, false] {
                         browser.mouse_button(sdl2::mouse::MouseButton::Left, bx, by, down);

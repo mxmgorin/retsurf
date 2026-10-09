@@ -140,7 +140,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// queued for the prompt overlay, and the rest dismissed with their defaults.
     fn show_embedder_control(&self, _webview: WebView, control: servo::EmbedderControl) {
         match control {
-            servo::EmbedderControl::InputMethod(ime) => self.ime_control.set(Some(ime.id())),
+            servo::EmbedderControl::InputMethod(ime) => {
+                self.ime_control.set(Some(ime.id()));
+                self.ime_allows_keyboard.set(ime.allow_virtual_keyboard());
+            }
             servo::EmbedderControl::SelectElement(_) | servo::EmbedderControl::SimpleDialog(_) => {
                 self.embedder_controls.push(control);
             }

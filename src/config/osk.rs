@@ -11,6 +11,9 @@ pub struct OskConfig {
     /// falls back to `["en"]`, so the keyboard always works.
     pub layouts: Vec<String>,
     pub style: OskStyle,
+    /// Open the keyboard when a text field takes focus or is tapped again, if it
+    /// was reached by touch or pad rather than a physical keyboard or mouse.
+    pub auto_show: bool,
 }
 
 impl Default for OskConfig {
@@ -18,6 +21,7 @@ impl Default for OskConfig {
         Self {
             layouts: vec!["en".to_string(), "ru".to_string()],
             style: OskStyle::default(),
+            auto_show: true,
         }
     }
 }

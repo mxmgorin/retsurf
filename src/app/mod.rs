@@ -16,6 +16,7 @@ use crate::browser::{AppBrowser, Favicon, LocalSite};
 use crate::data::{page_icons, session::Session};
 use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
+use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
 use crate::ui::AppUi;
 use crate::{config::AppConfig, platform::window::AppWindow};
@@ -37,6 +38,10 @@ pub struct App {
     /// Keyboard grid-navigation auto-repeat: latched direction and next fire time.
     osk_nav_dir: (i32, i32),
     osk_nav_next: Instant,
+    /// `[osk] auto_show` state: a text field focused last frame, and a page tap
+    /// waiting out [`OSK_TAP_SETTLE`].
+    osk_field_focused: bool,
+    osk_tap_at: Option<Instant>,
     /// When A/Enter went down on a hint, for the tap-vs-hold split (tap clicks
     /// the hint, hold opens its link in a background tab). `None` when no press
     /// is in flight over a hint.
@@ -91,6 +96,10 @@ const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
 /// How long after a navigation the allocator is asked for its free memory back:
 /// long enough that the document being replaced has finished going away.
 const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
+
+/// How long a page tap waits before raising the keyboard: the page reports a
+/// blur only after the click reaches it.
+const OSK_TAP_SETTLE: Duration = Duration::from_millis(300);
 
 /// How long a pass that neither presented nor waited on the queue sleeps, where
 /// the backend has no frame cap of its own — nothing else is left to pace it.
@@ -164,6 +173,8 @@ impl App {
             last_tick: Instant::now(),
             osk_nav_dir: (0, 0),
             osk_nav_next: Instant::now(),
+            osk_field_focused: false,
+            osk_tap_at: None,
             hint_press_at: None,
             session: Session::load(),
             last_flush: Instant::now(),
@@ -344,6 +355,10 @@ impl App {
                 .update(&mut self.window, &mut self.browser, &mut commands);
             self.frame_timer.ui_done(at);
 
+            if self.config.osk.auto_show {
+                self.auto_show_osk(&mut commands);
+            }
+
             // Android raises the system soft keyboard to match focus; desktop
             // leaves SDL's always-on text input alone and uses the OSK. Not under
             // the OSK: SDL's text view then takes the stick's motion events.
@@ -400,6 +415,41 @@ impl App {
         // Servo's SoftwareRenderingContext leaves its surfman context undestroyed,
         // which trips surfman's own guard and panics. Exit before the destructors.
         std::process::exit(0);
+    }
+
+    /// Open the on-screen keyboard for a text field just focused or tapped again,
+    /// unless a physical keyboard or mouse reached it.
+    fn auto_show_osk(&mut self, out: &mut Vec<AppCommand>) {
+        let tapped = self.event_handler.take_tap();
+        let chrome = self.ui.wants_keyboard();
+        let page = self.browser.text_input_wants_keyboard();
+        let focused = chrome || page;
+        let rose = focused && !std::mem::replace(&mut self.osk_field_focused, focused);
+        if self.ui.focus() == crate::ui::Focus::Osk {
+            self.osk_tap_at = None;
+            return;
+        }
+        // egui moves focus within the pass that saw the tap; the page does not.
+        if tapped && page && !chrome {
+            self.osk_tap_at = Some(Instant::now());
+        }
+        let settled = match self.osk_tap_at {
+            Some(at) if at.elapsed() >= OSK_TAP_SETTLE => {
+                self.osk_tap_at = None;
+                true
+            }
+            Some(_) => {
+                self.ui.request_repaint();
+                false
+            }
+            None => false,
+        };
+        // A physical keyboard types already; Android raises its own instead.
+        let needed = !self.event_handler.hardware_input()
+            && !(cfg!(target_os = "android") && self.config.controls.system_keyboard);
+        if needed && (rose || (tapped && chrome) || (settled && page)) {
+            self.ui.osk(OskCommand::Show, &self.browser, out);
+        }
     }
 
     fn shutdown(&mut self) {
