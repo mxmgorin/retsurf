@@ -153,6 +153,7 @@ impl AppUi {
             // the address bar (which only ever shows `retsurf:home` there).
             Focus::Home => OskDest::Home,
             _ if self.address_bar_focused() => OskDest::AddressBar,
+            _ if self.osk.visible && self.osk_on_address_bar => OskDest::AddressBar,
             _ => OskDest::Page,
         }
     }
@@ -178,6 +179,9 @@ impl AppUi {
             OskDest::Page => OskTarget::Page,
         };
         let to_page = matches!(target, OskTarget::Page);
+        if matches!(cmd, OskCommand::Show) {
+            self.osk_on_address_bar = matches!(target, OskTarget::AddressBar);
+        }
         self.osk.handle(cmd, target, browser, commands);
         // Only the page can scroll a covered field out; the lift is applied once
         // the keyboard's height is known (see `update`).

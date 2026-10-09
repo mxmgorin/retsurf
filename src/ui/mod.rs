@@ -227,6 +227,9 @@ pub struct AppUi {
     /// The keyboard was opened over a page field: scroll the page so the field
     /// clears the keys, once [`Self::osk_height`] is known (see [`AppUi::update`]).
     osk_lift_pending: bool,
+    /// The keyboard was opened for the address bar. Held while it is up: a tap
+    /// on a key takes egui focus off the field the destination is read from.
+    osk_on_address_bar: bool,
     repaint_pending: bool,
     /// Loop passes still to be drawn whatever else says, for the changes egui
     /// cannot report: the first frame, a resize, an explicit repaint.
@@ -344,6 +347,7 @@ impl AppUi {
             toolbar_rect: egui::Rect::NOTHING,
             osk_height: 0.0,
             osk_lift_pending: false,
+            osk_on_address_bar: false,
             repaint_pending: false,
             forced_passes: 1,
             browser_tex_id: window.browser_texture(),
