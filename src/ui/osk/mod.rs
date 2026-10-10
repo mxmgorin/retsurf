@@ -12,6 +12,7 @@ mod wheel;
 const KEY_W: f32 = 36.0;
 const KEY_H: f32 = 38.0;
 const KEY_GAP: f32 = 4.0;
+const KEY_RADIUS: f32 = 6.0;
 
 /// Tab, Caps, Backspace, Lang, Clear, Hide — and the cap on a named key.
 const WIDE_W: f32 = 54.0;
@@ -19,6 +20,16 @@ const WIDE_W: f32 = 54.0;
 /// What every row spans: the top row's thirteen characters and its Backspace.
 /// The other rows are sized by hand to match, and a short one centres in it.
 const ROW_SPAN: f32 = 13.0 * KEY_W + WIDE_W + 13.0 * KEY_GAP;
+
+/// Space between rows, the panel's padding and corner, and what it keeps clear
+/// of the screen's sides when it has to shrink to fit.
+const ROW_GAP: f32 = 5.0;
+const PANEL_MARGIN: f32 = 12.0;
+const PANEL_RADIUS: f32 = 12.0;
+const SCREEN_MARGIN: f32 = 8.0;
+/// The corner badges' size and inset.
+const BADGE_FONT: f32 = 10.0;
+const BADGE_INSET: egui::Vec2 = egui::vec2(4.0, 2.0);
 
 const KEY_FILL: egui::Color32 = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
 const HINT: egui::Color32 = egui::Color32::from_gray(150);
@@ -39,26 +50,33 @@ fn named_width(row_len: usize) -> f32 {
     share.min(WIDE_W)
 }
 
-/// How wide one row lays out, gaps included.
-fn row_width(row: &[Key], key_width: &impl Fn(usize, &Key) -> f32) -> f32 {
+/// How wide one row lays out, `gap` between keys included.
+fn row_width(row: &[Key], key_width: &impl Fn(usize, &Key) -> f32, gap: f32) -> f32 {
     let keys: f32 = row.iter().map(|key| key_width(row.len(), key)).sum();
-    keys + KEY_GAP * row.len().saturating_sub(1) as f32
+    keys + gap * row.len().saturating_sub(1) as f32
 }
 
 /// What the frame ends up sized to, and so what a shorter row centres in.
-fn grid_width(osk: &Osk, key_width: &impl Fn(usize, &Key) -> f32) -> f32 {
+fn grid_width(osk: &Osk, key_width: &impl Fn(usize, &Key) -> f32, gap: f32) -> f32 {
     osk.keys()
         .iter()
-        .map(|row| row_width(row, key_width))
+        .map(|row| row_width(row, key_width, gap))
         .fold(0.0, f32::max)
 }
 
-/// The dark rounded panel the grid sits on.
-fn panel() -> egui::Frame {
+/// The dark rounded panel the grid sits on, scaled by `fit`.
+fn panel(fit: f32) -> egui::Frame {
     egui::Frame::default()
         .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
-        .corner_radius(12.0)
-        .inner_margin(12.0)
+        .corner_radius(PANEL_RADIUS * fit)
+        .inner_margin(PANEL_MARGIN * fit)
+}
+
+/// The share of its size the keyboard is drawn at: whole wherever it fits, less
+/// on a screen narrower than the grid (a portrait panel).
+fn fit_scale(ctx: &egui::Context, grid_width: f32) -> f32 {
+    let room = ctx.content_rect().width() - 2.0 * SCREEN_MARGIN;
+    (room / (grid_width + 2.0 * PANEL_MARGIN)).clamp(f32::MIN_POSITIVE, 1.0)
 }
 
 /// The keyboard's area at the bottom, lifted by `bottom_inset` and moved by its
@@ -119,27 +137,33 @@ pub(super) fn add_osk(
             .rect_filled(ctx.content_rect(), 0.0, SCRIM);
     }
 
+    let fit = fit_scale(ctx, grid_width(osk, &key_width, KEY_GAP));
+    let key_width = |row_len: usize, key: &Key| key_width(row_len, key) * fit;
+    let label_font = egui::TextStyle::Button.resolve(&ctx.global_style()).size * fit;
+
     let area = osk_area(osk, bottom_inset).show(ctx, |ui| {
-        panel().show(ui, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(KEY_GAP, 5.0);
+        panel(fit).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(KEY_GAP, ROW_GAP) * fit;
             // The area sizes to the keys, so egui has no width to centre
             // against until they are laid out.
-            let width = grid_width(osk, &key_width);
+            let width = grid_width(osk, &key_width, KEY_GAP * fit);
             for (r, row) in osk.keys().iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.add_space((width - row_width(row, &key_width)) / 2.0);
+                    ui.add_space((width - row_width(row, &key_width, KEY_GAP * fit)) / 2.0);
                     for (c, key) in row.iter().enumerate() {
                         let is_sel = (r, c) == selected;
                         let active = is_sel
                             || (*key == Key::Shift && shift)
                             || (*key == Key::Caps && osk.caps);
-                        let size = egui::vec2(key_width(row.len(), key), KEY_H);
+                        let size = egui::vec2(key_width(row.len(), key), KEY_H * fit);
                         let fill = if active { ACCENT } else { KEY_FILL };
                         let button = egui::Button::new(
-                            egui::RichText::new(osk.key_label(*key)).color(egui::Color32::WHITE),
+                            egui::RichText::new(osk.key_label(*key))
+                                .size(label_font)
+                                .color(egui::Color32::WHITE),
                         )
                         .fill(fill)
-                        .corner_radius(6.0)
+                        .corner_radius(KEY_RADIUS * fit)
                         .min_size(size);
                         let response = ui.add(button);
                         if response.clicked() {
@@ -154,10 +178,11 @@ pub(super) fn add_osk(
                             let alt = osk.layout().resolve_char(*ch, !shift, osk.caps);
                             if !ch.is_alphabetic() && alt != main {
                                 ui.painter().text(
-                                    response.rect.right_top() + egui::vec2(-4.0, 2.0),
+                                    response.rect.right_top()
+                                        + egui::vec2(-BADGE_INSET.x, BADGE_INSET.y) * fit,
                                     egui::Align2::RIGHT_TOP,
                                     alt,
-                                    egui::FontId::proportional(10.0),
+                                    egui::FontId::proportional(BADGE_FONT * fit),
                                     HINT,
                                 );
                             }
@@ -166,10 +191,10 @@ pub(super) fn add_osk(
                         // as a small badge in the top-left corner.
                         if let Some(btn) = key.button_hint(face) {
                             ui.painter().text(
-                                response.rect.left_top() + egui::vec2(4.0, 2.0),
+                                response.rect.left_top() + BADGE_INSET * fit,
                                 egui::Align2::LEFT_TOP,
                                 btn,
-                                egui::FontId::proportional(10.0),
+                                egui::FontId::proportional(BADGE_FONT * fit),
                                 HINT,
                             );
                         }
