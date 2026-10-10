@@ -65,6 +65,9 @@ pub(super) fn build_preferences(
         apply_http_disk_cache(&mut prefs, perf.http_disk_cache_mb, &config::cache_dir());
     }
 
+    // A steady caret, as in the chrome: every blink costs a frame.
+    prefs.editing_caret_blink_time = 0;
+
     if let Some(ua) = resolve_user_agent(&config.user_agent) {
         log::info!("user agent: {ua}");
         prefs.user_agent = ua;
