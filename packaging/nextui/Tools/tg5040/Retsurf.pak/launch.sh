@@ -52,4 +52,4 @@ export RETSURF_DOWNLOAD_DIR="$gamedir/downloads"
 export RETSURF_PANIC_FILE="$gamedir/retsurf-panic.log"
 #export RETSURF_LOG_LEVEL=debug
 
-exec "$gamedir/$bin" >> "$gamedir/log.txt" 2>&1
+exec "$gamedir/$bin" "$@" >> "$gamedir/log.txt" 2>&1
