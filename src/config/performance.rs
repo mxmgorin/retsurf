@@ -36,6 +36,9 @@ pub struct PerformanceConfig {
     /// RAM plus free swap, in MB, under which the guard trips; `0` (the default)
     /// is a fifth of RAM, at most 512 MB. Applies at startup.
     pub memory_guard_floor_mb: u32,
+    /// PSI `some avg10` percent that trips the guard while swapping; `0` is off.
+    /// The default 10 is under the 16% a 1 GB board froze at. Applies at startup.
+    pub memory_guard_pressure: u32,
     /// Budget in MB for Servo's on-disk HTTP cache; `0` (the default) is off.
     /// A spill store, not a second level: it takes what the in-memory cache
     /// evicts, and a hit moves the entry back into memory and off disk. Off by
@@ -56,6 +59,7 @@ impl Default for PerformanceConfig {
             swap_tuning: false,
             memory_guard: true,
             memory_guard_floor_mb: 0,
+            memory_guard_pressure: 10,
             http_disk_cache_mb: 0,
             max_fps: 30,
         }

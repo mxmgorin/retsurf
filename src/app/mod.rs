@@ -161,6 +161,7 @@ impl App {
         let memory_guard = crate::platform::memory_guard::MemoryGuard::start(
             event_sender.clone(),
             config.performance.memory_guard_floor_mb,
+            config.performance.memory_guard_pressure,
         );
         Ok(Self {
             config,

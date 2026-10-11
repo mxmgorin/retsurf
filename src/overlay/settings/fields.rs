@@ -473,6 +473,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::System,   "Performance", "Swap tuning",             flag!(performance.swap_tuning), true),
     f(S::System,   "Performance", "Memory guard",            flag!(performance.memory_guard), false),
     f(S::System,   "Performance", "Memory guard floor (MB)", int!(performance.memory_guard_floor_mb as u32, bounds::MEMORY_GUARD_FLOOR_MB, 16, Some("Auto")), true),
+    f(S::System,   "Performance", "Memory guard pressure (%)", int!(performance.memory_guard_pressure as u32, bounds::MEMORY_GUARD_PRESSURE, 5, Some("Off")), true),
     f(S::System,   "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::System,   "Performance", "Frame cap (fps)",        int!(performance.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
     f(S::System,   "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),

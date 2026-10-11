@@ -226,6 +226,11 @@ impl AppConfig {
             b::MEMORY_GUARD_FLOOR_MB,
         );
         fix_u32(
+            "performance.memory_guard_pressure",
+            &mut self.performance.memory_guard_pressure,
+            b::MEMORY_GUARD_PRESSURE,
+        );
+        fix_u32(
             "performance.http_disk_cache_mb",
             &mut self.performance.http_disk_cache_mb,
             b::HTTP_DISK_CACHE_MB,

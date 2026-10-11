@@ -26,9 +26,6 @@ const FLOOR_MAX_KB: u64 = 512 * 1024;
 /// Samples in a row under the floor; one may be an allocation spike.
 const LOW_SAMPLES: u32 = 2;
 
-/// PSI `some avg10` percent that counts as thrashing while swapping.
-const PRESSURE_THRESHOLD: f32 = 20.0;
-
 /// Why the guard tripped.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Trip {
@@ -70,19 +67,23 @@ struct Sample {
 /// The trip rule, testable without the thread.
 struct Judge {
     floor_kb: u64,
+    /// PSI `some avg10` percent that counts as thrashing while swapping.
+    pressure_pct: Option<f32>,
     low_samples: u32,
     quiet_until: Option<Instant>,
 }
 
 impl Judge {
-    /// `floor_mb` of `0` derives the floor from total RAM.
-    fn new(total_kb: u64, floor_mb: u32) -> Self {
+    /// `floor_mb` of `0` derives the floor from total RAM; `pressure_pct` of `0`
+    /// never trips on pressure.
+    fn new(total_kb: u64, floor_mb: u32, pressure_pct: u32) -> Self {
         let floor_kb = match floor_mb {
             0 => (total_kb / FLOOR_DIVISOR).min(FLOOR_MAX_KB),
             mb => u64::from(mb) * 1024,
         };
         Self {
             floor_kb,
+            pressure_pct: (pressure_pct > 0).then_some(pressure_pct as f32),
             low_samples: 0,
             quiet_until: None,
         }
@@ -109,7 +110,7 @@ impl Judge {
         } else {
             sample
                 .some_avg10
-                .filter(|&avg| swapping && avg >= PRESSURE_THRESHOLD)
+                .filter(|&avg| swapping && self.pressure_pct.is_some_and(|pct| avg >= pct))
                 .map(|some_avg10| Trip::Pressure { some_avg10 })
         };
         if trip.is_some() {
@@ -132,20 +133,20 @@ pub struct MemoryGuard {
 impl MemoryGuard {
     /// Start watching, or `None` where the kernel's figures cannot be read.
     /// Not on Android, whose low-memory killer owns this decision. `floor_mb` of
-    /// `0` derives the floor from total RAM.
-    pub fn start(waker: UserEventSender, floor_mb: u32) -> Option<Self> {
+    /// `0` derives the floor from total RAM; `pressure_pct` of `0` ignores PSI.
+    pub fn start(waker: UserEventSender, floor_mb: u32, pressure_pct: u32) -> Option<Self> {
         if cfg!(target_os = "android") {
             return None;
         }
         let total_kb = meminfo_kb(&std::fs::read_to_string(MEMINFO).ok()?, "MemTotal:")?;
-        let mut judge = Judge::new(total_kb, floor_mb);
+        let mut judge = Judge::new(total_kb, floor_mb, pressure_pct);
         log::info!(
             "memory guard: floor {} MB, pressure {}",
             judge.floor_kb / 1024,
-            if read_pressure().is_some() {
-                "on"
-            } else {
-                "unavailable"
+            match (judge.pressure_pct, read_pressure()) {
+                (None, _) => "off".to_string(),
+                (Some(_), None) => "unavailable".to_string(),
+                (Some(pct), Some(_)) => format!("{pct}%"),
             },
         );
         let trip = Arc::new(Mutex::new(None));
@@ -223,6 +224,7 @@ mod tests {
     use super::*;
 
     const GB_KB: u64 = 1024 * 1024;
+    const PRESSURE_PCT: u32 = 10;
 
     fn sample(
         available_kb: u64,
@@ -250,19 +252,25 @@ mod tests {
 
     #[test]
     fn floor_is_a_fifth_of_ram_capped() {
-        assert_eq!(Judge::new(GB_KB, 0).floor_kb, GB_KB / FLOOR_DIVISOR);
-        assert_eq!(Judge::new(32 * GB_KB, 0).floor_kb, FLOOR_MAX_KB);
+        assert_eq!(
+            Judge::new(GB_KB, 0, PRESSURE_PCT).floor_kb,
+            GB_KB / FLOOR_DIVISOR
+        );
+        assert_eq!(
+            Judge::new(32 * GB_KB, 0, PRESSURE_PCT).floor_kb,
+            FLOOR_MAX_KB
+        );
     }
 
     #[test]
     fn configured_floor_overrides_the_derived_one() {
-        assert_eq!(Judge::new(GB_KB, 300).floor_kb, 300 * 1024);
+        assert_eq!(Judge::new(GB_KB, 300, PRESSURE_PCT).floor_kb, 300 * 1024);
     }
 
     /// One sample under the floor is a spike; a second in a row trips.
     #[test]
     fn low_memory_needs_consecutive_samples() {
-        let mut judge = Judge::new(GB_KB, 0);
+        let mut judge = Judge::new(GB_KB, 0, PRESSURE_PCT);
         let now = Instant::now();
         let low = sample(50 * 1024, 0, 0, None);
         let fine = sample(500 * 1024, 0, 0, None);
@@ -278,7 +286,7 @@ mod tests {
     /// Free swap is headroom: a board browsing on swap by design is not short.
     #[test]
     fn free_swap_counts_as_headroom() {
-        let mut judge = Judge::new(GB_KB, 0);
+        let mut judge = Judge::new(GB_KB, 0, PRESSURE_PCT);
         let now = Instant::now();
         let on_swap = sample(20 * 1024, 512 * 1024, 400 * 1024, None);
         assert_eq!(judge.assess(on_swap, now), None);
@@ -288,7 +296,7 @@ mod tests {
     /// Pressure alone trips only once the device is swapping.
     #[test]
     fn pressure_trips_only_while_swapping() {
-        let mut judge = Judge::new(GB_KB, 0);
+        let mut judge = Judge::new(GB_KB, 0, PRESSURE_PCT);
         let now = Instant::now();
         let no_swap_used = sample(500 * 1024, 256 * 1024, 256 * 1024, Some(40.0));
         assert_eq!(judge.assess(no_swap_used, now), None);
@@ -300,8 +308,15 @@ mod tests {
     }
 
     #[test]
+    fn zero_pressure_never_trips() {
+        let mut judge = Judge::new(GB_KB, 0, 0);
+        let swapping = sample(500 * 1024, 256 * 1024, 100 * 1024, Some(100.0));
+        assert_eq!(judge.assess(swapping, Instant::now()), None);
+    }
+
+    #[test]
     fn stays_quiet_through_the_cooldown() {
-        let mut judge = Judge::new(GB_KB, 0);
+        let mut judge = Judge::new(GB_KB, 0, PRESSURE_PCT);
         let now = Instant::now();
         let swapping = sample(500 * 1024, 256 * 1024, 100 * 1024, Some(40.0));
         assert!(judge.assess(swapping, now).is_some());
