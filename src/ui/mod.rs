@@ -614,10 +614,9 @@ impl AppUi {
         // Read before the state borrow below, which holds the tab list.
         let game_geometry = shaded.then(|| browser.game_geometry()).flatten();
         let face = self.pad_layout.labels();
-        // Android's system bars follow the chrome: whatever hides the toolbar
-        // wants the whole panel.
+        // Android's system bars stay hidden: the toolbar is the only chrome.
         #[cfg(target_os = "android")]
-        window.set_system_fullscreen(snapshot.chrome_hidden.any());
+        window.hold_system_fullscreen();
         self.clamp_overlay_selections();
         // A startup find waits for a calm screen: nothing open over the page, no game.
         if matches!(self.focus(), Focus::Page | Focus::Home) && !browser.in_game_mode() {

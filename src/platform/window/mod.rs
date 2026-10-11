@@ -168,22 +168,18 @@ impl AppWindow {
         self.backend.sync_egui_window_size();
     }
 
-    /// Match the system bars to `on`, idempotently: SDL gives a fullscreen
-    /// window immersive-sticky decor, hiding the status and navigation bars.
-    /// The change blocks this thread until the surface resizes (up to 500 ms).
+    /// Hide the status and navigation bars, idempotently: SDL gives a fullscreen
+    /// window immersive-sticky decor. A real change blocks this thread until the
+    /// surface resizes (up to 500 ms).
     #[cfg(target_os = "android")]
-    pub fn set_system_fullscreen(&mut self, on: bool) {
+    pub fn hold_system_fullscreen(&mut self) {
         use sdl2::video::FullscreenType;
-        let want = match on {
-            true => FullscreenType::Desktop,
-            false => FullscreenType::Off,
-        };
         let window = self.backend.window_mut();
-        if window.fullscreen_state() == want {
+        if window.fullscreen_state() == FullscreenType::Desktop {
             return;
         }
-        if let Err(e) = window.set_fullscreen(want) {
-            log::warn!("system fullscreen {on}: {e}");
+        if let Err(e) = window.set_fullscreen(FullscreenType::Desktop) {
+            log::warn!("system fullscreen: {e}");
         }
     }
 
