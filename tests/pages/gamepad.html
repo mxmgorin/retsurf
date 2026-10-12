@@ -35,6 +35,14 @@
     log('disconnected index=' + e.gamepad.index);
   });
 
+  // Where a mapped click lands, so a rig can tell the cursor moved.
+  ['mousedown', 'mouseup'].forEach(function (type) {
+    window.addEventListener(type, function (e) {
+      log('mouse type=' + type + ' button=' + e.button + ' x=' + e.clientX + ' y=' + e.clientY);
+    });
+  });
+  window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
   // Report only what changed: a pad at rest would otherwise flood the log. The
   // count is reported on every change too — a pad that connects before the
   // listener exists shows up in the list and in no event.

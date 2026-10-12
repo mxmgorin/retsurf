@@ -1,0 +1,14 @@
+# After Steam Input's "Gamepad with Mouse Trackpad" template: the game reads the
+# whole pad, and a held L3 turns the right stick into the cursor. Copy this into
+# <data dir>/input_maps/gamepad.toml to change it; deleting that copy restores this one.
+name = "Gamepad and mouse"
+
+[pad]
+l3 = "layer:mouse"
+
+[layer.mouse.pad]
+l2 = "mouse.right"
+r2 = "mouse.left"
+
+[layer.mouse.stick.right]
+analog = "mouse.cursor"

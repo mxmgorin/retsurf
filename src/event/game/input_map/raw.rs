@@ -48,8 +48,12 @@ impl RawTarget {
 #[derive(Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub(super) struct RawLayer {
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pad: BTreeMap<String, RawTarget>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     key: BTreeMap<String, RawTarget>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -210,12 +214,8 @@ impl InputMap {
         let pad = resolve_pad_table(id, "pad", &raw.pad, &names);
 
         let mut sticks = [StickRole::Unbound, StickRole::Unbound];
-        for (name, table) in &raw.stick {
-            let Some(side) = Side::parse(name) else {
-                log::warn!("input map: `{id}.stick.{name}` is not a stick; ignored");
-                continue;
-            };
-            sticks[side as usize] = resolve_stick(id, name, table, &names);
+        for (side, role) in resolve_sticks(id, "stick", &raw.stick, &names) {
+            sticks[side as usize] = role;
         }
 
         let resolved_keys = resolve_keys(id, "key", &raw.key, keys, &names);
@@ -226,12 +226,39 @@ impl InputMap {
             .iter()
             .map(|name| {
                 let raw_layer = &raw.layer[name];
+                let mut sticks = [None, None];
+                for (side, role) in
+                    resolve_sticks(id, &format!("layer.{name}.stick"), &raw_layer.stick, &[])
+                {
+                    sticks[side as usize] = Some(role);
+                }
                 Layer {
                     pad: resolve_pad_table(id, &format!("layer.{name}.pad"), &raw_layer.pad, &[]),
                     keys: resolve_keys(id, &format!("layer.{name}.key"), &raw_layer.key, keys, &[]),
+                    sticks,
                 }
             })
-            .collect();
+            .collect::<Vec<Layer>>();
+
+        // A stick that opened a layer taking that stick would hand itself
+        // over to itself on every switch.
+        for (side, role) in Side::ALL.into_iter().zip(&mut sticks) {
+            let StickRole::Digital(dirs) = role else {
+                continue;
+            };
+            for (dir, target) in Dir::ALL.into_iter().zip(dirs.iter_mut()) {
+                let opens_stick_layer = matches!(target, Some(Target::Layer(i))
+                    if layers[*i].sticks.iter().any(Option::is_some));
+                if opens_stick_layer {
+                    log::warn!(
+                        "input map: `{id}.stick.{}.{}` opens a layer that remaps a stick; ignored",
+                        side.name(),
+                        dir.name()
+                    );
+                    *target = None;
+                }
+            }
+        }
 
         InputMap {
             id: id.to_string(),
@@ -306,16 +333,37 @@ fn resolve_keys(
 
 /// One stick table: four directions, or `analog` for the whole stick. Both at
 /// once is a contradiction — the directions win, since they are the specific ones.
+/// One `stick` table, base or layer, keyed by side; `path` is where it sits
+/// in the file, for the log.
+fn resolve_sticks(
+    id: &str,
+    path: &str,
+    tables: &BTreeMap<String, BTreeMap<String, RawTarget>>,
+    layers: &[String],
+) -> Vec<(Side, StickRole)> {
+    tables
+        .iter()
+        .filter_map(|(name, table)| {
+            let path = format!("{path}.{name}");
+            let Some(side) = Side::parse(name) else {
+                log::warn!("input map: `{id}.{path}` is not a stick; ignored");
+                return None;
+            };
+            Some((side, resolve_stick(id, &path, table, layers)))
+        })
+        .collect()
+}
+
 fn resolve_stick(
     id: &str,
-    name: &str,
+    path: &str,
     table: &BTreeMap<String, RawTarget>,
     layers: &[String],
 ) -> StickRole {
     let mut dirs: [Option<Target>; 4] = [None, None, None, None];
     let mut analog = None;
     for (key, raw) in table {
-        let whose = format!("{id}.stick.{name}.{key}");
+        let whose = format!("{id}.{path}.{key}");
         let Some(target) = parse_target(raw, &whose, layers) else {
             continue;
         };
@@ -340,7 +388,7 @@ fn resolve_stick(
     let has_dirs = dirs.iter().any(Option::is_some);
     match (has_dirs, analog) {
         (true, Some(_)) => {
-            log::warn!("input map: `{id}.stick.{name}` is both directions and analog");
+            log::warn!("input map: `{id}.{path}` is both directions and analog");
             StickRole::Digital(Box::new(dirs))
         }
         (true, None) => StickRole::Digital(Box::new(dirs)),

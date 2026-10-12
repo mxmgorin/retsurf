@@ -58,11 +58,12 @@ An input map is what each button, stick and key sends to the page in Game Mode.
 | --- | --- | --- |
 | `keys` | Keyboard (arrows and Z/X) | arrows, A / B / X / Y as Z / X / C / Space; the retro and jam-game convention |
 | `wasd` | Keyboard (WASD) | Steam Input's WASD template: WASD on the left stick, Space / E / R / F, 1-4 on the D-pad, wheel on the bumpers, Shift on L3 |
+| `gamepad` | Gamepad and mouse | the whole pad as itself; holding L3 turns the right stick into the cursor, with L2 / R2 as right / left click |
 | `mouse` | Mouse only | left stick moves the cursor, A / X click left / right, B is Esc, right stick and bumpers scroll |
 
 `none` maps nothing: the game reads the pad and keys itself, with no cursor. There is no
-first-person map: Servo has no Pointer Lock. In every map L2 clicks right, R2 clicks left, Start is
-Enter and Select is Esc; in all but `mouse` the right stick moves the cursor.
+first-person map: Servo has no Pointer Lock. In `keys`, `wasd` and `mouse` L2 clicks right, R2 clicks
+left, Start is Enter and Select is Esc; in the first two the right stick moves the cursor.
 
 `input_maps/<id>.toml` in the data dir adds a map, or replaces the built-in of that id until
 the file is deleted. Files are read at startup; a bad entry is logged and skipped.
@@ -113,6 +114,8 @@ w = "key.ArrowUp"
 a = "key.Shift"
 [layer.aim.key]
 w = "key.ArrowDown"
+[layer.aim.stick.right]       # replaces [stick.right] while l1 is held
+analog = "mouse.scroll"
 ```
 
 **Targets**: `key.<name>` (one character, or a standard name like `ArrowUp`, `Enter`,
@@ -128,5 +131,8 @@ mapped pad", announced while such a map runs.
   read as directions withholds its whole axis.
 - The button of the `quick_access` gesture: a bare tap opens the menu and never reaches the
   game. Under a hold or chord it is the map's, sent on release.
-- Layers apply while held, carry buttons and keys but not sticks, and do not nest. A key
+- Layers apply while held and do not nest. A stick a layer names (`[layer.<name>.stick.right]`)
+  replaces the base one while it is held: a stick the game was reading drops to centre, and
+  comes back where it is when the layer lets go. A stick direction cannot open a layer that
+  remaps a stick. A key
   stays held until its source is released, even if the layer closes first.

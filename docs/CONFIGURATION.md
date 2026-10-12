@@ -141,7 +141,7 @@ max_decode_seconds = 300   # longest audio clip a page may decode, 0 = no limit
 enabled = true             # H.264 MP4 video, no streaming sites; off = audio only; restart
 
 [game_mode]
-# The map Game Mode uses: "keys", "wasd", "mouse", "none" (input reaches the game as is)
+# The map Game Mode uses: "keys", "wasd", "mouse", "gamepad", "none" (input reaches the game as is)
 # or the id of an input_maps/<id>.toml (see CONTROLS.md).
 input_map = "keys"
 

@@ -103,8 +103,12 @@ pub fn new_id(name: &str, taken: &[String]) -> String {
 /// The stock maps, in the order the list shows them. They live in code, so
 /// a release that adds one offers it to everyone; a file under the same id
 /// replaces it, and deleting that file restores this.
-pub(super) const BUILT_IN: [(&str, &str); 3] =
-    [("keys", KEYS_MAP), ("wasd", WASD_MAP), ("mouse", MOUSE_MAP)];
+pub(super) const BUILT_IN: [(&str, &str); 4] = [
+    ("keys", KEYS_MAP),
+    ("wasd", WASD_MAP),
+    ("mouse", MOUSE_MAP),
+    ("gamepad", GAMEPAD_MAP),
+];
 
 /// The id of no map at all: everything reaches the page as it is. Built in
 /// code rather than from a file, so no file can shadow or edit it.
@@ -118,6 +122,10 @@ const WASD_MAP: &str = include_str!("../../../../resources/input_maps/wasd.toml"
 
 /// Steam Input's mouse-only template, for games the pointer is the whole interface of.
 const MOUSE_MAP: &str = include_str!("../../../../resources/input_maps/mouse.toml");
+
+/// Steam Input's gamepad with mouse trackpad template, the trackpad behind a
+/// held L3.
+const GAMEPAD_MAP: &str = include_str!("../../../../resources/input_maps/gamepad.toml");
 
 /// Every map this run offers: no map first, then the built-ins, each replaced
 /// by an `input_maps/<id>.toml` that shadows it, then whatever other files are

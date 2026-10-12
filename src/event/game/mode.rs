@@ -71,10 +71,11 @@ pub struct GameInput {
     /// Which of each stick's four directions the page is holding, so a target is
     /// released exactly once (see [`Dir::ALL`] for the bit order).
     engaged: [u8; 2],
-    /// Each stick's raw vector, read by the analog roles.
-    vectors: [(f32, f32); 2],
-    /// Whether the page holds the left mouse button.
-    click: bool,
+    /// Each stick's last position, whatever its role, so a layer switch can
+    /// hand it over from where it is.
+    axes: [(i16, i16); 2],
+    /// How many sources hold each mouse button, indexed by [`ClickButton`].
+    clicks: [u32; ClickButton::ALL.len()],
     /// The Gamepad API slot the pad driving this belongs to, for the buttons a
     /// map sends on it. `None` until a pad press arrives — a keyboard never
     /// sets it, and its buttons go to the synthesized pad instead.
@@ -107,8 +108,8 @@ impl GameInput {
             active: Vec::new(),
             digital: [(0, 0); 2],
             engaged: [0; 2],
-            vectors: [(0.0, 0.0); 2],
-            click: false,
+            axes: [(0, 0); 2],
+            clicks: [0; ClickButton::ALL.len()],
             slot: None,
             scrolls: Vec::new(),
             cursors: Vec::new(),
@@ -232,6 +233,7 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
+        let raw = value;
         let value = axis_value(value);
         // A trigger is a pad with a threshold; the edges it crosses are presses.
         if let Some(pad) = trigger_of(axis) {
@@ -248,8 +250,12 @@ impl GameInput {
             return false;
         };
         let index = side as usize;
+        match is_y {
+            true => self.axes[index].1 = raw,
+            false => self.axes[index].0 = raw,
+        }
         // Read the role before touching the state: both borrow `self`.
-        let role = self.map.stick(side);
+        let role = self.stick_role(side);
         // A stick told to send nothing keeps its axis anyway, or `none` and
         // `passthrough` would be the same thing written twice.
         if *role == StickRole::Analog(Target::None) {
@@ -258,10 +264,6 @@ impl GameInput {
         let (analog, digital_role) = (role.is_analog(), role.is_digital());
         // The whole stick is one vector; `tick` reads it each frame.
         if analog {
-            match is_y {
-                true => self.vectors[index].1 = value,
-                false => self.vectors[index].0 = value,
-            }
             return true;
         }
         if !digital_role {
@@ -322,13 +324,7 @@ impl GameInput {
     ) -> bool {
         match target {
             Target::Key(key) => self.hold_key(key, pressed, browser),
-            // The left button also answers the chrome, which knows only "the
-            // pointer"; the other two are the page's alone.
-            Target::Click(ClickButton::Left) => self.set_click(pressed, commands),
-            Target::Click(button) => commands.push(AppCommand::Input(InputCommand::Click {
-                button: *button,
-                pressed,
-            })),
+            Target::Click(button) => self.hold_click(*button, pressed, commands),
             Target::ScrollBy { x, y, speed } => {
                 hold_step(&mut self.scrolls, (*x * speed, *y * speed), pressed)
             }
@@ -340,7 +336,7 @@ impl GameInput {
             Target::Cursor { .. } | Target::Scroll { .. } => {}
             // An activator sends nothing of its own, which is what makes a
             // layer free of buffering: there is never a press to retract.
-            Target::Layer(index) => self.hold_layer(*index, pressed),
+            Target::Layer(index) => self.hold_layer(*index, pressed, browser, commands),
             Target::Passthrough => return false,
             Target::None => {}
         }
@@ -384,14 +380,90 @@ impl GameInput {
         }
     }
 
-    /// Take or release an activator's hold on its layer.
-    fn hold_layer(&mut self, index: usize, pressed: bool) {
+    /// Take or release an activator's hold on its layer, handing over every
+    /// stick whose role that changes.
+    fn hold_layer(
+        &mut self,
+        index: usize,
+        pressed: bool,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        let before = Side::ALL.map(|side| self.stick_role(side).clone());
         match pressed {
             true => self.active.push(index),
             false => {
                 if let Some(at) = self.active.iter().rposition(|held| *held == index) {
                     self.active.remove(at);
                 }
+            }
+        }
+        for side in Side::ALL {
+            let old = &before[side as usize];
+            if self.stick_role(side) != old {
+                self.hand_over_stick(side, old, browser, commands);
+            }
+        }
+    }
+
+    /// A stick's role under whatever layer is held.
+    fn stick_role(&self, side: Side) -> &StickRole {
+        self.map.stick(self.layer(), side)
+    }
+
+    /// Move a stick from `old` to its current role: release what the old one
+    /// held, then take up the new one from where the stick is now.
+    fn hand_over_stick(
+        &mut self,
+        side: Side,
+        old: &StickRole,
+        browser: &AppBrowser,
+        commands: &mut Vec<AppCommand>,
+    ) {
+        let index = side as usize;
+        match old {
+            StickRole::Digital(targets) => {
+                for dir in Dir::ALL {
+                    if !self.digital_engaged(index, dir) {
+                        continue;
+                    }
+                    self.set_engaged(index, dir, false);
+                    if let Some(target) = &targets[dir as usize] {
+                        self.fire(target, false, browser, commands);
+                    }
+                }
+                self.digital[index] = (0, 0);
+            }
+            // The Gamepad API keeps the last value, so a game would walk on.
+            old if old.is_raw() => self.send_stick(side, (0, 0), browser),
+            _ => {}
+        }
+        let (x, y) = self.axes[index];
+        let new = self.stick_role(side);
+        if new.is_digital() {
+            self.digital[index] = (
+                axis_digital(axis_value(x), 0, self.deadzone),
+                axis_digital(axis_value(y), 0, self.deadzone),
+            );
+            self.refresh_stick(side, browser, commands);
+        } else if new.is_raw() {
+            self.send_stick(side, (x, y), browser);
+        }
+    }
+
+    /// Hand the page a stick's position on the pad driving the mode. With no
+    /// pad seen yet there is no slot, and nothing of the stick reached it.
+    fn send_stick(&self, side: Side, (x, y): (i16, i16), browser: &AppBrowser) {
+        let Some(slot) = self.slot else {
+            return;
+        };
+        let (axis_x, axis_y) = match side {
+            Side::Left => (Axis::LeftX, Axis::LeftY),
+            Side::Right => (Axis::RightX, Axis::RightY),
+        };
+        for (axis, value) in [(axis_x, x), (axis_y, y)] {
+            if let Some(event) = gamepad_api::axis(slot, axis, value) {
+                browser.handle_input(servo::InputEvent::Gamepad(event));
             }
         }
     }
@@ -434,7 +506,7 @@ impl GameInput {
         let want = dirs(x, y);
         let mut edges: [Option<Target>; 4] = [None, None, None, None];
         {
-            let StickRole::Digital(targets) = self.map.stick(side) else {
+            let StickRole::Digital(targets) = self.stick_role(side) else {
                 return;
             };
             for dir in Dir::ALL {
@@ -470,11 +542,17 @@ impl GameInput {
         }
     }
 
-    /// The click follows the cursor through the router's Confirm intent.
-    fn set_click(&mut self, pressed: bool, commands: &mut Vec<AppCommand>) {
-        if self.click != pressed {
-            self.click = pressed;
-            commands.push(AppCommand::Input(InputCommand::Confirm(pressed)));
+    /// Count a source onto `button`; only the first press and the last release
+    /// reach the page.
+    fn hold_click(&mut self, button: ClickButton, pressed: bool, commands: &mut Vec<AppCommand>) {
+        let count = &mut self.clicks[button as usize];
+        match pressed {
+            true => *count += 1,
+            false if *count == 0 => return,
+            false => *count -= 1,
+        }
+        if *count == u32::from(pressed) {
+            send_click(button, pressed, commands);
         }
     }
 
@@ -503,12 +581,13 @@ impl GameInput {
         let mut aim = (0.0, 0.0);
         let mut scroll = (0.0, 0.0);
         for side in Side::ALL {
-            let (speed, to_cursor) = match self.map.stick(side) {
+            let (speed, to_cursor) = match self.stick_role(side) {
                 StickRole::Analog(Target::Cursor { speed }) => (*speed, true),
                 StickRole::Analog(Target::Scroll { speed }) => (*speed, false),
                 _ => continue,
             };
-            let (x, y) = self.vectors[side as usize];
+            let (x, y) = self.axes[side as usize];
+            let (x, y) = (axis_value(x), axis_value(y));
             let live = |v: f32| match v.abs() < self.deadzone {
                 true => 0.0,
                 false => v * speed,
@@ -553,19 +632,32 @@ impl GameInput {
         self.active.clear();
         self.digital = [(0, 0); 2];
         self.engaged = [0; 2];
-        self.vectors = [(0.0, 0.0); 2];
+        self.axes = [(0, 0); 2];
         self.scrolls.clear();
         self.cursors.clear();
         for (button, _) in std::mem::take(&mut self.buttons) {
             self.send_pad(button, false, browser);
         }
-        self.set_click(false, commands);
+        for button in ClickButton::ALL {
+            if std::mem::take(&mut self.clicks[button as usize]) > 0 {
+                send_click(button, false, commands);
+            }
+        }
         for mirror in &mut self.reserved {
             *mirror = Mirror::new(mirror.gesture, mirror.opens);
         }
         // The drains above already ended whatever it was holding.
         self.deferred = None;
     }
+}
+
+/// Press or release a mouse button; the left one also answers the chrome under
+/// the pointer, so it is sent as Confirm.
+fn send_click(button: ClickButton, pressed: bool, commands: &mut Vec<AppCommand>) {
+    commands.push(AppCommand::Input(match button {
+        ClickButton::Left => InputCommand::Confirm(pressed),
+        button => InputCommand::Click { button, pressed },
+    }));
 }
 
 /// One reserved gesture's progress. A hold or a chord, never a tap: a tap would
@@ -718,5 +810,20 @@ mod tests {
     fn a_diagonal_holds_both_directions() {
         assert_eq!(dirs(1, -1), [true, false, false, true]);
         assert_eq!(dirs(0, 0), [false; 4]);
+    }
+
+    /// Two sources on one button: the page sees one press and one release.
+    #[test]
+    fn a_shared_click_is_released_by_the_last_source() {
+        let map = InputMap::none(crate::event::test_key_names());
+        let mut input = GameInput::new(map, &ControlsConfig::default(), &[]);
+        let mut commands = Vec::new();
+        input.hold_click(ClickButton::Left, true, &mut commands);
+        input.hold_click(ClickButton::Left, true, &mut commands);
+        input.hold_click(ClickButton::Left, false, &mut commands);
+        assert_eq!(commands.len(), 1, "a release while the other source holds");
+        input.hold_click(ClickButton::Left, false, &mut commands);
+        input.hold_click(ClickButton::Left, false, &mut commands);
+        assert_eq!(commands.len(), 2, "a stray release reaches the page");
     }
 }

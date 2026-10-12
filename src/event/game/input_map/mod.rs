@@ -136,6 +136,10 @@ pub enum ClickButton {
     Middle,
 }
 
+impl ClickButton {
+    pub const ALL: [ClickButton; 3] = [ClickButton::Left, ClickButton::Right, ClickButton::Middle];
+}
+
 /// What a source does while the mode is on.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Target {
@@ -197,6 +201,14 @@ impl StickRole {
     pub fn is_digital(&self) -> bool {
         matches!(self, StickRole::Digital(_))
     }
+
+    /// Whether the stick reaches the page as itself.
+    pub fn is_raw(&self) -> bool {
+        matches!(
+            self,
+            StickRole::Unbound | StickRole::Analog(Target::Passthrough)
+        )
+    }
 }
 
 /// A stick's role: four digital directions, or the whole stick as one vector.
@@ -208,13 +220,14 @@ pub enum StickRole {
     Unbound,
 }
 
-/// One alternate set, held open by its activator. Only buttons and keys: a
-/// stick that changed role mid-hold would have to release and re-engage its
-/// directions, which buys less than it costs.
+/// One alternate set, held open by its activator. A stick it names replaces
+/// the base one whole.
 #[derive(Clone, Default)]
 struct Layer {
     pad: Vec<Option<Target>>,
     keys: Vec<(u32, Target)>,
+    /// Left, then right; `None` leaves the base stick in place.
+    sticks: [Option<StickRole>; 2],
 }
 
 #[derive(Clone)]
@@ -255,8 +268,13 @@ impl InputMap {
         from_layer.or_else(|| self.pad.get(pad as usize).and_then(Option::as_ref))
     }
 
-    pub fn stick(&self, side: Side) -> &StickRole {
-        &self.sticks[side as usize]
+    /// A stick's role under the held layer, or the base one where the layer
+    /// names no such stick.
+    pub fn stick(&self, layer: Option<usize>, side: Side) -> &StickRole {
+        layer
+            .and_then(|i| self.layers.get(i))
+            .and_then(|l| l.sticks[side as usize].as_ref())
+            .unwrap_or(&self.sticks[side as usize])
     }
 
     /// The same fall-through for a physical key.
@@ -431,25 +449,32 @@ mod tests {
         for (id, text) in BUILT_IN {
             let map = InputMap::resolve(id, parse_built_in(id, text), keys);
             assert!(!map.name.is_empty(), "`{id}` has no name");
-            // Which source clicks and which stick points is the map's own
-            // business; that it can click and point at all is not.
-            let clicks = Pad::ALL
-                .into_iter()
-                .any(|pad| matches!(map.pad(None, pad), Some(Target::Click(_))));
-            let points = Side::ALL
-                .into_iter()
-                .any(|side| matches!(map.stick(side), StickRole::Analog(Target::Cursor { .. })));
+            // Which source clicks and which stick points, and under which
+            // layer, is the map's own business; that it can at all is not.
+            let layers: Vec<Option<usize>> = std::iter::once(None)
+                .chain((0..map.layers.len()).map(Some))
+                .collect();
+            let clicks = layers.iter().any(|&layer| {
+                Pad::ALL
+                    .into_iter()
+                    .any(|pad| matches!(map.pad(layer, pad), Some(Target::Click(_))))
+            });
+            let points = layers.iter().any(|&layer| {
+                Side::ALL.into_iter().any(|side| {
+                    matches!(
+                        map.stick(layer, side),
+                        StickRole::Analog(Target::Cursor { .. })
+                    )
+                })
+            });
             // Raw = nothing is withheld from the page: the Gamepad API sees
             // the whole pad, sticks included.
             let raw = Pad::ALL
                 .into_iter()
                 .all(|pad| matches!(map.pad(None, pad), None | Some(Target::Passthrough)))
-                && Side::ALL.into_iter().all(|side| {
-                    matches!(
-                        map.stick(side),
-                        StickRole::Unbound | StickRole::Analog(Target::Passthrough)
-                    )
-                })
+                && Side::ALL
+                    .into_iter()
+                    .all(|side| map.stick(None, side).is_raw())
                 && map.keys.is_empty()
                 && map.layers.is_empty();
             assert!(
@@ -500,7 +525,7 @@ mod tests {
                 check(map.pad(None, pad), format!("{id}.pad.{}", pad.name()));
             }
             for side in Side::ALL {
-                let StickRole::Digital(dirs) = map.stick(side) else {
+                let StickRole::Digital(dirs) = map.stick(None, side) else {
                     continue;
                 };
                 for dir in Dir::ALL {
@@ -523,9 +548,9 @@ mod tests {
             analog = "mouse.scroll"
             "#,
         );
-        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(map.stick(None, Side::Left), &StickRole::Unbound);
         assert_eq!(
-            map.stick(Side::Right),
+            map.stick(None, Side::Right),
             &StickRole::Analog(Target::Scroll { speed: 1.0 })
         );
     }
@@ -600,9 +625,9 @@ mod tests {
             analog = { to = "mouse.cursor", speed = 2.0 }
             "#,
         );
-        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(map.stick(None, Side::Left), &StickRole::Unbound);
         assert_eq!(
-            map.stick(Side::Right),
+            map.stick(None, Side::Right),
             &StickRole::Analog(Target::Cursor { speed: 2.0 })
         );
     }
@@ -636,7 +661,7 @@ mod tests {
             analog = "mouse.scroll.down"
             "#,
         );
-        assert_eq!(map.stick(Side::Left), &StickRole::Unbound);
+        assert_eq!(map.stick(None, Side::Left), &StickRole::Unbound);
     }
 
     /// `code` is what a game branches on, so the common spellings must derive it
@@ -693,6 +718,45 @@ mod tests {
     }
 
     #[test]
+    fn a_layer_replaces_the_sticks_it_names() {
+        let map = resolve(
+            r#"
+            [pad]
+            l3 = "layer:mouse"
+            [stick.left]
+            analog = "mouse.scroll"
+            [layer.mouse.stick.right]
+            analog = "mouse.cursor"
+            "#,
+        );
+        assert!(map.stick(None, Side::Right).is_raw());
+        assert!(map.stick(Some(0), Side::Right).is_analog());
+        // A stick the layer leaves alone is the base one.
+        assert_eq!(map.stick(Some(0), Side::Left), map.stick(None, Side::Left));
+    }
+
+    /// Opening it would hand the stick over to itself on every switch.
+    #[test]
+    fn a_stick_cannot_open_a_layer_that_remaps_a_stick() {
+        let map = resolve(
+            r#"
+            [stick.left]
+            up = "layer:aim"
+            down = "layer:plain"
+            [layer.aim.stick.right]
+            analog = "mouse.cursor"
+            [layer.plain.pad]
+            a = "key.x"
+            "#,
+        );
+        let StickRole::Digital(dirs) = map.stick(None, Side::Left) else {
+            panic!("the left stick is directions");
+        };
+        assert_eq!(dirs[Dir::Up as usize], None);
+        assert!(matches!(dirs[Dir::Down as usize], Some(Target::Layer(_))));
+    }
+
+    #[test]
     fn a_stick_is_four_directions_or_one_vector() {
         let map = resolve(
             r#"
@@ -702,12 +766,12 @@ mod tests {
             analog = "mouse.cursor"
             "#,
         );
-        let StickRole::Digital(dirs) = map.stick(Side::Left) else {
+        let StickRole::Digital(dirs) = map.stick(None, Side::Left) else {
             panic!("the left stick is not digital");
         };
         assert!(dirs[Dir::Up as usize].is_some() && dirs[Dir::Down as usize].is_none());
         assert_eq!(
-            map.stick(Side::Right),
+            map.stick(None, Side::Right),
             &StickRole::Analog(Target::Cursor { speed: 1.0 })
         );
     }
@@ -794,9 +858,12 @@ mod tests {
             analog = "passthrough"
             "#,
         );
-        assert_eq!(map.stick(Side::Left), &StickRole::Analog(Target::None));
         assert_eq!(
-            map.stick(Side::Right),
+            map.stick(None, Side::Left),
+            &StickRole::Analog(Target::None)
+        );
+        assert_eq!(
+            map.stick(None, Side::Right),
             &StickRole::Analog(Target::Passthrough)
         );
     }
@@ -818,7 +885,7 @@ mod tests {
         assert_eq!(copy.id, "my-game");
         assert_eq!(copy.name, "My game");
         assert_eq!(copy.pad(None, Pad::A), map.pad(None, Pad::A));
-        assert!(copy.stick(Side::Right).is_analog());
+        assert!(copy.stick(None, Side::Right).is_analog());
         // The copy is the user's, whatever it was copied from.
         assert!(!copy.builtin);
     }
