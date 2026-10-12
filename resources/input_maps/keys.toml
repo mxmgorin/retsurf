@@ -1,6 +1,6 @@
-# The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
-# js13k entries share. Copy this into <data dir>/input_maps/keys.toml to change it;
-# deleting that copy restores this one.
+# The retro convention: arrows to move, Z to confirm or jump, X to cancel or
+# attack, as RPG Maker and most jam games read them. Copy this into
+# <data dir>/input_maps/keys.toml to change it; deleting that copy restores this one.
 name = "Keyboard (arrows and Z/X)"
 
 [pad]
@@ -8,20 +8,16 @@ up = "key.ArrowUp"
 down = "key.ArrowDown"
 left = "key.ArrowLeft"
 right = "key.ArrowRight"
-a = "key.Space"
-b = "key.z"
-x = "key.x"
-y = "key.c"
+a = "key.z"
+b = "key.x"
+x = "key.c"
+y = "key.Space"
 l1 = "key.q"
 r1 = "key.e"
 start = "key.Enter"
-# The pointer path is the one measured on hardware, so every built-in keeps it.
+select = "key.Escape"
+l2 = "mouse.right"
 r2 = "mouse.left"
-# Unbound buttons reach the page as themselves; a game reading the Gamepad API
-# still sees these two.
-l2 = "passthrough"
-l3 = "passthrough"
-r3 = "passthrough"
 
 [stick.left]
 up = "key.ArrowUp"

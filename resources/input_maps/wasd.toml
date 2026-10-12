@@ -1,5 +1,5 @@
-# The other keyboard convention: WASD to walk, with the keys an action game
-# puts around it. Copy this into <data dir>/input_maps/wasd.toml to change it;
+# After Steam Input's "Keyboard (WASD) and Mouse" template, with the right stick
+# as the trackpad. Copy this into <data dir>/input_maps/wasd.toml to change it;
 # deleting that copy restores this one.
 name = "Keyboard (WASD)"
 
@@ -8,21 +8,19 @@ a = "key.Space"
 b = "key.e"
 x = "key.r"
 y = "key.f"
-l1 = "key.q"
-# Shift and Control are held, and the standard spells their key and their code
-# differently — a game reading `e.code` gets nothing from the bare name.
-r1 = { to = "key.Shift", code = "ShiftLeft" }
-l2 = { to = "key.Control", code = "ControlLeft" }
-start = "key.Enter"
-# The D-pad keeps the arrows, which most of these games take as well.
-up = "key.ArrowUp"
-down = "key.ArrowDown"
-left = "key.ArrowLeft"
-right = "key.ArrowRight"
-# Fire, and the pointer path every built-in keeps.
+# The hotbar, clockwise from the top.
+up = "key.1"
+right = "key.2"
+down = "key.3"
+left = "key.4"
+l1 = "mouse.scroll.down"
+r1 = "mouse.scroll.up"
+l2 = "mouse.right"
 r2 = "mouse.left"
-l3 = "passthrough"
-r3 = "passthrough"
+# Shift's key and code differ; a game reading `e.code` needs the code.
+l3 = { to = "key.Shift", code = "ShiftLeft" }
+start = "key.Enter"
+select = "key.Escape"
 
 [stick.left]
 up = "key.w"

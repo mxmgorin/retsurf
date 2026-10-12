@@ -56,12 +56,13 @@ An input map is what each button, stick and key sends to the page in Game Mode.
 
 | id | name | the game gets |
 | --- | --- | --- |
-| `keys` | Keyboard (arrows and Z/X) | the PICO-8 and js13k convention; most of itch.io works as is |
-| `wasd` | Keyboard (WASD) | WASD on the left stick, Space / E / R / F / Shift / Control around it |
-| `mouse` | Mouse only | left stick moves the cursor, A clicks, right stick scrolls |
+| `keys` | Keyboard (arrows and Z/X) | arrows, A / B / X / Y as Z / X / C / Space; the retro and jam-game convention |
+| `wasd` | Keyboard (WASD) | Steam Input's WASD template: WASD on the left stick, Space / E / R / F, 1-4 on the D-pad, wheel on the bumpers, Shift on L3 |
+| `mouse` | Mouse only | left stick moves the cursor, A / X click left / right, B is Esc, right stick and bumpers scroll |
 
 `none` maps nothing: the game reads the pad and keys itself, with no cursor. There is no
-first-person map: Servo has no Pointer Lock.
+first-person map: Servo has no Pointer Lock. In every map L2 clicks right, R2 clicks left, Start is
+Enter and Select is Esc; in all but `mouse` the right stick moves the cursor.
 
 `input_maps/<id>.toml` in the data dir adds a map, or replaces the built-in of that id until
 the file is deleted. Files are read at startup; a bad entry is logged and skipped.

@@ -1,12 +1,18 @@
-# Point and click: the left stick moves the cursor, A presses what is under it,
-# and the right stick scrolls the page the game sits on. The pointer is the one
-# way of playing this project has measured on hardware. Copy this into
-# <data dir>/input_maps/mouse.toml to change it; deleting that copy restores this.
+# After Steam Input's "Mouse Only" template, with the cursor on the left stick so a
+# one-stick handheld can point. Copy this into <data dir>/input_maps/mouse.toml
+# to change it; deleting that copy restores this one.
 name = "Mouse only"
 
 [pad]
-# One source per click: a second would let go while the first is still held.
 a = "mouse.left"
+b = "key.Escape"
+x = "mouse.right"
+l2 = "mouse.right"
+r2 = "mouse.left"
+start = "key.Enter"
+select = "key.Escape"
+l1 = "mouse.scroll.down"
+r1 = "mouse.scroll.up"
 
 [stick.left]
 analog = "mouse.cursor"

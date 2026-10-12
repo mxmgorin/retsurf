@@ -110,14 +110,13 @@ pub(super) const BUILT_IN: [(&str, &str); 3] =
 /// code rather than from a file, so no file can shadow or edit it.
 pub const NO_MAP: &str = "none";
 
-/// The retro convention (arrows + z/x/c + Space/Enter) that PICO-8 exports and
-/// js13k entries share, so most of itch.io plays with no map edit at all.
+/// The retro convention: arrows, Z to confirm, X to cancel, Enter to start.
 const KEYS_MAP: &str = include_str!("../../../../resources/input_maps/keys.toml");
 
-/// The other keyboard convention: WASD and the keys an action game puts round it.
+/// Steam Input's WASD and mouse template.
 const WASD_MAP: &str = include_str!("../../../../resources/input_maps/wasd.toml");
 
-/// Point and click, for the games the pointer is the whole interface of.
+/// Steam Input's mouse-only template, for games the pointer is the whole interface of.
 const MOUSE_MAP: &str = include_str!("../../../../resources/input_maps/mouse.toml");
 
 /// Every map this run offers: no map first, then the built-ins, each replaced
