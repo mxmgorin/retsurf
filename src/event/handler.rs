@@ -242,11 +242,13 @@ impl AppEventHandler {
         self.gamepad.reset(commands);
     }
 
-    /// How the pad reaches Quick Access in Game Mode, or `None` where this device has no
-    /// pad to name.
-    pub fn game_exit_text(&self) -> Option<String> {
-        let (access, _) = self.game_reserved[0];
-        self.has_pad().then(|| access.to_text())
+    /// How the pad reaches each strip in Game Mode; none where this device has
+    /// no pad to name.
+    pub fn game_strip_gestures(&self) -> Vec<(PadGesture, Strip)> {
+        match self.has_pad() {
+            true => self.game_reserved.clone(),
+            false => vec![],
+        }
     }
 
     /// Whether this device has a pad at all — a controller, or a panel that

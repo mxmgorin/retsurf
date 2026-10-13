@@ -1,12 +1,14 @@
 //! Toasts: a one-line notice over the page for something that happened with no
 //! visible effect of its own, gone again after a moment. One at a time; a new
-//! one replaces whatever is up.
+//! one replaces whatever is up. Every toast is a pill at the bottom centre: an
+//! icon, then words and key caps, fading out at the end of its time.
 
 use super::panel::ROW_RADIUS;
-use super::theme::{BORDER, INK, PANEL_FILL, ROW_FONT};
+use super::theme::{ACCENT, BORDER, INK, PANEL_FILL, ROW_FONT, SURFACE, WARN};
 use super::AppUi;
 use crate::browser::BrowserNotice;
 use crate::config::ToolbarPosition;
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
 
@@ -16,8 +18,53 @@ const LIFT: f32 = 36.0;
 /// How long a toast stays up unless its caller asks for longer.
 pub const TOAST: Duration = Duration::from_secs(2);
 
+/// The tail of a toast's time over which it fades out.
+pub(super) const FADE: Duration = Duration::from_millis(400);
+
+/// What a toast says: an icon, then words and key caps in reading order.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Notice {
+    icon: &'static str,
+    /// Something went wrong or was refused, which the icon's colour says.
+    warn: bool,
+    pub(super) parts: Vec<Part>,
+}
+
+/// One run of a [`Notice`]'s line.
+#[derive(Clone, PartialEq, Debug)]
+pub enum Part {
+    Text(String),
+    /// A key or button, drawn framed like a key.
+    Key(String),
+}
+
+impl Notice {
+    /// `text` after `icon`.
+    pub fn new(icon: &'static str, text: impl Into<String>) -> Self {
+        Self::parts(icon, vec![Part::Text(text.into())])
+    }
+
+    /// A line of words and keys after `icon`.
+    pub fn parts(icon: &'static str, parts: Vec<Part>) -> Self {
+        Self {
+            icon,
+            warn: false,
+            parts,
+        }
+    }
+
+    /// `text` as a warning: something did not happen, or happened against the
+    /// user's wishes.
+    pub fn warn(text: impl Into<String>) -> Self {
+        Self {
+            warn: true,
+            ..Self::new(bold::WARNING, text)
+        }
+    }
+}
+
 pub(super) struct Toast {
-    text: String,
+    notice: Notice,
     until: Instant,
     /// Not drawn yet. A toast raised outside input needs forced passes of its
     /// own, or its first sizing frame is the only one it gets.
@@ -25,14 +72,14 @@ pub(super) struct Toast {
 }
 
 impl AppUi {
-    /// Show `text` for [`TOAST`].
-    pub fn toast(&mut self, text: impl Into<String>) {
-        self.toast_for(text, TOAST);
+    /// Show `notice` for [`TOAST`].
+    pub fn toast(&mut self, notice: Notice) {
+        self.toast_for(notice, TOAST);
     }
 
-    pub fn toast_for(&mut self, text: impl Into<String>, shown: Duration) {
+    pub fn toast_for(&mut self, notice: Notice, shown: Duration) {
         self.toast = Some(Toast {
-            text: text.into(),
+            notice,
             until: Instant::now() + shown,
             fresh: true,
         });
@@ -52,17 +99,14 @@ impl AppUi {
             .and_then(|t| t.until.checked_duration_since(Instant::now()))
     }
 
-    /// Draw the toast as a snackbar: bottom centre, clear of the hint bars and
-    /// of whatever holds the bottom edge (a bottom toolbar, the keyboard).
+    /// Draw the toast at the bottom centre, clear of the hint bars and of
+    /// whatever holds the bottom edge (a bottom toolbar, the keyboard).
     /// Returns whether a toast was drawn.
     pub(super) fn add_toast(&self, ctx: &egui::Context) -> bool {
-        let Some(toast) = self
-            .toast
-            .as_ref()
-            .filter(|_| self.toast_visible_for().is_some())
-        else {
+        let (Some(toast), Some(left)) = (self.toast.as_ref(), self.toast_visible_for()) else {
             return false;
         };
+        let opacity = (left.as_secs_f32() / FADE.as_secs_f32()).min(1.0);
         let screen = ctx.content_rect();
         let mut floor = screen.bottom();
         if self.toolbar_position == ToolbarPosition::Bottom && self.toolbar_rect.is_positive() {
@@ -79,28 +123,57 @@ impl AppUi {
             .order(egui::Order::Tooltip)
             .interactable(false)
             .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(PANEL_FILL)
-                    .stroke(egui::Stroke::new(1.0, BORDER))
-                    .corner_radius(ROW_RADIUS)
-                    .inner_margin(egui::Margin::symmetric(12, 6))
-                    .show(ui, |ui| {
-                        let text = egui::RichText::new(&toast.text).color(INK).size(ROW_FONT);
-                        ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
-                    });
+                ui.set_opacity(opacity);
+                add_pill(ui, &toast.notice);
             });
         true
     }
 }
 
+fn add_pill(ui: &mut egui::Ui, notice: &Notice) {
+    egui::Frame::new()
+        .fill(PANEL_FILL)
+        .stroke(egui::Stroke::new(1.0, BORDER))
+        .corner_radius(egui::CornerRadius::same(u8::MAX))
+        .inner_margin(egui::Margin::symmetric(16, 8))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let tint = if notice.warn { WARN } else { ACCENT };
+                ui.label(egui::RichText::new(notice.icon).color(tint).size(ROW_FONT));
+                for part in &notice.parts {
+                    match part {
+                        Part::Text(text) => {
+                            let text = egui::RichText::new(text).color(INK).size(ROW_FONT);
+                            ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
+                        }
+                        Part::Key(key) => key_cap(ui, key),
+                    }
+                }
+            });
+        });
+}
+
+/// One key or button, framed like a key.
+fn key_cap(ui: &mut egui::Ui, key: &str) {
+    egui::Frame::new()
+        .fill(SURFACE)
+        .stroke(egui::Stroke::new(1.0, BORDER))
+        .corner_radius(ROW_RADIUS)
+        .inner_margin(egui::Margin::symmetric(6, 1))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(key).color(INK).size(ROW_FONT).strong());
+        });
+}
+
 /// How a [`BrowserNotice`] reads on screen.
-pub fn notice_text(notice: BrowserNotice) -> String {
-    match notice {
+pub fn browser_notice(notice: BrowserNotice) -> Notice {
+    Notice::warn(match notice {
         BrowserNotice::OldestTabClosed { cap } => {
             format!("Tab limit ({cap}): closed the oldest tab")
         }
         BrowserNotice::PopupRefused { cap } => {
             format!("Tab limit ({cap}): the page could not open a tab")
         }
-    }
+    })
 }

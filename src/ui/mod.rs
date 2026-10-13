@@ -27,10 +27,10 @@ mod toast;
 mod toolbar;
 mod update_notice;
 
-pub use self::game_mode::game_mode_toast_text;
+pub use self::game_mode::game_mode_hint;
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
-pub use self::toast::notice_text;
+pub use self::toast::{browser_notice, Notice};
 
 use crate::{
     browser::{AppBrowser, Favicon},
@@ -56,6 +56,9 @@ use crate::{
 };
 use egui_sdl2::egui;
 use std::time::{Duration, Instant};
+
+/// How often a fading toast is redrawn.
+const FADE_FRAME: Duration = Duration::from_millis(33);
 
 /// Style a freshly built [`egui::Context`]: the accent theme plus a launcher's
 /// pinned zoom. The fit to the panel needs a frame's measurements and arrives
@@ -524,9 +527,14 @@ impl AppUi {
             let tick = Duration::from_secs(1);
             self.repaint_delay = Some(self.repaint_delay.map_or(tick, |d| d.min(tick)));
         }
-        // A toast needs one wake at its expiry to be erased.
+        // A toast wakes once as its fade starts, every frame through it, and
+        // once more at its expiry to be erased.
         if let Some(left) = self.toast_visible_for() {
-            self.repaint_delay = Some(self.repaint_delay.map_or(left, |d| d.min(left)));
+            let wake = match left.checked_sub(toast::FADE) {
+                Some(until_fade) if !until_fade.is_zero() => until_fade,
+                _ => FADE_FRAME.min(left),
+            };
+            self.repaint_delay = Some(self.repaint_delay.map_or(wake, |d| d.min(wake)));
         }
         if self.take_fresh_toast() {
             self.request_repaint();

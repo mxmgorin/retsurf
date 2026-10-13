@@ -101,12 +101,23 @@ impl App {
         self.game_mode();
         // Read at entry, not at startup: a pad can be plugged in later, and the
         // gestures named have to be the ones the tables actually hold.
-        let toast = crate::ui::game_mode_toast_text(
-            self.event_handler.game_exit_text(),
-            &bindings::key_gestures(Action::QuickAccess),
+        let keys: Vec<(String, Strip)> = [
+            (Action::QuickAccess, Strip::QuickAccess),
+            (Action::Menu, Strip::QuickMenu),
+        ]
+        .into_iter()
+        .filter_map(|(action, strip)| {
+            let gesture = bindings::key_gestures(action).into_iter().next()?;
+            Some((gesture, strip))
+        })
+        .collect();
+        let hint = crate::ui::game_mode_hint(
+            &self.event_handler.game_strip_gestures(),
+            &keys,
+            self.event_handler.hardware_input(),
         );
         self.browser.set_mode(TabMode::Game);
-        self.ui.enter_game_mode(toast);
+        self.ui.enter_game_mode(hint);
         self.browser
             .set_game_scaling(self.config.game_mode.view.scaling);
         self.ui.osk(OskCommand::Hide, &self.browser, out);

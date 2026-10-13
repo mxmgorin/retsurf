@@ -16,7 +16,8 @@ use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, SettingsSection, Task};
 use crate::overlay::update_notice::Choice;
-use crate::ui::Focus;
+use crate::ui::{Focus, Notice};
+use egui_phosphor::bold;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
@@ -46,7 +47,7 @@ impl App {
             AppCommand::FocusAddressBar => self.focus_address_bar(out),
             AppCommand::CloseTab => {
                 self.close_tab_at(self.browser.active_tab());
-                self.ui.toast("Tab closed");
+                self.ui.toast(Notice::new(bold::X, "Tab closed"));
             }
             AppCommand::QuickAccess(action) => self.quick_access_action(action, out),
             AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),
@@ -145,11 +146,12 @@ impl App {
     fn toggle_bookmark(&mut self, url: &str) {
         self.ui.menu.toggle_bookmark(url);
         let saved = self.ui.menu.is_bookmarked(url);
-        self.ui.toast(if saved {
+        let text = if saved {
             "Bookmarked"
         } else {
             "Bookmark removed"
-        });
+        };
+        self.ui.toast(Notice::new(bold::BOOKMARK_SIMPLE, text));
     }
 
     /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
@@ -193,10 +195,9 @@ impl App {
                 if let Some(url) = self.ui.menu.selected_url() {
                     self.ui.menu.dial.toggle(&url);
                     let pinned = self.ui.menu.dial.contains(&url);
-                    self.ui.toast(if pinned {
-                        "Pinned to speed dial"
-                    } else {
-                        "Unpinned from speed dial"
+                    self.ui.toast(match pinned {
+                        true => Notice::new(bold::PUSH_PIN, "Pinned to speed dial"),
+                        false => Notice::new(bold::PUSH_PIN_SLASH, "Unpinned from speed dial"),
                     });
                 }
             }
@@ -286,7 +287,8 @@ impl App {
                 #[cfg(target_os = "android")]
                 Task::ShareLogs => {
                     if !crate::platform::android::share_logs() {
-                        self.ui.toast("Could not open the share sheet");
+                        self.ui
+                            .toast(Notice::warn("Could not open the share sheet"));
                     }
                 }
             }
@@ -324,7 +326,8 @@ impl App {
         self.session.discard();
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.browser.home_page);
-        self.ui.toast("Browsing data cleared");
+        self.ui
+            .toast(Notice::new(bold::CHECK, "Browsing data cleared"));
         log::info!("cleared browsing data");
     }
 
@@ -334,7 +337,7 @@ impl App {
     fn restore_defaults(&mut self) {
         self.ui.settings.restore_defaults();
         self.ui.menu.dial.reset();
-        self.ui.toast("Defaults restored");
+        self.ui.toast(Notice::new(bold::CHECK, "Defaults restored"));
         log::info!("restored default settings, bindings and pins");
     }
 

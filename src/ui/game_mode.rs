@@ -1,7 +1,12 @@
 //! Game Mode's slice of the chrome: the screens that shrink the browser's
-//! vocabulary, the entry toast's wording, and the map name the Gaming tab shows.
+//! vocabulary, the entry hint, and the map name the Gaming tab shows.
 
+use super::toast::{Notice, Part};
 use super::{drop_egui_focus, AppUi};
+use crate::overlay::game::map_edit::pad_label;
+use crate::overlay::quick_access::Strip;
+use egui_phosphor::bold;
+use inputbind::PadGesture;
 use std::time::Duration;
 
 /// How long the Game Mode entry toast stays before fading.
@@ -16,11 +21,11 @@ impl AppUi {
         self.quick_access.visible || self.input_maps.visible() || self.map_edit.visible()
     }
 
-    /// Enter Game Mode, showing `toast` (worded by [`game_mode_toast_text`]).
-    /// Dropping egui's keyboard focus is part of it: egui is offered every key
-    /// before we are, so a focused address bar would go on eating them.
-    pub fn enter_game_mode(&mut self, toast: String) {
-        self.toast_for(toast, GAME_MODE_TOAST);
+    /// Enter Game Mode, showing `hint` (see [`game_mode_hint`]). Dropping
+    /// egui's keyboard focus is part of it: egui is offered every key before
+    /// we are, so a focused address bar would go on eating them.
+    pub fn enter_game_mode(&mut self, hint: Notice) {
+        self.toast_for(hint, GAME_MODE_TOAST);
         drop_egui_focus(&self.egui_ctx);
     }
 
@@ -36,45 +41,149 @@ impl AppUi {
     }
 }
 
-/// Word the entry toast from the ways to the menu this device has: the gesture
-/// the pad reserves, and whatever `game_mode` answers to on a keyboard. Leaving
-/// is a row in that menu, so the toast only has to point at it.
-pub fn game_mode_toast_text(pad: Option<String>, keys: &[String]) -> String {
-    let mut ways: Vec<&str> = pad.iter().map(String::as_str).collect();
-    ways.extend(keys.iter().map(String::as_str));
-    let mut text = "Game Mode".to_string();
-    if !ways.is_empty() {
-        text.push_str(" - ");
-        text.push_str(&ways.join(" / "));
-        text.push_str(" for Quick Access");
+/// The entry hint: how to reach each strip on the device last used (the
+/// keyboard after a key or mouse press, `keyboard`), falling back to whichever
+/// device has any gesture.
+pub fn game_mode_hint(
+    pad: &[(PadGesture, Strip)],
+    keys: &[(String, Strip)],
+    keyboard: bool,
+) -> Notice {
+    let pad: Vec<_> = pad
+        .iter()
+        .map(|&(gesture, strip)| (pad_caps(gesture), strip))
+        .collect();
+    let keys: Vec<_> = keys
+        .iter()
+        .map(|(gesture, strip)| (key_caps(gesture), *strip))
+        .collect();
+    let (first, second) = match keyboard {
+        true => (keys, pad),
+        false => (pad, keys),
+    };
+    let ways = if first.is_empty() { second } else { first };
+    if ways.is_empty() {
+        return Notice::new(bold::GAME_CONTROLLER, "Game mode");
     }
-    text
+    // One verb for all when they share it: `Hold [Start] for ..., [Select] for ...`.
+    let shared = ways.iter().all(|((verb, _), _)| *verb == ways[0].0 .0);
+    let last = ways.len() - 1;
+    let mut parts = vec![];
+    for (i, ((verb, caps), strip)) in ways.into_iter().enumerate() {
+        if i == 0 || !shared {
+            parts.push(Part::Text(verb.to_string()));
+        }
+        for (j, cap) in caps.into_iter().enumerate() {
+            if j > 0 {
+                parts.push(Part::Text("+".to_string()));
+            }
+            parts.push(Part::Key(cap));
+        }
+        let comma = if i < last { "," } else { "" };
+        parts.push(Part::Text(format!("for {}{comma}", strip.name())));
+    }
+    Notice::parts(bold::GAME_CONTROLLER, parts)
+}
+
+/// A pad gesture as a verb and the buttons it takes.
+fn pad_caps(gesture: PadGesture) -> (&'static str, Vec<String>) {
+    let (verb, pads) = match gesture {
+        PadGesture::Hold(pad) => ("Hold", vec![pad]),
+        PadGesture::Tap(pad) => ("Press", vec![pad]),
+        PadGesture::Chord(leader, second) => ("Press", vec![leader, second]),
+    };
+    let caps = pads
+        .into_iter()
+        .map(|pad| pad_label(pad).to_string())
+        .collect();
+    (verb, caps)
+}
+
+/// A keyboard gesture as caps: `ctrl+alt+a` reads `Ctrl`, `Alt`, `A`.
+fn key_caps(gesture: &str) -> (&'static str, Vec<String>) {
+    let caps = gesture
+        .split('+')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            chars
+                .next()
+                .map(|first| first.to_uppercase().chain(chars).collect())
+                .unwrap_or_default()
+        })
+        .collect();
+    ("Press", caps)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::game_mode_toast_text;
+    use super::*;
+    use inputbind::Pad;
 
-    /// The toast is the only thing on screen once the chrome hides, so it has to
-    /// name the gestures this install really has — not the defaults.
+    fn text(text: &str) -> Part {
+        Part::Text(text.to_string())
+    }
+
+    fn key(key: &str) -> Part {
+        Part::Key(key.to_string())
+    }
+
+    fn hint(parts: Vec<Part>) -> Notice {
+        Notice::parts(bold::GAME_CONTROLLER, parts)
+    }
+
+    /// The hint is the only thing on screen once the chrome hides, so it names
+    /// the gestures this install really has, on the device last used.
     #[test]
-    fn the_toast_names_the_bound_gestures_and_nothing_else() {
-        let keys = vec!["ctrl+g".to_string()];
-        let pad = || Some("hold:start".to_string());
+    fn the_hint_names_the_bound_gestures_of_the_device_in_hand() {
+        let keys = vec![
+            ("ctrl+alt+a".to_string(), Strip::QuickAccess),
+            ("ctrl+m".to_string(), Strip::QuickMenu),
+        ];
+        let pad = [
+            (PadGesture::Hold(Pad::Start), Strip::QuickAccess),
+            (PadGesture::Hold(Pad::Select), Strip::QuickMenu),
+        ];
+        // A shared verb is said once.
         assert_eq!(
-            game_mode_toast_text(pad(), &keys),
-            "Game Mode - hold:start / ctrl+g for Quick Access"
+            game_mode_hint(&pad, &keys, false),
+            hint(vec![
+                text("Hold"),
+                key("Start"),
+                text("for Quick Access,"),
+                key("Select"),
+                text("for Quick Menu"),
+            ])
         );
-        // No pad: naming its gesture would point at a button that is not there.
         assert_eq!(
-            game_mode_toast_text(None, &keys),
-            "Game Mode - ctrl+g for Quick Access"
+            game_mode_hint(&pad, &keys[..1], true),
+            hint(vec![
+                text("Press"),
+                key("Ctrl"),
+                text("+"),
+                key("Alt"),
+                text("+"),
+                key("A"),
+                text("for Quick Access"),
+            ])
+        );
+        // The other device stands in for one that has nothing bound.
+        assert_eq!(game_mode_hint(&pad[..1], &[], true).parts.len(), 3);
+        let mixed = [
+            (PadGesture::Hold(Pad::Start), Strip::QuickAccess),
+            (PadGesture::Chord(Pad::Select, Pad::Y), Strip::QuickMenu),
+        ];
+        let parts = game_mode_hint(&mixed, &[], false).parts;
+        assert_eq!(
+            parts
+                .iter()
+                .filter(|part| matches!(part, Part::Text(t) if t == "Press"))
+                .count(),
+            1
         );
         assert_eq!(
-            game_mode_toast_text(pad(), &[]),
-            "Game Mode - hold:start for Quick Access"
+            game_mode_hint(&[], &[], false),
+            Notice::new(bold::GAME_CONTROLLER, "Game mode")
         );
-        // Nothing to name leaves no dangling separator behind.
-        assert_eq!(game_mode_toast_text(None, &[]), "Game Mode");
     }
 }

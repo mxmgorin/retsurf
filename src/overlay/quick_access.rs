@@ -20,6 +20,15 @@ pub enum Strip {
     QuickMenu,
 }
 
+impl Strip {
+    pub fn name(self) -> &'static str {
+        match self {
+            Strip::QuickAccess => "Quick Access",
+            Strip::QuickMenu => "Quick Menu",
+        }
+    }
+}
+
 /// Which tab modes a quick row shows in: the browser's (a page or its reader
 /// view) or the game's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

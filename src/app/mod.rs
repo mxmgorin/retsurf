@@ -18,8 +18,9 @@ use crate::event::handler::AppEventHandler;
 use crate::event::user::UserEventSender;
 use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
-use crate::ui::AppUi;
+use crate::ui::{AppUi, Notice};
 use crate::{config::AppConfig, platform::window::AppWindow};
+use egui_phosphor::bold;
 use sdl2::Sdl;
 use std::time::{Duration, Instant};
 
@@ -238,7 +239,7 @@ impl App {
                 self.store_page_icon(&url, &icon);
             }
             for notice in self.browser.take_notices() {
-                self.ui.toast(crate::ui::notice_text(notice));
+                self.ui.toast(crate::ui::browser_notice(notice));
             }
 
             // A closed document leaves its memory with the allocator rather than
@@ -305,7 +306,8 @@ impl App {
             self.ui.menu.downloads.poll();
             for request in self.browser.take_download_requests() {
                 self.ui.menu.downloads.start(request, &self.event_sender);
-                self.ui.toast("Download started");
+                self.ui
+                    .toast(Notice::new(bold::DOWNLOAD_SIMPLE, "Download started"));
             }
             // Rumble a page asked for, played here because the main loop owns
             // the SDL controllers.

@@ -63,10 +63,11 @@ pub(in crate::ui) fn add_quick_access(
     let outer = STRIP_W.min(screen.width() * MAX_SHARE);
     let width = outer - margin.x;
     // Each on the side of the button that opens it.
-    let (left, title) = match panel.strip() {
-        Strip::QuickAccess => (screen.right() - outer, "QUICK ACCESS"),
-        Strip::QuickMenu => (screen.left(), "QUICK MENU"),
+    let left = match panel.strip() {
+        Strip::QuickAccess => screen.right() - outer,
+        Strip::QuickMenu => screen.left(),
     };
+    let title = panel.strip().name().to_uppercase();
     add_backdrop(ctx, screen, commands);
     egui::Area::new(egui::Id::new("quick_access"))
         .order(egui::Order::Foreground)
@@ -77,7 +78,7 @@ pub(in crate::ui) fn add_quick_access(
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
-                add_header(ui, title);
+                add_header(ui, &title);
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 let rows = panel.rows().len() as f32;
