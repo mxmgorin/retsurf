@@ -794,7 +794,12 @@ impl AppUi {
                 // open over it to pick a key for a row.
                 if self.map_edit.visible() {
                     drop_egui_focus(ctx);
-                    game::map_edit::add_map_edit(ctx, &self.map_edit, commands);
+                    // Last frame's height; the OSK is drawn after this.
+                    let osk_height = match self.osk.visible {
+                        true => self.osk_height,
+                        false => 0.0,
+                    };
+                    game::map_edit::add_map_edit(ctx, &self.map_edit, osk_height, commands);
                 }
 
                 // Same, for the keyboard that types a map name.

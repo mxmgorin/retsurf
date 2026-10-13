@@ -384,7 +384,10 @@ fn add_controls(
                     } else {
                         ""
                     };
-                    ("      + Add".to_string(), value.to_string())
+                    (
+                        format!("      {}  New binding", bold::PLUS),
+                        value.to_string(),
+                    )
                 }
             };
             control_row(ui, full_w, i, sel, label, value, commands);

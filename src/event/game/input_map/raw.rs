@@ -5,7 +5,7 @@
 use super::store::is_built_in;
 use super::{
     ClickButton, Dir, InputMap, KeyTarget, Layer, Side, StickRole, Target, ANALOG, KEY_PREFIX,
-    PAD_PREFIX,
+    LAYER_PREFIX, PAD_PREFIX,
 };
 use inputbind::sdl::KeyNames;
 use inputbind::Pad;
@@ -49,11 +49,11 @@ impl RawTarget {
 #[serde(default)]
 pub(super) struct RawLayer {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pad: BTreeMap<String, RawTarget>,
+    pub(super) pad: BTreeMap<String, RawTarget>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    key: BTreeMap<String, RawTarget>,
+    pub(super) key: BTreeMap<String, RawTarget>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
+    pub(super) stick: BTreeMap<String, BTreeMap<String, RawTarget>>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -106,7 +106,7 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         }
     };
     let speed = speed.unwrap_or(1.0);
-    if let Some(name) = text.strip_prefix("layer:") {
+    if let Some(name) = text.strip_prefix(LAYER_PREFIX) {
         return match layers.iter().position(|l| l == name) {
             Some(index) => Some(Target::Layer(index)),
             None => {

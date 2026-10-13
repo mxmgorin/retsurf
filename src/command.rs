@@ -120,6 +120,8 @@ pub enum GameMapEditAction {
     CaptureCancel,
     /// Unbind the focused row, which takes its line out of the file.
     Remove,
+    /// A layer name the on-screen keyboard submitted, for a new one or a rename.
+    NameLayer(String),
 }
 
 /// Actions on the settings overlay. `Select` carries its target row;

@@ -17,7 +17,7 @@ pub const DIM: egui::Color32 = egui::Color32::from_gray(0x99);
 /// Backdrop under something that blocks: what it covers reads as inactive.
 pub const SCRIM: egui::Color32 = egui::Color32::from_black_alpha(140);
 
-/// A refused action: the success teal cannot read as "this did not happen".
+/// A refused or destructive action: the success teal cannot read as either.
 pub const WARN: egui::Color32 = egui::Color32::from_rgb(0xe8, 0x73, 0x5a);
 
 // The start-page palette, shared by the dial editor (its tiles must match).

@@ -1,7 +1,7 @@
 //! Rendering of the speed-dial editor overlay (state lives in
 //! [`crate::overlay::dial_edit`]): a title, the pins as a deletable tile grid,
-//! and a URL field + "Add" beneath. Tiles reuse the start page's look; edits go
-//! through [`crate::command::MenuAction`].
+//! and beneath them a URL field that pins on Enter. Tiles reuse the start
+//! page's look; edits go through [`crate::command::MenuAction`].
 
 use super::favicon::Icon;
 use super::home::{paint_action_tile, paint_tile, tile_grid, DialPins, GAP, GLYPH, TILE_H, TILE_W};

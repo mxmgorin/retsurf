@@ -1,7 +1,7 @@
 //! The speed-dial editor: a standalone full-screen overlay (reached from the
 //! start page's "Edit" tile) for managing the pinned shortcuts ([`crate::data::dial`]).
-//! It shows the pins as a deletable tile grid with a URL field + "Add" button
-//! beneath (the shared [`GridNav`], field below the grid). Tile indices are dial
+//! It shows the pins as a deletable tile grid with a URL field beneath that pins
+//! on Enter (the shared [`GridNav`], field below the grid). Tile indices are dial
 //! indices; the slot past them is the "Pin settings" tile shown while
 //! `SETTINGS_PIN` is off the dial.
 //! The dial itself lives in the menu's store, the central router drives the

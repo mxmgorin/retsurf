@@ -7,18 +7,18 @@ use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, Quic
 use crate::browser::{BrowserCommand, TabMode};
 use crate::config::Scaling;
 use crate::event::bindings::{self, Action};
-use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, PAD_PREFIX};
+use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX};
 use crate::event::game::GameMode;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
-use crate::overlay::game::map_edit::{self, Device, EditPress, Kind, Row, Slot, Take, UNBOUND};
+use crate::overlay::game::map_edit::{
+    self, CaptureFor, Device, EditPress, Kind, LayerName, LayerRow, Row, Slot, Tail, Take,
+    DIRECTIONS, NEW_LAYER_NAME, UNBOUND,
+};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::{Entry, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
-
-/// What a stick's row reads as once it is four directions.
-const DIRECTIONS: &str = "directions";
 
 impl App {
     /// Game Mode, loaded on demand with the map the config asks for.
@@ -403,8 +403,9 @@ impl App {
             // B backs out of the lists first, then the editor, saving only if
             // something changed — an untouched visit rewrites no file.
             GameMapEditAction::Close => {
+                // Leaving a layer changes which rows are the screen's.
                 if self.ui.map_edit.back() {
-                    return;
+                    return self.refresh_map_edit();
                 }
                 let id = self.ui.map_edit.map_id().to_string();
                 if self.ui.map_edit.close() {
@@ -428,22 +429,91 @@ impl App {
             // Only over the rows: inside a kind list the same press is about
             // to take one, not to undo it.
             GameMapEditAction::Remove => {
-                if let (false, Some(slot)) = (self.ui.map_edit.kind_open(), self.ui.map_edit.slot())
-                {
+                if self.ui.map_edit.kind_open() {
+                    return;
+                }
+                if let Some(slot) = self.ui.map_edit.slot() {
                     self.set_map_target(slot, None);
+                } else if self.ui.map_edit.focused_tail() == Some(Tail::HeldBy) {
+                    self.set_activator(None);
                 }
             }
+            GameMapEditAction::NameLayer(text) => self.name_layer(text),
         }
+    }
+
+    /// Name a new layer or rename the scoped one; a name another layer holds
+    /// gets a suffix, since the name is the layer's key in the file.
+    fn name_layer(&mut self, text: &str) {
+        let Some(naming) = self.ui.map_edit.take_naming() else {
+            return;
+        };
+        let id = self.ui.map_edit.map_id().to_string();
+        let scope = self.ui.map_edit.layer().map(str::to_string);
+        let Some(map) = self.game_mode().maps.get_mut(&id) else {
+            return;
+        };
+        let taken: Vec<String> = map
+            .raw_layers()
+            .filter(|name| Some(*name) != scope.as_deref())
+            .map(str::to_string)
+            .collect();
+        let name = unique_name(text, &taken);
+        match (naming.what, scope) {
+            (LayerName::New, _) => {
+                map.add_raw_layer(&name);
+                self.ui.map_edit.open_layer(name);
+            }
+            (LayerName::Rename, Some(old)) => {
+                map.rename_raw_layer(&old, &name);
+                self.ui.map_edit.rename_scope(name);
+            }
+            // A rename is only offered inside a layer.
+            (LayerName::Rename, None) => return,
+        }
+        self.edited_input_map();
+    }
+
+    /// Delete the layer the screen is scoped to, and go back to the base.
+    fn delete_layer(&mut self) {
+        self.ui.map_edit.close_confirm();
+        let Some(name) = self.ui.map_edit.layer().map(str::to_string) else {
+            return;
+        };
+        let id = self.ui.map_edit.map_id().to_string();
+        if let Some(map) = self.game_mode().maps.get_mut(&id) {
+            map.remove_raw_layer(&name);
+        }
+        self.ui.map_edit.leave_layer();
+        self.edited_input_map();
+    }
+
+    /// Hand the keyboard a layer name to edit.
+    fn ask_layer_name(&mut self, what: LayerName, out: &mut Vec<AppCommand>) {
+        let text = match what {
+            LayerName::New => NEW_LAYER_NAME,
+            LayerName::Rename => self.ui.map_edit.layer().unwrap_or(NEW_LAYER_NAME),
+        };
+        self.ui.map_edit.start_naming(what, text.to_string());
+        self.ui.osk(OskCommand::Show, &self.browser, out);
     }
 
     /// A captured gesture becomes the source a row is made for; what no row can
     /// hold is refused where it was asked for (see [`map_edit::source_of`]).
     fn map_edit_capture(&mut self, gesture: &str, keyboard: bool) {
+        let purpose = self.ui.map_edit.capturing();
         let slot = match map_edit::source_of(gesture, keyboard) {
+            Ok(Slot::Stick(_)) if purpose == Some(CaptureFor::Activator) => {
+                let note = "a stick cannot hold a layer open".to_string();
+                return self.ui.map_edit.stop_capture(Some(note));
+            }
             Ok(slot) => slot,
             Err(note) => return self.ui.map_edit.stop_capture(Some(note.to_string())),
         };
         self.ui.map_edit.stop_capture(None);
+        if purpose == Some(CaptureFor::Activator) {
+            return self.set_activator(Some(slot));
+        }
         // A source the map already binds has a row; the capture takes you to it
         // rather than adding a second one.
         if self.ui.map_edit.rows().iter().any(|row| row.slot == slot) {
@@ -460,13 +530,30 @@ impl App {
     fn map_edit_activate(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.map_edit.press() {
             Some(EditPress::OpenKinds) => self.ui.map_edit.open_kinds(),
-            Some(EditPress::StartCapture) => self.ui.map_edit.start_capture(),
+            Some(EditPress::StartCapture) => self.ui.map_edit.start_capture(CaptureFor::Source),
+            Some(EditPress::CaptureActivator) => {
+                self.ui.map_edit.start_capture(CaptureFor::Activator)
+            }
             // The mouse list is the one question a kind asks of its own; the
             // rows below it write like any other.
             Some(EditPress::Take(Kind::Mouse, _)) => self.ui.map_edit.open_device(Device::Mouse),
             Some(EditPress::Take(Kind::Gamepad, _)) => {
                 self.ui.map_edit.open_device(Device::Gamepad)
             }
+            Some(EditPress::Take(Kind::Layer, _)) => self.ui.map_edit.open_device(Device::Layer),
+            Some(EditPress::TakeLayer(name, slot)) => {
+                self.ui.map_edit.close_kinds();
+                self.set_map_target(slot, Some(format!("{LAYER_PREFIX}{name}")));
+            }
+            Some(EditPress::OpenLayer(name)) => {
+                self.ui.map_edit.open_layer(name);
+                self.refresh_map_edit();
+            }
+            Some(EditPress::NewLayer) => self.ask_layer_name(LayerName::New, out),
+            Some(EditPress::RenameLayer) => self.ask_layer_name(LayerName::Rename, out),
+            Some(EditPress::AskDelete) => self.ui.map_edit.ask_confirm(),
+            Some(EditPress::Delete(true)) => self.delete_layer(),
+            Some(EditPress::Delete(false)) => self.ui.map_edit.close_confirm(),
             Some(EditPress::TakeMouse(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 self.set_map_target(slot, Some(kind.target().to_string()));
@@ -480,8 +567,9 @@ impl App {
                 match kind.take() {
                     Take::Text(text) => self.set_map_target(slot, Some(text.to_string())),
                     Take::Arrows => self.set_map_arrows(slot),
+                    Take::Remove => self.set_map_target(slot, None),
                     // Reached by the arms above, which have the row they are for.
-                    Take::Mouse | Take::Gamepad => {}
+                    Take::Mouse | Take::Gamepad | Take::Layer => {}
                     // The keyboard becomes a key picker; the pick lands in the
                     // editor's slot, which the loop drains.
                     Take::Key => {
@@ -510,17 +598,41 @@ impl App {
     /// — a source bound from the row that captures has no row until now.
     fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
         let id = self.ui.map_edit.map_id().to_string();
+        let scope = self.ui.map_edit.layer().map(str::to_string);
+        let layer = scope.as_deref();
         let raw = text.map(RawTarget::Short);
         if let Some(map) = self.game_mode().maps.get_mut(&id) {
             match &slot {
-                Slot::Button(pad) => map.set_raw_pad(*pad, raw),
-                Slot::Key(name) => map.set_raw_key(name, raw),
-                Slot::Stick(side) => map.set_raw_stick(*side, raw),
-                Slot::Direction(side, dir) => map.set_raw_stick_dir(*side, *dir, raw),
+                Slot::Button(pad) => map.set_raw_pad(layer, *pad, raw),
+                Slot::Key(name) => map.set_raw_key(layer, name, raw),
+                Slot::Stick(side) => map.set_raw_stick(layer, *side, raw),
+                Slot::Direction(side, dir) => map.set_raw_stick_dir(layer, *side, *dir, raw),
             }
         }
         self.edited_input_map();
         self.ui.map_edit.select_slot(&slot);
+    }
+
+    /// Make `slot` the one base source that holds the scoped layer open, or
+    /// leave nothing holding it.
+    fn set_activator(&mut self, slot: Option<Slot>) {
+        let id = self.ui.map_edit.map_id().to_string();
+        let Some(layer) = self.ui.map_edit.layer().map(str::to_string) else {
+            return;
+        };
+        let Some(map) = self.game_mode().maps.get_mut(&id) else {
+            return;
+        };
+        map.clear_raw_activators(&layer);
+        let target = Some(RawTarget::Short(format!("{LAYER_PREFIX}{layer}")));
+        match slot {
+            Some(Slot::Button(pad)) => map.set_raw_pad(None, pad, target),
+            Some(Slot::Key(name)) => map.set_raw_key(None, &name, target),
+            Some(Slot::Direction(side, dir)) => map.set_raw_stick_dir(None, side, dir, target),
+            // Refused at the capture: a whole stick sends a vector, not an edge.
+            Some(Slot::Stick(_)) | None => {}
+        }
+        self.edited_input_map();
     }
 
     /// Hand a stick its four directions (see [`Take::Arrows`]).
@@ -529,8 +641,9 @@ impl App {
             return;
         };
         let id = self.ui.map_edit.map_id().to_string();
+        let scope = self.ui.map_edit.layer().map(str::to_string);
         if let Some(map) = self.game_mode().maps.get_mut(&id) {
-            map.set_raw_stick_arrows(side);
+            map.set_raw_stick_arrows(scope.as_deref(), side);
         }
         self.edited_input_map();
     }
@@ -540,10 +653,12 @@ impl App {
         self.refresh_map_edit();
     }
 
-    /// Re-snapshot the editor's rows from the map it has open. A stale id keeps
-    /// the last snapshot: writes to it are already no-ops (see `set_map_target`).
+    /// Re-snapshot the editor's rows from the map it has open, in its scope. A
+    /// stale id keeps the last snapshot: writes to it are already no-ops.
     fn refresh_map_edit(&mut self) {
         let id = self.ui.map_edit.map_id().to_string();
+        let scope = self.ui.map_edit.layer().map(str::to_string);
+        let layer = scope.as_deref();
         let Some(map) = self.game_mode().maps.get(&id) else {
             return;
         };
@@ -554,8 +669,8 @@ impl App {
         let mut rows = vec![];
         // The sticks lead, each a row only while the map binds it.
         for side in Side::ALL {
-            let digital = map.raw_stick_is_digital(side);
-            if !digital && map.raw_stick(side).is_none() {
+            let digital = map.raw_stick_is_digital(layer, side);
+            if !digital && map.raw_stick(layer, side).is_none() {
                 continue;
             }
             rows.push(Row {
@@ -564,13 +679,13 @@ impl App {
                 // so the row says what it has become instead.
                 target: match digital {
                     true => DIRECTIONS.to_string(),
-                    false => text(map.raw_stick(side)),
+                    false => text(map.raw_stick(layer, side)),
                 },
             });
             if digital {
                 rows.extend(Dir::ALL.map(|dir| Row {
                     slot: Slot::Direction(side, dir),
-                    target: text(map.raw_stick_dir(side, dir)),
+                    target: text(map.raw_stick_dir(layer, side, dir)),
                 }));
             }
         }
@@ -578,16 +693,28 @@ impl App {
         // the file's. No button is held back, or one the file spells could not
         // be taken back out.
         rows.extend(Pad::ALL.into_iter().filter_map(|pad| {
-            map.raw_pad(pad).map(|raw| Row {
+            map.raw_pad(layer, pad).map(|raw| Row {
                 slot: Slot::Button(pad),
                 target: raw.text().to_string(),
             })
         }));
-        rows.extend(map.raw_keys().map(|(name, raw)| Row {
+        rows.extend(map.raw_keys(layer).map(|(name, raw)| Row {
             slot: Slot::Key(name.to_string()),
             target: raw.text().to_string(),
         }));
-        self.ui.map_edit.set_rows(rows);
+        let layers = map
+            .raw_layers()
+            .map(|name| LayerRow {
+                name: name.to_string(),
+                held_by: map
+                    .raw_activators(name)
+                    .iter()
+                    .filter_map(|path| Slot::from_path(path))
+                    .collect(),
+                has_sticks: map.raw_layer_has_sticks(name),
+            })
+            .collect();
+        self.ui.map_edit.set_rows(rows, layers);
     }
 
     /// Adopt the map the config names, for a settings restore. The config
@@ -602,4 +729,20 @@ impl App {
         game.use_map(&id, &self.browser, out);
         self.refresh_input_maps();
     }
+}
+
+/// `text` trimmed, with a number after it where another name has it already.
+fn unique_name(text: &str, taken: &[String]) -> String {
+    let base = match text.trim() {
+        "" => NEW_LAYER_NAME,
+        trimmed => trimmed,
+    };
+    let free = |name: &str| !taken.iter().any(|t| t == name);
+    if free(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|n| format!("{base}-{n}"))
+        .find(|name| free(name))
+        .expect("the integers outnumber the layers")
 }

@@ -91,6 +91,7 @@ enum OskDest {
     Settings,
     Capture,
     GameName,
+    LayerName,
     DialEdit,
     Home,
     AddressBar,
@@ -146,6 +147,8 @@ impl AppUi {
             Focus::GameMapEdit if self.map_edit.picking().is_some() => OskDest::Capture,
             // A map being renamed or copied: the keyboard types its name.
             Focus::GameInputMaps if self.input_maps.naming().is_some() => OskDest::GameName,
+            // A layer being added or renamed in the map editor.
+            Focus::GameMapEdit if self.map_edit.naming().is_some() => OskDest::LayerName,
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
             // The speed-dial editor's URL field (its own buffer); Enter pins it.
             Focus::DialEdit => OskDest::DialEdit,
@@ -173,6 +176,11 @@ impl AppUi {
             OskDest::GameName => {
                 OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
             }
+            OskDest::LayerName => OskTarget::LayerName(
+                self.map_edit
+                    .naming_text_mut()
+                    .expect("LayerName is routed only while the editor names a layer"),
+            ),
             OskDest::DialEdit => OskTarget::DialEdit(self.dial_edit.input_mut()),
             OskDest::Home => OskTarget::Home(self.home.input_mut()),
             OskDest::AddressBar => OskTarget::AddressBar,
@@ -192,6 +200,7 @@ impl AppUi {
         // the keyboard away is how that is called off.
         if matches!(cmd, OskCommand::Hide) {
             self.input_maps.take_naming();
+            self.map_edit.take_naming();
         }
     }
 
@@ -250,9 +259,11 @@ impl AppUi {
             OskDest::DialEdit => OskField::DialEdit,
             OskDest::Home => OskField::Home,
             OskDest::AddressBar => OskField::AddressBar,
-            OskDest::Settings | OskDest::Capture | OskDest::GameName | OskDest::Page => {
-                OskField::None
-            }
+            OskDest::Settings
+            | OskDest::Capture
+            | OskDest::GameName
+            | OskDest::LayerName
+            | OskDest::Page => OskField::None,
         }
     }
 

@@ -268,7 +268,7 @@ impl AppEventHandler {
         // transition cannot resolve as both a gesture to bind and a bound action.
         // Two screens bind by listening — the settings' Controls rows and the
         // Game Mode map editor — and one machine serves both.
-        let capturing = ui.settings.capturing() || ui.map_edit.capturing();
+        let capturing = ui.settings.capturing() || ui.map_edit.capturing().is_some();
         if capturing != self.listening.is_some() {
             let held = self.gamepad.held();
             self.listening =
@@ -332,7 +332,7 @@ impl AppEventHandler {
 
         // Capture owns the pad, so no analog state is emitted while it is open.
         if let Some(listening) = &mut self.listening {
-            let for_map = ui.map_edit.capturing();
+            let for_map = ui.map_edit.capturing().is_some();
             match listening.capture.tick(Instant::now()) {
                 Tick::Got(captured) => push_capture(commands, captured, for_map),
                 Tick::GaveUp => push_capture_cancel(commands, for_map),
@@ -652,7 +652,7 @@ impl AppEventHandler {
     ) {
         self.note_input_source(&event);
         if self.listening.is_some()
-            && self.on_capture_event(&event, ui.map_edit.capturing(), commands)
+            && self.on_capture_event(&event, ui.map_edit.capturing().is_some(), commands)
         {
             return;
         }

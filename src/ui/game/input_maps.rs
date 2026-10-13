@@ -5,7 +5,8 @@
 
 use crate::command::{AppCommand, GameInputMapsAction};
 use crate::overlay::game::input_maps::{InputMaps, MapAction, NameFor, NEW_MAP_LABEL};
-use crate::ui::panel;
+use crate::ui::panel::{self, ListItem, Tone};
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 
 pub(in crate::ui) fn add_input_maps(
@@ -13,11 +14,11 @@ pub(in crate::ui) fn add_input_maps(
     screens: &InputMaps,
     commands: &mut Vec<AppCommand>,
 ) {
-    let closed = panel::row_list(
+    let closed = panel::grouped_row_list(
         ctx,
         "input_maps",
         &title(screens),
-        rows(screens),
+        items(screens),
         screens.selected(),
         |index| commands.push(AppCommand::GameInputMaps(GameInputMapsAction::Click(index))),
     );
@@ -51,6 +52,26 @@ fn remove_label(screens: &InputMaps) -> &'static str {
         .map_or("Remove", MapAction::label)
 }
 
+/// [`rows`] dressed for the list: the row that makes a map reads as a verb and
+/// stands apart from the maps, and a removal reads as one that destroys.
+fn items(screens: &InputMaps) -> Vec<ListItem> {
+    let removal = remove_label(screens);
+    let list = screens.open_row().is_none() && !screens.confirming();
+    let mut items = vec![];
+    for (index, (label, value)) in rows(screens).into_iter().enumerate() {
+        let tone = match () {
+            _ if list && index == 0 => Tone::Action,
+            _ if !list && label == removal => Tone::Danger,
+            _ => Tone::Plain,
+        };
+        items.push(ListItem::Toned(label, value, tone));
+        if list && index == 0 {
+            items.push(ListItem::Divider);
+        }
+    }
+    items
+}
+
 /// The rows of whichever screen is up.
 fn rows(screens: &InputMaps) -> Vec<(String, String)> {
     if screens.confirming() {
@@ -65,7 +86,7 @@ fn rows(screens: &InputMaps) -> Vec<(String, String)> {
     if screens.open_row().is_none() {
         let typed = naming.filter(|naming| naming.what == NameFor::New);
         let new = (
-            NEW_MAP_LABEL.to_string(),
+            format!("{}  {NEW_MAP_LABEL}", bold::PLUS),
             typed.map(|naming| naming.text.clone()).unwrap_or_default(),
         );
         return std::iter::once(new)

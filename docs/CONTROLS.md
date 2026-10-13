@@ -71,14 +71,22 @@ the file is deleted. Files are read at startup; a bad entry is logged and skippe
 ### In the app
 
 The **Input map** row (Quick Access in Game Mode, or Settings > Gaming) lists the maps.
-**+ Add** creates an empty one (everything passes through), and **A** on a map offers *Use
+**+ New map** creates an empty one (everything passes through), and **A** on a map offers *Use
 this map*, *Edit*, *Rename*, *Duplicate*, *Delete*, or *Reset to default* for an edited
 built-in.
 
 The editor has a row per bound source, grouped as *Sticks*, *Gamepad* and *Keyboard*. **A**
-picks what the source sends, **X** unbinds it, **B** saves. **+ Add** listens for the
-button, key or stick to bind; it refuses holds, chords and modified keys, and gives up after
-six seconds. Editing a built-in writes the file that replaces it.
+opens what the source can send, on what it sends now; *Remove* (or **X**) unbinds it, **B**
+saves. **+ New binding** listens for the button, key or stick to bind; it refuses holds,
+chords and modified keys, and gives up after six seconds. Editing a built-in writes the file
+that replaces it.
+
+Under *Layers* comes a row per layer and what holds it open. **A** opens the same editor for
+that layer, with *Held by*, *Rename* and *Delete* after its rows. *Held by* listens for the
+button or key that will hold the layer open, replacing any other (**X** clears it); deleting
+a layer also unbinds whatever held it. **+ New layer** names a new one on the on-screen
+keyboard. A base row can also hold a layer open by sending **Layer**; a stick direction is
+not offered a layer that remaps a stick.
 
 ### File format
 

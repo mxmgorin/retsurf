@@ -74,9 +74,8 @@ pub struct Naming {
 /// names something.
 pub const NEW_MAP_NAME: &str = "New map";
 
-/// The list's first row, which makes a map. Spelled like the row that adds a
-/// mapping inside one: each adds what its own screen lists.
-pub const NEW_MAP_LABEL: &str = "+ Add";
+/// The list's first row, which makes a map.
+pub const NEW_MAP_LABEL: &str = "New map";
 
 /// What **A** does, given which of the three lists the highlight is in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

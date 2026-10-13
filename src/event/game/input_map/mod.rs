@@ -34,6 +34,7 @@ use inputbind::sdl::KeyNames;
 use inputbind::Pad;
 use keyboard_types::{Code, Key, Modifiers};
 use raw::RawInputMap;
+use std::collections::BTreeMap;
 
 /// The key a stick's whole-vector target is written under.
 const ANALOG: &str = "analog";
@@ -48,6 +49,12 @@ pub const PAD_PREFIX: &str = "pad.";
 
 /// The table a stick is written in.
 pub const STICK_PREFIX: &str = "stick.";
+
+/// How an activator names the layer it holds open.
+pub const LAYER_PREFIX: &str = "layer:";
+
+type RawTable = BTreeMap<String, RawTarget>;
+type RawSticks = BTreeMap<String, RawTable>;
 
 /// Which stick, as the file spells it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -114,7 +121,7 @@ impl Dir {
         }
     }
 
-    fn parse(name: &str) -> Option<Dir> {
+    pub fn parse(name: &str) -> Option<Dir> {
         Dir::ALL.into_iter().find(|dir| dir.name() == name)
     }
 }
@@ -293,70 +300,111 @@ fn find_key(keys: &[(u32, Target)], code: u32) -> Option<&Target> {
 }
 
 impl InputMap {
-    /// What the file says this pad sends, for the editor's row.
-    pub fn raw_pad(&self, pad: Pad) -> Option<&RawTarget> {
-        self.raw.pad.get(pad.name())
+    /// The pad, key and stick tables of the base or of one layer; `None` for a
+    /// layer the file does not declare.
+    fn tables(&self, layer: Option<&str>) -> Option<(&RawTable, &RawTable, &RawSticks)> {
+        match layer {
+            None => Some((&self.raw.pad, &self.raw.key, &self.raw.stick)),
+            Some(name) => self.raw.layer.get(name).map(|l| (&l.pad, &l.key, &l.stick)),
+        }
     }
 
-    /// Rewrite one pad's entry; `None` unbinds it (the page gets it raw again).
-    pub fn set_raw_pad(&mut self, pad: Pad, target: Option<RawTarget>) {
+    fn tables_mut(
+        &mut self,
+        layer: Option<&str>,
+    ) -> Option<(&mut RawTable, &mut RawTable, &mut RawSticks)> {
+        match layer {
+            None => Some((&mut self.raw.pad, &mut self.raw.key, &mut self.raw.stick)),
+            Some(name) => {
+                let l = self.raw.layer.get_mut(name)?;
+                Some((&mut l.pad, &mut l.key, &mut l.stick))
+            }
+        }
+    }
+
+    /// What the file says this pad sends, for the editor's row.
+    pub fn raw_pad(&self, layer: Option<&str>, pad: Pad) -> Option<&RawTarget> {
+        self.tables(layer)?.0.get(pad.name())
+    }
+
+    /// Rewrite one pad's entry; `None` unbinds it (the page gets it raw again,
+    /// or the base's target under a layer).
+    pub fn set_raw_pad(&mut self, layer: Option<&str>, pad: Pad, target: Option<RawTarget>) {
+        let Some((pads, _, _)) = self.tables_mut(layer) else {
+            return;
+        };
         match target {
-            Some(target) => self.raw.pad.insert(pad.name().to_string(), target),
-            None => self.raw.pad.remove(pad.name()),
+            Some(target) => pads.insert(pad.name().to_string(), target),
+            None => pads.remove(pad.name()),
         };
     }
 
     /// The keys the file binds, by the name it spells them with — the editor
     /// has a row per entry, since which keys exist is the keyboard's business
     /// rather than a set the screen could list.
-    pub fn raw_keys(&self) -> impl Iterator<Item = (&str, &RawTarget)> {
-        self.raw
-            .key
-            .iter()
+    pub fn raw_keys(&self, layer: Option<&str>) -> impl Iterator<Item = (&str, &RawTarget)> {
+        self.tables(layer)
+            .into_iter()
+            .flat_map(|(_, keys, _)| keys.iter())
             .map(|(name, target)| (name.as_str(), target))
     }
 
     /// Rewrite one key's entry; `None` takes the line out of the file, which
     /// leaves the key reaching the page as itself.
-    pub fn set_raw_key(&mut self, name: &str, target: Option<RawTarget>) {
+    pub fn set_raw_key(&mut self, layer: Option<&str>, name: &str, target: Option<RawTarget>) {
+        let Some((_, keys, _)) = self.tables_mut(layer) else {
+            return;
+        };
         match target {
-            Some(target) => self.raw.key.insert(name.to_string(), target),
-            None => self.raw.key.remove(name),
+            Some(target) => keys.insert(name.to_string(), target),
+            None => keys.remove(name),
         };
     }
 
     /// What the file says the whole stick does.
-    pub fn raw_stick(&self, side: Side) -> Option<&RawTarget> {
-        self.raw.stick.get(side.name())?.get(ANALOG)
+    pub fn raw_stick(&self, layer: Option<&str>, side: Side) -> Option<&RawTarget> {
+        self.tables(layer)?.2.get(side.name())?.get(ANALOG)
     }
 
     /// What it says one of its directions does.
-    pub fn raw_stick_dir(&self, side: Side, dir: Dir) -> Option<&RawTarget> {
-        self.raw.stick.get(side.name())?.get(dir.name())
+    pub fn raw_stick_dir(&self, layer: Option<&str>, side: Side, dir: Dir) -> Option<&RawTarget> {
+        self.tables(layer)?.2.get(side.name())?.get(dir.name())
     }
 
     /// Whether the *file* reads this stick as four directions. The resolved
     /// role is a save behind while the editor is open, so the rows ask here.
-    pub fn raw_stick_is_digital(&self, side: Side) -> bool {
+    pub fn raw_stick_is_digital(&self, layer: Option<&str>, side: Side) -> bool {
         Dir::ALL
             .into_iter()
-            .any(|dir| self.raw_stick_dir(side, dir).is_some())
+            .any(|dir| self.raw_stick_dir(layer, side, dir).is_some())
     }
 
     /// Give the whole stick one target, dropping whatever directions it had:
     /// the file is one or the other, and one holding both resolves as the
     /// directions.
-    pub fn set_raw_stick(&mut self, side: Side, target: Option<RawTarget>) {
-        self.raw.stick.remove(side.name());
+    pub fn set_raw_stick(&mut self, layer: Option<&str>, side: Side, target: Option<RawTarget>) {
+        let Some((_, _, sticks)) = self.tables_mut(layer) else {
+            return;
+        };
+        sticks.remove(side.name());
         if let Some(target) = target {
-            let table = self.raw.stick.entry(side.name().to_string()).or_default();
+            let table = sticks.entry(side.name().to_string()).or_default();
             table.insert(ANALOG.to_string(), target);
         }
     }
 
     /// Set one direction, dropping the whole-stick entry for the same reason.
-    pub fn set_raw_stick_dir(&mut self, side: Side, dir: Dir, target: Option<RawTarget>) {
-        let table = self.raw.stick.entry(side.name().to_string()).or_default();
+    pub fn set_raw_stick_dir(
+        &mut self,
+        layer: Option<&str>,
+        side: Side,
+        dir: Dir,
+        target: Option<RawTarget>,
+    ) {
+        let Some((_, _, sticks)) = self.tables_mut(layer) else {
+            return;
+        };
+        let table = sticks.entry(side.name().to_string()).or_default();
         table.remove(ANALOG);
         match target {
             Some(target) => table.insert(dir.name().to_string(), target),
@@ -364,17 +412,103 @@ impl InputMap {
         };
         // An empty table would write a `[stick.left]` header with nothing under it.
         if table.is_empty() {
-            self.raw.stick.remove(side.name());
+            sticks.remove(side.name());
         }
     }
 
     /// Put the arrows on all four directions: a stick with none set resolves to
     /// unbound, which reaches the page instead.
-    pub fn set_raw_stick_arrows(&mut self, side: Side) {
+    pub fn set_raw_stick_arrows(&mut self, layer: Option<&str>, side: Side) {
         for dir in Dir::ALL {
             let arrow = RawTarget::Short(format!("{KEY_PREFIX}{}", dir.arrow()));
-            self.set_raw_stick_dir(side, dir, Some(arrow));
+            self.set_raw_stick_dir(layer, side, dir, Some(arrow));
         }
+    }
+
+    /// The layers the file declares, in its order.
+    pub fn raw_layers(&self) -> impl Iterator<Item = &str> {
+        self.raw.layer.keys().map(String::as_str)
+    }
+
+    /// Whether a layer remaps a stick, which no stick direction may open.
+    pub fn raw_layer_has_sticks(&self, name: &str) -> bool {
+        self.raw
+            .layer
+            .get(name)
+            .is_some_and(|l| !l.stick.is_empty())
+    }
+
+    /// The base sources that hold `name` open, as paths (`pad.l3`, `stick.left.up`).
+    pub fn raw_activators(&self, name: &str) -> Vec<String> {
+        let target = format!("{LAYER_PREFIX}{name}");
+        let opens = |raw: &RawTarget| raw.text() == target;
+        let pads = self.raw.pad.iter().filter(|(_, raw)| opens(raw));
+        let keys = self.raw.key.iter().filter(|(_, raw)| opens(raw));
+        let dirs = self.raw.stick.iter().flat_map(|(side, table)| {
+            table
+                .iter()
+                .filter(|(_, raw)| opens(raw))
+                .map(move |(dir, _)| format!("{STICK_PREFIX}{side}.{dir}"))
+        });
+        pads.map(|(pad, _)| format!("{PAD_PREFIX}{pad}"))
+            .chain(keys.map(|(key, _)| format!("{KEY_PREFIX}{key}")))
+            .chain(dirs)
+            .collect()
+    }
+
+    /// Declare an empty layer; one already there is left as it is.
+    pub fn add_raw_layer(&mut self, name: &str) {
+        self.raw.layer.entry(name.to_string()).or_default();
+    }
+
+    /// Rename a layer, and every activator with it.
+    pub fn rename_raw_layer(&mut self, old: &str, new: &str) {
+        let Some(layer) = self.raw.layer.remove(old) else {
+            return;
+        };
+        self.raw.layer.insert(new.to_string(), layer);
+        let (old, new) = (
+            format!("{LAYER_PREFIX}{old}"),
+            format!("{LAYER_PREFIX}{new}"),
+        );
+        for raw in self.base_targets_mut() {
+            if raw.text() == old {
+                *raw = RawTarget::Short(new.clone());
+            }
+        }
+    }
+
+    /// Drop a layer and the activators that opened it, which would otherwise
+    /// name nothing.
+    pub fn remove_raw_layer(&mut self, name: &str) {
+        self.raw.layer.remove(name);
+        self.clear_raw_activators(name);
+    }
+
+    /// Unbind every base source that holds `name` open.
+    pub fn clear_raw_activators(&mut self, name: &str) {
+        let target = format!("{LAYER_PREFIX}{name}");
+        let keep = |_: &String, raw: &mut RawTarget| raw.text() != target;
+        self.raw.pad.retain(keep);
+        self.raw.key.retain(keep);
+        for table in self.raw.stick.values_mut() {
+            table.retain(keep);
+        }
+        self.raw.stick.retain(|_, table| !table.is_empty());
+    }
+
+    /// Every target the base tables write, which is where activators live.
+    fn base_targets_mut(&mut self) -> impl Iterator<Item = &mut RawTarget> {
+        let sticks = self
+            .raw
+            .stick
+            .values_mut()
+            .flat_map(|table| table.values_mut());
+        self.raw
+            .pad
+            .values_mut()
+            .chain(self.raw.key.values_mut())
+            .chain(sticks)
     }
 
     /// Rename what the menu shows. The id stays: it is the file's stem, and
@@ -735,6 +869,38 @@ mod tests {
         assert_eq!(map.stick(Some(0), Side::Left), map.stick(None, Side::Left));
     }
 
+    /// A layer's activators follow it through a rename and leave with it.
+    #[test]
+    fn activators_follow_their_layer() {
+        let mut map = resolve(
+            r#"
+            [pad]
+            l3 = "layer:aim"
+            a = "key.x"
+            [key]
+            q = "layer:aim"
+            [stick.left]
+            up = "layer:aim"
+            down = "key.s"
+            [layer.aim.pad]
+            r2 = "mouse.left"
+            "#,
+        );
+        assert_eq!(
+            map.raw_activators("aim"),
+            ["pad.l3", "key.q", "stick.left.up"]
+        );
+        map.rename_raw_layer("aim", "mouse");
+        assert_eq!(map.raw_layers().collect::<Vec<_>>(), ["mouse"]);
+        assert_eq!(map.raw_activators("mouse").len(), 3);
+        assert!(map.raw_pad(Some("mouse"), Pad::R2).is_some());
+        map.remove_raw_layer("mouse");
+        assert_eq!(map.raw_layers().count(), 0);
+        assert!(map.raw_pad(None, Pad::L3).is_none() && map.raw_pad(None, Pad::A).is_some());
+        assert_eq!(map.raw_keys(None).count(), 0);
+        assert!(map.raw_stick_dir(None, Side::Left, Dir::Down).is_some());
+    }
+
     /// Opening it would hand the stick over to itself on every switch.
     #[test]
     fn a_stick_cannot_open_a_layer_that_remaps_a_stick() {
@@ -828,20 +994,21 @@ mod tests {
             analog = "mouse.cursor"
             "#,
         );
-        assert!(!map.raw_stick_is_digital(Side::Left));
-        map.set_raw_stick_arrows(Side::Left);
-        assert!(map.raw_stick(Side::Left).is_none());
-        assert!(map.raw_stick_is_digital(Side::Left));
+        assert!(!map.raw_stick_is_digital(None, Side::Left));
+        map.set_raw_stick_arrows(None, Side::Left);
+        assert!(map.raw_stick(None, Side::Left).is_none());
+        assert!(map.raw_stick_is_digital(None, Side::Left));
         assert_eq!(
-            map.raw_stick_dir(Side::Left, Dir::Up).map(RawTarget::text),
+            map.raw_stick_dir(None, Side::Left, Dir::Up)
+                .map(RawTarget::text),
             Some("key.ArrowUp")
         );
         // And back: the directions go when the whole stick is given a target.
         let scroll = RawTarget::Short("scroll".to_string());
-        map.set_raw_stick(Side::Left, Some(scroll));
-        assert!(map.raw_stick_dir(Side::Left, Dir::Up).is_none());
+        map.set_raw_stick(None, Side::Left, Some(scroll));
+        assert!(map.raw_stick_dir(None, Side::Left, Dir::Up).is_none());
         assert_eq!(
-            map.raw_stick(Side::Left).map(RawTarget::text),
+            map.raw_stick(None, Side::Left).map(RawTarget::text),
             Some("scroll")
         );
     }

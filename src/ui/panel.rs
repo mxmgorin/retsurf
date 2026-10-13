@@ -1,7 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT};
+use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT, WARN};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
 
@@ -74,13 +74,7 @@ pub(super) fn row(
     label: &str,
     value: &str,
 ) -> egui::Response {
-    let (label, value) = row_texts(label, value);
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
+    toned_row(ui, width, selected, label, value, Tone::Plain)
 }
 
 /// An on/off switch at the trailing edge of `row`, where a value would sit.
@@ -126,51 +120,78 @@ pub(super) fn named_row(
 }
 
 fn row_texts(label: &str, value: &str) -> (egui::RichText, egui::RichText) {
-    let label = egui::RichText::new(label)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
+    toned_texts(label, value, Tone::Plain)
+}
+
+fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
+    let color = match tone {
+        Tone::Plain => egui::Color32::WHITE,
+        Tone::Action => ACCENT,
+        Tone::Danger => WARN,
+    };
     (
-        label,
+        egui::RichText::new(label).color(color).size(ROW_FONT),
         egui::RichText::new(value).color(ACCENT).size(ROW_FONT),
     )
 }
 
-/// One entry of a [`row_list`]: a row to select, or a heading over the rows
-/// that follow it. A heading is not selectable, so the index the list is given
-/// and the one it reports both count rows alone.
+/// How a row's label is coloured: a value to read, a verb, or a verb that
+/// destroys something.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Tone {
+    Plain,
+    Action,
+    Danger,
+}
+
+/// One entry of a [`grouped_row_list`]: a row to select, or a heading or divider
+/// between them. Neither is selectable, so the index the list is given and
+/// the one it reports both count rows alone.
 pub(super) enum ListItem {
     Heading(String),
     Row(String, String),
+    /// A row whose label is coloured by its [`Tone`].
+    Toned(String, String, Tone),
+    /// A hairline between the rows above and below.
+    Divider,
 }
 
-/// A titled full-screen panel over one scrolling list of `(label, value)` rows;
-/// `on_click` gets the index of a clicked row. Returns whether it was closed.
-pub(super) fn row_list(
-    ctx: &egui::Context,
-    id: &str,
-    title: &str,
-    rows: Vec<(String, String)>,
-    selected: usize,
-    on_click: impl FnMut(usize),
-) -> bool {
-    let items = rows
-        .into_iter()
-        .map(|(label, value)| ListItem::Row(label, value))
-        .collect();
-    grouped_row_list(ctx, id, title, items, selected, on_click)
-}
-
-/// [`row_list`] over items that may carry headings — a long list reads as its
-/// groups rather than as one run of rows.
+/// A titled full-screen panel over one scrolling list, which headings and
+/// dividers break into groups; `on_click` gets the index of a clicked row.
+/// Returns whether it was closed.
 pub(super) fn grouped_row_list(
     ctx: &egui::Context,
     id: &str,
     title: &str,
     items: Vec<ListItem>,
     selected: usize,
+    on_click: impl FnMut(usize),
+) -> bool {
+    grouped_row_list_above(ctx, id, title, items, selected, 0.0, on_click)
+}
+
+/// [`grouped_row_list`] ending `bottom` above the screen's edge, so a keyboard
+/// drawn there covers none of it and the highlight scrolls into what is left.
+pub(super) fn grouped_row_list_above(
+    ctx: &egui::Context,
+    id: &str,
+    title: &str,
+    items: Vec<ListItem>,
+    selected: usize,
+    bottom: f32,
     mut on_click: impl FnMut(usize),
 ) -> bool {
-    let screen = ctx.content_rect();
+    let mut screen = ctx.content_rect();
+    screen.max.y -= bottom;
+    // A list cut shorter may have lost its highlight below the cut.
+    let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new(id));
+    let inset_key = egui::Id::new(("list_bottom", layer));
+    if ctx.data(|d| d.get_temp::<f32>(inset_key)) != Some(bottom) {
+        ctx.data_mut(|d| {
+            d.insert_temp(inset_key, bottom);
+            d.remove::<egui::Id>(centered_key(layer));
+        });
+    }
     let width = screen.width() - SIDES;
     panel(ctx, id, screen, |ui| {
         ui.label(
@@ -184,15 +205,20 @@ pub(super) fn grouped_row_list(
         section_scroll(ui, screen).show(ui, |ui| {
             let mut index = 0;
             for item in items {
-                let (label, value) = match item {
+                let (label, value, tone) = match item {
                     ListItem::Heading(text) => {
                         heading(ui, &text);
                         continue;
                     }
-                    ListItem::Row(label, value) => (label, value),
+                    ListItem::Divider => {
+                        divider(ui, width);
+                        continue;
+                    }
+                    ListItem::Row(label, value) => (label, value, Tone::Plain),
+                    ListItem::Toned(label, value, tone) => (label, value, tone),
                 };
                 let is_selected = index == selected;
-                let resp = row(ui, width, is_selected, &label, &value);
+                let resp = toned_row(ui, width, is_selected, &label, &value, tone);
                 if is_selected {
                     center_selected(&resp);
                 }
@@ -203,6 +229,32 @@ pub(super) fn grouped_row_list(
             }
         });
     })
+}
+
+/// A [`row`] whose label takes `tone`'s colour.
+fn toned_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    value: &str,
+    tone: Tone,
+) -> egui::Response {
+    let (label, value) = toned_texts(label, value, tone);
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+/// A hairline across the list, with a row gap's air on either side.
+fn divider(ui: &mut egui::Ui, width: f32) {
+    ui.add_space(ROW_GAP);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 1.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, HAIRLINE);
+    ui.add_space(ROW_GAP);
 }
 
 /// A heading over the rows that follow it: dim and small, and indented to the
@@ -287,12 +339,17 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
 /// re-applies a scroll request every frame it is asked, which pins the list so
 /// no drag can leave that row. Keyed per overlay — two can be open at once.
 pub(super) fn center_selected(resp: &egui::Response) {
-    let key = egui::Id::new(("centered_row", resp.layer_id));
+    let key = centered_key(resp.layer_id);
     if resp.ctx.data(|d| d.get_temp::<egui::Id>(key)) == Some(resp.id) {
         return;
     }
     resp.ctx.data_mut(|d| d.insert_temp(key, resp.id));
     resp.scroll_to_me(Some(egui::Align::Center));
+}
+
+/// Where [`center_selected`] remembers the row it last brought into view.
+fn centered_key(layer: egui::LayerId) -> egui::Id {
+    egui::Id::new(("centered_row", layer))
 }
 
 /// A section's scroll area, capped to the room down to the screen bottom: the
