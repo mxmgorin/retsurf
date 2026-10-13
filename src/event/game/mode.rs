@@ -9,6 +9,7 @@ use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, T
 use crate::browser::AppBrowser;
 use crate::command::{AppCommand, InputCommand, QuickAccessAction};
 use crate::config::ControlsConfig;
+use crate::event::gamepad::cursor_curve;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
 use crate::overlay::quick_access::Strip;
@@ -95,6 +96,8 @@ pub struct GameInput {
     /// press: a game polling once a frame would miss the two in one.
     deferred: Option<Target>,
     deadzone: f32,
+    /// [`ControlsConfig::cursor_curve`], for the sticks that point.
+    cursor_curve: f32,
     hold: Duration,
 }
 
@@ -121,6 +124,7 @@ impl GameInput {
             reserved: reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect(),
             deferred: None,
             deadzone: cfg.deadzone,
+            cursor_curve: cfg.cursor_curve,
             hold: Duration::from_millis(cfg.hold_ms),
         }
     }
@@ -590,11 +594,15 @@ impl GameInput {
             let (x, y) = (axis_value(x), axis_value(y));
             let live = |v: f32| match v.abs() < self.deadzone {
                 true => 0.0,
-                false => v * speed,
+                false => v,
             };
+            let (x, y) = (live(x), live(y));
             match to_cursor {
-                true => aim = (aim.0 + live(x), aim.1 + live(y)),
-                false => scroll = (scroll.0 + live(x), scroll.1 + live(y)),
+                true => {
+                    let (x, y) = cursor_curve((x, y), self.deadzone, self.cursor_curve);
+                    aim = (aim.0 + x * speed, aim.1 + y * speed);
+                }
+                false => scroll = (scroll.0 + x * speed, scroll.1 + y * speed),
             }
         }
         // A held source steps at a fully-deflected stick's rate, and two of them

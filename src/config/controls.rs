@@ -12,6 +12,9 @@ pub struct ControlsConfig {
     pub deadzone: f32,
     /// Cursor speed at full stick deflection, logical px per second.
     pub cursor_speed: f32,
+    /// Exponent of the stick-to-cursor response past the dead zone: above 1, a
+    /// small push moves slowly and a full one at `cursor_speed`.
+    pub cursor_curve: f32,
     /// Scroll speed at full stick deflection, device px per second.
     pub scroll_speed: f32,
     /// Trigger pull (normalized) above which L2/R2 count as pressed.
@@ -56,6 +59,7 @@ impl Default for ControlsConfig {
         Self {
             deadzone: 0.25,
             cursor_speed: 600.0,
+            cursor_curve: crate::config::bounds::CURSOR_CURVE.default as f32,
             scroll_speed: 1600.0,
             trigger_threshold: 0.5,
             osk_nav_threshold: 0.5,

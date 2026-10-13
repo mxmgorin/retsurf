@@ -72,6 +72,13 @@ pub const CURSOR_SPEED: FloatBounds = FloatBounds {
     max: 3000.0,
     default: 600.0,
 };
+
+/// 1 is linear; 2 gives a quarter of the speed at half deflection.
+pub const CURSOR_CURVE: FloatBounds = FloatBounds {
+    min: 1.0,
+    max: 6.0,
+    default: 2.0,
+};
 pub const SCROLL_SPEED: FloatBounds = FloatBounds {
     min: 100.0,
     max: 5000.0,

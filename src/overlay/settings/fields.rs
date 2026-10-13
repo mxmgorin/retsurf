@@ -52,6 +52,8 @@ pub enum Kind {
         max: f64,
         step: f64,
         decimals: usize,
+        /// Shown in place of the bare number.
+        describe: Option<fn(f64) -> String>,
         get: fn(&AppConfig) -> f64,
         set: fn(&mut AppConfig, f64),
     },
@@ -145,15 +147,29 @@ macro_rules! int {
 /// the display precision.
 macro_rules! float {
     ($($seg:ident).+ as $ty:ty, $b:expr, $step:expr, $decimals:expr) => {
+        float!($($seg).+ as $ty, $b, $step, $decimals, None)
+    };
+    ($($seg:ident).+ as $ty:ty, $b:expr, $step:expr, $decimals:expr, $describe:expr) => {
         Kind::Float {
             min: $b.min,
             max: $b.max,
             step: $step,
             decimals: $decimals,
+            describe: $describe,
             get: |c| c.$($seg).+ as f64,
             set: |c, v| c.$($seg).+ = v as $ty,
         }
     };
+}
+
+/// The share of top speed at half the travel past the dead zone.
+fn cursor_curve_label(exponent: f64) -> String {
+    if exponent <= 1.0 {
+        return "Linear".to_string();
+    }
+    let half = 0.5f64.powf(exponent) * 100.0;
+    let decimals = if half < 10.0 { 1 } else { 0 };
+    format!("{exponent:.2}, half push {half:.decimals$}%")
 }
 
 /// The screen a [`Kind::Door`] row opens.
@@ -276,7 +292,15 @@ pub fn value_of(kind: &Kind, config: &AppConfig) -> String {
                 _ => format!("{v}"),
             }
         }
-        Kind::Float { decimals, get, .. } => format!("{:.*}", decimals, get(config)),
+        Kind::Float {
+            decimals,
+            describe,
+            get,
+            ..
+        } => match describe {
+            Some(describe) => describe(get(config)),
+            None => format!("{:.*}", decimals, get(config)),
+        },
     }
 }
 
@@ -441,6 +465,7 @@ pub(super) static FIELDS: &[Field] = &[
 
     f(S::Controls, "Cursor & scroll", "Cursor mode",        choice!(controls.cursor_mode: CursorMode), true),
     f(S::Controls, "Cursor & scroll", "Cursor speed",       float!(controls.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
+    f(S::Controls, "Cursor & scroll", "Cursor curve",       float!(controls.cursor_curve as f32, bounds::CURSOR_CURVE, 0.25, 2, Some(cursor_curve_label)), false),
     f(S::Controls, "Cursor & scroll", "Scroll speed",       float!(controls.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
     f(S::Controls, "Cursor & scroll", "Edge scrolling",     flag!(controls.edge_scroll), false),
     f(S::Controls, "Cursor & scroll", "Hint badges",        flag!(controls.hint_badges), false),
@@ -494,6 +519,13 @@ pub(super) static FIELDS: &[Field] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_cursor_curve_reads_as_its_speed_at_half_push() {
+        assert_eq!(cursor_curve_label(1.0), "Linear");
+        assert_eq!(cursor_curve_label(2.0), "2.00, half push 25%");
+        assert_eq!(cursor_curve_label(6.0), "6.00, half push 1.6%");
+    }
 
     /// A label names one row per tab; a repeat is a row listed twice.
     #[test]

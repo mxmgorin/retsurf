@@ -9,6 +9,7 @@ use super::{
 };
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
+use crate::event::gamepad::cursor_curve;
 use crate::overlay::hints::{HintInput, Sym};
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::ui::Focus;
@@ -476,6 +477,7 @@ impl App {
             cfg.hint_badges,
             cfg.edge_scroll,
         );
+        let (deadzone, curve) = (cfg.deadzone, cfg.cursor_curve);
 
         // The right stick carries the keyboard at cursor speed, and scrolls the
         // page once it is pinned against an edge.
@@ -537,6 +539,13 @@ impl App {
         }
 
         if aim != (0.0, 0.0) {
+            // Only the stick's share of the aim takes the curve: the D-pad is
+            // already full deflection, and Game Mode curves its own sticks.
+            let curved = cursor_curve(stick, deadzone, curve);
+            let aim = (
+                (aim.0 - stick.0 + curved.0).clamp(-1.0, 1.0),
+                (aim.1 - stick.1 + curved.1).clamp(-1.0, 1.0),
+            );
             let clipped = self.ui.move_cursor(
                 aim.0 * cursor_speed * dt,
                 aim.1 * cursor_speed * dt,

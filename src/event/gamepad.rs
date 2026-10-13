@@ -201,6 +201,19 @@ impl Gamepad {
     }
 }
 
+/// A stick vector through the cursor's response curve: rescaled to start at the
+/// dead zone's edge, then raised to `exponent`. Full deflection stays full, a
+/// diagonal included.
+pub fn cursor_curve((x, y): (f32, f32), deadzone: f32, exponent: f32) -> (f32, f32) {
+    let length = x.hypot(y);
+    if length <= deadzone {
+        return (0.0, 0.0);
+    }
+    let t = ((length - deadzone) / (1.0 - deadzone)).min(1.0);
+    let scale = t.powf(exponent) / length;
+    (x * scale, y * scale)
+}
+
 /// The pad `button` reads as; `swap` exchanges A/B and X/Y.
 pub fn labelled_pad(button: Button, swap: bool) -> Option<Pad> {
     let pad = pad_of(button)?;
@@ -227,6 +240,25 @@ fn cadence_of(cfg: &ControlsConfig) -> Cadence {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The curve starts at the dead zone's edge, keeps full deflection full,
+    /// and slows the middle of the travel by its exponent.
+    #[test]
+    fn the_cursor_curve_slows_small_pushes_and_keeps_full_speed() {
+        let dz = 0.25;
+        assert_eq!(cursor_curve((0.25, 0.0), dz, 2.0), (0.0, 0.0));
+        assert_eq!(cursor_curve((1.0, 0.0), dz, 2.0), (1.0, 0.0));
+        let (half, _) = cursor_curve((0.625, 0.0), dz, 2.0);
+        assert!(
+            (half - 0.25).abs() < 1e-6,
+            "half the travel at a quarter speed"
+        );
+        let (linear, _) = cursor_curve((0.625, 0.0), dz, 1.0);
+        assert!((linear - 0.5).abs() < 1e-6);
+        // A full diagonal is no faster than a full push along one axis.
+        let (x, y) = cursor_curve((1.0, 1.0), dz, 2.0);
+        assert!((x.hypot(y) - 1.0).abs() < 1e-6);
+    }
 
     #[test]
     fn swap_reads_the_face_buttons_across() {

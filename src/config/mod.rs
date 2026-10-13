@@ -164,6 +164,11 @@ impl AppConfig {
             b::CURSOR_SPEED,
         );
         fix_f32(
+            "controls.cursor_curve",
+            &mut i.cursor_curve,
+            b::CURSOR_CURVE,
+        );
+        fix_f32(
             "controls.scroll_speed",
             &mut i.scroll_speed,
             b::SCROLL_SPEED,
