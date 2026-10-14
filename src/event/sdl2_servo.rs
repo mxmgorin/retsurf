@@ -161,6 +161,18 @@ pub fn code_for_char(c: char) -> keyboard_types::Code {
         '8' => Code::Digit8,
         '9' => Code::Digit9,
         ' ' => Code::Space,
+        // Unshifted US-layout punctuation; shifted characters (`?`) stay unidentified.
+        '`' => Code::Backquote,
+        '-' => Code::Minus,
+        '=' => Code::Equal,
+        '[' => Code::BracketLeft,
+        ']' => Code::BracketRight,
+        '\\' => Code::Backslash,
+        ';' => Code::Semicolon,
+        '\'' => Code::Quote,
+        ',' => Code::Comma,
+        '.' => Code::Period,
+        '/' => Code::Slash,
         _ => Code::Unidentified,
     }
 }
@@ -229,6 +241,7 @@ mod tests {
         assert_eq!(code_for_char('W'), Code::KeyW);
         assert_eq!(code_for_char('5'), Code::Digit5);
         assert_eq!(code_for_char(' '), Code::Space);
+        assert_eq!(code_for_char('/'), Code::Slash);
         assert_eq!(code_for_char('?'), Code::Unidentified);
     }
 }
