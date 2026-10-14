@@ -834,6 +834,8 @@ mod tests {
         };
         assert_eq!(key.code, Code::KeyY);
         assert!(key.modifiers.contains(Modifiers::SHIFT));
+        // Shifted, the letter is the capital a browser would report.
+        assert_eq!(key.key, Key::Character("X".to_string()));
     }
 
     /// No button is reserved here: which one the gesture spends is the bindings

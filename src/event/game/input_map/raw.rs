@@ -162,6 +162,13 @@ fn parse_target(raw: &RawTarget, whose: &str, layers: &[String]) -> Option<Targe
         }),
         None => derive_code(name, &key, whose),
     };
+    // A browser reports a shifted letter as the capital.
+    let key = match key {
+        Key::Character(c) if modifiers.contains(Modifiers::SHIFT) => {
+            Key::Character(c.to_uppercase())
+        }
+        key => key,
+    };
     Some(Target::Key(KeyTarget {
         key,
         code,

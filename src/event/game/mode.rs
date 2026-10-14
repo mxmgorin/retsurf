@@ -15,8 +15,18 @@ use crate::event::sdl2_servo::key_event;
 use crate::overlay::quick_access::Strip;
 use inputbind::sdl::{axis_value, trigger_of};
 use inputbind::{Pad, PadGesture, Trigger};
+use keyboard_types::{Code, Key, Modifiers, NamedKey};
 use sdl2::controller::Axis;
 use std::time::{Duration, Instant};
+
+/// How long a modifier a mapped key names is down before the key, and stays
+/// down after it: a game that reads held keys once a frame must see the
+/// modifier on the frame the key arrives.
+const MODIFIER_LEAD: Duration = Duration::from_millis(100);
+const MODIFIER_LINGER: Duration = Duration::from_millis(200);
+
+/// The shortest a delayed key is held, so a quick tap still spans a frame.
+const DELAYED_KEY_HOLD: Duration = Duration::from_millis(100);
 
 /// Stick-to-direction hysteresis: engage at the dead zone, release below this
 /// fraction of it, so a stick resting at the edge cannot spam edges.
@@ -95,6 +105,9 @@ pub struct GameInput {
     /// The release owed for a tap handed over late, sent a frame after its
     /// press: a game polling once a frame would miss the two in one.
     deferred: Option<Target>,
+    /// Key edges a modified key owes later, with when each falls due; fired in
+    /// that order (see [`Self::hold_chord`]).
+    scheduled: Vec<(KeyTarget, bool, Instant)>,
     deadzone: f32,
     /// [`ControlsConfig::cursor_curve`], for the sticks that point.
     cursor_curve: f32,
@@ -123,6 +136,7 @@ impl GameInput {
             ],
             reserved: reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect(),
             deferred: None,
+            scheduled: Vec::new(),
             deadzone: cfg.deadzone,
             cursor_curve: cfg.cursor_curve,
             hold: Duration::from_millis(cfg.hold_ms),
@@ -327,7 +341,7 @@ impl GameInput {
         commands: &mut Vec<AppCommand>,
     ) -> bool {
         match target {
-            Target::Key(key) => self.hold_key(key, pressed, browser),
+            Target::Key(key) => self.hold_chord(key, pressed, browser),
             Target::Click(button) => self.hold_click(*button, pressed, commands),
             Target::ScrollBy { x, y, speed } => {
                 hold_step(&mut self.scrolls, (*x * speed, *y * speed), pressed)
@@ -472,6 +486,40 @@ impl GameInput {
         }
     }
 
+    /// Take or release a key with the modifier keys it names held around it, so
+    /// a game that tracks the modifier's own key sees it go down too.
+    fn hold_chord(&mut self, key: &KeyTarget, pressed: bool, browser: &AppBrowser) {
+        let modifiers = modifier_keys(key.modifiers);
+        if modifiers.is_empty() {
+            return self.hold_key(key, pressed, browser);
+        }
+        let now = Instant::now();
+        if pressed {
+            for modifier in &modifiers {
+                self.hold_key(modifier, true, browser);
+            }
+            self.scheduled
+                .push((key.clone(), true, now + MODIFIER_LEAD));
+            return;
+        }
+        // A press still on its way is followed by its release, never overtaken.
+        let pending_press = self
+            .scheduled
+            .iter()
+            .filter(|(k, down, _)| *down && k == key)
+            .map(|(_, _, at)| *at)
+            .max();
+        let up = pending_press.map_or(now, |at| at + DELAYED_KEY_HOLD);
+        self.scheduled.push((key.clone(), false, up));
+        let free = up + MODIFIER_LINGER;
+        self.scheduled.extend(
+            modifiers
+                .into_iter()
+                .rev()
+                .map(|modifier| (modifier, false, free)),
+        );
+    }
+
     /// Take or release one source's hold on a key. The page sees an edge only
     /// when the last source lets go, so two sources naming one key never send a
     /// release the other still wants.
@@ -481,13 +529,13 @@ impl GameInput {
             (true, Some(i)) => self.held[i].1 += 1,
             (true, None) => {
                 self.held.push((key.clone(), 1));
-                send(browser, key, true);
+                send(browser, key, true, held_modifiers(&self.held));
             }
             (false, Some(i)) => {
                 self.held[i].1 -= 1;
                 if self.held[i].1 == 0 {
                     let (key, _) = self.held.swap_remove(i);
-                    send(browser, &key, false);
+                    send(browser, &key, false, held_modifiers(&self.held));
                 }
             }
             (false, None) => {}
@@ -566,6 +614,15 @@ impl GameInput {
         if let Some(target) = self.deferred.take() {
             self.fire(&target, false, browser, commands);
         }
+        let now = Instant::now();
+        let (mut due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.scheduled)
+            .into_iter()
+            .partition(|(_, _, at)| *at <= now);
+        self.scheduled = waiting;
+        due.sort_by_key(|(_, _, at)| *at);
+        for (key, pressed, _) in due {
+            self.hold_key(&key, pressed, browser);
+        }
         for mirror in &mut self.reserved {
             mirror.tick(self.hold, commands);
         }
@@ -627,14 +684,17 @@ impl GameInput {
             || scroll != (0.0, 0.0)
             || self.reserved.iter().any(|mirror| mirror.at.is_some())
             || self.deferred.is_some()
+            || !self.scheduled.is_empty()
     }
 
     /// Release everything the page holds — a mode or focus transition must
     /// never leave it with a stuck key or a stuck click.
     pub fn release(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         for (key, _) in self.held.drain(..) {
-            send(browser, &key, false);
+            send(browser, &key, false, Modifiers::empty());
         }
+        // What they owed was just released with everything else, or never sent.
+        self.scheduled.clear();
         self.pads.fill(None);
         self.keys.clear();
         self.active.clear();
@@ -791,8 +851,43 @@ fn hold_step(held: &mut Vec<((f32, f32), u32)>, step: (f32, f32), pressed: bool)
 }
 
 /// One synthesized key edge to the page.
-fn send(browser: &AppBrowser, key: &KeyTarget, down: bool) {
-    let event = key_event(key.key.clone(), key.code, key.modifiers, down);
+/// The modifier keys `modifiers` names, each as the key a game sees go down.
+fn modifier_keys(modifiers: Modifiers) -> Vec<KeyTarget> {
+    [
+        (Modifiers::CONTROL, NamedKey::Control, Code::ControlLeft),
+        (Modifiers::SHIFT, NamedKey::Shift, Code::ShiftLeft),
+        (Modifiers::ALT, NamedKey::Alt, Code::AltLeft),
+        (Modifiers::META, NamedKey::Meta, Code::MetaLeft),
+    ]
+    .into_iter()
+    .filter(|(modifier, _, _)| modifiers.contains(*modifier))
+    .map(|(modifier, key, code)| KeyTarget {
+        key: Key::Named(key),
+        code,
+        modifiers: modifier,
+    })
+    .collect()
+}
+
+/// The modifiers held down, which a real keyboard reports on every key event.
+fn held_modifiers(held: &[(KeyTarget, u32)]) -> Modifiers {
+    held.iter().fold(Modifiers::empty(), |mods, (key, _)| {
+        mods | modifier_of(&key.key)
+    })
+}
+
+fn modifier_of(key: &Key) -> Modifiers {
+    match key {
+        Key::Named(NamedKey::Shift) => Modifiers::SHIFT,
+        Key::Named(NamedKey::Control) => Modifiers::CONTROL,
+        Key::Named(NamedKey::Alt) => Modifiers::ALT,
+        Key::Named(NamedKey::Meta) => Modifiers::META,
+        _ => Modifiers::empty(),
+    }
+}
+
+fn send(browser: &AppBrowser, key: &KeyTarget, down: bool, held: Modifiers) {
+    let event = key_event(key.key.clone(), key.code, key.modifiers | held, down);
     browser.handle_input(servo::InputEvent::Keyboard(event));
 }
 
@@ -812,6 +907,25 @@ mod tests {
         // The opposite sign never inherits the hold.
         assert_eq!(axis_digital(0.45, -1, dz), 0);
         assert_eq!(axis_digital(-0.6, 1, dz), -1);
+    }
+
+    #[test]
+    fn a_held_modifier_key_qualifies_every_key_event() {
+        let held = |key: Key, code: Code| {
+            let modifiers = Modifiers::empty();
+            (
+                KeyTarget {
+                    key,
+                    code,
+                    modifiers,
+                },
+                1,
+            )
+        };
+        let shift = held(Key::Named(NamedKey::Shift), Code::ShiftLeft);
+        let g = held(Key::Character("g".into()), Code::KeyG);
+        assert_eq!(held_modifiers(std::slice::from_ref(&g)), Modifiers::empty());
+        assert_eq!(held_modifiers(&[shift, g]), Modifiers::SHIFT);
     }
 
     #[test]
