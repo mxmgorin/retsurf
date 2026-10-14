@@ -27,6 +27,8 @@ mod osk;
 mod pad_layout;
 mod paths;
 mod performance;
+mod texture_filter;
+mod texture_limit;
 mod token_enum;
 mod update;
 mod video;
@@ -48,6 +50,8 @@ pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
+pub use texture_filter::TextureFilter;
+pub use texture_limit::TextureLimit;
 pub use update::{Channel, UpdateConfig};
 pub use video::VideoConfig;
 

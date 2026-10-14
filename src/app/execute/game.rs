@@ -5,7 +5,7 @@
 
 use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, QuickAccessAction};
 use crate::browser::{BrowserCommand, TabMode};
-use crate::config::Scaling;
+use crate::config::{Scaling, TextureFilter, TextureLimit};
 use crate::event::bindings::{self, Action};
 use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX};
 use crate::event::game::GameMode;
@@ -120,6 +120,9 @@ impl App {
         self.ui.enter_game_mode(hint);
         self.browser
             .set_game_scaling(self.config.game_mode.view.scaling);
+        let view = &self.config.game_mode.view;
+        self.browser
+            .set_game_textures(view.texture_limit, view.texture_filter);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
         self.ui.menu.close();
         self.ui.hints.hide();
@@ -135,6 +138,8 @@ impl App {
         self.browser.set_mode(TabMode::Page);
         self.ui.quick_access.close();
         self.browser.set_game_scaling(Scaling::None);
+        self.browser
+            .set_game_textures(TextureLimit::Full, TextureFilter::default());
         // A pad the map asked for exists only while the map runs.
         self.browser.drop_mapped_pad();
         log::info!("game mode: false");

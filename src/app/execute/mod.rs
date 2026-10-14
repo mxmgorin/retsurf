@@ -371,11 +371,17 @@ impl App {
         // Restoring the defaults can move the pad map under a live Game
         // Mode, so push it the same way the menu does.
         self.adopt_input_map(out);
-        let scaling = match self.browser.in_game_mode() {
-            true => self.config.game_mode.view.scaling,
-            false => crate::config::Scaling::None,
+        let view = &self.config.game_mode.view;
+        let (scaling, texture_limit) = match self.browser.in_game_mode() {
+            true => (view.scaling, view.texture_limit),
+            false => (
+                crate::config::Scaling::None,
+                crate::config::TextureLimit::Full,
+            ),
         };
         self.browser.set_game_scaling(scaling);
+        self.browser
+            .set_game_textures(texture_limit, view.texture_filter);
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler

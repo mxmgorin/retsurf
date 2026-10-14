@@ -152,6 +152,13 @@ input_map = "keys"
 scaling = "none"
 # "none", a built-in or the id of a shaders/<id>.glsl (see SHADERS.md).
 shader = "none"
+# Largest texture side a game keeps: "full", "1024", "512" or "256". Larger ones are halved
+# until they fit, so a game too big for the GPU memory still loads; reload the game after
+# changing it.
+texture_limit = "full"
+# How they are shrunk: "smooth" (averaged, drawn with linear filtering) or "sharp" (every other
+# pixel, drawn as the game asks, for pixel art).
+texture_filter = "smooth"
 
 [debug]
 memory_overlay = false     # show the engine's memory use on screen

@@ -6,6 +6,7 @@
 //! [`engine`] (Servo construction and prefs), [`memory`] (reports and heap
 //! profile), [`pads`] (what the page knows of the gamepads), [`home`] /
 //! [`reader`] (the built-in pages), [`game_scaling`] (a game sized to the screen),
+//! [`game_textures`] (a game's textures shrunk to a limit),
 //! [`blob_download`] and [`forced_dark`] (user-content scripts), [`adblock`] and
 //! [`content_filter`] (load filtering).
 
@@ -20,6 +21,7 @@ mod engine;
 mod favicon;
 mod forced_dark;
 mod game_scaling;
+mod game_textures;
 mod home;
 mod input;
 mod junk_surfer;
@@ -211,6 +213,8 @@ struct AppBrowserInner {
     game_geometry: Cell<Option<game_scaling::GameGeometry>>,
     /// When the page was last asked for it.
     game_geometry_asked: Cell<Option<std::time::Instant>>,
+    /// The [`game_textures`] user script while a limit is on.
+    game_textures_script: RefCell<Option<Rc<servo::UserScript>>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -342,6 +346,7 @@ impl AppBrowserInner {
             game_scaling_script: RefCell::new(None),
             game_geometry: Cell::new(None),
             game_geometry_asked: Cell::new(None),
+            game_textures_script: RefCell::new(None),
             ime_control: Cell::new(None),
             ime_allows_keyboard: Cell::new(false),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),
