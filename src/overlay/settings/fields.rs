@@ -447,6 +447,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Gaming, "Game Mode",   "Shader",                 SHADER, false).shaders().quick(Modes::Game),
     f(S::Gaming, "Game Mode",   "Texture limit",          choice!(game_mode.view.texture_limit: TextureLimit), false),
     f(S::Gaming, "Game Mode",   "Texture filter",         choice!(game_mode.view.texture_filter: TextureFilter), false),
+    f(S::Gaming, "Game Mode",   "Cursor",                 flag!(game_mode.view.cursor), false).quick(Modes::Game),
 
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),

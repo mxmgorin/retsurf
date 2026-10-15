@@ -392,6 +392,7 @@ impl App {
         self.ui
             .set_toolbar_position(self.config.interface.toolbar_position);
         self.ui.set_shader(&self.config.game_mode.view.shader);
+        self.ui.set_game_cursor(self.config.game_mode.view.cursor);
         self.ui
             .set_toolbar_autohide(self.config.interface.toolbar_autohide);
         self.ui.set_hint_badges(self.config.controls.hint_badges);

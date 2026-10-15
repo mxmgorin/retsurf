@@ -15,6 +15,12 @@ impl AppUi {
         self.shader = shader.to_string();
     }
 
+    /// Draw the pad cursor over a game or not (live config change).
+    #[inline]
+    pub fn set_game_cursor(&mut self, on: bool) {
+        self.game_cursor = on;
+    }
+
     /// Move the toolbar to a window edge (live config change).
     #[inline]
     pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {

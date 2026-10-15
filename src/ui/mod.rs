@@ -244,6 +244,8 @@ pub struct AppUi {
     page_shader: Option<page_shader::PageShader>,
     /// The shader id Game Mode draws the page through.
     shader: String,
+    /// Whether the pad cursor is drawn over a game.
+    game_cursor: bool,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
     /// The notice on screen, if any (see [`toast`]).
@@ -356,6 +358,7 @@ impl AppUi {
             browser_tex_id: window.browser_texture(),
             page_shader: window.page_gl_texture().map(page_shader::PageShader::new),
             shader: crate::platform::render::shaders::NONE.to_string(),
+            game_cursor: true,
             browser_viewport: (0, 0),
             toast: None,
             quick_access: QuickAccess::new(),
@@ -876,7 +879,9 @@ impl AppUi {
                         let badges = self.hint_badges.then_some(face);
                         hints::add_hints(ctx, &self.hints, self.webview_rect, badges);
                     }
-                } else if cursor_visible.is_some() {
+                } else if cursor_visible.is_some()
+                    && (self.game_cursor || !snapshot.chrome_hidden.game_mode)
+                {
                     self.transients_built.cursor = true;
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
                     cursor::paint_cursor(ctx, pos, self.scroll_mode, self.edge_scroll);

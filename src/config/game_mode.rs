@@ -30,6 +30,8 @@ pub struct GameViewConfig {
     pub texture_limit: TextureLimit,
     /// How a texture over the limit is shrunk.
     pub texture_filter: TextureFilter,
+    /// Draw the pad cursor over the game; off for a game that draws its own.
+    pub cursor: bool,
 }
 
 impl Default for GameViewConfig {
@@ -39,6 +41,7 @@ impl Default for GameViewConfig {
             shader: crate::platform::render::shaders::NONE.to_string(),
             texture_limit: TextureLimit::default(),
             texture_filter: TextureFilter::default(),
+            cursor: true,
         }
     }
 }

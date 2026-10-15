@@ -159,6 +159,7 @@ texture_limit = "full"
 # How they are shrunk: "smooth" (averaged, drawn with linear filtering) or "sharp" (every other
 # pixel, drawn as the game asks, for pixel art).
 texture_filter = "smooth"
+cursor = true              # draw the pad cursor over the game; off for one that draws its own
 
 [debug]
 memory_overlay = false     # show the engine's memory use on screen
