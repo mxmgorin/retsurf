@@ -7,12 +7,14 @@ use super::super::{App, AppCommand, GameInputMapsAction, GameMapEditAction, Quic
 use crate::browser::{BrowserCommand, TabMode};
 use crate::config::{Scaling, TextureFilter, TextureLimit};
 use crate::event::bindings::{self, Action};
-use crate::event::game::input_map::{Dir, RawTarget, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX};
+use crate::event::game::input_map::{
+    Dir, KeyMods, RawTarget, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX,
+};
 use crate::event::game::GameMode;
 use crate::overlay::game::input_maps::{MapAction, MapRow, NameFor, Press, NEW_MAP_NAME};
 use crate::overlay::game::map_edit::{
-    self, CaptureFor, Device, EditPress, Kind, LayerName, LayerRow, Row, Slot, Tail, Take,
-    DIRECTIONS, NEW_LAYER_NAME, UNBOUND,
+    self, CaptureFor, Device, EditPress, Kind, LayerName, LayerRow, Modifier, Row, Slot, Tail,
+    Take, DIRECTIONS, NEW_LAYER_NAME, UNBOUND,
 };
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
@@ -578,6 +580,12 @@ impl App {
                 self.ui.map_edit.close_kinds();
                 self.set_map_target(slot, Some(format!("{PAD_PREFIX}{}", button.name())));
             }
+            Some(EditPress::Take(Kind::Modifiers, _)) => {
+                self.ui.map_edit.open_device(Device::Modifiers)
+            }
+            Some(EditPress::ToggleModifier(modifier, slot)) => {
+                self.toggle_map_modifier(slot, modifier)
+            }
             Some(EditPress::Take(kind, slot)) => {
                 self.ui.map_edit.close_kinds();
                 match kind.take() {
@@ -585,7 +593,7 @@ impl App {
                     Take::Arrows => self.set_map_arrows(slot),
                     Take::Remove => self.set_map_target(slot, None),
                     // Reached by the arms above, which have the row they are for.
-                    Take::Mouse | Take::Gamepad | Take::Layer => {}
+                    Take::Mouse | Take::Gamepad | Take::Layer | Take::Modifiers => {}
                     // The keyboard becomes a key picker; the pick lands in the
                     // editor's slot, which the loop drains.
                     Take::Key => {
@@ -610,13 +618,45 @@ impl App {
         self.set_map_target(slot, Some(format!("{KEY_PREFIX}{text}")));
     }
 
-    /// Write one row into the edited map, and put the highlight where it landed
-    /// — a source bound from the row that captures has no row until now.
+    /// Point one row at `text`, keeping what of its old target still applies.
     fn set_map_target(&mut self, slot: Slot, text: Option<String>) {
+        let old = self.map_raw(&slot);
+        let raw = text.map(|to| RawTarget::retarget(old.as_ref(), to));
+        self.write_map_raw(slot, raw);
+    }
+
+    fn toggle_map_modifier(&mut self, slot: Slot, modifier: Modifier) {
+        let Some(old) = self.map_raw(&slot) else {
+            return;
+        };
+        let raw = old.with_mods(modifier.toggled(old.mods()));
+        self.write_map_raw(slot, Some(raw));
+    }
+
+    /// The row's target in the edited map, in the editor's scope.
+    fn map_raw(&mut self, slot: &Slot) -> Option<RawTarget> {
         let id = self.ui.map_edit.map_id().to_string();
         let scope = self.ui.map_edit.layer().map(str::to_string);
         let layer = scope.as_deref();
-        let raw = text.map(RawTarget::Short);
+        let map = self.game_mode().maps.get(&id)?;
+        match slot {
+            Slot::Button(pad) => map.raw_pad(layer, *pad),
+            Slot::Key(name) => map
+                .raw_keys(layer)
+                .find(|(key, _)| key == name)
+                .map(|(_, raw)| raw),
+            Slot::Stick(side) => map.raw_stick(layer, *side),
+            Slot::Direction(side, dir) => map.raw_stick_dir(layer, *side, *dir),
+        }
+        .cloned()
+    }
+
+    /// Write one row into the edited map, and put the highlight where it landed
+    /// — a source bound from the row that captures has no row until now.
+    fn write_map_raw(&mut self, slot: Slot, raw: Option<RawTarget>) {
+        let id = self.ui.map_edit.map_id().to_string();
+        let scope = self.ui.map_edit.layer().map(str::to_string);
+        let layer = scope.as_deref();
         if let Some(map) = self.game_mode().maps.get_mut(&id) {
             match &slot {
                 Slot::Button(pad) => map.set_raw_pad(layer, *pad, raw),
@@ -682,6 +722,7 @@ impl App {
             Some(raw) => raw.text().to_string(),
             None => UNBOUND.to_string(),
         };
+        let mods = |raw: Option<&RawTarget>| raw.map(RawTarget::mods).unwrap_or_default();
         let mut rows = vec![];
         // The sticks lead, each a row only while the map binds it.
         for side in Side::ALL {
@@ -697,11 +738,13 @@ impl App {
                     true => DIRECTIONS.to_string(),
                     false => text(map.raw_stick(layer, side)),
                 },
+                mods: KeyMods::default(),
             });
             if digital {
                 rows.extend(Dir::ALL.map(|dir| Row {
                     slot: Slot::Direction(side, dir),
                     target: text(map.raw_stick_dir(layer, side, dir)),
+                    mods: mods(map.raw_stick_dir(layer, side, dir)),
                 }));
             }
         }
@@ -712,11 +755,13 @@ impl App {
             map.raw_pad(layer, pad).map(|raw| Row {
                 slot: Slot::Button(pad),
                 target: raw.text().to_string(),
+                mods: raw.mods(),
             })
         }));
         rows.extend(map.raw_keys(layer).map(|(name, raw)| Row {
             slot: Slot::Key(name.to_string()),
             target: raw.text().to_string(),
+            mods: raw.mods(),
         }));
         let layers = map
             .raw_layers()

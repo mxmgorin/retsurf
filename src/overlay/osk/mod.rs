@@ -441,6 +441,13 @@ impl Osk {
         commands: &mut Vec<AppCommand>,
     ) {
         match key {
+            // A picker takes Shift and Caps as keys.
+            Shift | Caps if matches!(target, OskTarget::Capture(_)) => {
+                if let OskTarget::Capture(slot) = target {
+                    let name = if key == Shift { "Shift" } else { "CapsLock" };
+                    *slot = Some(name.to_string());
+                }
+            }
             // The on-screen Shift key arms a one-shot Shift (toggle so a mis-tap
             // can be undone); L2 is the held modifier and lives in `shift_held`.
             Shift => self.shift_once = !self.shift_once,

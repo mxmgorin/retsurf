@@ -6,8 +6,8 @@
 
 use crate::command::{AppCommand, GameMapEditAction};
 use crate::overlay::game::map_edit::{
-    pad_label, target_label, CaptureFor, Device, LayerName, LayerRow, MapEdit, MouseKind, Slot,
-    Tail,
+    held_label, mods_label, pad_label, target_label, CaptureFor, Device, Kind, LayerName, LayerRow,
+    MapEdit, Modifier, MouseKind, Slot, Tail,
 };
 use crate::ui::panel::{self, ListItem, Tone};
 use egui_phosphor::bold;
@@ -84,6 +84,19 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
         // The kind the source sends now carries what exactly it sends; a device
         // list marks the matching row instead.
         let rows: Vec<(String, String)> = match edit.device_open() {
+            Some(Device::Modifiers) => {
+                let mods = edit.current_mods();
+                Modifier::ALL
+                    .iter()
+                    .map(|modifier| {
+                        let state = match modifier.is_in(mods) {
+                            true => "On",
+                            false => "Off",
+                        };
+                        (modifier.label().to_string(), state.to_string())
+                    })
+                    .collect()
+            }
             Some(device) => {
                 let labels: Vec<String> = match device {
                     Device::Mouse => MouseKind::all(&slot)
@@ -99,6 +112,7 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
                         .into_iter()
                         .map(str::to_string)
                         .collect(),
+                    Device::Modifiers => vec![],
                 };
                 labels
                     .into_iter()
@@ -116,9 +130,13 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
                 .kinds(&slot)
                 .into_iter()
                 .map(|kind| {
-                    let value = match Some(kind) == edit.current_kind() {
-                        true => current.map(target_label).unwrap_or_default(),
-                        false => String::new(),
+                    let mods = edit.current_mods();
+                    let value = match kind {
+                        Kind::Modifiers => mods_label(mods),
+                        _ if Some(kind) == edit.current_kind() => current
+                            .map(|target| held_label(target_label(target), mods))
+                            .unwrap_or_default(),
+                        _ => String::new(),
                     };
                     (kind.label().to_string(), value)
                 })
@@ -137,7 +155,7 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
             items.push(ListItem::Heading(heading.to_string()));
             group = Some(heading);
         }
-        items.push(ListItem::Row(row.slot.label(), target_label(&row.target)));
+        items.push(ListItem::Row(row.slot.label(), row.label()));
     }
     // While the keyboard is up, the row it was opened from carries what is
     // being typed: there is nowhere else on screen the name would show.

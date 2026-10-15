@@ -77,7 +77,8 @@ built-in.
 
 The editor has a row per bound source, grouped as *Sticks*, *Gamepad* and *Keyboard*. **A**
 opens what the source can send, on what it sends now; *Remove* (or **X**) unbinds it, **B**
-saves. **+ New binding** listens for the button, key or stick to bind; it refuses holds,
+saves. *Keyboard* picks the key on the on-screen keyboard (Shift and Caps there are keys too);
+a row that sends a key also has *Modifiers*, a list of Ctrl, Alt and Shift to send with it. **+ New binding** listens for the button, key or stick to bind; it refuses holds,
 chords and modified keys, and gives up after six seconds. Editing a built-in writes the file
 that replaces it.
 

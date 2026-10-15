@@ -27,7 +27,7 @@
 mod raw;
 mod store;
 
-pub use raw::RawTarget;
+pub use raw::{KeyMods, RawTarget};
 pub use store::{built_in, load_all, new_id, pick};
 
 use inputbind::sdl::KeyNames;

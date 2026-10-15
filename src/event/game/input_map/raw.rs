@@ -35,12 +35,82 @@ pub enum RawTarget {
     },
 }
 
+/// The modifier keys a key target holds down around itself.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub struct KeyMods {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+}
+
 impl RawTarget {
     /// How the file spells it, for the editor's rows.
     pub fn text(&self) -> &str {
         match self {
             RawTarget::Short(text) => text,
             RawTarget::Long { to, .. } => to,
+        }
+    }
+
+    pub fn mods(&self) -> KeyMods {
+        match self {
+            RawTarget::Short(_) => KeyMods::default(),
+            &RawTarget::Long {
+                shift, ctrl, alt, ..
+            } => KeyMods { shift, ctrl, alt },
+        }
+    }
+
+    /// `to` in place of what `old` sent, keeping whatever of `old` still applies:
+    /// its modifiers for a key, its speed for a whole-stick mouse, its `code` for the same key.
+    pub fn retarget(old: Option<&RawTarget>, to: String) -> RawTarget {
+        let Some(RawTarget::Long {
+            to: was,
+            code,
+            shift,
+            ctrl,
+            alt,
+            speed,
+        }) = old
+        else {
+            return RawTarget::Short(to);
+        };
+        let key = to.starts_with(KEY_PREFIX);
+        Self::long(
+            code.clone().filter(|_| *was == to),
+            KeyMods {
+                shift: *shift && key,
+                ctrl: *ctrl && key,
+                alt: *alt && key,
+            },
+            speed.filter(|_| [CURSOR, SCROLL].contains(&to.as_str())),
+            to,
+        )
+    }
+
+    /// The same target holding `mods` instead.
+    pub fn with_mods(&self, mods: KeyMods) -> RawTarget {
+        match self {
+            RawTarget::Short(to) => Self::long(None, mods, None, to.clone()),
+            RawTarget::Long {
+                to, code, speed, ..
+            } => Self::long(code.clone(), mods, *speed, to.clone()),
+        }
+    }
+
+    /// The table form when it says anything beyond `to`, else the bare string.
+    fn long(code: Option<String>, mods: KeyMods, speed: Option<f32>, to: String) -> RawTarget {
+        if code.is_none() && mods == KeyMods::default() && speed.is_none() {
+            return RawTarget::Short(to);
+        }
+        let KeyMods { shift, ctrl, alt } = mods;
+        RawTarget::Long {
+            to,
+            code,
+            shift,
+            ctrl,
+            alt,
+            speed,
         }
     }
 }
@@ -401,5 +471,80 @@ fn resolve_stick(
         (true, None) => StickRole::Digital(Box::new(dirs)),
         (false, Some(target)) => StickRole::Analog(target),
         (false, None) => StickRole::Unbound,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shifted(to: &str, code: Option<&str>) -> RawTarget {
+        let mods = KeyMods {
+            shift: true,
+            ..KeyMods::default()
+        };
+        let code = code.map(str::to_string);
+        RawTarget::Short(to.to_string())
+            .with_mods(mods)
+            .with_code(code)
+    }
+
+    impl RawTarget {
+        fn with_code(self, code: Option<String>) -> RawTarget {
+            match self {
+                RawTarget::Long {
+                    to,
+                    shift,
+                    ctrl,
+                    alt,
+                    speed,
+                    ..
+                } => RawTarget::Long {
+                    to,
+                    code,
+                    shift,
+                    ctrl,
+                    alt,
+                    speed,
+                },
+                short => short,
+            }
+        }
+    }
+
+    #[test]
+    fn a_new_key_keeps_the_modifiers_and_drops_the_old_code() {
+        let old = shifted("key.1", Some("Digit1"));
+        let new = RawTarget::retarget(Some(&old), "key.2".to_string());
+        assert_eq!(new.text(), "key.2");
+        assert!(new.mods().shift);
+        assert!(matches!(new, RawTarget::Long { code: None, .. }));
+    }
+
+    #[test]
+    fn a_target_that_is_no_key_sheds_the_modifiers() {
+        let old = shifted("key.1", None);
+        let new = RawTarget::retarget(Some(&old), "mouse.left".to_string());
+        assert!(matches!(new, RawTarget::Short(ref to) if to == "mouse.left"));
+    }
+
+    #[test]
+    fn clearing_the_last_modifier_writes_the_short_form() {
+        let new = shifted("key.1", None).with_mods(KeyMods::default());
+        assert!(matches!(new, RawTarget::Short(ref to) if to == "key.1"));
+    }
+
+    #[test]
+    fn a_stick_keeps_its_speed_across_a_retarget() {
+        let old = RawTarget::Long {
+            to: CURSOR.to_string(),
+            code: None,
+            shift: false,
+            ctrl: false,
+            alt: false,
+            speed: Some(0.35),
+        };
+        let new = RawTarget::retarget(Some(&old), SCROLL.to_string());
+        assert!(matches!(new, RawTarget::Long { speed: Some(_), .. }));
     }
 }

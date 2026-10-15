@@ -16,7 +16,7 @@
 //! named on the on-screen keyboard.
 
 use crate::event::game::input_map::{
-    Dir, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX, STICK_PREFIX,
+    Dir, KeyMods, Side, KEY_PREFIX, LAYER_PREFIX, PAD_PREFIX, STICK_PREFIX,
 };
 use inputbind::{KeyGesture, Mods, Pad, PadGesture};
 
@@ -177,8 +177,72 @@ pub enum Kind {
     Directions,
     /// Opens the layer list: the source holds the picked layer open.
     Layer,
+    /// Opens the modifier list: the modifiers sent with the row's key.
+    Modifiers,
     /// Unbind the row.
     Remove,
+}
+
+/// A modifier a key row can send with its key.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Modifier {
+    Shift,
+    Ctrl,
+    Alt,
+}
+
+impl Modifier {
+    pub const ALL: [Modifier; 3] = [Modifier::Ctrl, Modifier::Alt, Modifier::Shift];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Modifier::Shift => "Shift",
+            Modifier::Ctrl => "Ctrl",
+            Modifier::Alt => "Alt",
+        }
+    }
+
+    pub fn is_in(self, mods: KeyMods) -> bool {
+        match self {
+            Modifier::Shift => mods.shift,
+            Modifier::Ctrl => mods.ctrl,
+            Modifier::Alt => mods.alt,
+        }
+    }
+
+    pub fn toggled(self, mut mods: KeyMods) -> KeyMods {
+        let flag = match self {
+            Modifier::Shift => &mut mods.shift,
+            Modifier::Ctrl => &mut mods.ctrl,
+            Modifier::Alt => &mut mods.alt,
+        };
+        *flag = !*flag;
+        mods
+    }
+}
+
+/// The modifiers alone, as the Modifiers row says them: `Ctrl+Shift`, or `None`.
+pub fn mods_label(mods: KeyMods) -> String {
+    let names: Vec<&str> = Modifier::ALL
+        .iter()
+        .filter(|modifier| modifier.is_in(mods))
+        .map(|modifier| modifier.label())
+        .collect();
+    match names.is_empty() {
+        true => "None".to_string(),
+        false => names.join("+"),
+    }
+}
+
+/// A target's label with the modifiers it is sent with: `Ctrl+Shift+1`.
+pub fn held_label(label: String, mods: KeyMods) -> String {
+    Modifier::ALL
+        .iter()
+        .rev()
+        .filter(|modifier| modifier.is_in(mods))
+        .fold(label, |label, modifier| {
+            format!("{}+{label}", modifier.label())
+        })
 }
 
 impl Kind {
@@ -215,6 +279,7 @@ impl Kind {
             Kind::Ignore => "Ignore",
             Kind::Directions => "Four directions",
             Kind::Layer => "Layer",
+            Kind::Modifiers => "Modifiers",
             Kind::Remove => "Remove",
         }
     }
@@ -227,6 +292,7 @@ impl Kind {
             Kind::Gamepad => Take::Gamepad,
             Kind::Directions => Take::Arrows,
             Kind::Layer => Take::Layer,
+            Kind::Modifiers => Take::Modifiers,
             Kind::Remove => Take::Remove,
             Kind::Passthrough => Take::Text(PASSTHROUGH),
             Kind::Ignore => Take::Text(IGNORE),
@@ -240,6 +306,7 @@ pub enum Device {
     Mouse,
     Gamepad,
     Layer,
+    Modifiers,
 }
 
 impl Device {
@@ -249,6 +316,7 @@ impl Device {
             Device::Mouse => "MOUSE",
             Device::Gamepad => "GAMEPAD",
             Device::Layer => "LAYER",
+            Device::Modifiers => "MODIFIERS",
         }
     }
 }
@@ -360,6 +428,8 @@ pub enum Take {
     Gamepad,
     /// Open the layer list over this row.
     Layer,
+    /// Open the modifier list over this row.
+    Modifiers,
     /// Take the row's line out of the file.
     Remove,
     /// Turn the stick into four directions, seeded with the arrows — a stick
@@ -383,6 +453,8 @@ pub enum EditPress {
     TakePad(Pad, Slot),
     /// Make the row hold this layer open.
     TakeLayer(String, Slot),
+    /// Add or drop a modifier on the row's key; the list stays up.
+    ToggleModifier(Modifier, Slot),
     /// Scope the screen to a layer.
     OpenLayer(String),
     /// Name a new layer.
@@ -516,6 +588,15 @@ pub struct Row {
     pub slot: Slot,
     /// What it sends, as the file spells it.
     pub target: String,
+    /// The modifiers a key target is sent with.
+    pub mods: KeyMods,
+}
+
+impl Row {
+    /// What it sends, as the screen says it.
+    pub fn label(&self) -> String {
+        held_label(target_label(&self.target), self.mods)
+    }
 }
 
 pub struct MapEdit {
@@ -734,9 +815,17 @@ impl MapEdit {
     }
 
     /// The kinds `slot` is offered here. Layer only on the base, where there
-    /// is one it may open: layers do not nest. Remove only for a bound row.
+    /// is one it may open: layers do not nest. The modifiers only for a row
+    /// that sends a key. Remove only for a bound row.
     pub fn kinds(&self, slot: &Slot) -> Vec<Kind> {
         let mut kinds = Kind::all(slot).to_vec();
+        if self.current_kind() == Some(Kind::Key) {
+            let at = kinds
+                .iter()
+                .position(|kind| *kind == Kind::Key)
+                .map_or(0, |at| at + 1);
+            kinds.insert(at, Kind::Modifiers);
+        }
         if self.layer.is_none() && !self.layer_choices(slot).is_empty() {
             let at = kinds.len() - 1;
             kinds.insert(at, Kind::Layer);
@@ -762,6 +851,18 @@ impl MapEdit {
         self.rows.get(self.selected).map(|row| row.target.as_str())
     }
 
+    /// The modifiers the row's key is sent with; none for a source with no row yet.
+    pub fn current_mods(&self) -> KeyMods {
+        match self.fresh {
+            Some(_) => KeyMods::default(),
+            None => self
+                .rows
+                .get(self.selected)
+                .map(|row| row.mods)
+                .unwrap_or_default(),
+        }
+    }
+
     /// The kind the row sends now, if the list offers it.
     pub fn current_kind(&self) -> Option<Kind> {
         self.current().and_then(kind_of)
@@ -783,6 +884,8 @@ impl MapEdit {
                 .iter()
                 .map(|name| format!("{LAYER_PREFIX}{name}"))
                 .collect(),
+            // Toggles, not targets: nothing here is what the row sends.
+            Device::Modifiers => vec![],
         }
     }
 
@@ -889,6 +992,7 @@ impl MapEdit {
             Some((Device::Mouse, _)) => MouseKind::all(&slot).len(),
             Some((Device::Gamepad, _)) => Pad::ALL.len(),
             Some((Device::Layer, _)) => self.layer_choices(&slot).len(),
+            Some((Device::Modifiers, _)) => Modifier::ALL.len(),
             None => self.kinds(&slot).len(),
         }
     }
@@ -942,6 +1046,11 @@ impl MapEdit {
             }
             Some((Device::Gamepad, at)) => {
                 return Pad::ALL.get(at).map(|pad| EditPress::TakePad(*pad, slot))
+            }
+            Some((Device::Modifiers, at)) => {
+                return Modifier::ALL
+                    .get(at)
+                    .map(|modifier| EditPress::ToggleModifier(*modifier, slot))
             }
             Some((Device::Layer, at)) => {
                 let name = self.layer_choices(&slot).get(at)?.to_string();
@@ -1066,6 +1175,7 @@ mod tests {
         Row {
             slot,
             target: target.to_string(),
+            mods: KeyMods::default(),
         }
     }
 
@@ -1109,6 +1219,39 @@ mod tests {
         // Only a source with an edge can stand in for a gamepad button.
         assert!(button.contains(&Kind::Gamepad) && !stick.contains(&Kind::Gamepad));
         assert!(dir.contains(&Kind::Gamepad));
+    }
+
+    /// A key row offers its modifiers as one row, which opens a list of toggles
+    /// that stays up while they are pressed.
+    #[test]
+    fn a_key_row_lists_its_modifiers_behind_one_row() {
+        let mut edit = MapEdit::new();
+        edit.open("keys".to_string(), "Keyboard keys".to_string());
+        let slot = Slot::Button(Pad::A);
+        let shifted = KeyMods {
+            shift: true,
+            ..KeyMods::default()
+        };
+        let key = Row {
+            slot: slot.clone(),
+            target: "key.1".to_string(),
+            mods: shifted,
+        };
+        edit.set_rows(vec![key], vec![]);
+        edit.select_slot(&slot);
+        edit.open_kinds();
+        let kinds = edit.kinds(&slot);
+        assert_eq!(kinds.iter().filter(|k| **k == Kind::Modifiers).count(), 1);
+        assert_eq!(mods_label(edit.current_mods()), "Shift");
+
+        edit.open_device(Device::Modifiers);
+        assert_eq!(edit.row_count(), Modifier::ALL.len());
+        let press = edit.press();
+        assert_eq!(
+            press,
+            Some(EditPress::ToggleModifier(Modifier::ALL[0], slot))
+        );
+        assert!(edit.back() && edit.kind_open());
     }
 
     /// Both device lists open over the kinds, and B takes them off again — the
