@@ -6,7 +6,9 @@
 // MODE is "off" or how to scale: "fit", "integer" or "stretch". Every call
 // undoes the last one first, so a mode can be swapped in place. A scaling mode
 // also runs as a user script before the page has a body, so it polls until a
-// game shows up. The result is "on", "waiting" (no game yet) or "off".
+// game shows up; there it waits for the game to settle first, since a game
+// that sizes its backbuffer from the canvas's box at startup would read the
+// scaled one. The result is "on", "waiting" (no game yet) or "off".
 (function () {
     const MODE = "GAME_SCALING_MODE";
     // Smaller boxes are ads, avatars and sparklines, not games.
@@ -16,6 +18,10 @@
     // How often a page with no game yet is searched again.
     const POLL_MS = 1000;
     const KEY = Symbol.for("retsurf.gameScaling");
+    // Marks a canvas the page has taken a context of: a game in progress.
+    const DRAWN = Symbol.for("retsurf.gameScaling.drawn");
+    // Before the page's own scripts: the game has yet to set its canvas up.
+    const EARLY = document.readyState === "loading";
     // Each of these on an ancestor makes it the containing block of a fixed
     // descendant, or a stacking context the backdrop could not rise out of.
     const NEUTRAL = {
@@ -35,9 +41,32 @@
     if (root[KEY]) root[KEY].off();
     if (MODE === "off") return "off";
 
+    if (EARLY && !HTMLCanvasElement.prototype[DRAWN]) {
+        const getContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function () {
+            this[DRAWN] = true;
+            return getContext.apply(this, arguments);
+        };
+        HTMLCanvasElement.prototype[DRAWN] = true;
+    }
+
+    // The game element's size and style at the last poll, to see it settle.
+    let lastLook = null;
+    function settled() {
+        if (!EARLY) return true;
+        const target = largest("canvas") || largest("iframe, embed, object");
+        if (!target) return false;
+        // A canvas waits for the page to draw on it; a frame cannot be watched.
+        if (target instanceof HTMLCanvasElement && !Object.hasOwn(target, DRAWN)) return false;
+        const look = [target, target.width, target.height, target.getAttribute("style")].join("|");
+        const still = look === lastLook;
+        lastLook = look;
+        return still;
+    }
+
     let detach = null;
     const attach = () => {
-        if (document.body) detach = fitGame();
+        if (document.body && settled()) detach = fitGame();
         return detach !== null;
     };
     const poll = setInterval(() => attach() && clearInterval(poll), POLL_MS);
