@@ -382,6 +382,7 @@ impl App {
         self.browser.set_game_scaling(scaling);
         self.browser
             .set_game_textures(texture_limit, view.texture_filter);
+        self.browser.set_game_patches(self.config.game_mode.patches);
         // The router reads cursor/scroll speeds from the config each frame, but
         // the gamepad state machine and the UI cache a few values to push in.
         self.event_handler

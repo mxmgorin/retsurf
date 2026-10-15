@@ -20,6 +20,7 @@ mod delegate;
 mod engine;
 mod favicon;
 mod forced_dark;
+mod game_patches;
 mod game_scaling;
 mod game_textures;
 mod home;
@@ -215,6 +216,8 @@ struct AppBrowserInner {
     game_geometry_asked: Cell<Option<std::time::Instant>>,
     /// The [`game_textures`] user script while a limit is on.
     game_textures_script: RefCell<Option<Rc<servo::UserScript>>>,
+    /// The [`game_patches`] user scripts while they are on.
+    game_patch_scripts: RefCell<Vec<Rc<servo::UserScript>>>,
     /// The live IME request, present while an editable element on the page
     /// holds focus (see [`delegate`]). Plain-key keyboard shortcuts are
     /// suppressed while it's set so they can't hijack typing.
@@ -318,6 +321,13 @@ impl AppBrowserInner {
             GAMEPAD_COMPAT_JS.to_string(),
             None,
         )));
+        let patch_scripts = match config.game_mode.patches {
+            true => game_patches::scripts(),
+            false => vec![],
+        };
+        for script in &patch_scripts {
+            user_content.add_script(script.clone());
+        }
         let forced_dark = forced_dark::stylesheet();
         if browser.page_theme.is_forced_dark() {
             user_content.add_stylesheet(forced_dark.clone());
@@ -347,6 +357,7 @@ impl AppBrowserInner {
             game_geometry: Cell::new(None),
             game_geometry_asked: Cell::new(None),
             game_textures_script: RefCell::new(None),
+            game_patch_scripts: RefCell::new(patch_scripts),
             ime_control: Cell::new(None),
             ime_allows_keyboard: Cell::new(false),
             embedder_controls: FrameQueue::new(UserEvent::ControlPending, event_sender.clone()),

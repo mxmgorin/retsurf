@@ -145,6 +145,7 @@ enabled = true             # H.264 MP4 video, no streaming sites; off = audio on
 # The map Game Mode uses: "keys", "wasd", "mouse", "gamepad", "none" (input reaches the game as is)
 # or the id of an input_maps/<id>.toml (see CONTROLS.md).
 input_map = "keys"
+patches = true             # built-in fixes for known games (saves of Humble's asm.js ports)
 
 [game_mode.view]
 # "none", "fit" (the game's canvas, aspect kept), "integer" (whole multiples, sharp) or

@@ -13,6 +13,8 @@ pub struct GameModeConfig {
     pub input_map: String,
     /// How the page's game is shown while the mode is on (`[game_mode.view]`).
     pub view: GameViewConfig,
+    /// Apply the built-in fixes for known games.
+    pub patches: bool,
 }
 
 /// Everything visual about a game (`[game_mode.view]`).
@@ -69,6 +71,7 @@ impl Default for GameModeConfig {
         Self {
             input_map: DEFAULT_INPUT_MAP.to_string(),
             view: GameViewConfig::default(),
+            patches: true,
         }
     }
 }
