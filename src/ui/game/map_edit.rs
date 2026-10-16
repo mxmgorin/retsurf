@@ -6,8 +6,8 @@
 
 use crate::command::{AppCommand, GameMapEditAction};
 use crate::overlay::game::map_edit::{
-    held_label, mods_label, pad_label, target_label, CaptureFor, Device, Kind, LayerName, LayerRow,
-    MapEdit, Modifier, MouseKind, Slot, Tail,
+    held_label, mods_label, pad_label, target_label, CaptureFor, Device, Kind, KindGroup,
+    LayerName, LayerRow, MapEdit, Modifier, MouseKind, Slot, Tail,
 };
 use crate::ui::panel::{self, ListItem, Tone};
 use egui_phosphor::bold;
@@ -64,6 +64,45 @@ fn title(edit: &MapEdit) -> String {
 
 /// Marks the row of a device list that the source sends now.
 const CURRENT: &str = "current";
+
+/// The kinds list in its groups: the current kind in the accent, Modifiers
+/// indented under the key it qualifies, Remove apart and in red.
+fn kind_items(edit: &MapEdit, slot: &Slot, current: Option<&str>) -> Vec<ListItem> {
+    let mods = edit.current_mods();
+    let mut items = vec![];
+    let mut group = None;
+    for kind in edit.kinds(slot) {
+        if group != Some(kind.group()) {
+            items.push(match kind.group() {
+                KindGroup::Send => ListItem::Heading("Send".to_string()),
+                KindGroup::Other => ListItem::Heading("Other".to_string()),
+                KindGroup::Remove => ListItem::Divider,
+            });
+            group = Some(kind.group());
+        }
+        let is_current = Some(kind) == edit.current_kind();
+        let value = match kind {
+            Kind::Modifiers => mods_label(mods),
+            _ if is_current => current
+                .map(|target| held_label(target_label(target), mods))
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+        let label = match kind {
+            Kind::Modifiers => format!("{MODIFIERS_INDENT}{}", kind.label()),
+            _ => kind.label().to_string(),
+        };
+        items.push(match kind {
+            Kind::Remove => ListItem::Toned(label, value, Tone::Danger),
+            _ if is_current => ListItem::Toned(label, value, Tone::Action),
+            _ => ListItem::Row(label, value),
+        });
+    }
+    items
+}
+
+/// Sets Modifiers under the Keyboard row it qualifies.
+const MODIFIERS_INDENT: &str = "    ";
 
 /// Whichever list is up. The sources arrive grouped by the table that holds
 /// them, so a heading goes in wherever the group changes; the tail follows,
@@ -126,21 +165,7 @@ fn items(edit: &MapEdit) -> Vec<ListItem> {
                     })
                     .collect()
             }
-            None => edit
-                .kinds(&slot)
-                .into_iter()
-                .map(|kind| {
-                    let mods = edit.current_mods();
-                    let value = match kind {
-                        Kind::Modifiers => mods_label(mods),
-                        _ if Some(kind) == edit.current_kind() => current
-                            .map(|target| held_label(target_label(target), mods))
-                            .unwrap_or_default(),
-                        _ => String::new(),
-                    };
-                    (kind.label().to_string(), value)
-                })
-                .collect(),
+            None => return kind_items(edit, &slot, current),
         };
         return rows
             .into_iter()

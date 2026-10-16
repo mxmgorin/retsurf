@@ -183,6 +183,16 @@ pub enum Kind {
     Remove,
 }
 
+/// Where a kind sits in the kinds list, in screen order.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum KindGroup {
+    /// What the source sends, and how.
+    Send,
+    /// The source reaching the page as is, or doing nothing.
+    Other,
+    Remove,
+}
+
 /// A modifier a key row can send with its key.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Modifier {
@@ -281,6 +291,15 @@ impl Kind {
             Kind::Layer => "Layer",
             Kind::Modifiers => "Modifiers",
             Kind::Remove => "Remove",
+        }
+    }
+
+    /// The group the kinds list shows it in.
+    pub fn group(self) -> KindGroup {
+        match self {
+            Kind::Passthrough | Kind::Ignore => KindGroup::Other,
+            Kind::Remove => KindGroup::Remove,
+            _ => KindGroup::Send,
         }
     }
 
@@ -833,6 +852,7 @@ impl MapEdit {
         if self.fresh.is_none() {
             kinds.push(Kind::Remove);
         }
+        kinds.sort_by_key(|kind| kind.group());
         kinds
     }
 
@@ -1219,6 +1239,23 @@ mod tests {
         // Only a source with an edge can stand in for a gamepad button.
         assert!(button.contains(&Kind::Gamepad) && !stick.contains(&Kind::Gamepad));
         assert!(dir.contains(&Kind::Gamepad));
+    }
+
+    /// The kinds come in their groups, so the screen can head each one.
+    #[test]
+    fn the_kinds_come_grouped() {
+        let mut edit = opened();
+        edit.set_rows(rows(), vec![layer("aim", false)]);
+        let groups: Vec<KindGroup> = edit
+            .kinds(&Slot::Button(Pad::A))
+            .iter()
+            .map(|kind| kind.group())
+            .collect();
+        assert!(groups.is_sorted());
+        assert_eq!(groups.last(), Some(&KindGroup::Remove));
+        let kinds = edit.kinds(&Slot::Button(Pad::A));
+        assert_eq!(Kind::Layer.group(), KindGroup::Send);
+        assert!(kinds.contains(&Kind::Layer));
     }
 
     /// A key row offers its modifiers as one row, which opens a list of toggles
