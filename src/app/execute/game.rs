@@ -457,6 +457,13 @@ impl App {
                 }
             }
             GameMapEditAction::NameLayer(text) => self.name_layer(text),
+            GameMapEditAction::Adjust(dx) => {
+                if let Some((slot, speed)) = self.ui.map_edit.stepped_speed(*dx) {
+                    if let Some(old) = self.map_raw(&slot) {
+                        self.write_map_raw(slot, Some(old.with_speed(speed)));
+                    }
+                }
+            }
         }
     }
 
@@ -723,6 +730,7 @@ impl App {
             None => UNBOUND.to_string(),
         };
         let mods = |raw: Option<&RawTarget>| raw.map(RawTarget::mods).unwrap_or_default();
+        let speed = |raw: Option<&RawTarget>| raw.and_then(RawTarget::speed);
         let mut rows = vec![];
         // The sticks lead, each a row only while the map binds it.
         for side in Side::ALL {
@@ -739,12 +747,14 @@ impl App {
                     false => text(map.raw_stick(layer, side)),
                 },
                 mods: KeyMods::default(),
+                speed: speed(map.raw_stick(layer, side)),
             });
             if digital {
                 rows.extend(Dir::ALL.map(|dir| Row {
                     slot: Slot::Direction(side, dir),
                     target: text(map.raw_stick_dir(layer, side, dir)),
                     mods: mods(map.raw_stick_dir(layer, side, dir)),
+                    speed: None,
                 }));
             }
         }
@@ -756,12 +766,14 @@ impl App {
                 slot: Slot::Button(pad),
                 target: raw.text().to_string(),
                 mods: raw.mods(),
+                speed: None,
             })
         }));
         rows.extend(map.raw_keys(layer).map(|(name, raw)| Row {
             slot: Slot::Key(name.to_string()),
             target: raw.text().to_string(),
             mods: raw.mods(),
+            speed: None,
         }));
         let layers = map
             .raw_layers()

@@ -61,6 +61,24 @@ impl RawTarget {
         }
     }
 
+    /// The speed a whole-stick mouse target moves at; `None` for the default.
+    pub fn speed(&self) -> Option<f32> {
+        match self {
+            RawTarget::Short(_) => None,
+            RawTarget::Long { speed, .. } => *speed,
+        }
+    }
+
+    /// The same target at `speed` instead.
+    pub fn with_speed(&self, speed: Option<f32>) -> RawTarget {
+        match self {
+            RawTarget::Short(to) => Self::long(None, KeyMods::default(), speed, to.clone()),
+            RawTarget::Long { to, code, .. } => {
+                Self::long(code.clone(), self.mods(), speed, to.clone())
+            }
+        }
+    }
+
     /// `to` in place of what `old` sent, keeping whatever of `old` still applies:
     /// its modifiers for a key, its speed for a whole-stick mouse, its `code` for the same key.
     pub fn retarget(old: Option<&RawTarget>, to: String) -> RawTarget {
@@ -532,6 +550,13 @@ mod tests {
     fn clearing_the_last_modifier_writes_the_short_form() {
         let new = shifted("key.1", None).with_mods(KeyMods::default());
         assert!(matches!(new, RawTarget::Short(ref to) if to == "key.1"));
+    }
+
+    #[test]
+    fn the_default_speed_writes_the_short_form() {
+        let slow = RawTarget::Short(CURSOR.to_string()).with_speed(Some(0.35));
+        assert_eq!(slow.speed(), Some(0.35));
+        assert!(matches!(slow.with_speed(None), RawTarget::Short(ref to) if to == CURSOR));
     }
 
     #[test]

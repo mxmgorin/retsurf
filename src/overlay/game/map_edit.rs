@@ -231,6 +231,29 @@ impl Modifier {
     }
 }
 
+/// The steps a stick's speed takes; `None` is the default, x1.
+pub const SPEEDS: [Option<f32>; 7] = [
+    Some(0.25),
+    Some(0.35),
+    Some(0.5),
+    Some(0.75),
+    None,
+    Some(1.5),
+    Some(2.0),
+];
+
+/// A speed as the screen says it: `x0.35`, `x1` for the default.
+pub fn speed_label(speed: Option<f32>) -> String {
+    format!("x{}", speed.unwrap_or(1.0))
+}
+
+/// Whether `target` moves the cursor or scrolls with the whole stick.
+fn is_analog_mouse(target: &str) -> bool {
+    [MouseKind::Cursor, MouseKind::Scroll]
+        .iter()
+        .any(|kind| kind.target() == target)
+}
+
 /// The modifiers alone, as the Modifiers row says them: `Ctrl+Shift`, or `None`.
 pub fn mods_label(mods: KeyMods) -> String {
     let names: Vec<&str> = Modifier::ALL
@@ -609,12 +632,18 @@ pub struct Row {
     pub target: String,
     /// The modifiers a key target is sent with.
     pub mods: KeyMods,
+    /// How fast a whole-stick mouse moves; `None` for the default.
+    pub speed: Option<f32>,
 }
 
 impl Row {
     /// What it sends, as the screen says it.
     pub fn label(&self) -> String {
-        held_label(target_label(&self.target), self.mods)
+        let label = held_label(target_label(&self.target), self.mods);
+        match is_analog_mouse(&self.target) {
+            true => format!("{label} {}", speed_label(self.speed)),
+            false => label,
+        }
     }
 }
 
@@ -869,6 +898,29 @@ impl MapEdit {
             return None;
         }
         self.rows.get(self.selected).map(|row| row.target.as_str())
+    }
+
+    /// The focused row's speed one step along [`SPEEDS`], for a stick that
+    /// points or scrolls and only while no list is over the rows.
+    pub fn stepped_speed(&self, dx: i32) -> Option<(Slot, Option<f32>)> {
+        if self.kind.is_some() || self.confirm.is_some() {
+            return None;
+        }
+        let row = self.rows.get(self.selected)?;
+        if !is_analog_mouse(&row.target) {
+            return None;
+        }
+        // A speed the steps do not hold moves from the nearest one they do.
+        let value = |step: &Option<f32>| step.unwrap_or(1.0);
+        let now = value(&row.speed);
+        let at = (0..SPEEDS.len())
+            .min_by(|a, b| {
+                let (a, b) = (value(&SPEEDS[*a]) - now, value(&SPEEDS[*b]) - now);
+                a.abs().total_cmp(&b.abs())
+            })
+            .unwrap_or(0);
+        let next = (at as i32 + dx).clamp(0, SPEEDS.len() as i32 - 1) as usize;
+        Some((row.slot.clone(), SPEEDS[next]))
     }
 
     /// The modifiers the row's key is sent with; none for a source with no row yet.
@@ -1196,6 +1248,7 @@ mod tests {
             slot,
             target: target.to_string(),
             mods: KeyMods::default(),
+            speed: None,
         }
     }
 
@@ -1241,6 +1294,23 @@ mod tests {
         assert!(dir.contains(&Kind::Gamepad));
     }
 
+    /// Left/Right step a pointing stick's speed and leave every other row alone.
+    #[test]
+    fn left_and_right_step_a_pointing_sticks_speed() {
+        let mut edit = MapEdit::new();
+        edit.open("keys".to_string(), "Keyboard keys".to_string());
+        let slot = Slot::Stick(Side::Left);
+        let mut stick = row(slot.clone(), "mouse.cursor");
+        stick.speed = Some(0.35);
+        assert_eq!(stick.label(), "Cursor x0.35");
+        edit.set_rows(vec![stick, row(Slot::Button(Pad::A), "key.Space")], vec![]);
+        edit.select_slot(&slot);
+        assert_eq!(edit.stepped_speed(1), Some((slot.clone(), Some(0.5))));
+        assert_eq!(edit.stepped_speed(-1), Some((slot, Some(0.25))));
+        edit.select_slot(&Slot::Button(Pad::A));
+        assert_eq!(edit.stepped_speed(1), None);
+    }
+
     /// The kinds come in their groups, so the screen can head each one.
     #[test]
     fn the_kinds_come_grouped() {
@@ -1273,6 +1343,7 @@ mod tests {
             slot: slot.clone(),
             target: "key.1".to_string(),
             mods: shifted,
+            speed: None,
         };
         edit.set_rows(vec![key], vec![]);
         edit.select_slot(&slot);
