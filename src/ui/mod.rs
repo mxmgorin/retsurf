@@ -246,6 +246,8 @@ pub struct AppUi {
     shader: String,
     /// Whether the pad cursor is drawn over a game.
     game_cursor: bool,
+    /// The rows [`Self::shader`] sees the game in.
+    shader_resolution: crate::config::ShaderResolution,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
     /// The notice on screen, if any (see [`toast`]).
@@ -359,6 +361,7 @@ impl AppUi {
             page_shader: window.page_gl_texture().map(page_shader::PageShader::new),
             shader: crate::platform::render::shaders::NONE.to_string(),
             game_cursor: true,
+            shader_resolution: crate::config::ShaderResolution::default(),
             browser_viewport: (0, 0),
             toast: None,
             quick_access: QuickAccess::new(),
@@ -706,7 +709,8 @@ impl AppUi {
                         // by the window itself, and this rect stays empty.
                         match (&self.page_shader, self.browser_tex_id) {
                             (Some(pass), _) if shaded => {
-                                pass.paint(ui, rect, &self.shader, game_geometry);
+                                let rows = self.shader_resolution.rows(&self.shader);
+                                pass.paint(ui, rect, &self.shader, game_geometry, rows);
                             }
                             (pass, Some(tex)) => {
                                 if let Some(pass) = pass {

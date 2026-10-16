@@ -7,7 +7,7 @@
 use super::SettingsSection;
 use crate::config::{
     bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, HomeStyle, MemoryProfile, OskStyle,
-    PadLayout, PageTheme, Scaling, TextureFilter, TextureLimit, ToolbarPosition,
+    PadLayout, PageTheme, Scaling, ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -445,6 +445,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Gaming, "Game Mode",   "Input map",              Kind::Door { door: Door::InputMaps }, false),
     f(S::Gaming, "Game Mode",   "Scaling",                choice!(game_mode.view.scaling: Scaling), false).quick(Modes::Game),
     f(S::Gaming, "Game Mode",   "Shader",                 SHADER, false).shaders().quick(Modes::Game),
+    f(S::Gaming, "Game Mode",   "Shader resolution",      choice!(game_mode.view.shader_resolution: ShaderResolution), false).quick(Modes::Game),
     f(S::Gaming, "Game Mode",   "Texture limit",          choice!(game_mode.view.texture_limit: TextureLimit), false),
     f(S::Gaming, "Game Mode",   "Texture filter",         choice!(game_mode.view.texture_filter: TextureFilter), false),
     f(S::Gaming, "Game Mode",   "Cursor",                 flag!(game_mode.view.cursor), false).quick(Modes::Game),

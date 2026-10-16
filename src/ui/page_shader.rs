@@ -3,7 +3,7 @@
 //! page drawn plain around it, then the shader over the game's rect.
 
 use crate::browser::GameGeometry;
-use crate::platform::render::shaders;
+use crate::platform::render::shaders::{self, Rows};
 use egui_sdl2::egui;
 use egui_sdl2::egui_glow::{self, glow, glow::HasContext};
 use std::cell::Cell;
@@ -50,20 +50,51 @@ struct Frame {
 
 impl Frame {
     /// From the page's `geometry`, else as if the whole page were a game of
-    /// [`shaders::guessed_period`]-sized pixels.
-    fn new((w, h): (f32, f32), geometry: Option<GameGeometry>) -> Self {
+    /// [`shaders::guessed_period`]-sized pixels; a game with more rows than
+    /// `rows` asks for is seen at those, aspect kept.
+    fn new((w, h): (f32, f32), geometry: Option<GameGeometry>, rows: Rows) -> Self {
         match geometry {
             Some(GameGeometry {
                 source,
                 rect: [x, top, rw, rh],
-            }) => Self {
-                size: (w, h),
-                source_size: source,
-                // The page reports its top edge; GL counts from the bottom.
-                source_rect: [x, h - top - rh, rw, rh],
-            },
+            }) => {
+                // A whole number of screen pixels per game pixel on both axes,
+                // centred in the game's rect, so masks and grids land evenly.
+                if let Rows::Scale(scale) = rows {
+                    let scale = scale as f32;
+                    let (cols, rows) = ((rw / scale).floor(), (rh / scale).floor());
+                    if rows >= 1.0 && rows < source.1 {
+                        let (dw, dh) = (cols * scale, rows * scale);
+                        let bottom = h - top - rh + ((rh - dh) / 2.0).floor();
+                        return Self {
+                            size: (w, h),
+                            source_size: (cols, rows),
+                            source_rect: [x + ((rw - dw) / 2.0).floor(), bottom, dw, dh],
+                        };
+                    }
+                }
+                let wanted = match rows {
+                    Rows::Fixed(rows) => Some(rows as f32),
+                    Rows::Native | Rows::Scale(_) => None,
+                };
+                Self {
+                    size: (w, h),
+                    source_size: match wanted {
+                        Some(rows) if rows < source.1 => {
+                            ((source.0 * rows / source.1).round(), rows)
+                        }
+                        _ => source,
+                    },
+                    // The page reports its top edge; GL counts from the bottom.
+                    source_rect: [x, h - top - rh, rw, rh],
+                }
+            }
             None => {
-                let period = shaders::guessed_period(h);
+                let period = match rows {
+                    Rows::Scale(scale) => scale as f32,
+                    Rows::Fixed(rows) => shaders::guessed_period(h, Some(rows)),
+                    Rows::Native => shaders::guessed_period(h, None),
+                };
                 Self {
                     size: (w, h),
                     source_size: ((w / period).round(), (h / period).round()),
@@ -106,6 +137,7 @@ impl PageShader {
         rect: egui::Rect,
         id: &str,
         geometry: Option<GameGeometry>,
+        rows: Rows,
     ) {
         self.live.set(true);
         let texture = self.texture;
@@ -137,7 +169,7 @@ impl PageShader {
                 return;
             };
             let vp = info.viewport_in_pixels();
-            let frame = Frame::new((vp.width_px as f32, vp.height_px as f32), geometry);
+            let frame = Frame::new((vp.width_px as f32, vp.height_px as f32), geometry, rows);
             unsafe { passes.draw(gl, texture, &frame, (vp.left_px, vp.from_bottom_px)) };
         });
         ui.painter().add(egui::PaintCallback {
@@ -583,5 +615,35 @@ unsafe fn link(
                 Err(log)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn game(source: (f32, f32)) -> Option<GameGeometry> {
+        Some(GameGeometry {
+            source,
+            rect: [0.0, 0.0, 1280.0, 720.0],
+        })
+    }
+
+    #[test]
+    fn a_game_taller_than_the_rows_is_seen_at_them() {
+        let frame = Frame::new((1280.0, 720.0), game((1280.0, 720.0)), Rows::Fixed(240));
+        assert_eq!(frame.source_size, (427.0, 240.0));
+        let scaled = Frame::new((1280.0, 720.0), game((1280.0, 720.0)), Rows::Scale(3));
+        // 1280 is not a multiple of 3: the drawn width drops to one that is.
+        assert_eq!(scaled.source_size, (426.0, 240.0));
+        assert_eq!(scaled.source_rect, [1.0, 0.0, 1278.0, 720.0]);
+    }
+
+    #[test]
+    fn a_game_shorter_than_the_rows_keeps_its_own() {
+        let frame = Frame::new((1280.0, 720.0), game((320.0, 180.0)), Rows::Fixed(240));
+        assert_eq!(frame.source_size, (320.0, 180.0));
+        let native = Frame::new((1280.0, 720.0), game((1280.0, 720.0)), Rows::Native);
+        assert_eq!(native.source_size, (1280.0, 720.0));
     }
 }

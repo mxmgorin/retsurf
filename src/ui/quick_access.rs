@@ -200,6 +200,7 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "Scaling" => bold::FRAME_CORNERS,
             "Shader" => bold::TELEVISION_SIMPLE,
+            "Shader resolution" => bold::ROWS,
             "Cursor" => bold::CURSOR,
             "Page theme" => bold::CIRCLE_HALF,
             "Ad blocker" => bold::SHIELD_CHECK,

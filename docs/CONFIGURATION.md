@@ -153,6 +153,10 @@ patches = true             # built-in fixes for known games (saves of Humble's a
 scaling = "none"
 # "none", a built-in or the id of a shaders/<id>.glsl (see SHADERS.md).
 shader = "none"
+# Rows the shader sees the game in: "auto" (the scale each shader is made for: 3 screen px a
+# row for scanlines and grid, 4 for CRT, 5 for SameBoy LCD, the game's own for upscalers),
+# "native", "480", "360" or "240".
+shader_resolution = "auto"
 # Largest texture side a game keeps: "full", "1024", "512" or "256". Larger ones are halved
 # until they fit, so a game too big for the GPU memory still loads; reload the game after
 # changing it.

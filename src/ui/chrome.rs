@@ -15,6 +15,12 @@ impl AppUi {
         self.shader = shader.to_string();
     }
 
+    /// The rows the shader sees the game in (live config change).
+    #[inline]
+    pub fn set_shader_resolution(&mut self, resolution: crate::config::ShaderResolution) {
+        self.shader_resolution = resolution;
+    }
+
     /// Draw the pad cursor over a game or not (live config change).
     #[inline]
     pub fn set_game_cursor(&mut self, on: bool) {

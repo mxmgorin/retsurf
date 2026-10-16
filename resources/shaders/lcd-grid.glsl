@@ -41,17 +41,19 @@ uniform vec2 TextureSize;
 uniform vec2 OutputSize;
 COMPAT_VARYING vec2 vTexCoord;
 
-// Line darkness, and the gain that restores the average brightness.
+// How much the grid lines darken.
 const float DEPTH = 0.4;
-const float GAIN = 1.25;
 
 void main() {
     vec2 texel = vTexCoord * TextureSize;
     vec4 color = COMPAT_TEXTURE(Texture, (floor(texel) + 0.5) / TextureSize);
-    // The last output row and column of each game pixel are the grid.
-    vec2 scale = OutputSize / TextureSize;
-    vec2 cell = floor(fract(texel) * scale);
-    vec2 line = step(scale - 1.0, cell);
-    FragColor = vec4(min(color.rgb * (1.0 - DEPTH * max(line.x, line.y)) * GAIN, vec3(1.0)), 1.0);
+    // The last output row and column of each game pixel, so a scale that is
+    // not a whole number still gives every pixel exactly one of each.
+    vec2 scale = max(OutputSize / TextureSize, vec2(1.0));
+    vec2 line = step(vec2(1.0), floor(texel + 1.0 / scale) - floor(texel));
+    // The share of output pixels on a line, which the gain makes up for.
+    float lit = (1.0 - 1.0 / scale.x) * (1.0 - 1.0 / scale.y);
+    float gain = 1.0 / (1.0 - DEPTH * (1.0 - lit));
+    FragColor = vec4(min(color.rgb * (1.0 - DEPTH * max(line.x, line.y)) * gain, vec3(1.0)), 1.0);
 }
 #endif

@@ -1,5 +1,5 @@
 use crate::config::token_enum::token_enum;
-use crate::config::{TextureFilter, TextureLimit};
+use crate::config::{ShaderResolution, TextureFilter, TextureLimit};
 use serde::{Deserialize, Serialize};
 
 /// Game Mode (`[game_mode]`): the browser stops consuming input so the page
@@ -27,6 +27,8 @@ pub struct GameViewConfig {
     /// Shader id: `none`, a built-in or a `shaders/<id>.glsl` (see
     /// [`crate::platform::render::shaders`]).
     pub shader: String,
+    /// The rows the shader sees the game in.
+    pub shader_resolution: ShaderResolution,
     /// The largest texture side a game keeps (see
     /// [`crate::browser::AppBrowser::set_game_textures`]).
     pub texture_limit: TextureLimit,
@@ -41,6 +43,7 @@ impl Default for GameViewConfig {
         Self {
             scaling: Scaling::default(),
             shader: crate::platform::render::shaders::NONE.to_string(),
+            shader_resolution: ShaderResolution::default(),
             texture_limit: TextureLimit::default(),
             texture_filter: TextureFilter::default(),
             cursor: true,

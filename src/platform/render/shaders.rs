@@ -27,6 +27,20 @@ struct BuiltIn {
     source: &'static str,
     /// Samples the game bilinearly, as its RetroArch preset asks.
     linear: bool,
+    /// Screen pixels per game row the look is made for; `None` for an
+    /// upscaler, which wants the game's own rows.
+    scale: Option<u32>,
+}
+
+/// The rows a page shader sees the game in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Rows {
+    /// The game's own.
+    Native,
+    /// This many, or the game's own where it has fewer.
+    Fixed(u32),
+    /// As many as give each one this many screen pixels.
+    Scale(u32),
 }
 
 const BUILT_INS: &[BuiltIn] = &[
@@ -35,60 +49,70 @@ const BUILT_INS: &[BuiltIn] = &[
         label: "Scanlines",
         source: include_str!("../../../resources/shaders/scanlines.glsl"),
         linear: false,
+        scale: Some(3),
     },
     BuiltIn {
         id: "lcd-grid",
         label: "LCD grid",
         source: include_str!("../../../resources/shaders/lcd-grid.glsl"),
         linear: false,
+        scale: Some(3),
     },
     BuiltIn {
         id: "zfast-crt",
         label: "zfast CRT",
         source: include_str!("../../../resources/shaders/zfast-crt.glsl"),
         linear: false,
+        scale: Some(4),
     },
     BuiltIn {
         id: "crt-pi",
         label: "CRT Pi",
         source: include_str!("../../../resources/shaders/crt-pi.glsl"),
         linear: false,
+        scale: Some(4),
     },
     BuiltIn {
         id: "crt-lottes",
         label: "CRT Lottes",
         source: include_str!("../../../resources/shaders/crt-lottes.glsl"),
         linear: false,
+        scale: Some(4),
     },
     BuiltIn {
         id: "xbr-lv3",
         label: "xBR",
         source: include_str!("../../../resources/shaders/xbr-lv3.glsl"),
         linear: false,
+        scale: None,
     },
     BuiltIn {
         id: "omniscale",
         label: "OmniScale",
         source: include_str!("../../../resources/shaders/omniscale.glsl"),
         linear: false,
+        scale: None,
     },
     BuiltIn {
         id: "sharp-bilinear",
         label: "Sharp bilinear",
         source: include_str!("../../../resources/shaders/sharp-bilinear.glsl"),
         linear: true,
+        scale: None,
     },
     BuiltIn {
         id: "sameboy-lcd",
         label: "SameBoy LCD",
         source: include_str!("../../../resources/shaders/sameboy-lcd.glsl"),
         linear: false,
+        scale: Some(5),
     },
     BuiltIn {
         id: "sameboy-mono-lcd",
         label: "SameBoy mono LCD",
         source: include_str!("../../../resources/shaders/sameboy-mono-lcd.glsl"),
         linear: false,
+        scale: Some(5),
     },
 ];
 
@@ -153,9 +177,19 @@ pub fn source(id: &str) -> Option<Source> {
     }
 }
 
-/// Output pixels per game pixel when only the page's `height_px` is known.
-pub fn guessed_period(height_px: f32) -> f32 {
-    (height_px / IMITATED_ROWS).round().max(MIN_PERIOD)
+/// Output pixels per game pixel when only the page's `height_px` is known,
+/// imitating `rows` rows, or [`IMITATED_ROWS`].
+pub fn guessed_period(height_px: f32, rows: Option<u32>) -> f32 {
+    let rows = rows.map_or(IMITATED_ROWS, |rows| rows as f32);
+    (height_px / rows).round().max(MIN_PERIOD)
+}
+
+/// The rows a built-in shader is made for; the game's own for an upscaler, a
+/// user's shader or none.
+pub fn preferred_rows(id: &str) -> Rows {
+    builtin(id)
+        .and_then(|b| b.scale)
+        .map_or(Rows::Native, Rows::Scale)
 }
 
 fn builtin(id: &str) -> Option<&'static BuiltIn> {
@@ -205,7 +239,8 @@ mod tests {
 
     #[test]
     fn a_guessed_period_never_drops_below_two() {
-        assert_eq!(guessed_period(100.0), MIN_PERIOD);
-        assert_eq!(guessed_period(1440.0), 6.0);
+        assert_eq!(guessed_period(100.0, None), MIN_PERIOD);
+        assert_eq!(guessed_period(1440.0, None), 6.0);
+        assert_eq!(guessed_period(1440.0, Some(480)), 3.0);
     }
 }

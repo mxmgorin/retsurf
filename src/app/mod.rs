@@ -152,6 +152,7 @@ impl App {
             crate::browser::effective_user_agent(&config.browser),
         );
         ui.set_shader(&config.game_mode.view.shader);
+        ui.set_shader_resolution(config.game_mode.view.shader_resolution);
         ui.set_game_cursor(config.game_mode.view.cursor);
         log::info!("init: app constructed");
 
