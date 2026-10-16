@@ -1,0 +1,46 @@
+retsurf - a lightweight, gamepad-first web browser
+Copyright (C) 2025-2026 Maxim Gorin (mxmgorin)
+https://github.com/mxmgorin/retsurf
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version, with the additional terms below.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program in the file LICENSE. If not, see <https://www.gnu.org/licenses/>.
+
+
+Additional terms under section 7 of the GNU General Public License
+
+1. Attribution (section 7b). The copyright notice above must be preserved in
+   this material and in the Appropriate Legal Notices displayed by any work
+   containing it, including the program's About screen.
+
+2. Origin (section 7c). Modified versions must be marked in reasonable ways as
+   different from the original version, and the origin of this material must
+   not be misrepresented.
+
+3. Publicity (section 7d). The names of the licensors and authors of this
+   material may not be used to endorse or promote a modified version, or any
+   product or service built on it, without prior written permission. This
+   does not limit the attribution required by term 1.
+
+4. Trademarks (section 7e). This license grants no rights under trademark law
+   to the name "retsurf" or the retsurf logo and icons. TRADEMARKS.md states
+   the permitted uses.
+
+5. Indemnification (section 7f). Anyone who conveys this material, or a
+   modified version of it, with contractual assumptions of liability to the
+   recipient must indemnify its licensors and authors for any liability that
+   these contractual assumptions directly impose on them.
+
+
+Third-party files
+
+Files that carry their own copyright and license notice, such as those under
+vendor/ and resources/shaders/, remain under those terms.

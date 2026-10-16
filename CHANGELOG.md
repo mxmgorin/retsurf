@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- License: GPL-3.0-or-later with the additional terms in `NOTICE`; the name and logo under `TRADEMARKS.md`
+
 ## [0.10.0] - 2026-10-08
 
 ### Added

@@ -142,3 +142,9 @@ If you find the project useful, here is how you can help:
   zfast_crt by Greg Hogan, crt-pi by davej, crt-lottes by Timothy Lottes, xBR by Hyllian
   and sharp-bilinear by rsn8887; OmniScale and the LCD shaders from
   [SameBoy](https://github.com/LIJI32/SameBoy) by Lior Halphon
+
+## License
+
+Copyright (C) 2025-2026 Maxim Gorin. retsurf is free software under the
+[GNU General Public License v3.0 or later](LICENSE), with the additional terms in
+[NOTICE](NOTICE). The name, logo and icons: [TRADEMARKS.md](TRADEMARKS.md).

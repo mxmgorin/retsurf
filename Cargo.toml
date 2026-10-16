@@ -2,7 +2,11 @@
 name = "retsurf"
 version = "0.10.0"
 edition = "2021"
-license = "GPL-3.0"
+authors = ["Maxim Gorin"]
+description = "A lightweight, gamepad-first web browser powered by Servo"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/mxmgorin/retsurf"
+homepage = "https://retsurf.app"
 
 # The Android `libretsurf.so` is built from `android/lib`, not from a second
 # crate-type here: the armhf build compiles non-PIC (see tools/armhf/build.sh) and
