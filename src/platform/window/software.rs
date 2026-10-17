@@ -305,6 +305,10 @@ impl WindowBackend for SoftwareBackend {
         self.frame_interval
     }
 
+    fn software_webgl(&self) -> bool {
+        self.rendering_ctx.software_webgl()
+    }
+
     fn set_max_fps(&mut self, max_fps: u32) {
         self.frame_interval = frame_interval(max_fps);
     }

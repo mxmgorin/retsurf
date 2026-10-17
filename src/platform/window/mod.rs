@@ -62,6 +62,7 @@ trait WindowBackend {
     fn pointer_pos_in_points(&self) -> Option<egui::Pos2>;
     fn paint(&mut self, page_at: (i32, i32), page_painted: bool) -> Option<CompositeTiming>;
     fn frame_interval(&self) -> Option<Duration>;
+    fn software_webgl(&self) -> bool;
     /// Frees native resources before an exit that skips drops; the backend is dead after.
     fn destroy(&mut self);
     /// egui's handle to the page texture; `None` where the backend composites
@@ -129,6 +130,11 @@ impl AppWindow {
     /// framebuffer.
     pub fn rendering_ctx(&self) -> Rc<dyn RenderingContext> {
         self.backend.rendering_ctx()
+    }
+
+    /// Whether WebGL renders on a CPU rasterizer.
+    pub fn software_webgl(&self) -> bool {
+        self.backend.software_webgl()
     }
 
     /// egui's handle to the page texture; `None` on the software backend, which

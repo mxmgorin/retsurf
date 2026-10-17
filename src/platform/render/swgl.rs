@@ -40,6 +40,14 @@ pub struct SwglRenderingContext {
 }
 
 impl SwglRenderingContext {
+    /// Whether WebGL here renders on a CPU rasterizer.
+    pub fn software_webgl(&self) -> bool {
+        #[cfg(all(feature = "webgl", target_os = "linux"))]
+        return self.webgl.as_ref().is_some_and(|webgl| webgl.software);
+        #[cfg(not(all(feature = "webgl", target_os = "linux")))]
+        false
+    }
+
     pub fn new(size: PhysicalSize<u32>) -> Rc<Self> {
         let swgl = swgl::Context::create();
         // swgl keeps one current context per process in a global; must precede

@@ -23,6 +23,9 @@ use surfman::{Surface, SurfaceTexture};
 /// Any version reads a texture through an FBO.
 const READBACK_GL_VERSION: GLVersion = GLVersion { major: 2, minor: 1 };
 
+/// `GL_RENDERER` prefixes of Mesa's CPU rasterizers.
+const SOFTWARE_RENDERERS: [&str; 3] = ["llvmpipe", "softpipe", "swrast"];
+
 /// A swgl texture lent the pixels of one locked front buffer.
 struct Lent {
     texture: u32,
@@ -32,6 +35,8 @@ struct Lent {
 
 /// Front buffers copied from a surfaceless GL context into swgl textures.
 pub struct Readback {
+    /// Whether the GL WebGL renders on is a CPU rasterizer.
+    pub software: bool,
     connection: Connection,
     device: Device,
     context: RefCell<Context>,
@@ -76,11 +81,12 @@ impl Readback {
                 return None;
             }
         };
-        log::info!(
-            "gl: WebGL front buffers read back from {} for swgl",
-            unsafe { gl.get_parameter_string(glow::RENDERER) }
-        );
+        let renderer = unsafe { gl.get_parameter_string(glow::RENDERER) };
+        log::info!("gl: WebGL front buffers read back from {renderer} for swgl");
         Some(Self {
+            software: SOFTWARE_RENDERERS
+                .iter()
+                .any(|name| renderer.starts_with(name)),
             connection,
             device,
             context: RefCell::new(context),

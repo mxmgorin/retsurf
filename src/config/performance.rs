@@ -47,6 +47,24 @@ pub struct PerformanceConfig {
     /// Frames per second the software renderer is held to (`0` uncapped,
     /// `RETSURF_MAX_FPS` overrides); it paces the whole loop, Servo's too.
     pub max_fps: u32,
+    /// Texture units WebGL pages are told of; `0` (the default) caps them at
+    /// [`SOFTWARE_WEBGL_TEXTURE_UNITS`] where WebGL runs on the CPU. Applies at startup.
+    pub webgl_texture_units: u32,
+}
+
+/// The `webgl_texture_units` cap a software GL gets by default: WebGL 1's minimum.
+/// Batching engines compile one shader over every unit, which costs seconds there.
+pub const SOFTWARE_WEBGL_TEXTURE_UNITS: u32 = 8;
+
+impl PerformanceConfig {
+    /// The texture-unit cap for WebGL pages, `None` to leave the GL's own.
+    pub fn webgl_texture_units(&self, software_webgl: bool) -> Option<u32> {
+        match self.webgl_texture_units {
+            0 if software_webgl => Some(SOFTWARE_WEBGL_TEXTURE_UNITS),
+            0 => None,
+            units => Some(units),
+        }
+    }
 }
 
 impl Default for PerformanceConfig {
@@ -62,6 +80,7 @@ impl Default for PerformanceConfig {
             memory_guard_pressure: 10,
             http_disk_cache_mb: 0,
             max_fps: 30,
+            webgl_texture_units: 0,
         }
     }
 }

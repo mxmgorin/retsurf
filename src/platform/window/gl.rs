@@ -246,6 +246,10 @@ impl WindowBackend for GlBackend {
         Some(self.frame_interval)
     }
 
+    fn software_webgl(&self) -> bool {
+        false
+    }
+
     fn browser_texture(&self) -> Option<egui::TextureId> {
         Some(self.browser_tex)
     }

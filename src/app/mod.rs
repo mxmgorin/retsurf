@@ -133,6 +133,9 @@ impl App {
             event_sender.clone(),
             clipboard,
             local_site,
+            config
+                .performance
+                .webgl_texture_units(window.software_webgl()),
             &config,
         )?;
         log::info!("init: browser ready; creating event handler + ui");
