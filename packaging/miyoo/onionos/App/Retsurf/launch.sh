@@ -14,6 +14,14 @@ mkdir -p "$gamedir/data" "$gamedir/downloads"
 # stubs an Onion card does not need (lib/README.md).
 export LD_LIBRARY_PATH="$gamedir/lib:$sysdir/lib/parasyte:$sysdir/lib:$miyoodir/lib:/lib:/config/lib:/customer/lib:$gamedir/lib/fallback"
 export LD_PRELOAD="$gamedir/lib/libSDL2-2.0.so.0"
+
+# WebGL's GL when the package carries Mesa: last on the path, so it only adds
+# what the firmware lacks and never shadows a library the firmware brings.
+if [ -d "$gamedir/lib/mesa" ]; then
+  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$gamedir/lib/mesa"
+  export __EGL_VENDOR_LIBRARY_FILENAMES="$gamedir/lib/mesa/50_mesa.json"
+  export LIBGL_DRIVERS_PATH="$gamedir/lib/mesa/dri"
+fi
 export SDL_VIDEODRIVER=Mini
 export EGL_VIDEODRIVER=Mini
 # SDL lists its own `software` driver first, and that one never reaches the panel.
