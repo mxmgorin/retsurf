@@ -1,3 +1,5 @@
+#[cfg(all(feature = "webgl", target_os = "linux"))]
+use super::readback::Readback;
 use super::BYTES_PER_PIXEL;
 use dpi::PhysicalSize;
 use gleam::gl::{self, Gl};
@@ -32,6 +34,9 @@ pub struct SwglRenderingContext {
     // The same context as `swgl`, as the trait object WebRender draws through.
     gl: Rc<dyn Gl>,
     size: Cell<PhysicalSize<u32>>,
+    /// WebGL front buffers, read back for swgl.
+    #[cfg(all(feature = "webgl", target_os = "linux"))]
+    webgl: Option<Readback>,
 }
 
 impl SwglRenderingContext {
@@ -44,6 +49,8 @@ impl SwglRenderingContext {
             swgl,
             gl: Rc::new(swgl),
             size: Cell::new(size),
+            #[cfg(all(feature = "webgl", target_os = "linux"))]
+            webgl: Readback::new(),
         });
         ctx.allocate(size);
         ctx
@@ -142,5 +149,32 @@ impl RenderingContext for SwglRenderingContext {
 
     fn glow_gl_api(&self) -> Arc<glow::Context> {
         unreachable!("glow is only reached through Servo's offscreen GL wrapper, never built on the swgl path")
+    }
+
+    #[cfg(all(feature = "webgl", target_os = "linux"))]
+    fn connection(&self) -> Option<surfman::Connection> {
+        self.webgl.as_ref().map(Readback::connection)
+    }
+
+    #[cfg(all(feature = "webgl", target_os = "linux"))]
+    fn create_texture(
+        &self,
+        surface: surfman::Surface,
+    ) -> Result<(surfman::SurfaceTexture, u32, euclid::default::Size2D<i32>), surfman::Surface>
+    {
+        match self.webgl.as_ref() {
+            Some(webgl) => webgl.create_texture(&self.swgl, surface),
+            None => Err(surface),
+        }
+    }
+
+    #[cfg(all(feature = "webgl", target_os = "linux"))]
+    fn destroy_texture(
+        &self,
+        surface_texture: surfman::SurfaceTexture,
+    ) -> Option<surfman::Surface> {
+        self.webgl
+            .as_ref()
+            .and_then(|webgl| webgl.destroy_texture(&self.swgl, surface_texture))
     }
 }

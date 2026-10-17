@@ -2,6 +2,8 @@
 //! context, and — with the `software` feature — [`SwglRenderingContext`] over
 //! swgl, for devices with no GPU at all.
 
+#[cfg(all(feature = "software", feature = "webgl", target_os = "linux"))]
+mod readback;
 mod sdl;
 pub mod shaders;
 #[cfg(feature = "software")]

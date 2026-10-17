@@ -29,6 +29,19 @@ fn frame_interval(max_fps: u32) -> Option<Duration> {
     interval
 }
 
+const FRAMEBUFFER_ACCELERATION_HINT: &str = "SDL_FRAMEBUFFER_ACCELERATION";
+
+/// On X11 SDL backs the window surface with GL, and the GLX context it leaves
+/// current bars EGL on this thread. Never overrides the environment.
+fn keep_gl_off_x11_framebuffer(video_subsystem: &VideoSubsystem) {
+    if cfg!(all(feature = "webgl", target_os = "linux"))
+        && video_subsystem.current_video_driver() == "x11"
+        && std::env::var_os(FRAMEBUFFER_ACCELERATION_HINT).is_none()
+    {
+        sdl2::hint::set(FRAMEBUFFER_ACCELERATION_HINT, "0");
+    }
+}
+
 /// No GL anywhere: swgl rasterizes the page, SDL's own renderer paints the
 /// chrome over it, one texture copy to the panel — the only presentation path
 /// some drivers (the Miyoo Mini's `mmiyoo`) support.
@@ -71,6 +84,7 @@ impl SoftwareBackend {
         max_fps: u32,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
+        keep_gl_off_x11_framebuffer(video_subsystem);
         let mut window = build_window(video_subsystem, config, false)?;
         set_window_icon(&mut window);
 
