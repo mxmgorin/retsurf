@@ -131,7 +131,9 @@ docker run --rm -i --network host \
       -mtune=cortex-a7 \
       -ffunction-sections -fdata-sections \
       -I/opt/sysroot/usr/include"
-    export CXXFLAGS_armv7_unknown_linux_gnueabihf="$CFLAGS_armv7_unknown_linux_gnueabihf"
+    # libstdc++ 10 calls glibc-2.30 pthread clock functions the 2.28 sysroot lacks.
+    clock_shim="-include /repo/tools/armhf/pthread-clock-decls.h"
+    export CXXFLAGS_armv7_unknown_linux_gnueabihf="$CFLAGS_armv7_unknown_linux_gnueabihf $clock_shim"
 
     # bindgen runs the host libclang against target headers, so it needs pointing
     # at both sysroots by hand -- it inherits nothing from the cross gcc.
@@ -150,7 +152,8 @@ docker run --rm -i --network host \
       -isystem /usr/arm-linux-gnueabihf/include/c++/10/arm-linux-gnueabihf \
       -isystem /usr/lib/gcc-cross/arm-linux-gnueabihf/10/include \
       -isystem $tc/arm-linux-gnueabihf/include \
-      -isystem /opt/sysroot/usr/include"
+      -isystem /opt/sysroot/usr/include \
+      $clock_shim"
 
     # SpiderMonkey builds tools that run on the build machine, and its configure
     # falls back to the target compiler when these are unset. GCC and not the
