@@ -50,6 +50,9 @@ pub struct PerformanceConfig {
     /// Texture units WebGL pages are told of; `0` (the default) caps them at
     /// [`SOFTWARE_WEBGL_TEXTURE_UNITS`] where WebGL runs on the CPU. Applies at startup.
     pub webgl_texture_units: u32,
+    /// WebGL for pages. Off, no GL is loaded for it, which matters where it runs
+    /// on the CPU. Applies at startup.
+    pub webgl: bool,
 }
 
 /// The `webgl_texture_units` cap a software GL gets by default: WebGL 1's minimum.
@@ -81,6 +84,7 @@ impl Default for PerformanceConfig {
             http_disk_cache_mb: 0,
             max_fps: 30,
             webgl_texture_units: 0,
+            webgl: true,
         }
     }
 }

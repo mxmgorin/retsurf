@@ -82,6 +82,7 @@ impl SoftwareBackend {
         video_subsystem: &VideoSubsystem,
         config: &DisplayConfig,
         max_fps: u32,
+        webgl: bool,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         keep_gl_off_x11_framebuffer(video_subsystem);
@@ -101,7 +102,8 @@ impl SoftwareBackend {
 
         let (offscreen, present) = build_compose_targets(&canvas, size)?;
         let egui = EguiCanvas::for_surface_with_format(canvas.window(), &offscreen, COMPOSE_FORMAT);
-        let rendering_ctx = SwglRenderingContext::new(dpi::PhysicalSize::new(size.0, size.1));
+        let rendering_ctx =
+            SwglRenderingContext::new(dpi::PhysicalSize::new(size.0, size.1), webgl);
         log::info!("window: swgl rendering context created");
 
         let backend = Self {

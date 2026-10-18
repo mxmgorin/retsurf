@@ -101,6 +101,7 @@ worker_pool_max = 0        # 0 = the memory profile's choice
 http_disk_cache_mb = 0     # keep cached pages on disk across restarts, 0 = off; restart
 max_fps = 30               # frame cap for software rendering, 0 = none
 webgl_texture_units = 0    # texture units WebGL pages see, 0 = 8 on a software GL; restart
+webgl = true               # WebGL for pages; off loads no GL for it; restart
 
 [display]
 width = 640                # desktop window size, remembered on exit

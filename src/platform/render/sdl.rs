@@ -28,6 +28,7 @@ impl SdlRenderingContext {
         gl: Rc<dyn Gl>,
         glow: Arc<glow::Context>,
         size: PhysicalSize<u32>,
+        webgl: bool,
         get_proc: impl Fn(&str) -> *const c_void,
     ) -> Rc<Self> {
         let fbo = gl.gen_framebuffers(1)[0];
@@ -35,7 +36,7 @@ impl SdlRenderingContext {
         let ctx = Rc::new(Self {
             gl,
             glow,
-            webgl: FrontBuffers::new(get_proc),
+            webgl: webgl.then(|| FrontBuffers::new(get_proc)).flatten(),
             fbo: Cell::new(fbo),
             color_tex: Cell::new(color_tex),
             size: Cell::new(size),

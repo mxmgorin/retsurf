@@ -95,6 +95,7 @@ impl GlBackend {
     pub(super) fn new(
         video_subsystem: &VideoSubsystem,
         config: &DisplayConfig,
+        webgl: bool,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         // Mali blobs on RK3326/RK3566 expose GLES 3.2; WebRender needs >= 3.0.
@@ -152,8 +153,8 @@ impl GlBackend {
 
         let (w, h) = window.drawable_size();
         log::info!("window: GL context current ({w}x{h}); creating rendering context");
-        let rendering_ctx =
-            SdlRenderingContext::new(gl, glow_ctx.clone(), dpi::PhysicalSize::new(w, h), get_proc);
+        let size = dpi::PhysicalSize::new(w, h);
+        let rendering_ctx = SdlRenderingContext::new(gl, glow_ctx.clone(), size, webgl, get_proc);
         log::info!("window: rendering context created");
 
         let mut egui = EguiGlow::new(&window, glow_ctx.clone(), None, false);

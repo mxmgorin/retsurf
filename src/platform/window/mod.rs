@@ -101,16 +101,20 @@ pub fn page_shaders() -> bool {
 
 impl AppWindow {
     /// Build the window with the renderer `config` asks for, the software one
-    /// paced to `max_fps`. `ctx_init` styles each [`egui::Context`] this window
-    /// creates.
+    /// paced to `max_fps`, offering pages WebGL when `webgl` is set. `ctx_init`
+    /// styles each [`egui::Context`] this window creates.
     pub fn new(
         sdl: &Sdl,
         config: &DisplayConfig,
         max_fps: u32,
+        webgl: bool,
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         let video_subsystem = sdl.video()?;
-        let backend = build_backend(&video_subsystem, config, max_fps, ctx_init)?;
+        if !webgl {
+            log::info!("gl: WebGL off in the config");
+        }
+        let backend = build_backend(&video_subsystem, config, max_fps, webgl, ctx_init)?;
         PAGE_SHADERS.store(backend.page_gl_texture().is_some(), Ordering::Relaxed);
         let mut window = Self {
             video_subsystem,
@@ -293,19 +297,20 @@ fn build_backend(
     video: &VideoSubsystem,
     config: &DisplayConfig,
     max_fps: u32,
+    webgl: bool,
     ctx_init: fn(&egui::Context),
 ) -> Result<Box<dyn WindowBackend>, String> {
     if config.software_render {
         return Ok(Box::new(SoftwareBackend::new(
-            video, config, max_fps, ctx_init,
+            video, config, max_fps, webgl, ctx_init,
         )?));
     }
-    match GlBackend::new(video, config, ctx_init) {
+    match GlBackend::new(video, config, webgl, ctx_init) {
         Ok(backend) => Ok(Box::new(backend)),
         Err(e) => {
             log::warn!("GL unavailable ({e}); falling back to software rendering");
             Ok(Box::new(SoftwareBackend::new(
-                video, config, max_fps, ctx_init,
+                video, config, max_fps, webgl, ctx_init,
             )?))
         }
     }
@@ -316,9 +321,10 @@ fn build_backend(
     video: &VideoSubsystem,
     config: &DisplayConfig,
     _max_fps: u32,
+    webgl: bool,
     ctx_init: fn(&egui::Context),
 ) -> Result<Box<dyn WindowBackend>, String> {
-    Ok(Box::new(GlBackend::new(video, config, ctx_init)?))
+    Ok(Box::new(GlBackend::new(video, config, webgl, ctx_init)?))
 }
 
 fn build_window(

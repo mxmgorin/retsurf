@@ -48,17 +48,21 @@ impl SwglRenderingContext {
         false
     }
 
-    pub fn new(size: PhysicalSize<u32>) -> Rc<Self> {
+    pub fn new(size: PhysicalSize<u32>, webgl: bool) -> Rc<Self> {
         let swgl = swgl::Context::create();
         // swgl keeps one current context per process in a global; must precede
         // any call through `gl`, including WebRender's setup.
         swgl.make_current();
+        #[cfg(not(all(feature = "webgl", target_os = "linux")))]
+        if webgl {
+            log::info!("gl: no WebGL in this build");
+        }
         let ctx = Rc::new(Self {
             swgl,
             gl: Rc::new(swgl),
             size: Cell::new(size),
             #[cfg(all(feature = "webgl", target_os = "linux"))]
-            webgl: Readback::new(),
+            webgl: webgl.then(Readback::new).flatten(),
         });
         ctx.allocate(size);
         ctx

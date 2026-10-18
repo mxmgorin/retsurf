@@ -117,6 +117,7 @@ impl App {
             sdl,
             &config.display,
             config.performance.max_fps,
+            config.performance.webgl,
             crate::ui::init_egui_ctx,
         )?;
         // Before the engine, whose startup blocks this thread.
