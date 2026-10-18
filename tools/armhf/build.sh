@@ -175,7 +175,7 @@ docker run --rm -i --network host \
     # there is a lot of it. The rasterizers keep -O3, see Cargo.toml.
     export CARGO_PROFILE_RELEASE_OPT_LEVEL="${RETSURF_ARM_OPT:-s}"
 
-    cargo build --release --no-default-features --features software --target "$TARGET" $CARGO_ARGS
+    cargo build --release --no-default-features --features software,webgl --target "$TARGET" $CARGO_ARGS
     out="/target/$TARGET/release/retsurf"
     file "$out"
     arm-linux-gnueabihf-readelf -d "$out" | grep NEEDED

@@ -67,7 +67,8 @@ flipped. With no vsync, the loop caps at `[performance] max_fps`.
 WebGL needs a GL implementation even here, since pages bring their own shaders. A build
 with both `software` and `webgl` renders WebGL on Mesa's surfaceless EGL platform and copies
 each front buffer into a swgl texture (`src/platform/render/readback.rs`). That costs one
-`glReadPixels` per canvas and frame, and no window or display server. On X11 SDL is told
+`glReadPixels` per canvas and frame, and no window or display server. The Miyoo packages
+carry Debian buster's Mesa 18.3 (llvmpipe) in `lib/mesa`. On X11 SDL is told
 not to back the window with GL, since glvnd refuses EGL on a thread with a current GLX
 context.
 

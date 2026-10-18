@@ -267,7 +267,9 @@ jobs:
           # Without it both halves compile against jammy's glibc 2.35 headers and
           # the link resolves there, taking the binary over the floor.
           CFLAGS_armv7_unknown_linux_gnueabihf: "--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc -mtune=cortex-a7 -I/opt/sysroot/usr/include"
-          CXXFLAGS_armv7_unknown_linux_gnueabihf: "--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc -mtune=cortex-a7 -I/opt/sysroot/usr/include"
+          # -include: libstdc++ 10 calls glibc-2.30 pthread clock functions the
+          # 2.28 sysroot lacks.
+          CXXFLAGS_armv7_unknown_linux_gnueabihf: "--sysroot=/opt/miyoomini-toolchain/arm-linux-gnueabihf/libc -mtune=cortex-a7 -I/opt/sysroot/usr/include -include ${{ github.workspace }}/tools/armhf/pthread-clock-decls.h"
           # bindgen runs libclang against target headers, so it needs pointing at
           # both sysroots by hand — it inherits nothing from the cross gcc. The
           # C++ headers are the compiler's, not the sysroot's: that one carries
@@ -282,6 +284,7 @@ jobs:
             -isystem /usr/lib/gcc-cross/arm-linux-gnueabihf/10/include
             -isystem /opt/miyoomini-toolchain/arm-linux-gnueabihf/include
             -isystem /opt/sysroot/usr/include
+            -include ${{ github.workspace }}/tools/armhf/pthread-clock-decls.h
           # SpiderMonkey's configure hunts for llvm-objdump beside whichever clang
           # it found and gives up if there is none. Named outright, since the
           # compiler here is GCC.
@@ -310,7 +313,7 @@ jobs:
           CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux
-          cargo build --release --no-default-features --features software --target "$TARGET"
+          cargo build --release --no-default-features --features software,webgl --target "$TARGET"
           df -h /
 
       - name: Stage binary

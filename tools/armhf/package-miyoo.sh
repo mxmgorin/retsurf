@@ -16,8 +16,8 @@
 #   Debian buster     fontconfig and its two dependencies, that being the
 #                     glibc-2.28 era; no firmware ships any of it
 #
-# `RETSURF_MESA=1` also stages Mesa's software GL into `lib/mesa` for a `webgl`
-# build (mesa-buster.sh); about 60 MB, most of it LLVM.
+# Mesa's software GL goes into `lib/mesa` for WebGL (mesa-buster.sh); about
+# 60 MB, most of it LLVM. `RETSURF_MESA=0` leaves it out.
 #
 # Fonts come from the host's DejaVu install, which every distro packages.
 set -euo pipefail
@@ -82,7 +82,7 @@ fi
 cp -a "$sdl_lib/libSDL2-2.0.so.0" "$sdl_lib/libEGL.so" "$sdl_lib/libjson-c.so.5" "$payload/lib/"
 cp -a "$sdl_lib/fallback/libGLESv2.so" "$sdl_lib/fallback/libshmvar.so" "$payload/lib/fallback/"
 [ -f "$sdl_lib/README.md" ] && cp -a "$sdl_lib/README.md" "$payload/lib/"
-[ "${RETSURF_MESA:-0}" = 1 ] && "$here/mesa-buster.sh" "$payload/lib/mesa"
+if [ "${RETSURF_MESA:-1}" = 1 ]; then "$here/mesa-buster.sh" "$payload/lib/mesa"; fi
 
 # The generic families `fonts.conf.in` maps, and no more: on 128 MB the cache and
 # the open faces both cost.
