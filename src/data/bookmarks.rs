@@ -480,6 +480,19 @@ impl Bookmarks {
     }
 }
 
+/// Whether the bookmark of id `id` is on disk and reads as one; the reason
+/// when not. An id that would reach outside the directory names none.
+pub fn check(id: &str) -> Result<(), String> {
+    let inside = !id.is_empty() && !id.starts_with('.') && !id.contains(['/', '\\']);
+    let path = file(id);
+    if !inside || !Path::new(&path).is_file() {
+        return Err(format!("no bookmark `{id}`"));
+    }
+    read_raw(Path::new(&path))
+        .map(|_| ())
+        .map_err(|why| format!("bookmark `{id}` {why}"))
+}
+
 /// A bookmark's name from its page's title: the part before the site's name,
 /// empty when the title is unknown and the site should show instead.
 pub fn name_from_title(title: &str, url: &str) -> String {

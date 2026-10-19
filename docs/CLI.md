@@ -1,12 +1,13 @@
 # Command line
 
 ```
-retsurf [--game-mode] [PATH]
+retsurf [--game-mode] [PATH | --open ID]
 ```
 
 | Argument | Effect |
 | --- | --- |
 | `PATH` | Open a local game folder (its `index.html`) or an HTML file. |
+| `--open ID` | Open the bookmark `bookmarks/ID.toml` as it asks: a site, an app or a game. |
 | `--game-mode` | Start in Game Mode, before the page loads. |
 | `-h`, `--help` / `-V`, `--version` | Print the usage or the version. |
 
@@ -21,10 +22,11 @@ retsurf ~/games/hexgl                 # a game folder: opens its index.html
 retsurf --game-mode ~/games/hexgl     # the same, straight into Game Mode
 retsurf ~/games/carts/cart.html       # an HTML file inside a folder
 retsurf --game-mode                   # Game Mode over the usual first tabs
+retsurf --open vampire-survivors      # a bookmark, as it opens from the start page
 ```
 
-A PATH starting with `-` goes after `--`: `retsurf -- -name/`. A bad PATH or an unknown
-option prints the usage and exits with status 64.
+A PATH starting with `-` goes after `--`: `retsurf -- -name/`. A bad PATH, a missing or
+invalid bookmark or an unknown option prints the usage and exits with status 64.
 
 ## Environment variables
 

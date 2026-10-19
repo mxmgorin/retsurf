@@ -60,25 +60,34 @@ pub fn run_app() {
     let mut sdl = sdl2::init().unwrap();
     let app = App::new(&mut sdl, app_config, args.local_site).unwrap();
 
-    app.run(args.game_mode);
+    app.run(args.game_mode, args.open);
 }
 
 /// The command line, with PATH already opened as a site.
 #[derive(Default)]
 struct StartupArgs {
     local_site: Option<browser::LocalSite>,
+    /// A bookmark's id, checked to name one.
+    open: Option<String>,
     game_mode: bool,
 }
 
-/// Exits on help, version or a bad PATH, before a window opens.
+/// Exits on help, version, a bad PATH or an unknown bookmark, before a window
+/// opens.
 #[cfg(not(target_os = "android"))]
 fn startup_args() -> StartupArgs {
     let args = cli::from_env(BUILD_ID);
     let local_site = args
         .path
         .map(|path| browser::LocalSite::open(&path).unwrap_or_else(|err| cli::fail(&err)));
+    if let Some(id) = &args.open {
+        if let Err(err) = data::bookmarks::check(id) {
+            cli::fail(&err);
+        }
+    }
     StartupArgs {
         local_site,
+        open: args.open,
         game_mode: args.game_mode,
     }
 }

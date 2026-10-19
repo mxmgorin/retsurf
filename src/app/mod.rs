@@ -84,7 +84,8 @@ pub struct App {
     /// Holds `SDL_INIT_AUDIO` open for the WebAudio backend ([`crate::media`]);
     /// dropping it closes the sinks' devices. `None` when audio is off/unavailable.
     _audio: Option<sdl2::AudioSubsystem>,
-    /// Opened in place of the usual first tabs; the saved session is left alone.
+    /// A local site's page, opened in place of the usual first tabs; the saved
+    /// session is left alone while it runs.
     launch_url: Option<String>,
 }
 
@@ -219,7 +220,9 @@ impl App {
         self.browser.set_screen_geometry(screen, window);
     }
 
-    pub fn run(mut self, game_mode: bool) {
+    /// Run the main loop; `game_mode` enters Game Mode before the first page
+    /// loads, `open` opens that bookmark in place of the usual first tabs.
+    pub fn run(mut self, game_mode: bool, open: Option<String>) {
         self.sync_screen_geometry();
         // Both before the first tab: a page reads `devicePixelRatio` and
         // `screen` while it parses, and only some read them again on resize.
@@ -227,10 +230,26 @@ impl App {
         // A pad plugged in before we started sends no connect event of its own.
         self.event_handler.announce_pads(&self.browser);
         self.prune_page_icons();
-        self.open_first_tabs();
+        // The first tab is built on the bookmark's page: a load sent to a tab
+        // still on its first one is lost.
+        let bookmark = open.as_deref().and_then(|id| {
+            let at = self.ui.menu.bookmarks.position(id);
+            if at.is_none() {
+                log::warn!("bookmark `{id}` did not load; opening the usual tabs");
+            }
+            at
+        });
+        let first = bookmark
+            .map(|at| self.ui.menu.bookmarks.all()[at].url.clone())
+            .or_else(|| self.launch_url.clone());
+        self.open_first_tabs(first.as_deref());
         let mut commands = Vec::with_capacity(4);
+        if let Some(at) = bookmark {
+            self.start_bookmark(at, &mut commands);
+            self.arm_bookmark_reader(at);
+        }
         // Before the page loads: a game sizes its canvas once.
-        if game_mode {
+        if game_mode && !self.browser.in_game_mode() {
             self.enter_game_mode(&mut commands);
         }
         // Throttled background check for a newer build (`[update] auto_check`); its
@@ -497,10 +516,11 @@ impl App {
         }
     }
 
-    /// Fill the empty tab list at startup: the saved session, or the home page
-    /// when there is none. `restore_tabs` off drops the stored session instead.
-    fn open_first_tabs(&mut self) {
-        if let Some(url) = &self.launch_url {
+    /// Fill the empty tab list at startup: `first` when given, else the saved
+    /// session, or the home page when there is none. `restore_tabs` off drops
+    /// the stored session instead.
+    fn open_first_tabs(&mut self, first: Option<&str>) {
+        if let Some(url) = first {
             self.browser.open_tab(url);
             return;
         }

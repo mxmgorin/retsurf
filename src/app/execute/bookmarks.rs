@@ -23,15 +23,21 @@ impl App {
     /// a game. A game enters Game Mode before the page loads, which sizes its
     /// canvas once.
     pub(in crate::app) fn open_bookmark(&mut self, at: usize, out: &mut Vec<AppCommand>) {
-        let Some(bookmark) = self.ui.menu.bookmarks.all().get(at) else {
-            return;
-        };
-        let (id, url, launch, reader) = (
-            bookmark.id.clone(),
-            bookmark.url.clone(),
-            bookmark.launch,
-            bookmark.reader,
-        );
+        if let Some(url) = self.start_bookmark(at, out) {
+            self.open_url(url);
+            self.arm_bookmark_reader(at);
+        }
+    }
+
+    /// Set the active tab up to run the bookmark at `at`, short of loading it;
+    /// returns its URL to load.
+    pub(in crate::app) fn start_bookmark(
+        &mut self,
+        at: usize,
+        out: &mut Vec<AppCommand>,
+    ) -> Option<String> {
+        let bookmark = self.ui.menu.bookmarks.all().get(at)?;
+        let (id, url, launch) = (bookmark.id.clone(), bookmark.url.clone(), bookmark.launch);
         self.ui.menu.bookmarks.opened(&url);
         match launch {
             // A site takes the tab back, chrome and all.
@@ -44,8 +50,16 @@ impl App {
         if launch == Launch::Game && !self.browser.in_game_mode() {
             self.enter_game_mode(out);
         }
-        self.open_url(url);
-        if reader && launch != Launch::Game {
+        Some(url)
+    }
+
+    /// Arm reader view on the active tab's load, when the bookmark at `at`
+    /// opens in it.
+    pub(in crate::app) fn arm_bookmark_reader(&mut self, at: usize) {
+        let Some(bookmark) = self.ui.menu.bookmarks.all().get(at) else {
+            return;
+        };
+        if bookmark.reader && bookmark.launch != Launch::Game {
             self.browser.arm_reader_on_load();
         }
     }

@@ -4,10 +4,11 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 const USAGE: &str = "\
-Usage: retsurf [--game-mode] [PATH]
+Usage: retsurf [--game-mode] [PATH | --open ID]
 
   PATH          a game folder (opens its index.html) or an HTML file in one,
                 served as http://<folder>.localhost/
+  --open ID     open the bookmark bookmarks/ID.toml as it asks
   --game-mode   start in Game Mode
   -h, --help    print this help
   -V, --version print the version";
@@ -19,6 +20,8 @@ const EX_USAGE: i32 = 64;
 pub struct Args {
     /// Opened instead of the usual first tabs.
     pub path: Option<PathBuf>,
+    /// A bookmark's id, opened instead of the usual first tabs.
+    pub open: Option<String>,
     pub game_mode: bool,
 }
 
@@ -50,21 +53,29 @@ pub fn fail(err: &str) -> ! {
     std::process::exit(EX_USAGE);
 }
 
-fn parse(args: impl Iterator<Item = OsString>) -> Result<Parsed, String> {
+fn parse(mut args: impl Iterator<Item = OsString>) -> Result<Parsed, String> {
     let mut out = Args::default();
     let mut only_paths = false;
-    for arg in args {
+    while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--") if !only_paths => only_paths = true,
             Some("-h" | "--help") if !only_paths => return Ok(Parsed::Help),
             Some("-V" | "--version") if !only_paths => return Ok(Parsed::Version),
             Some("--game-mode") if !only_paths => out.game_mode = true,
+            Some("--open") if !only_paths => {
+                let id = args.next().ok_or("`--open` needs a bookmark id")?;
+                let id = id.into_string().map_err(|_| "a bookmark id is text")?;
+                out.open = Some(id);
+            }
             Some(flag) if !only_paths && flag.starts_with('-') && flag != "-" => {
                 return Err(format!("unknown option `{flag}`"));
             }
             _ if out.path.is_some() => return Err("only one PATH can be given".to_string()),
             _ => out.path = Some(PathBuf::from(arg)),
         }
+    }
+    if out.path.is_some() && out.open.is_some() {
+        return Err("PATH and `--open` both name what to open".to_string());
     }
     Ok(Parsed::Run(out))
 }
@@ -87,6 +98,7 @@ mod tests {
         let want = Parsed::Run(Args {
             path: Some(PathBuf::from("games/digger")),
             game_mode: true,
+            ..Args::default()
         });
         assert_eq!(run(&["--game-mode", "games/digger"]), Ok(want));
         assert!(matches!(
@@ -102,6 +114,20 @@ mod tests {
     fn mistakes_are_errors() {
         assert!(run(&["--gamemode"]).is_err());
         assert!(run(&["a", "b"]).is_err());
+        assert!(run(&["--open"]).is_err());
+        assert!(run(&["--open", "ftl", "games/digger"]).is_err());
+    }
+
+    #[test]
+    fn open_takes_a_bookmark_id() {
+        assert_eq!(
+            run(&["--game-mode", "--open", "ftl"]),
+            Ok(Parsed::Run(Args {
+                open: Some("ftl".to_string()),
+                game_mode: true,
+                ..Args::default()
+            }))
+        );
     }
 
     #[test]
@@ -110,7 +136,7 @@ mod tests {
             run(&["--", "--game-mode"]),
             Ok(Parsed::Run(Args {
                 path: Some(PathBuf::from("--game-mode")),
-                game_mode: false,
+                ..Args::default()
             }))
         );
     }
