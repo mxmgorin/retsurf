@@ -203,8 +203,18 @@ name = "Wikipedia"                       # shown on the tile; without it, the si
 url = "https://en.wikipedia.org"
 order = 1                                # position; lower first, unset after the rest
 tags = ["reference"]                     # groups for the start page's filter
+launch = "browser"                       # "browser", "app" (no toolbar) or "game" (Game Mode too)
+reader = false                           # open in reader view; not for a game
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
+
+[game_mode.view]                         # a game's own [game_mode] settings, any key of it
+scaling = "fit"
 ```
+
+An app or a game opens without the toolbar and keeps it hidden through its own links;
+Quick Access ends in **Exit**, back to the start page. While a game runs, the `[game_mode]`
+settings changed in Quick Access or Settings are written to its bookmark, not to
+`config.toml`. A bookmark made in Game Mode is a game.
 
 On the start page L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.

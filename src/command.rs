@@ -88,6 +88,8 @@ pub enum HomeAction {
     StepSort(i32),
     /// Open the options of the tile at this index of the grid.
     Options(usize),
+    /// Open the tile at this index of the grid.
+    Open(usize),
 }
 
 /// Actions on Quick Access. `Click` carries its target row; the rest act on
@@ -220,6 +222,8 @@ pub enum MenuAction {
     /// Clear all entries in the active section.
     Clear,
     OpenUrl(String),
+    /// Open the bookmark at this index of the store.
+    OpenBookmark(usize),
     ToggleBookmark(String),
     /// Remove the entry at `index` in the active section.
     RemoveAt(usize),

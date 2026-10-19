@@ -194,11 +194,13 @@ fn page_icon_wants<'a>(
 struct ChromeHidden {
     page_fullscreen: bool,
     game_mode: bool,
+    /// The tab runs a bookmark as an app or a game.
+    launched: bool,
 }
 
 impl ChromeHidden {
     fn any(self) -> bool {
-        self.page_fullscreen || self.game_mode
+        self.page_fullscreen || self.game_mode || self.launched
     }
 }
 
@@ -564,6 +566,7 @@ impl AppUi {
             chrome_hidden: ChromeHidden {
                 page_fullscreen: browser.is_fullscreen(),
                 game_mode: browser.in_game_mode(),
+                launched: browser.launched().is_some(),
             },
         }
     }
@@ -986,19 +989,28 @@ mod tests {
     /// Mode — which it does on every navigation — cannot flash the chrome back.
     #[test]
     fn one_reason_ending_does_not_reveal_the_chrome_while_the_other_holds() {
-        let both = ChromeHidden {
+        let all = ChromeHidden {
             page_fullscreen: true,
             game_mode: true,
+            launched: true,
         };
-        assert!(both.any());
+        assert!(all.any());
         assert!(ChromeHidden {
             page_fullscreen: false,
-            ..both
+            game_mode: false,
+            ..all
+        }
+        .any());
+        assert!(ChromeHidden {
+            page_fullscreen: false,
+            launched: false,
+            ..all
         }
         .any());
         assert!(ChromeHidden {
             game_mode: false,
-            ..both
+            launched: false,
+            ..all
         }
         .any());
         assert!(!ChromeHidden::default().any());

@@ -341,8 +341,8 @@ impl Bookmarks {
     }
 
     /// Bookmark `url` at the end of the manual order, under `name` (empty shows
-    /// the site). Writes its file.
-    pub fn add(&mut self, url: &str, name: String) {
+    /// the site), opening as `launch`. Writes its file.
+    pub fn add(&mut self, url: &str, name: String, launch: Launch) {
         let taken: Vec<String> = self.items.iter().map(|b| b.id.clone()).collect();
         let stem = match name.is_empty() {
             true => crate::data::page_icons::host_key(url).unwrap_or_default(),
@@ -354,7 +354,7 @@ impl Bookmarks {
             name,
             url: normalize(url),
             tags: Vec::new(),
-            launch: Launch::default(),
+            launch,
             reader: false,
             order: Some(order),
             last_opened: 0,
@@ -385,6 +385,38 @@ impl Bookmarks {
             bookmark.save();
             self.items.sort_by(manual_order);
         }
+    }
+
+    /// Set how the bookmark at `index` opens. Writes its file.
+    pub fn set_launch(&mut self, index: usize, launch: Launch) {
+        if let Some(bookmark) = self.items.get_mut(index) {
+            bookmark.launch = launch;
+            bookmark.save();
+        }
+    }
+
+    /// Set whether the bookmark at `index` opens in reader view. Writes its file.
+    pub fn set_reader(&mut self, index: usize, reader: bool) {
+        if let Some(bookmark) = self.items.get_mut(index) {
+            bookmark.reader = reader;
+            bookmark.save();
+        }
+    }
+
+    /// Replace the `[game_mode]` overrides of bookmark `id`, writing its file
+    /// when they changed.
+    pub fn set_game_mode(&mut self, id: &str, game_mode: toml::Table) {
+        if let Some(bookmark) = self.items.iter_mut().find(|b| b.id == id) {
+            if bookmark.game_mode != game_mode {
+                bookmark.game_mode = game_mode;
+                bookmark.save();
+            }
+        }
+    }
+
+    /// The bookmark of id `id`.
+    pub fn get(&self, id: &str) -> Option<&Bookmark> {
+        self.items.iter().find(|b| b.id == id)
     }
 
     /// Replace the tags of the bookmark at `index`. Writes its file.
@@ -564,7 +596,7 @@ fn first_run() -> Vec<Bookmark> {
         cursor: super::ListCursor::new(0),
     };
     for (name, url) in DEFAULTS {
-        store.add(url, name.to_string());
+        store.add(url, name.to_string(), Launch::Browser);
     }
     store.items
 }

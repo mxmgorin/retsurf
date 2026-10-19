@@ -1,0 +1,97 @@
+//! Sparse overrides in a config table's own shape: laid over the table to get
+//! the effective one, and taken back out of it as the keys that differ.
+
+use toml::Table;
+
+/// Lay `over` onto `base`: a table merges key by key, any other value replaces.
+/// A key `base` does not have is logged under `path` and left out, since no
+/// field reads it.
+fn merge(base: &mut Table, over: &Table, path: &str) {
+    for (key, value) in over {
+        let at = format!("{path}.{key}");
+        match (base.get_mut(key), value) {
+            (Some(toml::Value::Table(inner)), toml::Value::Table(value)) => {
+                merge(inner, value, &at)
+            }
+            (Some(slot), value) => *slot = value.clone(),
+            (None, _) => log::warn!("config: override `{at}` names no setting; ignored"),
+        }
+    }
+}
+
+/// The keys of `working` whose values differ from `base`, nested as in both.
+fn diff(working: &Table, base: &Table) -> Table {
+    let mut out = Table::new();
+    for (key, value) in working {
+        match (value, base.get(key)) {
+            (toml::Value::Table(value), Some(toml::Value::Table(base))) => {
+                let inner = diff(value, base);
+                if !inner.is_empty() {
+                    out.insert(key.clone(), toml::Value::Table(inner));
+                }
+            }
+            (value, Some(base)) if value == base => {}
+            (value, _) => {
+                out.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    out
+}
+
+/// `base` with `over` laid onto it through their TOML form; `base` again, with
+/// a log line, when the result does not read back as a `T`.
+pub fn apply<T>(base: &T, over: &Table, path: &str) -> T
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Clone,
+{
+    let Ok(mut table) = Table::try_from(base) else {
+        return base.clone();
+    };
+    merge(&mut table, over, path);
+    match table.try_into() {
+        Ok(value) => value,
+        Err(e) => {
+            log::warn!("config: overrides of `{path}` are invalid: {e}; ignored");
+            base.clone()
+        }
+    }
+}
+
+/// The keys of `working` that differ from `base`, as a table.
+pub fn changes<T: serde::Serialize>(working: &T, base: &T) -> Table {
+    match (Table::try_from(working), Table::try_from(base)) {
+        (Ok(working), Ok(base)) => diff(&working, &base),
+        _ => Table::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{GameModeConfig, Scaling};
+
+    #[test]
+    fn an_override_lands_and_reads_back_as_its_diff() {
+        let base = GameModeConfig::default();
+        let over: Table =
+            toml::from_str("input_map = \"wasd\"\n[view]\nscaling = \"fit\"\nnot_a_key = 1\n")
+                .unwrap();
+        let working = apply(&base, &over, "game_mode");
+        assert_eq!(working.input_map, "wasd");
+        assert_eq!(working.view.scaling, Scaling::Fit);
+        assert_eq!(working.view.cursor, base.view.cursor);
+        let back = changes(&working, &base);
+        let expected: Table =
+            toml::from_str("input_map = \"wasd\"\n[view]\nscaling = \"fit\"\n").unwrap();
+        assert_eq!(back, expected);
+        assert!(changes(&base, &base).is_empty());
+    }
+
+    #[test]
+    fn a_bad_override_leaves_the_base() {
+        let base = GameModeConfig::default();
+        let over: Table = toml::from_str("patches = \"yes\"\n").unwrap();
+        assert_eq!(apply(&base, &over, "game_mode").patches, base.patches);
+    }
+}

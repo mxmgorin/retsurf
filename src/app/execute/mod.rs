@@ -12,8 +12,8 @@ use super::{
     UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::{AppConfig, HomeSort};
-use crate::data::bookmarks::Filter;
+use crate::config::{AppConfig, GameModeConfig, HomeSort};
+use crate::data::bookmarks::{Filter, Launch};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, SettingsSection, Task};
@@ -41,9 +41,15 @@ impl App {
                 self.sync_screen_geometry();
                 self.ui.resize_browser(&self.window, &self.browser);
             }
+            // Home leaves a running bookmark too: the start page is no place to run one.
+            AppCommand::Browser(BrowserCommand::Home) => {
+                self.end_launch(out);
+                self.browser
+                    .execute_command(&BrowserCommand::Home, &self.config);
+            }
             AppCommand::Browser(command) => self.browser.execute_command(command, &self.config),
             AppCommand::Input(command) => self.route_input(command, out),
-            AppCommand::Menu(action) => self.menu_action(action),
+            AppCommand::Menu(action) => self.menu_action(action, out),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::FocusAddressBar => self.focus_address_bar(out),
             AppCommand::CloseTab => {
@@ -63,7 +69,7 @@ impl App {
             },
             AppCommand::Settings(action) => self.settings_action(action, out),
             AppCommand::UpdateNotice(action) => self.update_notice_action(action, out),
-            AppCommand::Home(action) => self.home_action(action),
+            AppCommand::Home(action) => self.home_action(action, out),
         };
 
         // Commands drain after `ui.update` built the frame, so a UI change needs
@@ -79,7 +85,7 @@ impl App {
     }
 
     /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
-    fn menu_action(&mut self, action: &MenuAction) {
+    fn menu_action(&mut self, action: &MenuAction, out: &mut Vec<AppCommand>) {
         match action {
             // The gesture toggles the menu; the menu button only ever opens it (it's
             // hidden behind the menu once shown).
@@ -92,10 +98,11 @@ impl App {
             }
             MenuAction::Close => self.ui.menu.close(),
             MenuAction::SetSection(section) => self.ui.menu.set_section(*section),
-            MenuAction::OpenSelected => self.menu_open_selected(),
+            MenuAction::OpenSelected => self.menu_open_selected(out),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
+            MenuAction::OpenBookmark(at) => self.open_bookmark(*at, out),
             MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
             MenuAction::RemoveAt(index) => match self.ui.menu.section() {
                 Section::Bookmarks => self.remove_bookmark(*index),
@@ -134,13 +141,19 @@ impl App {
         self.ui.menu.close();
     }
 
-    /// Bookmark the current page, or remove its bookmark. The start page holds
-    /// the bookmarks rather than being one.
-    fn toggle_current_bookmark(&mut self) {
+    /// Bookmark the current page, or remove its bookmark; never the start
+    /// page, and never the bookmark the tab runs.
+    pub(super) fn toggle_current_bookmark(&mut self) {
         let url = self.browser.state().page_url().to_string();
-        if !url.is_empty() && url != crate::browser::HOME_URL {
-            self.toggle_bookmark(&url);
+        if url.is_empty() || url == crate::browser::HOME_URL {
+            return;
         }
+        if self.browser.launched().is_some() && self.ui.menu.is_bookmarked(&url) {
+            self.ui
+                .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+            return;
+        }
+        self.toggle_bookmark(&url);
     }
 
     /// Bookmark `url` under its open tab's title, or remove its bookmark.
@@ -158,7 +171,12 @@ impl App {
             .map(|tab| tab.title)
             .unwrap_or_default();
         let name = crate::data::bookmarks::name_from_title(&title, url);
-        self.ui.menu.bookmarks.add(url, name);
+        // A page bookmarked in Game Mode is a game.
+        let launch = match self.browser.in_game_mode() {
+            true => Launch::Game,
+            false => Launch::Browser,
+        };
+        self.ui.menu.bookmarks.add(url, name, launch);
         self.ui
             .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
     }
@@ -189,7 +207,7 @@ impl App {
     /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
     /// switches to the tab (or opens a new one on the "+ New tab" row); in the URL
     /// lists it loads the entry. Closes the menu either way.
-    pub(super) fn menu_open_selected(&mut self) {
+    pub(super) fn menu_open_selected(&mut self, out: &mut Vec<AppCommand>) {
         if self.ui.menu.section() == Section::Tabs {
             match self.selected_tab_index() {
                 Some(index) => self.open_tab_at(index),
@@ -198,10 +216,15 @@ impl App {
         } else if self.ui.menu.clear_selected() {
             // The section's clear row (index 0): arms, then wipes; stays open.
             self.ui.menu.clear_or_arm();
+        } else if let Some(at) = self
+            .ui
+            .menu
+            .bookmarks
+            .selected_index()
+            .filter(|_| self.ui.menu.section() == Section::Bookmarks)
+        {
+            self.open_bookmark(at, out);
         } else if let Some(url) = self.ui.menu.selected_url() {
-            if self.ui.menu.section() == Section::Bookmarks {
-                self.ui.menu.bookmarks.opened(&url);
-            }
             self.open_url(url);
         } else if self.ui.menu.section() != Section::Downloads {
             // A on an active/failed download has nothing to open — keep the menu
@@ -366,6 +389,11 @@ impl App {
     /// ship; bookmarks, history and tabs stay.
     fn restore_defaults(&mut self) {
         self.ui.settings.restore_defaults();
+        // The global `[game_mode]` goes back too, or the save would write the
+        // defaults into the running bookmark as overrides of the old global.
+        if self.game_base.is_some() {
+            self.game_base = Some(GameModeConfig::default());
+        }
         self.ui.toast(Notice::new(bold::CHECK, "Defaults restored"));
         log::info!("restored default settings and bindings");
     }
@@ -396,7 +424,12 @@ impl App {
     /// take effect on the next launch, and their rows are flagged with `*`.
     fn apply_config(&mut self, config: AppConfig, out: &mut Vec<AppCommand>) {
         self.config = config;
-        self.config.save();
+        self.save_config();
+        self.apply_live(out);
+    }
+
+    /// Push the config into everything that holds a copy of it.
+    pub(super) fn apply_live(&mut self, out: &mut Vec<AppCommand>) {
         // Restoring the defaults can move the pad map under a live Game
         // Mode, so push it the same way the menu does.
         self.adopt_input_map(out);
@@ -455,6 +488,10 @@ impl App {
     /// Put the caret where an address is typed, over the page or the start page
     /// only; the start page's search field stands in for the address bar there.
     fn focus_address_bar(&mut self, out: &mut Vec<AppCommand>) {
+        // A launched bookmark has no address bar to type into.
+        if self.browser.launched().is_some() {
+            return;
+        }
         match self.ui.focus() {
             Focus::Home if self.config.home.search => self.ui.home.focus_search(),
             Focus::Home | Focus::Page | Focus::Hints => {
@@ -471,11 +508,9 @@ impl App {
     /// Open the start page's focused bookmark, or with its search field
     /// focused, the OSK to type into it.
     pub(super) fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.home_selected_url() {
-            Some(url) => {
-                self.ui.menu.bookmarks.opened(&url);
-                self.open_url(url);
-            }
+        let tile = self.ui.home.tile();
+        match tile.and_then(|tile| self.ui.home_visible().get(tile).copied()) {
+            Some(at) => self.open_bookmark(at, out),
             None if self.ui.home.search_focused() => {
                 self.ui.osk(OskCommand::Show, &self.browser, out)
             }
@@ -484,7 +519,7 @@ impl App {
     }
 
     /// Change the start page's filter or sort and save it, or open a tile's options.
-    pub(super) fn home_action(&mut self, action: &HomeAction) {
+    pub(super) fn home_action(&mut self, action: &HomeAction, out: &mut Vec<AppCommand>) {
         match action {
             HomeAction::Options(tile) => {
                 self.open_options(*tile);
@@ -496,6 +531,12 @@ impl App {
                 let at = offered.iter().position(|f| *f == current).unwrap_or(0);
                 let next = offered[crate::list::wrap(at, *delta, offered.len())].token();
                 self.config.home.bookmarks.filter = next;
+            }
+            HomeAction::Open(tile) => {
+                if let Some(&at) = self.ui.home_visible().get(*tile) {
+                    self.open_bookmark(at, out);
+                }
+                return;
             }
             HomeAction::SetFilter(token) => self.config.home.bookmarks.filter = token.clone(),
             HomeAction::StepSort(delta) => {
@@ -509,7 +550,7 @@ impl App {
                     HomeSort::from_value(sorts[crate::list::wrap(at, *delta, sorts.len())].1);
             }
         }
-        self.config.save();
+        self.save_config();
         self.ui.set_home(&self.config.home);
     }
 

@@ -382,7 +382,7 @@ fn add_bookmarks_section(
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
+                    commands.push(AppCommand::Menu(MenuAction::OpenBookmark(i)));
                 }
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));

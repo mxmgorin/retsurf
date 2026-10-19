@@ -362,12 +362,6 @@ impl AppUi {
         self.home.move_sel(dx, dy, count);
     }
 
-    /// The focused tile's URL, if a tile rather than the search field is focused.
-    pub fn home_selected_url(&self) -> Option<String> {
-        let at = *self.home_visible().get(self.home.tile()?)?;
-        Some(self.menu.bookmarks.all()[at].url.clone())
-    }
-
     /// Hint mode opened: a collection round was started in the browser. The badge
     /// alphabet follows the device that triggered it (typed letters from the
     /// keyboard, button combos from the pad) — fixed for the whole session.

@@ -54,7 +54,7 @@ it to a gesture you never press.
 | Pad | Mouse | Effect |
 | --- | --- | --- |
 | A on a tile | click | open the bookmark |
-| X on a tile | right-click | the bookmark's options: open, rename, tags, move left / right, remove |
+| X on a tile | right-click | the bookmark's options: open, launch as, reader view, rename, tags, move left / right, remove |
 | L1 / R1 | click a chip | previous / next filter |
 | Y | click the sort chip | next sort |
 

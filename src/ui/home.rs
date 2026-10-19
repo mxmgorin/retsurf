@@ -2,12 +2,12 @@
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
 //! none), a search / URL field, a row of filter and sort chips and a grid of
 //! the bookmarks.
-//! Navigation is routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
+//! Navigation is routed by [`crate::app`]; tiles open via [`HomeAction::Open`].
 
 use super::favicon::{Icon, PageIcons};
 use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use super::OskCaret;
-use crate::command::{AppCommand, HomeAction, MenuAction};
+use crate::command::{AppCommand, HomeAction};
 use crate::config::HomeSort;
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
@@ -469,7 +469,7 @@ fn add_grid(
         let icon = tiles.icons.icon(&bookmark.url);
         let resp = add_tile(ui, bookmark, icon, selected);
         if resp.clicked() {
-            commands.push(AppCommand::Menu(MenuAction::OpenUrl(bookmark.url.clone())));
+            commands.push(AppCommand::Home(HomeAction::Open(i)));
         }
         if resp.secondary_clicked() {
             commands.push(AppCommand::Home(HomeAction::Options(i)));

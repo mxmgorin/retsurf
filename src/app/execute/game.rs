@@ -41,9 +41,10 @@ impl App {
             self.ui.menu.close();
             return;
         }
+        let launched = self.browser.launched().is_some();
         self.ui
             .quick_access
-            .open(strip, self.browser.mode(), &self.config);
+            .open(strip, self.browser.mode(), launched, &self.config);
         let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",
@@ -135,7 +136,7 @@ impl App {
     }
 
     /// Leave it (Quick Access's Exit row), closing the panel.
-    fn leave_game_mode(&mut self) {
+    pub(super) fn leave_game_mode(&mut self) {
         self.ui.leave_game_mode();
         self.browser.set_mode(TabMode::Page);
         self.ui.quick_access.close();
@@ -162,6 +163,7 @@ impl App {
                 Entry::Quick(field) => self.step_quick(field, *dx, out),
                 Entry::InputMap => self.step_input_map(*dx, out),
                 Entry::Run(Action::Reader) => self.quick_access_activate(out),
+                Entry::Options(row) => self.step_options_row(row, *dx),
                 _ => {}
             },
             QuickAccessAction::Click(index) => {
@@ -185,6 +187,11 @@ impl App {
             Entry::Osk => {
                 self.ui.quick_access.close();
                 self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
+            // Direct, not queued: the mode's command filter drops the browser's.
+            Entry::Run(Action::Bookmark) => {
+                self.ui.quick_access.close();
+                self.toggle_current_bookmark();
             }
             // As its gesture would, once the panel is out of the way.
             Entry::Run(action) => {
@@ -222,6 +229,7 @@ impl App {
                 self.enter_game_mode(out);
             }
             Entry::Exit => self.leave_game_mode(),
+            Entry::Leave => self.exit_launch(out),
             Entry::Options(row) => self.options_row(row, out),
         }
     }
@@ -366,7 +374,7 @@ impl App {
         let (live, _) = game.delete(&id, &self.browser, out);
         if self.config.game_mode.input_map != live {
             self.config.game_mode.input_map = live;
-            self.config.save();
+            self.save_config();
         }
         self.refresh_input_maps();
         self.ui.input_maps.close_confirm();
@@ -381,7 +389,7 @@ impl App {
         let (id, _) = game.use_map(id, &self.browser, out);
         self.ui.settings.adopt_input_map(&id);
         self.config.game_mode.input_map = id;
-        self.config.save();
+        self.save_config();
         self.refresh_input_maps();
         log::info!("input map: {}", self.config.game_mode.input_map);
     }

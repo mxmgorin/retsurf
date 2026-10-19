@@ -184,7 +184,7 @@ fn glyph(entry: Entry) -> &'static str {
     match entry {
         Entry::Enter => bold::GAME_CONTROLLER,
         Entry::Reload => bold::ARROW_CLOCKWISE,
-        Entry::Exit => bold::SIGN_OUT,
+        Entry::Exit | Entry::Leave => bold::SIGN_OUT,
         Entry::InputMap => bold::JOYSTICK,
         Entry::Osk => bold::KEYBOARD,
         Entry::Settings => bold::GEAR,
@@ -198,6 +198,8 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
         Entry::Options(OptionsRow::Open) => bold::ARROW_SQUARE_OUT,
+        Entry::Options(OptionsRow::LaunchAs) => bold::APP_WINDOW,
+        Entry::Options(OptionsRow::Reader) => bold::BOOK_OPEN,
         Entry::Options(OptionsRow::Rename) => bold::PENCIL_SIMPLE,
         Entry::Options(OptionsRow::Tags) => bold::TAG,
         Entry::Options(OptionsRow::MoveLeft) => bold::ARROW_LEFT,
@@ -229,7 +231,7 @@ mod tests {
         let mut panel = QuickAccess::new();
         for strip in [Strip::QuickAccess, Strip::QuickMenu, Strip::Options] {
             for mode in [TabMode::Page, TabMode::Reader, TabMode::Game] {
-                panel.open(strip, mode, &AppConfig::default());
+                panel.open(strip, mode, true, &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");
                 }

@@ -181,10 +181,18 @@ impl servo::WebViewDelegate for AppBrowserInner {
             parent_webview.gamepad_delegate(),
         );
 
-        // A game's popup stays in the game; a reader view is the opener's own.
-        let mode = match self.tab_index(parent_webview.id()) {
-            Some(i) if self.tabs.borrow()[i].state.mode == TabMode::Game => TabMode::Game,
-            _ => TabMode::Page,
+        // A game's popup stays in the game, and a launched bookmark's in the
+        // bookmark; a reader view is the opener's own.
+        let (mode, launched) = match self.tab_index(parent_webview.id()) {
+            Some(i) => {
+                let parent = &self.tabs.borrow()[i].state;
+                let mode = match parent.mode {
+                    TabMode::Game => TabMode::Game,
+                    TabMode::Page | TabMode::Reader => TabMode::Page,
+                };
+                (mode, parent.launched.clone())
+            }
+            None => (TabMode::Page, None),
         };
         // Dropping a `WebView` closes it in Servo, so the tab it replaces goes
         // with it rather than lingering behind the cap.
@@ -195,6 +203,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             webview,
             state: BrowserState {
                 mode,
+                launched,
                 ..BrowserState::default()
             },
             page_images: RefCell::default(),

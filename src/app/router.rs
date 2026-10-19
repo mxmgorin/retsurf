@@ -52,7 +52,7 @@ impl App {
                 }
                 Focus::Menu => {
                     if *pressed {
-                        self.menu_open_selected();
+                        self.menu_open_selected(out);
                     }
                 }
                 Focus::QuickAccess => {
@@ -261,7 +261,7 @@ impl App {
                     self.osk_input(PadInput::Y, out);
                 }
                 // Y on the start page cycles the grid's sort.
-                Focus::Home => self.home_action(&HomeAction::StepSort(1)),
+                Focus::Home => self.home_action(&HomeAction::StepSort(1), out),
                 Focus::Prompt | Focus::Settings => {}
                 Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
@@ -293,7 +293,7 @@ impl App {
                         self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                     }
                     // On the start page they cycle the grid's filter.
-                    Focus::Home => self.home_action(&HomeAction::StepFilter(*delta)),
+                    Focus::Home => self.home_action(&HomeAction::StepFilter(*delta), out),
                     Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Page => {
                         // Page navigation is parked while the modal prompt is up (it
                         // may sit under the keyboard), like tab switching.

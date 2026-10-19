@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Start page filter chips (sites, apps, games, tags) on L1 / R1 and a sort on Y: manual, recent or name
 - Start page without the search field (`[home] search = false`)
 - Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
+- Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings), or in reader view; Quick Access gets Exit while one runs
+- Bookmark row in Game Mode's Quick Access
 
 ### Changed
 

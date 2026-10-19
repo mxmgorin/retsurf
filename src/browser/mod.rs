@@ -100,6 +100,11 @@ pub struct BrowserState {
     fullscreen: bool,
     /// What the tab shows over its page.
     mode: TabMode,
+    /// The bookmark the tab runs as an app or a game, by id. Outlives
+    /// navigation, and a tab the page opens inherits it.
+    launched: Option<String>,
+    /// Enter reader view once the current load completes.
+    reader_on_load: bool,
 }
 
 /// What a tab shows over its page. One field, so the views exclude each other.
@@ -142,6 +147,8 @@ impl Default for BrowserState {
             loading: false,
             fullscreen: false,
             mode: TabMode::Page,
+            launched: None,
+            reader_on_load: false,
         }
     }
 }
@@ -521,6 +528,43 @@ impl AppBrowser {
         if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
             tab.state.mode = mode;
         }
+    }
+
+    /// The bookmark the active tab runs, by id.
+    pub fn launched(&self) -> Option<String> {
+        self.state().launched.clone()
+    }
+
+    /// Whether the active tab runs the bookmark `id`, or none for `None`.
+    pub fn launched_is(&self, id: Option<&str>) -> bool {
+        self.state().launched.as_deref() == id
+    }
+
+    pub fn set_launched(&self, id: Option<String>) {
+        let active = self.inner.active.get();
+        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
+            tab.state.launched = id;
+        }
+    }
+
+    /// Enter reader view on the active tab once its current load completes.
+    pub fn arm_reader_on_load(&self) {
+        let active = self.inner.active.get();
+        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
+            tab.state.reader_on_load = true;
+        }
+    }
+
+    /// Whether the active tab's armed reader view is due, disarming it.
+    pub fn take_reader_due(&self) -> bool {
+        let active = self.inner.active.get();
+        let mut tabs = self.inner.tabs.borrow_mut();
+        let Some(state) = tabs.get_mut(active).map(|t| &mut t.state) else {
+            return false;
+        };
+        let due = state.reader_on_load && !state.loading;
+        state.reader_on_load &= !due;
+        due
     }
 
     #[inline]

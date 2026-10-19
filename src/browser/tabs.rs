@@ -39,6 +39,7 @@ impl AppBrowser {
                     title,
                     url: tab.state.page_url.clone(),
                     active: i == active,
+                    launched: tab.state.launched.is_some(),
                     favicon: tab.favicon.clone(),
                 }
             })

@@ -37,6 +37,10 @@ impl Strip {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OptionsRow {
     Open,
+    /// Step how it opens.
+    LaunchAs,
+    /// Whether it opens in reader view; not for a game.
+    Reader,
     Rename,
     Tags,
     /// One place earlier in the manual order.
@@ -110,6 +114,8 @@ pub enum Entry {
     Reload,
     /// Turn Game Mode off.
     Exit,
+    /// Stop running the tab's bookmark and go back to the start page.
+    Leave,
     /// Close retsurf, on a second press (see [`QuickAccess::confirm`]).
     Quit,
     /// A row of a bookmark's options.
@@ -140,6 +146,7 @@ const ACCESS_GAME: &[Slot] = &[
     Slot::QuickRows,
     Slot::Row(Entry::InputMap),
     Slot::Row(Entry::Osk),
+    Slot::Row(Entry::Run(Action::Bookmark)),
     Slot::Row(Entry::Exit),
 ];
 
@@ -160,6 +167,8 @@ const MENU_GAME: &[Slot] = &[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)]
 /// A bookmark's options; the moves show only where the order is the manual one.
 const OPTIONS: &[Slot] = &[
     Slot::Row(Entry::Options(OptionsRow::Open)),
+    Slot::Row(Entry::Options(OptionsRow::LaunchAs)),
+    Slot::Row(Entry::Options(OptionsRow::Reader)),
     Slot::Row(Entry::Options(OptionsRow::Rename)),
     Slot::Row(Entry::Options(OptionsRow::Tags)),
     Slot::Row(Entry::Options(OptionsRow::MoveLeft)),
@@ -183,8 +192,11 @@ impl Entry {
             Entry::Settings => "Settings",
             Entry::Reload => "Reload",
             Entry::Exit => "Exit game mode",
+            Entry::Leave => "Exit",
             Entry::Quit => "Quit retsurf",
             Entry::Options(OptionsRow::Open) => "Open",
+            Entry::Options(OptionsRow::LaunchAs) => "Launch as",
+            Entry::Options(OptionsRow::Reader) => "Reader view",
             Entry::Options(OptionsRow::Rename) => "Rename...",
             Entry::Options(OptionsRow::Tags) => "Tags...",
             Entry::Options(OptionsRow::MoveLeft) => "Move left",
@@ -208,13 +220,18 @@ impl Entry {
     pub fn steps(self) -> bool {
         matches!(
             self,
-            Entry::Quick(_) | Entry::InputMap | Entry::Run(Action::Reader)
+            Entry::Quick(_)
+                | Entry::InputMap
+                | Entry::Run(Action::Reader)
+                | Entry::Options(OptionsRow::LaunchAs | OptionsRow::Reader)
         )
     }
 }
 
-/// The entries `strip` shows in `mode`, in its table's order.
-fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
+/// The entries `strip` shows in `mode`, in its table's order. Over a launched
+/// bookmark Quick Access ends in the way out of it, which in a game stands in
+/// for leaving Game Mode alone.
+fn entries(strip: Strip, mode: TabMode, launched: bool) -> Vec<Entry> {
     let game = mode == TabMode::Game;
     let layout = match (strip, game) {
         (Strip::QuickAccess, false) => ACCESS_BROWSER,
@@ -249,6 +266,12 @@ fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
             ),
         }
     }
+    if launched && strip == Strip::QuickAccess {
+        match rows.iter().position(|row| *row == Entry::Exit) {
+            Some(at) => rows[at] = Entry::Leave,
+            None => rows.push(Entry::Leave),
+        }
+    }
     rows
 }
 
@@ -281,19 +304,39 @@ impl QuickAccess {
         }
     }
 
-    /// Show `strip`'s rows for the current mode, highlighting the first.
-    pub fn open(&mut self, strip: Strip, mode: TabMode, config: &AppConfig) {
-        self.visible = true;
-        self.strip = strip;
-        self.bookmark = None;
-        self.rows = entries(strip, mode);
-        self.selected = 0;
-        self.armed = None;
-        self.values = vec![String::new(); self.rows.len()];
-        self.flags = vec![None; self.rows.len()];
+    /// Show `strip`'s rows for the current mode, highlighting the first;
+    /// `launched`: whether the tab runs a bookmark.
+    pub fn open(&mut self, strip: Strip, mode: TabMode, launched: bool, config: &AppConfig) {
+        self.show(strip, entries(strip, mode, launched));
         self.refresh(config);
         if let Some(at) = self.position(Entry::Run(Action::Reader)) {
             self.flags[at] = Some(mode == TabMode::Reader);
+        }
+    }
+
+    /// Show `rows` as `strip`, highlighting the first, with no values yet.
+    fn show(&mut self, strip: Strip, rows: Vec<Entry>) {
+        self.visible = true;
+        self.strip = strip;
+        self.bookmark = None;
+        self.selected = 0;
+        self.armed = None;
+        self.values = vec![String::new(); rows.len()];
+        self.flags = vec![None; rows.len()];
+        self.rows = rows;
+    }
+
+    /// Show `entry` as a switch in state `on`.
+    pub fn set_flag(&mut self, entry: Entry, on: bool) {
+        if let Some(at) = self.position(entry) {
+            self.flags[at] = Some(on);
+        }
+    }
+
+    /// Focus `entry`'s row, when the strip has one.
+    pub fn select_entry(&mut self, entry: Entry) {
+        if let Some(at) = self.position(entry) {
+            self.select(at);
         }
     }
 
@@ -324,26 +367,18 @@ impl QuickAccess {
     }
 
     /// Show the options of bookmark `id`, titled `title`; `manual` offers the
-    /// moves, which mean nothing in another order.
-    pub fn open_options(
-        &mut self,
-        id: String,
-        title: String,
-        manual: bool,
-        mode: TabMode,
-        config: &AppConfig,
-    ) {
-        self.open(Strip::Options, mode, config);
-        if !manual {
-            self.rows.retain(|row| {
-                !matches!(
-                    row,
-                    Entry::Options(OptionsRow::MoveLeft | OptionsRow::MoveRight)
-                )
-            });
-            self.values.truncate(self.rows.len());
-            self.flags.truncate(self.rows.len());
-        }
+    /// moves, which mean nothing in another order, and `game` drops the reader
+    /// view, which a game cannot open in.
+    pub fn open_options(&mut self, id: String, title: String, manual: bool, game: bool) {
+        let rows = entries(Strip::Options, TabMode::Page, false)
+            .into_iter()
+            .filter(|row| match row {
+                Entry::Options(OptionsRow::MoveLeft | OptionsRow::MoveRight) => manual,
+                Entry::Options(OptionsRow::Reader) => !game,
+                _ => true,
+            })
+            .collect();
+        self.show(Strip::Options, rows);
         self.bookmark = Some(OptionsBookmark {
             id,
             title,
@@ -482,7 +517,7 @@ mod tests {
 
     fn open(mode: TabMode) -> QuickAccess {
         let mut panel = QuickAccess::new();
-        panel.open(Strip::QuickAccess, mode, &AppConfig::default());
+        panel.open(Strip::QuickAccess, mode, false, &AppConfig::default());
         panel
     }
 
@@ -515,17 +550,19 @@ mod tests {
 
     #[test]
     fn each_mode_lists_its_own_rows() {
-        let game = entries(Strip::QuickAccess, TabMode::Game);
-        let browser = entries(Strip::QuickAccess, TabMode::Page);
+        let game = entries(Strip::QuickAccess, TabMode::Game, false);
+        let browser = entries(Strip::QuickAccess, TabMode::Page, false);
         assert!(game.contains(&Entry::Exit) && !game.contains(&Entry::Enter));
         assert!(browser.contains(&Entry::Enter) && !browser.contains(&Entry::Exit));
         assert!(!browser.contains(&Entry::Osk));
         let has = |rows: &[Entry], label| rows.iter().any(|row| row.label() == label);
         assert!(has(&game, "Scaling") && !has(&browser, "Scaling"));
         assert!(has(&browser, "Page theme") && !has(&game, "Page theme"));
-        assert!(!game
-            .iter()
-            .any(|row| matches!(row, Entry::Run(_) | Entry::List(_))));
+        // A game keeps its page, so only bookmarking it runs from its strip.
+        assert!(!game.iter().any(|row| {
+            matches!(row, Entry::List(_))
+                || matches!(row, Entry::Run(action) if *action != Action::Bookmark)
+        }));
         // Actions in Quick Access, places to go in Quick Menu.
         let door = |row: &Entry| {
             matches!(
@@ -534,12 +571,12 @@ mod tests {
             )
         };
         assert!(!browser.iter().any(door));
-        let menu = entries(Strip::QuickMenu, TabMode::Page);
+        let menu = entries(Strip::QuickMenu, TabMode::Page, false);
         assert!(menu.iter().all(door));
-        let bookmark = entries(Strip::Options, TabMode::Page);
+        let bookmark = entries(Strip::Options, TabMode::Page, false);
         assert!(bookmark.iter().all(|row| matches!(row, Entry::Options(_))));
         assert_eq!(
-            entries(Strip::QuickMenu, TabMode::Game),
+            entries(Strip::QuickMenu, TabMode::Game, false),
             [Entry::Settings, Entry::Quit]
         );
         assert!(!game.contains(&Entry::Settings));
@@ -568,16 +605,34 @@ mod tests {
     }
 
     #[test]
+    fn a_launched_bookmark_ends_quick_access_in_its_way_out() {
+        let game = entries(Strip::QuickAccess, TabMode::Game, true);
+        assert!(game.contains(&Entry::Leave) && !game.contains(&Entry::Exit));
+        let app = entries(Strip::QuickAccess, TabMode::Page, true);
+        assert_eq!(app.last(), Some(&Entry::Leave));
+        assert!(!entries(Strip::QuickMenu, TabMode::Page, true).contains(&Entry::Leave));
+    }
+
+    #[test]
     fn the_options_move_only_in_the_manual_order() {
         let mut panel = QuickAccess::new();
-        let config = AppConfig::default();
         let moves =
             |panel: &QuickAccess| panel.rows().contains(&Entry::Options(OptionsRow::MoveLeft));
-        panel.open_options("a".into(), "A".into(), true, TabMode::Page, &config);
+        panel.open_options("a".into(), "A".into(), true, false);
         assert!(moves(&panel) && panel.title() == "A");
-        panel.open_options("a".into(), "A".into(), false, TabMode::Page, &config);
+        panel.open_options("a".into(), "A".into(), false, true);
         assert!(!moves(&panel));
+        assert!(!panel.rows().contains(&Entry::Options(OptionsRow::Reader)));
         assert_eq!(panel.rows().len(), panel.value_count());
+        let rename = panel
+            .rows()
+            .iter()
+            .position(|row| *row == Entry::Options(OptionsRow::Rename))
+            .expect("every options strip renames");
+        panel.start_naming(OptionsText::Name, "Typed".into());
+        assert_eq!(panel.value(rename), "Typed");
+        panel.take_naming();
+        assert_eq!(panel.value(rename), "");
         panel.close();
         assert_eq!(panel.bookmark_id(), None);
     }
@@ -585,7 +640,12 @@ mod tests {
     #[test]
     fn quitting_takes_a_second_press() {
         let mut panel = QuickAccess::new();
-        panel.open(Strip::QuickMenu, TabMode::Page, &AppConfig::default());
+        panel.open(
+            Strip::QuickMenu,
+            TabMode::Page,
+            false,
+            &AppConfig::default(),
+        );
         panel.move_sel(-1);
         assert_eq!(panel.row(), Entry::Quit);
         assert!(!panel.confirm(Entry::Quit));

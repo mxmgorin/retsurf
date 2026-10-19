@@ -136,6 +136,7 @@ mod tests {
                 title: String::new(),
                 url: url.to_string(),
                 active: false,
+                launched: false,
                 favicon: None,
             })
             .collect()

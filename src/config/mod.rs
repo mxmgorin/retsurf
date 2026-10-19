@@ -25,6 +25,7 @@ mod history;
 mod home;
 mod interface;
 mod osk;
+pub mod overlay;
 mod pad_layout;
 mod paths;
 mod performance;

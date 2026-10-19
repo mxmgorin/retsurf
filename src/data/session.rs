@@ -17,6 +17,8 @@ pub struct TabInfo {
     pub url: String,
     /// Whether this is the currently shown tab.
     pub active: bool,
+    /// Whether it runs a bookmark as an app or a game.
+    pub launched: bool,
     pub favicon: Option<crate::browser::Favicon>,
 }
 
@@ -77,7 +79,8 @@ impl Session {
 }
 
 /// The session-worthy tabs: those with a loaded URL (a tab still on its first
-/// load has none), with the active index remapped past the ones dropped.
+/// load has none), with the active index remapped past the ones dropped. A
+/// launched bookmark is recorded as the start page, so it cannot start itself.
 fn snapshot(tabs: &[TabInfo]) -> Store {
     let mut urls = Vec::with_capacity(tabs.len());
     let mut active = 0;
@@ -88,7 +91,10 @@ fn snapshot(tabs: &[TabInfo]) -> Store {
         if tab.active {
             active = urls.len();
         }
-        urls.push(tab.url.clone());
+        urls.push(match tab.launched {
+            true => crate::browser::HOME_URL.to_string(),
+            false => tab.url.clone(),
+        });
     }
     Store { urls, active }
 }
@@ -102,6 +108,7 @@ mod tests {
             title: String::new(),
             url: url.to_string(),
             active,
+            launched: false,
             favicon: None,
         }
     }
@@ -120,6 +127,14 @@ mod tests {
 
         assert_eq!(store.urls, ["https://a", "https://b"]);
         assert_eq!(store.active, 1);
+    }
+
+    #[test]
+    fn a_launched_tab_comes_back_as_the_start_page() {
+        let mut game = tab("https://game.example/", true);
+        game.launched = true;
+        let store = snapshot(&[tab("https://a", false), game]);
+        assert_eq!(store.urls, ["https://a", crate::browser::HOME_URL]);
     }
 
     /// Quitting while the active tab is still blank leaves the highlight on the

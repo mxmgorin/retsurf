@@ -50,6 +50,10 @@ pub struct App {
     /// A bookmark with settings asked to be removed, by id, and when: a second
     /// ask while its notice shows removes it.
     bookmark_remove_armed: Option<(String, Instant)>,
+    /// The bookmark whose `[game_mode]` overrides the config holds, by id.
+    applied_launch: Option<String>,
+    /// The global `[game_mode]` while a bookmark's overrides stand in for it.
+    game_base: Option<crate::config::GameModeConfig>,
     /// The tabs to reopen at startup (`[browser] restore_tabs`).
     session: Session,
     /// Last time the deferred stores (history, tab session) were written. The
@@ -189,6 +193,8 @@ impl App {
             osk_tap_at: None,
             hint_press_at: None,
             bookmark_remove_armed: None,
+            applied_launch: None,
+            game_base: None,
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
@@ -301,6 +307,10 @@ impl App {
             // Set before `wait` handles input, so the UI's focus precedence and
             // the router both see `Focus::Home` this frame.
             let home_changed = self.ui.set_home_active(self.browser.on_home_page());
+            self.sync_launch(&mut commands);
+            if self.browser.take_reader_due() {
+                self.browser.toggle_reader();
+            }
 
             let waited = self.event_handler.wait(
                 &mut self.window,
@@ -483,7 +493,7 @@ impl App {
         // than rewriting the file on every exit.
         self.config.sanitize();
         if (self.config.display.width, self.config.display.height) != before {
-            self.config.save();
+            self.save_config();
         }
     }
 
