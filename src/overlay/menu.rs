@@ -7,7 +7,6 @@
 
 use crate::config::{DownloadsConfig, HistoryConfig};
 use crate::data::bookmarks::Bookmarks;
-use crate::data::dial::Dial;
 use crate::data::downloads::Downloads;
 use crate::data::history::History;
 use crate::data::page_icons;
@@ -47,11 +46,7 @@ impl Section {
 pub struct Menu {
     pub visible: bool,
     section: Section,
-    bookmarks: Bookmarks,
-    /// The start page's pinned speed-dial (separate from bookmarks; pinned from
-    /// the Bookmarks / History sections with Y). Lives here so both the menu's
-    /// pin action and the start-page renderer ([`crate::ui::home`]) share it.
-    pub dial: Dial,
+    pub bookmarks: Bookmarks,
     history: History,
     pub downloads: Downloads,
     /// Highlighted row in the Tabs section. The tab list lives in the browser, so
@@ -74,7 +69,6 @@ impl Menu {
             visible: false,
             section: Section::Tabs,
             bookmarks: Bookmarks::load(),
-            dial: Dial::load(),
             history: History::load(history_cfg),
             downloads: Downloads::load(downloads_cfg, user_agent),
             tab_selected: 0,
@@ -110,10 +104,6 @@ impl Menu {
 
     pub fn section(&self) -> Section {
         self.section
-    }
-
-    pub fn bookmarks(&self) -> &Bookmarks {
-        &self.bookmarks
     }
 
     pub fn history(&self) -> &History {
@@ -194,7 +184,10 @@ impl Menu {
     /// Downloads: the `file://` URL of a successfully finished entry).
     pub fn selected_url(&self) -> Option<String> {
         match self.section {
-            Section::Bookmarks => self.bookmarks.selected_url(),
+            Section::Bookmarks => self
+                .bookmarks
+                .selected_index()
+                .map(|i| self.bookmarks.all()[i].url.clone()),
             Section::History => self.history.selected_url(),
             Section::Downloads => self.downloads.selected_open_url(),
             Section::Tabs => None,
@@ -202,23 +195,23 @@ impl Menu {
     }
 
     /// Remove the highlighted entry in the active section (Downloads: cancels the
-    /// entry instead while it's still in flight).
+    /// entry instead while it's still in flight). A no-op for Tabs and
+    /// Bookmarks, whose removal the caller owns.
     pub fn remove_selected(&mut self) {
         match self.section {
-            Section::Bookmarks => self.bookmarks.remove_selected(),
             Section::History => self.history.remove_selected(),
             Section::Downloads => self.downloads.remove_selected(),
-            Section::Tabs => {}
+            Section::Tabs | Section::Bookmarks => {}
         }
     }
 
-    /// Remove the entry at `index` in the active section.
+    /// Remove the entry at `index` in the active section; Tabs and Bookmarks
+    /// as for [`Self::remove_selected`].
     pub fn remove_at(&mut self, index: usize) {
         match self.section {
-            Section::Bookmarks => self.bookmarks.remove(index),
             Section::History => self.history.remove(index),
             Section::Downloads => self.downloads.remove(index),
-            Section::Tabs => {}
+            Section::Tabs | Section::Bookmarks => {}
         }
     }
 
@@ -235,16 +228,15 @@ impl Menu {
         }
     }
 
-    /// Hosts whose icons the saved lists show: bookmarks and pins, plus the
-    /// history when `with_history`.
+    /// Hosts whose icons the saved lists show: bookmarks, plus the history when
+    /// `with_history`.
     pub fn icon_hosts(&self, with_history: bool) -> HashSet<String> {
         let history = self.history.entries().iter().map(|e| e.url.as_str());
         let history = history.take(if with_history { usize::MAX } else { 0 });
         self.bookmarks
-            .urls()
+            .all()
             .iter()
-            .chain(self.dial.urls())
-            .map(String::as_str)
+            .map(|b| b.url.as_str())
             .chain(history)
             .filter_map(page_icons::host_key)
             .collect()
@@ -259,10 +251,5 @@ impl Menu {
     /// Whether `url` is a saved bookmark (drives the toolbar bookmark icon).
     pub fn is_bookmarked(&self, url: &str) -> bool {
         self.bookmarks.contains(url)
-    }
-
-    /// Add or remove `url` from saved bookmarks (the bookmark button / Start).
-    pub fn toggle_bookmark(&mut self, url: &str) {
-        self.bookmarks.toggle(url);
     }
 }

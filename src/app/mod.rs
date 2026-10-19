@@ -47,6 +47,9 @@ pub struct App {
     /// the hint, hold opens its link in a background tab). `None` when no press
     /// is in flight over a hint.
     hint_press_at: Option<Instant>,
+    /// A bookmark with settings asked to be removed, by id, and when: a second
+    /// ask while its notice shows removes it.
+    bookmark_remove_armed: Option<(String, Instant)>,
     /// The tabs to reopen at startup (`[browser] restore_tabs`).
     session: Session,
     /// Last time the deferred stores (history, tab session) were written. The
@@ -184,6 +187,7 @@ impl App {
             osk_field_focused: false,
             osk_tap_at: None,
             hint_press_at: None,
+            bookmark_remove_armed: None,
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
@@ -239,6 +243,7 @@ impl App {
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
                 self.ui.menu.record_history(&url);
+                self.ui.menu.bookmarks.opened(&url);
                 self.schedule_heap_trim();
             }
             for (url, icon) in self.browser.take_new_icons() {

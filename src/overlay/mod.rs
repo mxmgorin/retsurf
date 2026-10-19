@@ -6,7 +6,6 @@
 //! submodules, and the central router ([`crate::app`]) decides which overlay
 //! owns the input.
 
-pub mod dial_edit;
 pub mod game;
 pub mod grid;
 pub mod hints;

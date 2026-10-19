@@ -4,7 +4,6 @@
 //! renders them.
 
 pub mod bookmarks;
-pub mod dial;
 pub mod downloads;
 pub mod history;
 pub mod page_icons;
@@ -40,12 +39,52 @@ fn save_toml<T: Serialize>(file: &str, val: &T, what: &str) -> bool {
             return false;
         }
     };
-    match std::fs::write(data_path(file), text) {
+    match write_atomic(&data_path(file), &text) {
         Ok(()) => true,
         Err(e) => {
             log::warn!("could not write {what}: {e}");
             false
         }
+    }
+}
+
+/// Write `text` to `path` through a temp file and a rename, so a crash or a
+/// full card mid-write leaves the old file whole.
+pub(crate) fn write_atomic(path: &str, text: &str) -> std::io::Result<()> {
+    let tmp = format!("{path}.tmp");
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, path)
+}
+
+/// A file stem for a typed name: lowercased, one dash per run of anything
+/// else, `fallback` for a name with nothing to keep, never one of `taken`.
+pub(crate) fn new_id(name: &str, taken: &[String], fallback: &str) -> String {
+    let slug: String = name
+        .chars()
+        .map(|c| match c.is_alphanumeric() {
+            true => c.to_lowercase().next().unwrap_or(c),
+            false => '-',
+        })
+        .collect();
+    let base: String = slug
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let base = match base.is_empty() {
+        true => fallback.to_string(),
+        false => base,
+    };
+    if !taken.contains(&base) {
+        return base;
+    }
+    let mut n = 2;
+    loop {
+        let candidate = format!("{base}-{n}");
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
     }
 }
 

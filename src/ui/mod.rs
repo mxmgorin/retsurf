@@ -5,7 +5,6 @@
 mod brand;
 mod chrome;
 mod cursor;
-mod dial_edit;
 mod favicon;
 mod game;
 mod game_mode;
@@ -30,7 +29,7 @@ mod update_notice;
 pub use self::game_mode::game_mode_hint;
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
-pub use self::toast::{browser_notice, Notice};
+pub use self::toast::{browser_notice, Notice, TOAST};
 
 use crate::{
     browser::{AppBrowser, Favicon},
@@ -40,7 +39,6 @@ use crate::{
         OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
     data::session::TabInfo,
-    overlay::dial_edit::DialEdit,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
     overlay::hints::Hints,
@@ -80,7 +78,6 @@ pub fn init_egui_ctx(ctx: &egui::Context) {
 pub(super) enum OskField {
     None,
     AddressBar,
-    DialEdit,
     Prompt,
     Home,
 }
@@ -90,7 +87,6 @@ pub(super) enum OskField {
 pub(super) mod ids {
     pub const LOCATION: &str = "location";
     pub const HOME_SEARCH: &str = "home_search";
-    pub const DIAL_EDIT_URL: &str = "dial_edit_url";
 }
 
 /// Drop egui's keyboard focus, so Enter reaches only the overlay's selected row.
@@ -160,10 +156,10 @@ struct FrameInputs {
 }
 
 /// The sites whose icons this frame draws: the menu's current section and the
-/// speed dial when `dial_shown`, each tab with its live icon.
+/// start page's bookmarks when `home_shown`, each tab with its live icon.
 fn page_icon_wants<'a>(
     menu: &'a Menu,
-    dial_shown: bool,
+    home_shown: bool,
     tabs: &'a [TabInfo],
 ) -> Vec<(&'a str, Option<&'a Favicon>)> {
     let mut wanted = Vec::new();
@@ -173,7 +169,7 @@ fn page_icon_wants<'a>(
                 wanted.extend(tabs.iter().map(|t| (t.url.as_str(), t.favicon.as_ref())))
             }
             Section::Bookmarks => {
-                wanted.extend(menu.bookmarks().urls().iter().map(|u| (u.as_str(), None)))
+                wanted.extend(menu.bookmarks.all().iter().map(|b| (b.url.as_str(), None)))
             }
             Section::History => wanted.extend(
                 menu.history()
@@ -184,8 +180,8 @@ fn page_icon_wants<'a>(
             Section::Downloads => {}
         }
     }
-    if dial_shown {
-        wanted.extend(menu.dial.urls().iter().map(|u| (u.as_str(), None)));
+    if home_shown {
+        wanted.extend(menu.bookmarks.all().iter().map(|b| (b.url.as_str(), None)));
     }
     wanted
 }
@@ -298,8 +294,6 @@ pub struct AppUi {
     pub update_notice: UpdateNotice,
     /// The built-in start page overlay's selection / search-field state.
     pub home: Home,
-    /// The standalone speed-dial editor overlay (opened from the start page).
-    pub dial_edit: DialEdit,
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
@@ -390,7 +384,6 @@ impl AppUi {
             update: Updater::new(update),
             update_notice: UpdateNotice::default(),
             home: Home::new(),
-            dial_edit: DialEdit::new(),
             home_active: false,
             page_icons: favicon::PageIcons::new(interface.page_icons),
             home_style: interface.home_style,
@@ -583,16 +576,10 @@ impl AppUi {
         self.page_icons.set_enabled(on);
     }
 
-    /// Keep the start-page / dial-editor selections in range before they render.
+    /// Keep the start page's selection in range before it renders.
     fn clamp_overlay_selections(&mut self) {
         if self.home_active {
-            self.home.clamp(home::slot_count(self.menu.dial.urls()));
-        }
-        if self.dial_edit.visible() {
-            // The grid is the pins plus a trailing "Pin settings" tile while the
-            // settings shortcut is off the dial.
-            let slots = self.dial_edit_slots();
-            self.dial_edit.clamp(slots);
+            self.home.clamp(self.menu.bookmarks.all().len());
         }
     }
 
@@ -746,13 +733,11 @@ impl AppUi {
                     }
                 }
 
-                let dial_shown = self.home_active || self.dial_edit.visible();
-                let wanted = page_icon_wants(&self.menu, dial_shown, &tab_infos);
+                let wanted = page_icon_wants(&self.menu, self.home_active, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
 
-                // A backdrop over the blank web view, below the foreground
-                // overlays; the dial editor covers it entirely.
-                if self.home_active && !self.dial_edit.visible() {
+                // A backdrop over the blank web view, below the foreground overlays.
+                if self.home_active {
                     let mark = match self.home_style {
                         HomeStyle::Banner => self
                             .banner
@@ -761,31 +746,16 @@ impl AppUi {
                         HomeStyle::Wordmark => home::Mark::Wordmark,
                         HomeStyle::Compact => home::Mark::None,
                     };
-                    let pins = home::DialPins {
-                        urls: self.menu.dial.urls(),
+                    let tiles = home::Tiles {
+                        bookmarks: self.menu.bookmarks.all(),
                         icons: &self.page_icons,
                     };
                     home::add_home(
                         ctx,
                         &mut self.home,
-                        home::HomeView { pins, mark },
+                        home::HomeView { tiles, mark },
                         self.webview_rect,
                         caret_for(OskField::Home),
-                        commands,
-                    );
-                }
-
-                // Above the start page; the OSK can still open on top to type a URL.
-                if self.dial_edit.visible() {
-                    dial_edit::add_dial_edit(
-                        ctx,
-                        &mut self.dial_edit,
-                        home::DialPins {
-                            urls: self.menu.dial.urls(),
-                            icons: &self.page_icons,
-                        },
-                        caret_for(OskField::DialEdit),
-                        face,
                         commands,
                     );
                 }

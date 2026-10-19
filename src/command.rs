@@ -203,16 +203,6 @@ pub enum MenuAction {
     Clear,
     OpenUrl(String),
     ToggleBookmark(String),
-    /// Open the speed-dial editor overlay.
-    DialEdit,
-    /// Close the speed-dial editor.
-    DialClose,
-    /// Pin `url` to the speed dial from the editor's field (normalized to a URL),
-    /// clearing the field.
-    DialAdd(String),
-    DialRemoveAt(usize),
-    /// Put the settings shortcut back on the dial.
-    DialPinSettings,
     /// Remove the entry at `index` in the active section.
     RemoveAt(usize),
     /// Switch to the tab at `index` and close the menu.

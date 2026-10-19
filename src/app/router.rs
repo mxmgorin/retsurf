@@ -105,17 +105,10 @@ impl App {
                     }
                 }
                 // The start page: A opens the OSK to type into its search field,
-                // or opens the focused speed-dial tile (see [`App::home_confirm`]).
+                // or opens the focused bookmark (see [`App::home_confirm`]).
                 Focus::Home => {
                     if *pressed {
                         self.home_confirm(out);
-                    }
-                }
-                // The speed-dial editor: A types into the field / pins via Add
-                // (tiles are edit-only — see [`App::dial_edit_confirm`]).
-                Focus::DialEdit => {
-                    if *pressed {
-                        self.dial_edit_confirm(out);
                     }
                 }
                 Focus::Page => self.primary_action(*pressed),
@@ -151,8 +144,6 @@ impl App {
                         self.ui.hints.hide();
                     }
                 }
-                // B in the editor returns to the start page.
-                Focus::DialEdit => self.ui.dial_edit.close(),
                 // B on the start page goes back like a normal page — except that
                 // it is also the only way out of a page holding fullscreen.
                 Focus::Home | Focus::Page => {
@@ -166,9 +157,6 @@ impl App {
             InputCommand::ToggleOsk => match focus {
                 // X deletes the highlighted entry (closes a tab in the Tabs section).
                 Focus::Menu => self.delete_menu_selection(),
-                // X deletes the focused pin tile (no-op on the field or the
-                // trailing "Pin settings" tile, which adds with A).
-                Focus::DialEdit => self.ui.dial_edit_remove_selected(),
                 // X is unused in settings (rows edit with A and Left/Right) and
                 // on Quick Access and Game Mode's screens (the keyboard has a row of its own).
                 Focus::Settings | Focus::UpdateNotice => {}
@@ -239,7 +227,6 @@ impl App {
                 }
                 Focus::Hints => self.hints_nav(*dx, *dy),
                 Focus::Home => self.ui.home_move(*dx, *dy),
-                Focus::DialEdit => self.ui.dial_edit_move(*dx, *dy),
                 Focus::Page => {}
             },
             // Discrete D-pad press: in hint mode it types a combo symbol;
@@ -258,14 +245,14 @@ impl App {
                     self.hint_key(*c);
                 }
             }
-            // Y / L3: a pin/bookmark toggle, a space over the keyboard, or link
-            // hints on the page. Unpinning is the dial editor's job, not a press.
+            // Y / L3: a bookmark toggle, a space over the keyboard, or link
+            // hints on the page.
             InputCommand::Hints => match focus {
                 Focus::Menu => self.menu_y_action(),
                 Focus::Osk => {
                     self.osk_input(PadInput::Y, out);
                 }
-                Focus::Home | Focus::Prompt | Focus::DialEdit | Focus::Settings => {}
+                Focus::Home | Focus::Prompt | Focus::Settings => {}
                 Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
@@ -290,9 +277,6 @@ impl App {
                     // Game Mode's screens would leave the game.
                     Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                     Focus::UpdateNotice => {}
-                    // In the dial editor they reorder the focused pin (Left/Right
-                    // moves the selection there).
-                    Focus::DialEdit => self.ui.dial_edit_move_selected(*delta),
                     // In hint mode L1/R1 are combo symbols; with combos off they fall
                     // through to the page back/forward below.
                     Focus::Hints if self.config.controls.hint_badges => {

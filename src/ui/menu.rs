@@ -80,35 +80,24 @@ fn row_atoms<'a>(
 /// of the path keeps what differs between two rows of the same site.
 fn url_atoms(
     ui: &egui::Ui,
-    url: &str,
-    pinned: bool,
+    brand_text: String,
+    tail: &str,
     icon: Option<egui::Atom<'static>>,
     width: f32,
 ) -> egui::Atoms<'static> {
     let font = egui::FontId::proportional(ROW_FONT);
-    let brand_text = super::home::brand_label(url);
-    // Row padding, the gap after the brand, and the pin and icon when present.
+    // Row padding, the gap after the brand, and the icon when present.
     let mut budget = width - text_width(ui, &brand_text, &font) - 24.0;
-    if pinned {
-        budget -= text_width(ui, bold::PUSH_PIN, &font) + 4.0;
-    }
     if icon.is_some() {
         budget -= ROW_FONT + 4.0;
     }
     let brand = egui::RichText::new(brand_text)
         .size(ROW_FONT)
         .color(egui::Color32::WHITE);
-    let tail = egui::RichText::new(elide_middle(ui, url_tail(url), &font, budget))
+    let tail = egui::RichText::new(elide_middle(ui, tail, &font, budget))
         .size(ROW_FONT)
         .color(DIM);
     let mut atoms = egui::Atoms::new((brand, tail.atom_shrink(true), egui::Atom::grow()));
-    if pinned {
-        atoms.push_left(
-            egui::RichText::new(bold::PUSH_PIN)
-                .size(ROW_FONT)
-                .color(ACCENT),
-        );
-    }
     if let Some(icon) = icon {
         atoms.push_left(icon);
     }
@@ -182,6 +171,11 @@ fn clear_row(
     }
 }
 
+/// `url` past its scheme.
+fn url_without_scheme(url: &str) -> &str {
+    url.split_once("://").map_or(url, |(_, rest)| rest)
+}
+
 /// Path, query and fragment of `url`; empty for a bare host.
 fn url_tail(url: &str) -> &str {
     let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
@@ -231,11 +225,9 @@ pub(super) fn add_menu(
         if let Some(section) = clicked {
             commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
         }
-        // Y is section-specific: Bookmarks pins to the dial, History/Tabs bookmark.
         let y_action = match menu.section() {
-            Section::Bookmarks => Some("pin"),
             Section::History | Section::Tabs => Some("bookmark"),
-            Section::Downloads => None,
+            Section::Bookmarks | Section::Downloads => None,
         };
         let x_action = match menu.section() {
             Section::Tabs => "close",
@@ -351,7 +343,8 @@ fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
     })
 }
 
-/// Bookmarks section: the saved URLs, highlighted row selected.
+/// Bookmarks section: the bookmarks in manual order, highlighted row selected;
+/// a named one shows its name and address, an unnamed one its site and path.
 fn add_bookmarks_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -360,14 +353,10 @@ fn add_bookmarks_section(
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = DIM;
-    let bookmarks = menu.bookmarks();
-    if bookmarks.urls().is_empty() {
+    let bookmarks = &menu.bookmarks;
+    if bookmarks.all().is_empty() {
         ui.label(
-            egui::RichText::new(format!(
-                "No bookmarks yet — press {} to add this page.",
-                bold::STAR
-            ))
-            .color(dim),
+            egui::RichText::new("No bookmarks yet. Bookmark a page from Quick Access.").color(dim),
         );
         return;
     }
@@ -377,12 +366,17 @@ fn add_bookmarks_section(
     let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        for (i, url) in bookmarks.urls().iter().enumerate() {
+        for (i, bookmark) in bookmarks.all().iter().enumerate() {
             let selected = i == bookmarks.selected();
-            // A leading pin marks a row pinned to the start-page dial (Y toggles).
+            let url = &bookmark.url;
             ui.horizontal(|ui| {
                 let icon = site_icon(icons, url);
-                let atoms = url_atoms(ui, url, menu.dial.contains(url), icon, row_w);
+                let tail = match bookmark.name.is_empty() {
+                    true => url_tail(url),
+                    false => url_without_scheme(url),
+                };
+                let label = super::home::bookmark_label(bookmark);
+                let atoms = url_atoms(ui, label, tail, icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     center_selected(&resp);
@@ -493,7 +487,8 @@ fn add_history_section(
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
                 let icon = site_icon(icons, &entry.url);
-                let atoms = url_atoms(ui, &entry.url, false, icon, row_w);
+                let brand = super::home::brand_label(&entry.url);
+                let atoms = url_atoms(ui, brand, url_tail(&entry.url), icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     center_selected(&resp);

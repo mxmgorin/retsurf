@@ -5,9 +5,9 @@
 //! shared [`GridNav`], field above the grid) and the search field's edit
 //! buffer; the central router moves the selection and activates, and
 //! [`crate::ui::home`] renders it (reading the tile list from the menu's live
-//! speed dial).
+//! bookmarks).
 
-use super::grid::{FieldSide, GridNav};
+use super::grid::GridNav;
 
 pub struct Home {
     nav: GridNav,
@@ -19,7 +19,7 @@ pub struct Home {
 impl Home {
     pub fn new() -> Self {
         Self {
-            nav: GridNav::new(FieldSide::Above),
+            nav: GridNav::new(),
             input: String::new(),
         }
     }

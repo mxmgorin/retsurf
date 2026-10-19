@@ -46,9 +46,6 @@ pub enum OskTarget<'a> {
     /// The start page's search field (see [`crate::overlay::home`]); Enter
     /// submits it as a navigation in the active tab.
     Home(&'a mut String),
-    /// The speed-dial editor's URL field (see [`crate::overlay::dial_edit`]);
-    /// Enter pins it to the dial rather than navigating.
-    DialEdit(&'a mut String),
     /// A settings-overlay text field (see [`crate::overlay::settings`]); Enter
     /// just hides the keyboard (the value already lives in the draft).
     Settings(&'a mut String),
@@ -523,7 +520,6 @@ impl Osk {
             OskTarget::AddressBar => browser.get_state_mut().location.clear(),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
-            | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::LayerName(buf) => buf.clear(),
@@ -563,7 +559,6 @@ impl Osk {
             OskTarget::AddressBar => self.remove_before(&mut browser.get_state_mut().location),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
-            | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::LayerName(buf) => self.remove_before(buf),
@@ -592,7 +587,6 @@ impl Osk {
             OskTarget::AddressBar => self.insert(&mut browser.get_state_mut().location, c),
             OskTarget::Prompt(buf)
             | OskTarget::Home(buf)
-            | OskTarget::DialEdit(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::LayerName(buf) => self.insert(buf, c),
@@ -620,13 +614,6 @@ impl Osk {
                 let text = buf.trim();
                 if !text.is_empty() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
-                }
-            }
-            // The editor's field pins to the speed dial instead of navigating.
-            OskTarget::DialEdit(buf) => {
-                let text = buf.trim();
-                if !text.is_empty() {
-                    commands.push(AppCommand::Menu(MenuAction::DialAdd(text.to_string())));
                 }
             }
             // A settings text field already holds the typed value in the draft;
@@ -686,7 +673,7 @@ fn grid_command(input: PadInput) -> Option<OskCommand> {
 fn caret_field(target: &OskTarget) -> bool {
     matches!(
         target,
-        OskTarget::AddressBar | OskTarget::Prompt(_) | OskTarget::Home(_) | OskTarget::DialEdit(_)
+        OskTarget::AddressBar | OskTarget::Prompt(_) | OskTarget::Home(_)
     )
 }
 
@@ -696,7 +683,6 @@ fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
         OskTarget::AddressBar => browser.get_state_mut().location.chars().count(),
         OskTarget::Prompt(buf)
         | OskTarget::Home(buf)
-        | OskTarget::DialEdit(buf)
         | OskTarget::Settings(buf)
         | OskTarget::GameName(buf)
         | OskTarget::LayerName(buf) => buf.chars().count(),

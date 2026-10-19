@@ -32,7 +32,7 @@ impl Osk {
         let mut state = browser.get_state_mut();
         let buf = match target {
             OskTarget::AddressBar => &mut state.location,
-            OskTarget::Prompt(buf) | OskTarget::Home(buf) | OskTarget::DialEdit(buf) => buf,
+            OskTarget::Prompt(buf) | OskTarget::Home(buf) => buf,
             _ => unreachable!("caret_field admits only the address bar and buffer fields"),
         };
         let len = buf.chars().count();

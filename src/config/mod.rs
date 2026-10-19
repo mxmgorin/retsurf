@@ -30,7 +30,7 @@ mod performance;
 mod shader_resolution;
 mod texture_filter;
 mod texture_limit;
-mod token_enum;
+pub(crate) mod token_enum;
 mod update;
 mod video;
 

@@ -1,15 +1,14 @@
 //! Rendering of the built-in start page overlay (state lives in
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
-//! none), a search / URL field and a speed-dial grid of the pinned shortcuts.
+//! none), a search / URL field and a grid of the bookmarks.
 //! Navigation is routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::favicon::{Icon, PageIcons};
 use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use super::OskCaret;
 use crate::command::{AppCommand, MenuAction};
-use crate::data::dial::SETTINGS_PIN;
+use crate::data::bookmarks::Bookmark;
 use crate::overlay::home::Home;
-use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -41,7 +40,7 @@ pub(super) enum Mark<'a> {
 /// Everything the start page shows besides its own state.
 #[derive(Clone, Copy)]
 pub(super) struct HomeView<'a> {
-    pub pins: DialPins<'a>,
+    pub tiles: Tiles<'a>,
     pub mark: Mark<'a>,
 }
 
@@ -92,14 +91,14 @@ fn rasterize_banner(height: u32) -> Option<egui::ColorImage> {
     ))
 }
 
-/// The pinned URLs with the site icons to draw them by.
+/// The bookmarks with the site icons to draw them by.
 #[derive(Clone, Copy)]
-pub(super) struct DialPins<'a> {
-    pub urls: &'a [String],
+pub(super) struct Tiles<'a> {
+    pub bookmarks: &'a [Bookmark],
     pub icons: &'a PageIcons,
 }
 
-/// Tile footprint (logical px) and grid spacing. Shared with the dial editor.
+/// Tile footprint (logical px) and grid spacing.
 pub(super) const TILE_W: f32 = 96.0;
 pub(super) const TILE_H: f32 = 84.0;
 pub(super) const GAP: f32 = 12.0;
@@ -116,7 +115,7 @@ const WAVE_AMP: f32 = WORDMARK_SIZE * 0.08; // crest height
 const WAVE_STROKE: f32 = WORDMARK_SIZE * 0.045;
 const WAVE_BAND: f32 = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
 
-/// Clearance between the page's foot and the scrolling dial.
+/// Clearance between the page's foot and the scrolling grid.
 const FOOT: f32 = 12.0;
 
 /// Draw the start-page overlay over the (blank) web view, confined to the
@@ -159,7 +158,7 @@ pub(super) fn add_home(
                     const GAP_MID: f32 = 36.0; // field to grid
                     const GAP_TOP_RATIO: f32 = 0.6; // mark to field, of the mark's own height
 
-                    // The grid scrolls in what is left, so a long dial can't hide
+                    // The grid scrolls in what is left, so a long one can't hide
                     // rows off the page.
                     let floor = area.bottom() - FOOT;
                     let banner_size = |t: &egui::TextureHandle| {
@@ -201,7 +200,7 @@ pub(super) fn add_home(
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
                                 ui.vertical_centered(|ui| {
-                                    add_dial(ui, home, view.pins, block_w, cols, commands);
+                                    add_grid(ui, home, view.tiles, block_w, cols, commands);
                                 });
                             });
                     });
@@ -361,36 +360,32 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
     });
 }
 
-/// Grid slots for `pins`: one per pin plus the trailing "Edit" tile. Shared with
-/// the navigation side ([`crate::ui::AppUi`]) so paint and nav can't drift.
-pub(super) fn slot_count(pins: &[String]) -> usize {
-    pins.len() + 1
-}
+/// Shown in place of an empty grid.
+const EMPTY_HINT: &str = "Bookmark a page from Quick Access to see it here";
 
-/// The speed-dial grid: one tile per pinned shortcut (the brand initial over its
-/// name), followed by a trailing "Edit" tile that opens the speed-dial editor.
-fn add_dial(
+/// The bookmark grid: one tile per bookmark, in manual order.
+fn add_grid(
     ui: &mut egui::Ui,
     home: &Home,
-    pins: DialPins,
+    tiles: Tiles,
     width: f32,
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    tile_grid(ui, width, cols, slot_count(pins.urls), |ui, i| {
+    if tiles.bookmarks.is_empty() {
+        ui.label(
+            egui::RichText::new(EMPTY_HINT)
+                .font(font(14.0))
+                .color(MUTED),
+        );
+        return;
+    }
+    tile_grid(ui, width, cols, tiles.bookmarks.len(), |ui, i| {
+        let bookmark = &tiles.bookmarks[i];
         let selected = home.tile() == Some(i);
-        match pins.urls.get(i) {
-            Some(url) => {
-                if add_tile(ui, url, pins.icons.icon(url), selected).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(url.clone())));
-                }
-            }
-            // i == pins.len(): the trailing "Edit" tile.
-            None => {
-                if add_edit_tile(ui, selected).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::DialEdit));
-                }
-            }
+        let icon = tiles.icons.icon(&bookmark.url);
+        if add_tile(ui, bookmark, icon, selected).clicked() {
+            commands.push(AppCommand::Menu(MenuAction::OpenUrl(bookmark.url.clone())));
         }
     });
 }
@@ -444,11 +439,25 @@ const LETTER_VAL: f32 = 0.42;
 /// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
 /// the brand name beneath it. Custom-painted (not a Button) for the two-tier
 /// look.
-fn add_tile(ui: &mut egui::Ui, url: &str, icon: Option<Icon>, selected: bool) -> egui::Response {
+fn add_tile(
+    ui: &mut egui::Ui,
+    bookmark: &Bookmark,
+    icon: Option<Icon>,
+    selected: bool,
+) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     keep_visible(ui, &resp, rect, selected);
-    paint_tile(ui.painter(), rect, url, icon, selected || resp.hovered());
+    let label = bookmark_label(bookmark);
+    paint_tile(ui.painter(), rect, &label, icon, selected || resp.hovered());
     resp
+}
+
+/// What a bookmark is shown as: its name, else its site.
+pub(super) fn bookmark_label(bookmark: &Bookmark) -> String {
+    match bookmark.name.is_empty() {
+        true => brand_label(&bookmark.url),
+        false => bookmark.name.clone(),
+    }
 }
 
 /// Scroll a selected tile into view on the frame the selection reaches it. Going
@@ -465,38 +474,21 @@ fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected
     }
 }
 
-/// Paint a speed-dial tile's visuals into `rect`: the site `icon` on a square
-/// tinted after it, else the initial; the caller owns the click region and any
-/// extra overlay.
-pub(super) fn paint_tile(
+/// Paint a tile's visuals into `rect`: the site `icon` on a square tinted
+/// after it, else the label's initial; the caller owns the click region.
+fn paint_tile(
     painter: &egui::Painter,
     rect: egui::Rect,
-    url: &str,
+    label: &str,
     icon: Option<Icon>,
     active: bool,
 ) {
-    let icon = icon.filter(|_| url != SETTINGS_PIN);
     let fill = match icon {
         Some(icon) if icon.dark => INK,
         Some(icon) => SURFACE.lerp_to_gamma(icon.tint, TINT_MIX),
-        None if url == SETTINGS_PIN => SURFACE,
-        None => letter_fill(&brand_label(url)),
+        None => letter_fill(label),
     };
-    let glyph = paint_glyph_square(painter, rect, active, Some(fill));
-
-    // The settings sentinel isn't a real address: show a gear glyph and "Settings"
-    // rather than the garbage `brand_label` would derive from `retsurf:settings`.
-    let (glyph_text, name) = if url == SETTINGS_PIN {
-        (bold::GEAR.to_string(), "Settings".to_string())
-    } else {
-        let label = brand_label(url);
-        let initial = label
-            .chars()
-            .next()
-            .map(|c| c.to_uppercase().to_string())
-            .unwrap_or_default();
-        (initial, label)
-    };
+    let glyph = paint_glyph_square(painter, rect, active, fill);
     match icon {
         Some(Icon { bare: texture, .. }) => {
             let fit = DIAL_ICON / texture.size_vec2().max_elem();
@@ -505,21 +497,26 @@ pub(super) fn paint_tile(
             painter.image(texture.id(), at, uv, egui::Color32::WHITE);
         }
         None => {
+            let initial = label
+                .chars()
+                .next()
+                .map(|c| c.to_uppercase().to_string())
+                .unwrap_or_default();
             painter.text(
                 glyph.center(),
                 egui::Align2::CENTER_CENTER,
-                glyph_text,
+                initial,
                 font(22.0),
                 INK,
             );
         }
     }
 
-    // Brand name under the glyph (truncated so a long name can't overflow).
+    // The label under the glyph, truncated so a long one can't overflow.
     painter.text(
         egui::pos2(rect.center().x, glyph.bottom() + 14.0),
         egui::Align2::CENTER_CENTER,
-        truncate(&name, 12),
+        truncate(label, 12),
         font(12.0),
         if active { INK } else { MUTED },
     );
@@ -552,21 +549,18 @@ fn letter_fill(label: &str) -> egui::Color32 {
     .into()
 }
 
-/// The rounded glyph square at a tile's top. `None` leaves it unfilled, for an
-/// action slot's outline.
+/// The rounded glyph square at a tile's top.
 fn paint_glyph_square(
     painter: &egui::Painter,
     rect: egui::Rect,
     active: bool,
-    fill: Option<egui::Color32>,
+    fill: egui::Color32,
 ) -> egui::Rect {
     let glyph = egui::Rect::from_center_size(
         egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
         egui::vec2(GLYPH, GLYPH),
     );
-    if let Some(fill) = fill {
-        painter.rect_filled(glyph, 12.0, fill);
-    }
+    painter.rect_filled(glyph, 12.0, fill);
     painter.rect_stroke(
         glyph,
         12.0,
@@ -577,40 +571,6 @@ fn paint_glyph_square(
         egui::StrokeKind::Inside,
     );
     glyph
-}
-
-/// An action slot: an unfilled glyph square holding `icon`, captioned `label`.
-pub(super) fn paint_action_tile(
-    painter: &egui::Painter,
-    rect: egui::Rect,
-    icon: &str,
-    label: &str,
-    active: bool,
-) {
-    let glyph = paint_glyph_square(painter, rect, active, None);
-    painter.text(
-        glyph.center(),
-        egui::Align2::CENTER_CENTER,
-        icon,
-        font(24.0),
-        if active { ACCENT } else { MUTED },
-    );
-    painter.text(
-        egui::pos2(rect.center().x, glyph.bottom() + 14.0),
-        egui::Align2::CENTER_CENTER,
-        label,
-        font(12.0),
-        if active { INK } else { MUTED },
-    );
-}
-
-/// The trailing "Edit" tile: an action slot holding a pencil. Opens the editor.
-fn add_edit_tile(ui: &mut egui::Ui, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    keep_visible(ui, &resp, rect, selected);
-    let active = selected || resp.hovered();
-    paint_action_tile(ui.painter(), rect, bold::PENCIL_SIMPLE, "Edit", active);
-    resp
 }
 
 /// Trim a label to `max` characters, appending `…` when shortened.

@@ -1,8 +1,8 @@
 //! [`AppUi`]'s overlay coordinators: the [`Focus`] precedence the router matches
 //! on, OSK input routing, and the per-overlay passthroughs (menu, settings,
-//! start page, speed-dial editor, hints) the router and app drive.
+//! start page, hints) the router and app drive.
 
-use super::{dial_edit, home, settings, AppUi, OskField};
+use super::{settings, AppUi, OskField};
 use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
@@ -36,8 +36,6 @@ pub enum Focus {
     Settings,
     /// Link-hint navigation.
     Hints,
-    /// The standalone speed-dial editor (opened from the start page).
-    DialEdit,
     /// The built-in start page overlay (active tab is on `retsurf:home`).
     Home,
     /// No overlay: input goes to the page or the toolbar.
@@ -56,7 +54,6 @@ impl Focus {
             | Focus::Menu
             | Focus::Settings
             | Focus::Hints
-            | Focus::DialEdit
             | Focus::Home
             | Focus::Page => false,
         }
@@ -71,13 +68,9 @@ impl Focus {
             | Focus::QuickAccess
             | Focus::GameInputMaps
             | Focus::GameMapEdit => true,
-            Focus::Osk
-            | Focus::Prompt
-            | Focus::Menu
-            | Focus::Hints
-            | Focus::DialEdit
-            | Focus::Home
-            | Focus::Page => false,
+            Focus::Osk | Focus::Prompt | Focus::Menu | Focus::Hints | Focus::Home | Focus::Page => {
+                false
+            }
         }
     }
 }
@@ -92,7 +85,6 @@ enum OskDest {
     Capture,
     GameName,
     LayerName,
-    DialEdit,
     Home,
     AddressBar,
     Page,
@@ -128,8 +120,6 @@ impl AppUi {
             Focus::Settings
         } else if self.hints.visible {
             Focus::Hints
-        } else if self.dial_edit.visible() {
-            Focus::DialEdit
         } else if self.home_active {
             Focus::Home
         } else {
@@ -150,8 +140,6 @@ impl AppUi {
             // A layer being added or renamed in the map editor.
             Focus::GameMapEdit if self.map_edit.naming().is_some() => OskDest::LayerName,
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
-            // The speed-dial editor's URL field (its own buffer); Enter pins it.
-            Focus::DialEdit => OskDest::DialEdit,
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
             Focus::Home => OskDest::Home,
@@ -181,7 +169,6 @@ impl AppUi {
                     .naming_text_mut()
                     .expect("LayerName is routed only while the editor names a layer"),
             ),
-            OskDest::DialEdit => OskTarget::DialEdit(self.dial_edit.input_mut()),
             OskDest::Home => OskTarget::Home(self.home.input_mut()),
             OskDest::AddressBar => OskTarget::AddressBar,
             OskDest::Page => OskTarget::Page,
@@ -256,7 +243,6 @@ impl AppUi {
         }
         match self.osk_destination() {
             OskDest::Prompt => OskField::Prompt,
-            OskDest::DialEdit => OskField::DialEdit,
             OskDest::Home => OskField::Home,
             OskDest::AddressBar => OskField::AddressBar,
             OskDest::Settings
@@ -359,71 +345,21 @@ impl AppUi {
         changed
     }
 
-    /// Move the start-page selection by one dominant-axis step across the pin
-    /// grid (see [`home::slot_count`]).
+    /// Move the start-page selection by one dominant-axis step across the
+    /// bookmark grid.
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
-        let count = home::slot_count(self.menu.dial.urls());
+        let count = self.menu.bookmarks.all().len();
         self.home.move_sel(dx, dy, count);
     }
 
-    /// The focused tile's pinned URL, if a *pin* tile is selected (the trailing
-    /// "Edit" tile has no URL — see [`Self::home_tile_is_edit`]).
+    /// The focused tile's URL, if a tile rather than the search field is focused.
     #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
         self.home
             .tile()
-            .and_then(|i| self.menu.dial.urls().get(i).cloned())
-    }
-
-    /// Whether the trailing "Edit" tile (index == pin count) is focused.
-    #[inline]
-    pub fn home_tile_is_edit(&self) -> bool {
-        self.home.tile() == Some(self.menu.dial.urls().len())
-    }
-
-    // --- Speed-dial editor (the standalone overlay opened from the start page) ---
-
-    /// Move the editor's selection by one dominant-axis step.
-    #[inline]
-    pub fn dial_edit_move(&mut self, dx: i32, dy: i32) {
-        self.dial_edit.move_sel(dx, dy, self.dial_edit_slots());
-    }
-
-    #[inline]
-    pub(super) fn dial_edit_slots(&self) -> usize {
-        dial_edit::slot_count(self.menu.dial.urls())
-    }
-
-    /// Whether the trailing "Pin settings" slot is focused — drives **A** in the
-    /// editor. The slot exists only while `slot_count` runs past the pins.
-    pub fn dial_edit_pin_settings_selected(&self) -> bool {
-        let pins = self.menu.dial.urls().len();
-        self.dial_edit.tile() == Some(pins) && self.dial_edit_slots() > pins
-    }
-
-    /// Delete the editor's focused pin. The trailing tile's slot is out of
-    /// range, so it's a no-op there.
-    pub fn dial_edit_remove_selected(&mut self) {
-        if let Some(slot) = self.dial_edit.tile() {
-            self.menu.dial.remove(slot);
-        }
-    }
-
-    /// Move the editor's focused pin by `delta` slots, taking the
-    /// selection with it.
-    pub fn dial_edit_move_selected(&mut self, delta: i32) {
-        let Some(slot) = self.dial_edit.tile() else {
-            return;
-        };
-        let pins = self.menu.dial.urls().len();
-        let target = slot as i32 + delta;
-        if slot >= pins || target < 0 || target as usize >= pins {
-            return;
-        }
-        let target = target as usize;
-        self.menu.dial.swap(slot, target);
-        self.dial_edit.select_tile(target);
+            .and_then(|i| self.menu.bookmarks.all().get(i))
+            .map(|b| b.url.clone())
     }
 
     /// Hint mode opened: a collection round was started in the browser. The badge
@@ -485,12 +421,6 @@ impl AppUi {
     /// start-page selection, and plain-key shortcuts are muted.
     pub fn home_field_editing(&self) -> bool {
         self.field_focused(super::ids::HOME_SEARCH)
-    }
-
-    /// Whether the speed-dial editor's URL field holds egui keyboard focus —
-    /// [`Self::home_field_editing`] for the editor's `dial_edit_url` field.
-    pub fn dial_edit_field_editing(&self) -> bool {
-        self.field_focused(super::ids::DIAL_EDIT_URL)
     }
 
     /// Whether the chrome text field `id` holds egui keyboard focus.

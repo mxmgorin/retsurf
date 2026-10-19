@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bookmarks and the speed dial are one list: the start page shows the bookmarks as tiles, one file per bookmark in `bookmarks/`; `dial.toml` and `bookmarks.toml` are no longer read
+- Removing a bookmark that has tags or settings takes a second press
 - License: GPL-3.0-or-later with the additional terms in `NOTICE`; the name and logo under `TRADEMARKS.md`
+
+### Removed
+
+- Speed-dial editor and the start page's settings tile
 
 ## [0.10.0] - 2026-10-08
 

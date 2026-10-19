@@ -8,14 +8,14 @@ also in the in-app settings overlay.
 Controls and Game Mode input maps are in [Controls](CONTROLS.md), environment variables in
 [Command line](CLI.md#environment-variables).
 
-The data dir also holds history, bookmarks, the saved session, site data (`servo/`) and
-caches (`cache/`, safe to delete).
+The data dir also holds history, bookmarks (`bookmarks/`), the saved session, site data
+(`servo/`) and caches (`cache/`, safe to delete).
 
 - **Settings > System > Clear browsing data** wipes history, cookies, site storage, the cache,
-  the saved session and finished downloads, and closes the tabs. Bookmarks, pins, settings
-  and bindings stay. IndexedDB is not cleared yet; delete `servo/clientstorage/` by hand.
-- **Settings > System > Restore all defaults** resets settings, speed-dial pins and
-  bindings, and leaves bookmarks, history and tabs alone.
+  the saved session and finished downloads, and closes the tabs. Bookmarks, settings and
+  bindings stay. IndexedDB is not cleared yet; delete `servo/clientstorage/` by hand.
+- **Settings > System > Restore all defaults** resets settings and bindings, and leaves
+  bookmarks, history and tabs alone.
 
 Both take two presses. Rows marked `*` need a restart.
 
@@ -186,9 +186,24 @@ window. `[interface] scale` makes it larger or smaller from there, and pages fol
 Mini). It needs a build with the `software` feature, which also switches to it on its own
 when the GPU cannot be used.
 
+## Bookmarks
+
+Bookmarks are the start page's tiles and the menu's Bookmarks list. Each is one file,
+`bookmarks/<id>.toml` in the data dir:
+
+```toml
+name = "Wikipedia"                       # shown on the tile; without it, the site
+url = "https://en.wikipedia.org"
+order = 1                                # position; lower first, unset after the rest
+last_opened = 2026-10-21T09:12:00Z       # written by retsurf
+```
+
+The id is the file name and never changes. A file that does not parse is skipped. Removing
+a bookmark that has tags or other settings takes a second press.
+
 ## Page icons
 
 `page_icons` shows the icon a site declares (not `/favicon.ico`) beside its tab, bookmark and
-history row and on its dial tile; sites without one get a globe. Icons are kept in
-`page_icons/` in the data dir for bookmarked, pinned, visited and open sites. SVG icons
+history row and on its start-page tile; sites without one get a globe. Icons are kept in
+`page_icons/` in the data dir for bookmarked, visited and open sites. SVG icons
 appear from the second visit in a session.

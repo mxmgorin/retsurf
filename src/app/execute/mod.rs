@@ -1,7 +1,7 @@
 //! Command dispatch: turning an [`AppCommand`] into effects on the browser, UI,
 //! and config. The main loop ([`super::App::run`]) drains its command queue
 //! through [`App::execute_command`]; the per-overlay action helpers it fans out
-//! to (menu / settings / speed-dial / bookmarks) live here too. Input intents are
+//! to (menu / settings / start page / bookmarks) live here too. Input intents are
 //! mapped earlier, in [`super::router`].
 
 mod game;
@@ -11,13 +11,13 @@ use super::{
 };
 use crate::browser::BrowserCommand;
 use crate::config::AppConfig;
-use crate::overlay::dial_edit::EditItem;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, SettingsSection, Task};
 use crate::overlay::update_notice::Choice;
 use crate::ui::{Focus, Notice};
 use egui_phosphor::bold;
+use std::time::Instant;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
@@ -95,12 +95,10 @@ impl App {
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone()),
             MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
-            MenuAction::DialEdit => self.ui.dial_edit.open(),
-            MenuAction::DialClose => self.ui.dial_edit.close(),
-            MenuAction::DialAdd(url) => self.dial_add(url),
-            MenuAction::DialRemoveAt(index) => self.ui.menu.dial.remove(*index),
-            MenuAction::DialPinSettings => self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN),
-            MenuAction::RemoveAt(index) => self.ui.menu.remove_at(*index),
+            MenuAction::RemoveAt(index) => match self.ui.menu.section() {
+                Section::Bookmarks => self.remove_bookmark(*index),
+                _ => self.ui.menu.remove_at(*index),
+            },
             MenuAction::OpenTab(index) => self.open_tab_at(*index),
             MenuAction::CloseTab(index) => self.close_tab_at(*index),
             MenuAction::NewTab => self.new_tab(),
@@ -135,23 +133,56 @@ impl App {
         self.ui.menu.close();
     }
 
-    /// Toggle the current page in saved bookmarks (the bookmark button / Start).
+    /// Bookmark the current page, or remove its bookmark. The start page holds
+    /// the bookmarks rather than being one.
     fn toggle_current_bookmark(&mut self) {
         let url = self.browser.state().page_url().to_string();
-        if !url.is_empty() {
+        if !url.is_empty() && url != crate::browser::HOME_URL {
             self.toggle_bookmark(&url);
         }
     }
 
+    /// Bookmark `url` under its open tab's title, or remove its bookmark.
     fn toggle_bookmark(&mut self, url: &str) {
-        self.ui.menu.toggle_bookmark(url);
-        let saved = self.ui.menu.is_bookmarked(url);
-        let text = if saved {
-            "Bookmarked"
-        } else {
-            "Bookmark removed"
+        let bookmarks = &self.ui.menu.bookmarks;
+        if let Some(index) = bookmarks.all().iter().position(|b| b.url == url) {
+            self.remove_bookmark(index);
+            return;
+        }
+        let title = self
+            .browser
+            .tabs()
+            .into_iter()
+            .find(|tab| tab.url == url)
+            .map(|tab| tab.title)
+            .unwrap_or_default();
+        let name = crate::data::bookmarks::name_from_title(&title, url);
+        self.ui.menu.bookmarks.add(url, name);
+        self.ui
+            .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+    }
+
+    /// Remove the bookmark at `index`. One with settings or tags takes a second
+    /// ask while the first one's notice shows.
+    fn remove_bookmark(&mut self, index: usize) {
+        let Some(bookmark) = self.ui.menu.bookmarks.all().get(index) else {
+            return;
         };
-        self.ui.toast(Notice::new(bold::BOOKMARK_SIMPLE, text));
+        let confirmed = self
+            .bookmark_remove_armed
+            .take()
+            .is_some_and(|(id, at)| id == bookmark.id && at.elapsed() < crate::ui::TOAST);
+        if bookmark.has_settings() && !confirmed {
+            self.bookmark_remove_armed = Some((bookmark.id.clone(), Instant::now()));
+            self.ui.toast(Notice::new(
+                bold::BOOKMARK_SIMPLE,
+                "Press again to remove it and its settings",
+            ));
+            return;
+        }
+        self.ui.menu.bookmarks.remove(index);
+        self.ui
+            .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));
     }
 
     /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
@@ -167,6 +198,9 @@ impl App {
             // The section's clear row (index 0): arms, then wipes; stays open.
             self.ui.menu.clear_or_arm();
         } else if let Some(url) = self.ui.menu.selected_url() {
+            if self.ui.menu.section() == Section::Bookmarks {
+                self.ui.menu.bookmarks.opened(&url);
+            }
             self.open_url(url);
         } else if self.ui.menu.section() != Section::Downloads {
             // A on an active/failed download has nothing to open — keep the menu
@@ -178,29 +212,25 @@ impl App {
     /// Delete the highlighted menu entry (the **X** button / Delete). In Tabs this
     /// closes the tab; in the URL lists it removes the bookmark / history entry.
     pub(super) fn delete_menu_selection(&mut self) {
-        if self.ui.menu.section() == Section::Tabs {
-            if let Some(index) = self.selected_tab_index() {
-                self.close_tab_at(index);
+        match self.ui.menu.section() {
+            Section::Tabs => {
+                if let Some(index) = self.selected_tab_index() {
+                    self.close_tab_at(index);
+                }
             }
-        } else {
-            self.ui.menu.remove_selected();
+            Section::Bookmarks => {
+                if let Some(index) = self.ui.menu.bookmarks.selected_index() {
+                    self.remove_bookmark(index);
+                }
+            }
+            Section::History | Section::Downloads => self.ui.menu.remove_selected(),
         }
     }
 
-    /// Y in the menu: Bookmarks pins the selected entry on the speed dial,
-    /// History and Tabs bookmark it. Downloads has no Y action.
+    /// Bookmark the entry selected in History or Tabs; the other sections have
+    /// nothing to bookmark.
     pub(super) fn menu_y_action(&mut self) {
         match self.ui.menu.section() {
-            Section::Bookmarks => {
-                if let Some(url) = self.ui.menu.selected_url() {
-                    self.ui.menu.dial.toggle(&url);
-                    let pinned = self.ui.menu.dial.contains(&url);
-                    self.ui.toast(match pinned {
-                        true => Notice::new(bold::PUSH_PIN, "Pinned to speed dial"),
-                        false => Notice::new(bold::PUSH_PIN_SLASH, "Unpinned from speed dial"),
-                    });
-                }
-            }
             Section::History => {
                 if let Some(url) = self.ui.menu.selected_url() {
                     self.toggle_bookmark(&url);
@@ -215,7 +245,7 @@ impl App {
                     }
                 }
             }
-            Section::Downloads => {}
+            Section::Bookmarks | Section::Downloads => {}
         }
     }
 
@@ -318,7 +348,7 @@ impl App {
 
     /// Wipe the browsing data: history, the icons only it referenced, the
     /// finished downloads, the saved session and the open tabs, plus Servo's
-    /// cookies, web storage and HTTP cache. Bookmarks, pins and the settings stay.
+    /// cookies, web storage and HTTP cache. Bookmarks and the settings stay.
     fn clear_browsing_data(&mut self) {
         self.ui.menu.history_mut().clear();
         crate::data::page_icons::prune(&self.ui.menu.icon_hosts(false));
@@ -331,14 +361,12 @@ impl App {
         log::info!("cleared browsing data");
     }
 
-    /// Settings and bindings (overlay drafts, saved on close) plus the pins (their
-    /// own file, written now) back to how they ship. Bookmarks, history and tabs
-    /// are [`Self::clear_browsing_data`]'s business.
+    /// Settings and bindings (overlay drafts, saved on close) back to how they
+    /// ship; bookmarks, history and tabs stay.
     fn restore_defaults(&mut self) {
         self.ui.settings.restore_defaults();
-        self.ui.menu.dial.reset();
         self.ui.toast(Notice::new(bold::CHECK, "Defaults restored"));
-        log::info!("restored default settings, bindings and pins");
+        log::info!("restored default settings and bindings");
     }
 
     /// Close the settings overlay: adopt its edited drafts
@@ -439,58 +467,20 @@ impl App {
         }
     }
 
-    /// A on the start page: open the focused speed-dial tile, open the speed-dial
-    /// editor on the "Edit" tile, or — when the search field is focused — open
-    /// the OSK to type into it.
+    /// Open the start page's focused bookmark, or with its search field
+    /// focused, the OSK to type into it.
     pub(super) fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.home_tile_is_edit() {
-            self.ui.dial_edit.open();
-        } else if let Some(url) = self.ui.home_selected_url() {
-            self.open_url(url);
-        } else {
-            self.ui.osk(OskCommand::Show, &self.browser, out);
-        }
-    }
-
-    /// A in the speed-dial editor: open the OSK on the field, pin via the Add
-    /// button, or nothing on a tile (tiles are edit-only here).
-    pub(super) fn dial_edit_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.dial_edit.item() {
-            EditItem::Field => {
-                self.ui.dial_edit.focus_field();
-                self.ui.osk(OskCommand::Show, &self.browser, out);
+        match self.ui.home_selected_url() {
+            Some(url) => {
+                self.ui.menu.bookmarks.opened(&url);
+                self.open_url(url);
             }
-            // A on the trailing tile pins the settings shortcut; pin tiles are
-            // edit-only (delete with X, move with L1/R1).
-            EditItem::Tile(_) => {
-                if self.ui.dial_edit_pin_settings_selected() {
-                    self.ui.menu.dial.pin(crate::data::dial::SETTINGS_PIN);
-                }
-            }
+            None => self.ui.osk(OskCommand::Show, &self.browser, out),
         }
     }
 
-    /// Pin the speed-dial editor's field text to the dial, normalized to a URL
-    /// the same way navigation is, then clear the field (it stays open to add
-    /// more).
-    fn dial_add(&mut self, text: &str) {
-        if let Some(url) =
-            crate::browser::try_into_url(text.trim(), &self.config.browser.search_page)
-        {
-            self.ui.menu.dial.pin(url.as_str());
-        }
-        self.ui.dial_edit.clear_input();
-    }
-
-    /// Load `url` in the focused tab and close the menu. The settings pin is a
-    /// sentinel, not a real address: it opens the settings overlay instead of
-    /// navigating (so a settings speed-dial tile / menu row behaves like the toolbar's).
+    /// Load `url` in the focused tab and close the menu.
     fn open_url(&mut self, url: String) {
-        if url == crate::data::dial::SETTINGS_PIN {
-            self.ui.menu.close();
-            self.ui.settings_open(&self.config);
-            return;
-        }
         self.browser.get_state_mut().location = url;
         self.browser
             .execute_command(&BrowserCommand::Load, &self.config.browser);

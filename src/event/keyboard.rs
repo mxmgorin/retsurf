@@ -117,8 +117,7 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
         Keycode::Delete | Keycode::Backspace => {
             commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
         }
-        // P pins / unpins the selected Bookmarks or History entry to the speed
-        // dial (Y's role) — a no-op in the other sections (handled in the router).
+        // P is Y's role: bookmark the selected History or Tabs entry.
         Keycode::P => commands.push(AppCommand::Input(InputCommand::Hints)),
         _ => {}
     }
@@ -256,56 +255,6 @@ fn on_key_down(
             if enter_confirms(key, commands) {
                 return;
             }
-            // P toggles the focused tile's pin (Y's role).
-            if ui.home.tile().is_some() && matches!(key.kc, Keycode::P) {
-                commands.push(AppCommand::Input(InputCommand::Hints));
-                return;
-            }
-        }
-    }
-
-    // The speed-dial editor mirrors the start page: its URL field keeps typing
-    // while it holds egui focus, Up/Down leave it, Enter pins.
-    if ui.focus() == Focus::DialEdit {
-        if matches!(key.kc, Keycode::Escape) {
-            commands.push(AppCommand::Input(InputCommand::Cancel));
-            return;
-        }
-        // Tab / Shift+Tab reorder the focused pin, as L1/R1 do.
-        if tab_step(key, commands) {
-            return;
-        }
-        if ui.dial_edit_field_editing() {
-            // Up/Down leave the field (grid / Pin settings); Left/Right stay
-            // caret moves inside it.
-            if matches!(key.kc, Keycode::Up) {
-                commands.push(AppCommand::Input(InputCommand::Nav(0, -1)));
-                return;
-            }
-            if matches!(key.kc, Keycode::Down) {
-                commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
-                return;
-            }
-            let pin = |text| AppCommand::Menu(MenuAction::DialAdd(text));
-            if enter_submits(key, ui.dial_edit.input(), pin, commands) {
-                return;
-            }
-        } else {
-            // Ctrl+arrows fall through to the bindings (`prev`/`next`, i.e.
-            // the same reorder); only the plain ones move the selection.
-            if arrows_move(key, commands) {
-                return;
-            }
-            if enter_confirms(key, commands) {
-                return;
-            }
-            // Delete the focused tile (X's role), routed as the same intent.
-            if matches!(key.kc, Keycode::Delete | Keycode::Backspace)
-                && ui.dial_edit.tile().is_some()
-            {
-                commands.push(AppCommand::Input(InputCommand::ToggleOsk));
-                return;
-            }
         }
     }
 
@@ -337,10 +286,8 @@ fn on_key_down(
     // Overlays whose navigation comes from the `nav_*` bindings, so a rebound
     // key moves them too.
     let overlay = matches!(ui.focus(), Focus::Osk | Focus::Hints | Focus::Settings);
-    let typing = browser.text_input_focused()
-        || ui.address_bar_focused()
-        || ui.home_field_editing()
-        || ui.dial_edit_field_editing();
+    let typing =
+        browser.text_input_focused() || ui.address_bar_focused() || ui.home_field_editing();
     // The on-screen keyboard: Enter presses the selected key, Esc hides it. Not
     // while a field has focus, where a real keyboard types into it.
     if ui.focus() == Focus::Osk && !typing {

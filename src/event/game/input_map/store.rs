@@ -66,39 +66,13 @@ fn write_file(id: &str, raw: &RawInputMap) -> bool {
     }
 }
 
-/// A file stem for a typed name: lowercased, one dash per run of anything
-/// else, and never one of `taken` — an id collision would shadow a map
-/// instead of adding one.
+/// A file stem for a typed map name (see [`crate::data::new_id`]).
 pub fn new_id(name: &str, taken: &[String]) -> String {
-    let slug: String = name
-        .chars()
-        .map(|c| match c.is_alphanumeric() {
-            true => c.to_lowercase().next().unwrap_or(c),
-            false => '-',
-        })
-        .collect();
-    let base: String = slug
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-    // A name of nothing but punctuation still needs a stem to live under.
-    let base = match base.is_empty() {
-        true => "map".to_string(),
-        false => base,
-    };
-    if !taken.contains(&base) {
-        return base;
-    }
-    let mut n = 2;
-    loop {
-        let candidate = format!("{base}-{n}");
-        if !taken.contains(&candidate) {
-            return candidate;
-        }
-        n += 1;
-    }
+    crate::data::new_id(name, taken, FALLBACK_ID)
 }
+
+/// The stem of a map whose name keeps no letter or digit.
+const FALLBACK_ID: &str = "map";
 
 /// The stock maps, in the order the list shows them. They live in code, so
 /// a release that adds one offers it to everyone; a file under the same id
