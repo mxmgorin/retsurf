@@ -3,6 +3,7 @@
 //! `prompt` dialogs, drawn as a centered panel above everything else with the
 //! page dimmed behind it.
 
+use super::keys;
 use super::theme::{self, ACCENT, DIM, SCRIM};
 use super::OskCaret;
 use crate::command::{AppCommand, PromptAction};
@@ -80,14 +81,19 @@ fn add_select(
     let dim = DIM;
     let multiple = select.allow_select_multiple();
     let row_w = (screen.width() - 96.0).min(448.0);
-    ui.label(
-        egui::RichText::new(if multiple {
-            format!("Select options — {} toggles, OK applies", face.a)
-        } else {
-            "Select an option".to_string()
-        })
-        .color(dim),
-    );
+    match multiple {
+        true => keys::hint_row(
+            ui,
+            &[
+                (&[], "Select options"),
+                (&[face.a], "toggles"),
+                (&[], "OK applies"),
+            ],
+        ),
+        false => {
+            ui.label(egui::RichText::new("Select an option").color(dim));
+        }
+    }
     ui.add_space(6.0);
 
     let selected_slot = prompt.selected_slot();

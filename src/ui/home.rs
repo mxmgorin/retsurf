@@ -396,9 +396,8 @@ const FILTER_KEYS: (&str, &str) = ("L1", "R1");
 /// The chips row: filter chips at the left between their caps, the sort chip
 /// at the right. Filters show only when more than All is on offer.
 fn add_chips(ui: &mut egui::Ui, chips: &Chips, width: f32, commands: &mut Vec<AppCommand>) {
-    let key = |ui: &mut egui::Ui, text: &str| {
-        ui.label(egui::RichText::new(text).font(font(12.0)).color(MUTED));
-    };
+    let key =
+        |ui: &mut egui::Ui, text: &str| super::keys::key_cap(ui, text, super::keys::HINT_FONT);
     ui.allocate_ui_with_layout(
         egui::vec2(width, CHIP_H),
         egui::Layout::left_to_right(egui::Align::Center),

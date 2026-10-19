@@ -113,11 +113,6 @@ pub fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     egui::Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
 }
 
-/// Join control hints (`"A open"`, ...) into one line, a small dot between each.
-pub fn hint_line(hints: &[&str]) -> String {
-    hints.join(&format!("  {}  ", egui_phosphor::bold::DOT))
-}
-
 /// Side of the square close button (logical px).
 pub const CLOSE_SIZE: f32 = 28.0;
 

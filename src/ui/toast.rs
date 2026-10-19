@@ -3,8 +3,7 @@
 //! one replaces whatever is up. Every toast is a pill at the bottom centre: an
 //! icon, then words and key caps, fading out at the end of its time.
 
-use super::panel::ROW_RADIUS;
-use super::theme::{ACCENT, BORDER, INK, PANEL_FILL, ROW_FONT, SURFACE, WARN};
+use super::theme::{ACCENT, BORDER, INK, PANEL_FILL, ROW_FONT, WARN};
 use super::AppUi;
 use crate::browser::BrowserNotice;
 use crate::config::ToolbarPosition;
@@ -147,22 +146,10 @@ fn add_pill(ui: &mut egui::Ui, notice: &Notice) {
                             let text = egui::RichText::new(text).color(INK).size(ROW_FONT);
                             ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
                         }
-                        Part::Key(key) => key_cap(ui, key),
+                        Part::Key(key) => super::keys::key_cap(ui, key, ROW_FONT),
                     }
                 }
             });
-        });
-}
-
-/// One key or button, framed like a key.
-fn key_cap(ui: &mut egui::Ui, key: &str) {
-    egui::Frame::new()
-        .fill(SURFACE)
-        .stroke(egui::Stroke::new(1.0, BORDER))
-        .corner_radius(ROW_RADIUS)
-        .inner_margin(egui::Margin::symmetric(6, 1))
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(key).color(INK).size(ROW_FONT).strong());
         });
 }
 

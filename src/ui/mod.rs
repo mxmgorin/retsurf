@@ -10,6 +10,7 @@ mod game;
 mod game_mode;
 mod hints;
 mod home;
+mod keys;
 mod memory;
 mod menu;
 mod osk;

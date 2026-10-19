@@ -3,6 +3,7 @@
 //! (Tabs / Bookmarks / History / Downloads).
 
 use super::favicon::PageIcons;
+use super::keys;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, MenuAction};
@@ -209,7 +210,6 @@ pub(super) fn add_menu(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let dim = DIM;
     let closed = panel::panel(ctx, "menu", screen, |ui| {
         let clicked = panel::section_bar(
             ui,
@@ -233,18 +233,18 @@ pub(super) fn add_menu(
             Section::Tabs => "close",
             Section::Bookmarks | Section::History | Section::Downloads => "remove",
         };
-        let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
-        let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
-        let mut hints = vec![
-            format!("{left}{right} section"),
-            format!("{up}{down} select"),
-            format!("{} open", face.a),
-            format!("{} {x_action}", face.x),
+        let (upright, sideways) = keys::dpad_caps();
+        let (sideways, upright) = ([sideways.as_str()], [upright.as_str()]);
+        let (a, x, y, b) = ([face.a], [face.x], [face.y], [face.b]);
+        let mut hints: Vec<keys::Hint> = vec![
+            (&sideways, "section"),
+            (&upright, "select"),
+            (&a, "open"),
+            (&x, x_action),
         ];
-        hints.extend(y_action.map(|y| format!("{} {y}", face.y)));
-        hints.push(format!("{} back", face.b));
-        let hints: Vec<&str> = hints.iter().map(String::as_str).collect();
-        ui.label(egui::RichText::new(theme::hint_line(&hints)).color(dim));
+        hints.extend(y_action.map(|action| (&y[..], action)));
+        hints.push((&b, "back"));
+        keys::hint_row(ui, &hints);
         ui.add_space(8.0);
 
         match menu.section() {

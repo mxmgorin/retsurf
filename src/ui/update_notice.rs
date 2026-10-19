@@ -1,6 +1,7 @@
 //! Rendering of the startup update notice (state lives in
 //! [`crate::overlay::update_notice`]): a centered card over a dimmed screen.
 
+use super::keys;
 use super::theme::{self, DIM, SCRIM};
 use crate::command::{AppCommand, UpdateNoticeAction};
 use crate::config::FaceLabels;
@@ -43,10 +44,11 @@ pub(super) fn add_update_notice(
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     let buttons = [
-                        (Choice::Update, format!("{} Update", face.a)),
-                        (Choice::Later, format!("{} Later", face.b)),
+                        (Choice::Update, face.a, "Update"),
+                        (Choice::Later, face.b, "Later"),
                     ];
-                    for (choice, label) in buttons {
+                    for (choice, key, label) in buttons {
+                        keys::key_cap(ui, key, keys::HINT_FONT);
                         let button = egui::Button::selectable(
                             notice.selected() == choice,
                             egui::RichText::new(label).color(egui::Color32::WHITE),

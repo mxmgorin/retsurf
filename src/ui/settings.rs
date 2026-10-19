@@ -3,6 +3,7 @@
 //! section's field rows. L1/R1 switch section, Up/Down move, Left/Right adjust,
 //! A edit, B save & close — all of it without an analog stick.
 
+use super::keys;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
 use crate::command::{AppCommand, SettingsAction};
@@ -14,6 +15,9 @@ use egui_phosphor::bold;
 use egui_sdl2::egui;
 use inputbind::editor::{Bound, Row};
 use inputbind::Action as _;
+
+/// The caps of the section hint.
+const SHOULDERS: [&str; 2] = ["L1", "R1"];
 
 /// The reset rows, in the order the Controls list counts them.
 const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboard defaults"];
@@ -446,37 +450,28 @@ pub(super) fn add_settings(
         if let Some(section) = clicked {
             commands.push(AppCommand::Settings(SettingsAction::SetSection(section)));
         }
-        let (up, down) = (bold::CARET_UP, bold::CARET_DOWN);
-        let (left, right) = (bold::CARET_LEFT, bold::CARET_RIGHT);
-        let (ok, back) = (face.a, face.b);
-        let (section, mv) = ("L1/R1 section", format!("{up}{down} move"));
-        let hint = if settings.capturing() {
-            theme::hint_line(&["Press a button or key to bind", "Esc cancel"])
+        let (upright, sideways) = keys::dpad_caps();
+        let (upright, sideways) = ([upright.as_str()], [sideways.as_str()]);
+        let (ok, back) = ([face.a], [face.b]);
+        let section: keys::Hint = (&SHOULDERS, "section");
+        let mv: keys::Hint = (&upright, "move");
+        let hints: Vec<keys::Hint> = if settings.capturing() {
+            vec![(&[], "Press a button or key to bind"), (&["Esc"], "cancel")]
         } else if settings.is_info_section() {
-            theme::hint_line(&[
-                section,
-                &mv,
-                &format!("{ok} select"),
-                &format!("{back} back"),
-            ])
+            vec![section, mv, (&ok, "select"), (&back, "back")]
         } else if settings.bindings_open() {
-            theme::hint_line(&[
-                section,
-                &mv,
-                &format!("{ok} open / bind / remove"),
-                &format!("{back} back"),
-            ])
+            vec![section, mv, (&ok, "open / bind / remove"), (&back, "back")]
         } else {
-            theme::hint_line(&[
+            vec![
                 section,
-                &mv,
-                &format!("{left}{right} adjust"),
-                &format!("{ok} edit"),
-                &format!("{back} save & back"),
-                "* needs restart",
-            ])
+                mv,
+                (&sideways, "adjust"),
+                (&ok, "edit"),
+                (&back, "save & back"),
+                (&[], "* needs restart"),
+            ]
         };
-        ui.label(egui::RichText::new(hint).color(dim));
+        keys::hint_row(ui, &hints);
         if let Some(note) = settings.controls_note() {
             ui.label(egui::RichText::new(note).color(WARN));
         }
