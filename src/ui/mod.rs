@@ -35,9 +35,10 @@ use crate::{
     browser::{AppBrowser, Favicon},
     command::AppCommand,
     config::{
-        ControlsConfig, DebugConfig, DownloadsConfig, HistoryConfig, HomeStyle, InterfaceConfig,
-        OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
+        Brand, ControlsConfig, DebugConfig, DownloadsConfig, HistoryConfig, HomeConfig,
+        InterfaceConfig, OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
+    data::bookmarks::{self, Filter},
     data::session::TabInfo,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
@@ -297,8 +298,8 @@ pub struct AppUi {
     /// Whether the active tab is on the start page (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
-    /// `[interface] home_style`, and the banner it may draw, rasterized on first use.
-    home_style: HomeStyle,
+    /// `[home]`, and the banner it may draw, rasterized on first use.
+    home_config: HomeConfig,
     banner: home::Banner,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
@@ -332,6 +333,7 @@ impl AppUi {
     pub fn new(
         window: &AppWindow,
         interface: &InterfaceConfig,
+        home_config: &HomeConfig,
         history: &HistoryConfig,
         downloads: &DownloadsConfig,
         osk: &OskConfig,
@@ -383,10 +385,10 @@ impl AppUi {
             settings: Settings::new(),
             update: Updater::new(update),
             update_notice: UpdateNotice::default(),
-            home: Home::new(),
+            home: Home::new(home_config.search),
             home_active: false,
             page_icons: favicon::PageIcons::new(interface.page_icons),
-            home_style: interface.home_style,
+            home_config: home_config.clone(),
             banner: home::Banner::default(),
             hints: Hints::new(),
             prompt: Prompt::new(),
@@ -565,10 +567,27 @@ impl AppUi {
         }
     }
 
-    /// `[interface] home_style`, applied live.
-    #[inline]
-    pub fn set_home_style(&mut self, style: HomeStyle) {
-        self.home_style = style;
+    /// `[home]`, applied live.
+    pub fn set_home(&mut self, home: &HomeConfig) {
+        self.home_config = home.clone();
+        self.home.set_search(home.search);
+    }
+
+    /// The start page's bookmark filter.
+    pub(super) fn home_filter(&self) -> Filter {
+        Filter::parse(&self.home_config.bookmarks.filter)
+    }
+
+    /// The filters the start page offers.
+    pub fn home_filters(&self) -> Vec<Filter> {
+        bookmarks::filters(self.menu.bookmarks.all(), &self.home_filter())
+    }
+
+    /// Indices into the bookmarks of the start page's tiles, in their order.
+    pub(super) fn home_visible(&self) -> Vec<usize> {
+        let sort = self.home_config.bookmarks.sort;
+        let all = self.menu.bookmarks.all();
+        bookmarks::view(all, &self.home_filter(), sort, home::bookmark_label)
     }
 
     /// `[interface] page_icons`, applied live; off frees every icon texture.
@@ -579,7 +598,7 @@ impl AppUi {
     /// Keep the start page's selection in range before it renders.
     fn clamp_overlay_selections(&mut self) {
         if self.home_active {
-            self.home.clamp(self.menu.bookmarks.all().len());
+            self.home.clamp(self.home_visible().len());
         }
     }
 
@@ -738,22 +757,38 @@ impl AppUi {
 
                 // A backdrop over the blank web view, below the foreground overlays.
                 if self.home_active {
-                    let mark = match self.home_style {
-                        HomeStyle::Banner => self
+                    let visible = self.home_visible();
+                    let filters = self.home_filters();
+                    let filter = self.home_filter();
+                    let mark = match self.home_config.brand {
+                        Brand::Banner => self
                             .banner
                             .texture(ctx)
                             .map_or(home::Mark::Wordmark, home::Mark::Banner),
-                        HomeStyle::Wordmark => home::Mark::Wordmark,
-                        HomeStyle::Compact => home::Mark::None,
+                        Brand::Wordmark => home::Mark::Wordmark,
+                        Brand::None => home::Mark::None,
+                    };
+                    let chips = home::Chips {
+                        filters: &filters,
+                        filter,
+                        sort: self.home_config.bookmarks.sort,
+                        sort_key: face.y,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
+                        visible: &visible,
                         icons: &self.page_icons,
+                    };
+                    let view = home::HomeView {
+                        tiles,
+                        mark,
+                        search: self.home_config.search,
+                        chips,
                     };
                     home::add_home(
                         ctx,
                         &mut self.home,
-                        home::HomeView { tiles, mark },
+                        view,
                         self.webview_rect,
                         caret_for(OskField::Home),
                         commands,

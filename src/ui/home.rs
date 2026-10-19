@@ -1,14 +1,17 @@
 //! Rendering of the built-in start page overlay (state lives in
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
-//! none), a search / URL field and a grid of the bookmarks.
+//! none), a search / URL field, a row of filter and sort chips and a grid of
+//! the bookmarks.
 //! Navigation is routed by [`crate::app`]; tiles open via [`MenuAction::OpenUrl`].
 
 use super::favicon::{Icon, PageIcons};
 use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, SURFACE, SURF_WARM};
 use super::OskCaret;
-use crate::command::{AppCommand, MenuAction};
-use crate::data::bookmarks::Bookmark;
+use crate::command::{AppCommand, HomeAction, MenuAction};
+use crate::config::HomeSort;
+use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
+use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -38,10 +41,22 @@ pub(super) enum Mark<'a> {
 }
 
 /// Everything the start page shows besides its own state.
-#[derive(Clone, Copy)]
 pub(super) struct HomeView<'a> {
     pub tiles: Tiles<'a>,
     pub mark: Mark<'a>,
+    /// Whether the search field shows.
+    pub search: bool,
+    pub chips: Chips<'a>,
+}
+
+/// The chips row: the filters offered and the sort.
+#[derive(Clone)]
+pub(super) struct Chips<'a> {
+    pub filters: &'a [Filter],
+    pub filter: Filter,
+    pub sort: HomeSort,
+    /// The cap beside the sort chip.
+    pub sort_key: &'a str,
 }
 
 /// The banner rasterized for the current pixel density. It is drawn at one
@@ -95,6 +110,8 @@ fn rasterize_banner(height: u32) -> Option<egui::ColorImage> {
 #[derive(Clone, Copy)]
 pub(super) struct Tiles<'a> {
     pub bookmarks: &'a [Bookmark],
+    /// Indices into `bookmarks` of the tiles shown, in their order.
+    pub visible: &'a [usize],
     pub icons: &'a PageIcons,
 }
 
@@ -155,7 +172,6 @@ pub(super) fn add_home(
                     // The field anchors the page. Centering the whole block moved the
                     // mark and the field whenever a pin added a grid row.
                     const FIELD_ANCHOR: f32 = 0.3; // field top, share of the height
-                    const GAP_MID: f32 = 36.0; // field to grid
                     const GAP_TOP_RATIO: f32 = 0.6; // mark to field, of the mark's own height
 
                     // The grid scrolls in what is left, so a long one can't hide
@@ -190,8 +206,12 @@ pub(super) fn add_home(
                             Mark::None => {}
                         }
                         ui.add_space(gap_top);
-                        add_search(ui, home, block_w, osk_caret);
-                        ui.add_space(GAP_MID);
+                        if view.search {
+                            add_search(ui, home, block_w, osk_caret);
+                            ui.add_space(CHIPS_GAP);
+                        }
+                        add_chips(ui, &view.chips, block_w, commands);
+                        ui.add_space(CHIPS_GAP);
                         let rest = (floor - ui.cursor().top()).max(TILE_H);
                         // The viewport spans the page and the grid centers inside
                         // it; shrunk to fit, the scrollbar would push it off-center.
@@ -360,10 +380,73 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
     });
 }
 
+/// Search field to chips, and chips to grid.
+const CHIPS_GAP: f32 = 12.0;
+/// A chip's height.
+const CHIP_H: f32 = 26.0;
+/// Space between chips.
+const CHIP_GAP: f32 = 6.0;
+/// The launch mark's badge.
+const MARK_RADIUS: f32 = 10.0;
+/// How far the badge's center sits inside the glyph square's corner.
+const MARK_INSET: f32 = 4.0;
+/// The caps at either end of the filter chips.
+const FILTER_KEYS: (&str, &str) = ("L1", "R1");
+
+/// The chips row: filter chips at the left between their caps, the sort chip
+/// at the right. Filters show only when more than All is on offer.
+fn add_chips(ui: &mut egui::Ui, chips: &Chips, width: f32, commands: &mut Vec<AppCommand>) {
+    let key = |ui: &mut egui::Ui, text: &str| {
+        ui.label(egui::RichText::new(text).font(font(12.0)).color(MUTED));
+    };
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, CHIP_H),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = CHIP_GAP;
+            if chips.filters.len() > 1 {
+                key(ui, FILTER_KEYS.0);
+                for filter in chips.filters {
+                    if chip(ui, &filter.label(), *filter == chips.filter).clicked() {
+                        commands.push(AppCommand::Home(HomeAction::SetFilter(filter.token())));
+                    }
+                }
+                key(ui, FILTER_KEYS.1);
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let text = format!("{}  {}", bold::SORT_ASCENDING, sort_label(chips.sort));
+                if chip(ui, &text, false).clicked() {
+                    commands.push(AppCommand::Home(HomeAction::StepSort(1)));
+                }
+                key(ui, chips.sort_key);
+            });
+        },
+    );
+}
+
+fn sort_label(sort: HomeSort) -> &'static str {
+    HomeSort::CHOICES
+        .iter()
+        .find(|(_, token)| *token == sort.as_str())
+        .map_or("", |(label, _)| label)
+}
+
+/// One chip; `on` marks the active one.
+fn chip(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
+    let text = egui::RichText::new(text)
+        .font(font(13.0))
+        .color(if on { INK } else { MUTED });
+    ui.add(
+        egui::Button::selectable(on, text)
+            .corner_radius(CHIP_H / 2.0)
+            .min_size(egui::vec2(0.0, CHIP_H)),
+    )
+}
+
 /// Shown in place of an empty grid.
 const EMPTY_HINT: &str = "Bookmark a page from Quick Access to see it here";
 
-/// The bookmark grid: one tile per bookmark, in manual order.
+/// The bookmark grid: one tile per bookmark the view shows, in its order.
 fn add_grid(
     ui: &mut egui::Ui,
     home: &Home,
@@ -372,7 +455,7 @@ fn add_grid(
     cols: usize,
     commands: &mut Vec<AppCommand>,
 ) {
-    if tiles.bookmarks.is_empty() {
+    if tiles.visible.is_empty() {
         ui.label(
             egui::RichText::new(EMPTY_HINT)
                 .font(font(14.0))
@@ -380,8 +463,8 @@ fn add_grid(
         );
         return;
     }
-    tile_grid(ui, width, cols, tiles.bookmarks.len(), |ui, i| {
-        let bookmark = &tiles.bookmarks[i];
+    tile_grid(ui, width, cols, tiles.visible.len(), |ui, i| {
+        let bookmark = &tiles.bookmarks[tiles.visible[i]];
         let selected = home.tile() == Some(i);
         let icon = tiles.icons.icon(&bookmark.url);
         if add_tile(ui, bookmark, icon, selected).clicked() {
@@ -448,7 +531,11 @@ fn add_tile(
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
     keep_visible(ui, &resp, rect, selected);
     let label = bookmark_label(bookmark);
-    paint_tile(ui.painter(), rect, &label, icon, selected || resp.hovered());
+    let active = selected || resp.hovered();
+    let glyph = paint_tile(ui.painter(), rect, &label, icon, active);
+    if let Some(mark) = launch_mark(bookmark.launch) {
+        paint_launch_mark(ui.painter(), glyph, mark, active);
+    }
     resp
 }
 
@@ -475,14 +562,15 @@ fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected
 }
 
 /// Paint a tile's visuals into `rect`: the site `icon` on a square tinted
-/// after it, else the label's initial; the caller owns the click region.
+/// after it, else the label's initial; returns the square. The caller owns the
+/// click region.
 fn paint_tile(
     painter: &egui::Painter,
     rect: egui::Rect,
     label: &str,
     icon: Option<Icon>,
     active: bool,
-) {
+) -> egui::Rect {
     let fill = match icon {
         Some(icon) if icon.dark => INK,
         Some(icon) => SURFACE.lerp_to_gamma(icon.tint, TINT_MIX),
@@ -519,6 +607,34 @@ fn paint_tile(
         truncate(label, 12),
         font(12.0),
         if active { INK } else { MUTED },
+    );
+    glyph
+}
+
+/// The corner mark of a bookmark that opens as a program; `None` for a site.
+fn launch_mark(launch: Launch) -> Option<&'static str> {
+    match launch {
+        Launch::Browser => None,
+        Launch::App => Some(bold::APP_WINDOW),
+        Launch::Game => Some(bold::GAME_CONTROLLER),
+    }
+}
+
+/// `mark` on a badge over the glyph square's bottom-right corner.
+fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, mark: &str, active: bool) {
+    let center = glyph.right_bottom() - egui::vec2(MARK_INSET, MARK_INSET);
+    painter.circle(
+        center,
+        MARK_RADIUS,
+        BG,
+        egui::Stroke::new(1.0, if active { ACCENT } else { BORDER }),
+    );
+    painter.text(
+        center,
+        egui::Align2::CENTER_CENTER,
+        mark,
+        font(MARK_RADIUS * 1.2),
+        if active { ACCENT } else { INK },
     );
 }
 

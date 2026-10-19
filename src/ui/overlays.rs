@@ -142,7 +142,7 @@ impl AppUi {
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
-            Focus::Home => OskDest::Home,
+            Focus::Home if self.home_config.search => OskDest::Home,
             _ if self.address_bar_focused() => OskDest::AddressBar,
             _ if self.osk.visible && self.osk_on_address_bar => OskDest::AddressBar,
             _ => OskDest::Page,
@@ -349,17 +349,14 @@ impl AppUi {
     /// bookmark grid.
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
-        let count = self.menu.bookmarks.all().len();
+        let count = self.home_visible().len();
         self.home.move_sel(dx, dy, count);
     }
 
     /// The focused tile's URL, if a tile rather than the search field is focused.
-    #[inline]
     pub fn home_selected_url(&self) -> Option<String> {
-        self.home
-            .tile()
-            .and_then(|i| self.menu.bookmarks.all().get(i))
-            .map(|b| b.url.clone())
+        let at = *self.home_visible().get(self.home.tile()?)?;
+        Some(self.menu.bookmarks.all()[at].url.clone())
     }
 
     /// Hint mode opened: a collection round was started in the browser. The badge

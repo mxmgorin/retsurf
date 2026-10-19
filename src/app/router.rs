@@ -4,8 +4,8 @@
 //! state-agnostic and only emits intents.
 
 use super::{
-    App, AppCommand, GameInputMapsAction, GameMapEditAction, InputCommand, PromptAction,
-    QuickAccessAction, UpdateNoticeAction,
+    App, AppCommand, GameInputMapsAction, GameMapEditAction, HomeAction, InputCommand,
+    PromptAction, QuickAccessAction, UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
 use crate::event::game::input_map::ClickButton;
@@ -151,7 +151,7 @@ impl App {
                         true => BrowserCommand::ExitFullscreen,
                         false => BrowserCommand::Back,
                     };
-                    self.browser.execute_command(&command, &self.config.browser);
+                    self.browser.execute_command(&command, &self.config);
                 }
             },
             InputCommand::ToggleOsk => match focus {
@@ -172,10 +172,13 @@ impl App {
                 Focus::Hints | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
-                    // On the start page, X types into the search field — focus it
-                    // so a tile selection doesn't swallow the typed text.
+                    // On the start page, X types into the search field, or into
+                    // the address bar when the page shows none.
                     if focus == Focus::Home {
-                        self.ui.home.focus_search();
+                        match self.config.home.search {
+                            true => self.ui.home.focus_search(),
+                            false => self.ui.focus_address_bar(),
+                        }
                     }
                     self.ui.osk(OskCommand::Show, &self.browser, out);
                 }
@@ -252,7 +255,9 @@ impl App {
                 Focus::Osk => {
                     self.osk_input(PadInput::Y, out);
                 }
-                Focus::Home | Focus::Prompt | Focus::Settings => {}
+                // Y on the start page cycles the grid's sort.
+                Focus::Home => self.home_action(&HomeAction::StepSort(1)),
+                Focus::Prompt | Focus::Settings => {}
                 Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                 // In hint mode Y is a combo symbol (B exits instead); with combos
@@ -282,7 +287,9 @@ impl App {
                     Focus::Hints if self.config.controls.hint_badges => {
                         self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
                     }
-                    Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Home | Focus::Page => {
+                    // On the start page they cycle the grid's filter.
+                    Focus::Home => self.home_action(&HomeAction::StepFilter(*delta)),
+                    Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Page => {
                         // Page navigation is parked while the modal prompt is up (it
                         // may sit under the keyboard), like tab switching.
                         if !self.ui.prompt.visible() {
@@ -291,7 +298,7 @@ impl App {
                             } else {
                                 BrowserCommand::Forward
                             };
-                            self.browser.execute_command(&cmd, &self.config.browser);
+                            self.browser.execute_command(&cmd, &self.config);
                         }
                     }
                 }
@@ -309,7 +316,7 @@ impl App {
             InputCommand::Zoom(delta) => {
                 if focus != Focus::Osk && !focus.takes_over() {
                     let cmd = BrowserCommand::Zoom(*delta);
-                    self.browser.execute_command(&cmd, &self.config.browser);
+                    self.browser.execute_command(&cmd, &self.config);
                 }
             }
             // Dedicated keyboard keys act only while the keyboard is open. The one
@@ -319,7 +326,7 @@ impl App {
                     self.ui.osk(*cmd, &self.browser, out);
                 } else if matches!(cmd, OskCommand::Space) && !focus.takes_over() {
                     self.browser
-                        .execute_command(&BrowserCommand::Reload, &self.config.browser);
+                        .execute_command(&BrowserCommand::Reload, &self.config);
                 }
             }
             // A game's own click with a button Confirm cannot carry: the page

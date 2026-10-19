@@ -11,6 +11,7 @@
 
 use crate::clock;
 use crate::config::token_enum::token_enum;
+use crate::config::HomeSort;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use toml::value::{Date, Datetime, Offset, Time};
@@ -45,6 +46,146 @@ token_enum! {
         /// Open it without the chrome, in Game Mode.
         Game => "game", "Game",
     }
+}
+
+/// Which bookmarks a view shows: all, those that open one way, or one tag's.
+#[derive(Clone, Eq, Debug)]
+pub enum Filter {
+    All,
+    Launch(Launch),
+    Tag(String),
+}
+
+/// A tag reads the same in either case.
+impl PartialEq for Filter {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Filter::All, Filter::All) => true,
+            (Filter::Launch(a), Filter::Launch(b)) => a == b,
+            (Filter::Tag(a), Filter::Tag(b)) => same_tag(a, b),
+            (Filter::All | Filter::Launch(_) | Filter::Tag(_), _) => false,
+        }
+    }
+}
+
+/// `(label, token)` of each filter that needs no tag: All, then one per
+/// [`FILTER_LAUNCHES`] entry in its order. A tag spelled like a token reads as
+/// the filter.
+pub const FILTER_CHOICES: &[(&str, &str)] = &[
+    ("All", "all"),
+    ("Sites", "sites"),
+    ("Apps", "apps"),
+    ("Games", "games"),
+];
+/// What each filter after All admits.
+const FILTER_LAUNCHES: [Launch; 3] = [Launch::Browser, Launch::App, Launch::Game];
+const _: () = assert!(FILTER_CHOICES.len() == FILTER_LAUNCHES.len() + 1);
+
+impl Filter {
+    /// The filter a config token names; an empty one is [`Filter::All`].
+    pub fn parse(token: &str) -> Self {
+        let token = token.trim();
+        if token.is_empty() {
+            return Filter::All;
+        }
+        match FILTER_CHOICES
+            .iter()
+            .position(|(_, t)| token.eq_ignore_ascii_case(t))
+        {
+            Some(0) => Filter::All,
+            Some(i) => Filter::Launch(FILTER_LAUNCHES[i - 1]),
+            None => Filter::Tag(token.to_string()),
+        }
+    }
+
+    /// The config token [`Self::parse`] reads back.
+    pub fn token(&self) -> String {
+        match self.choice() {
+            Some((_, token)) => token.to_string(),
+            None => self.label(),
+        }
+    }
+
+    /// Its display name.
+    pub fn label(&self) -> String {
+        match (self, self.choice()) {
+            (_, Some((label, _))) => label.to_string(),
+            (Filter::Tag(tag), None) => tag.clone(),
+            (Filter::All | Filter::Launch(_), None) => {
+                unreachable!("FILTER_CHOICES lists All and every Launch")
+            }
+        }
+    }
+
+    pub fn admits(&self, bookmark: &Bookmark) -> bool {
+        match self {
+            Filter::All => true,
+            Filter::Launch(launch) => bookmark.launch == *launch,
+            Filter::Tag(tag) => bookmark.tags.iter().any(|t| same_tag(t, tag)),
+        }
+    }
+
+    /// Its entry in [`FILTER_CHOICES`]; `None` for a tag.
+    fn choice(&self) -> Option<(&'static str, &'static str)> {
+        let at = match self {
+            Filter::All => 0,
+            Filter::Launch(launch) => FILTER_LAUNCHES.iter().position(|l| l == launch)? + 1,
+            Filter::Tag(_) => return None,
+        };
+        Some(FILTER_CHOICES[at])
+    }
+}
+
+/// The filters worth offering over `all`: All, each launch and then each tag by
+/// how many bookmarks carry it, every one narrower than All and not empty, plus
+/// `current` wherever it would be missing. Only All when nothing narrows it.
+pub fn filters(all: &[Bookmark], current: &Filter) -> Vec<Filter> {
+    let narrows = |filter: &Filter| {
+        let n = all.iter().filter(|b| filter.admits(b)).count();
+        n > 0 && n < all.len()
+    };
+    let mut out = vec![Filter::All];
+    out.extend(
+        FILTER_LAUNCHES
+            .map(Filter::Launch)
+            .into_iter()
+            .filter(narrows),
+    );
+    let mut tags: Vec<(&str, usize)> = Vec::new();
+    for tag in all.iter().flat_map(|b| &b.tags) {
+        match tags.iter_mut().find(|(t, _)| same_tag(t, tag)) {
+            Some((_, n)) => *n += 1,
+            None => tags.push((tag, 1)),
+        }
+    }
+    tags.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    out.extend(
+        tags.into_iter()
+            .map(|(tag, _)| Filter::parse(tag))
+            .filter(|f| matches!(f, Filter::Tag(_)) && narrows(f)),
+    );
+    if !out.contains(current) {
+        out.push(current.clone());
+    }
+    out
+}
+
+/// Indices into `all` of the bookmarks `filter` admits, in `sort` order;
+/// `label` is what a bookmark is shown as, for the name sort.
+pub fn view(
+    all: &[Bookmark],
+    filter: &Filter,
+    sort: HomeSort,
+    label: impl Fn(&Bookmark) -> String,
+) -> Vec<usize> {
+    let mut out: Vec<usize> = (0..all.len()).filter(|&i| filter.admits(&all[i])).collect();
+    match sort {
+        // `all` is in manual order already.
+        HomeSort::Manual => {}
+        HomeSort::Recent => out.sort_by_key(|&i| std::cmp::Reverse(all[i].last_opened)),
+        HomeSort::Name => out.sort_by_cached_key(|&i| label(&all[i]).to_lowercase()),
+    }
+    out
 }
 
 /// A bookmark as its file spells it. Keys at their default are left out.
@@ -514,6 +655,80 @@ mod tests {
         assert_eq!(bookmark.last_opened, 1_760_805_997);
         assert!(bookmark.game_mode.contains_key("view"));
         assert!(bookmark.has_settings());
+    }
+
+    fn tagged(id: &str, launch: Launch, tags: &[&str], last_opened: u64) -> Bookmark {
+        Bookmark {
+            launch,
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            last_opened,
+            ..Bookmark::from_raw(id.to_string(), Raw::default())
+        }
+    }
+
+    #[test]
+    fn a_filter_token_reads_back() {
+        for token in ["all", "sites", "apps", "games", "roguelike"] {
+            assert_eq!(Filter::parse(token).token(), token);
+        }
+        assert_eq!(Filter::parse(""), Filter::All);
+        assert_eq!(Filter::parse(" Games "), Filter::Launch(Launch::Game));
+    }
+
+    #[test]
+    fn only_narrowing_filters_are_offered() {
+        let all = [
+            tagged("a", Launch::Browser, &["news"], 0),
+            tagged("b", Launch::Game, &["arcade", "news"], 0),
+            tagged("c", Launch::Game, &["arcade"], 0),
+            tagged("d", Launch::Game, &["games"], 0),
+        ];
+        let offered = filters(&all, &Filter::All);
+        assert_eq!(
+            offered,
+            [
+                Filter::All,
+                Filter::Launch(Launch::Browser),
+                Filter::Launch(Launch::Game),
+                Filter::Tag("arcade".to_string()),
+                Filter::Tag("news".to_string()),
+            ]
+        );
+        let missing = Filter::Launch(Launch::App);
+        assert_eq!(filters(&all, &missing).last(), Some(&missing));
+        assert_eq!(filters(&all[..1], &Filter::All), [Filter::All]);
+    }
+
+    #[test]
+    fn a_view_filters_then_sorts() {
+        let all = [
+            tagged("b", Launch::Game, &[], 5),
+            tagged("a", Launch::Browser, &[], 9),
+            tagged("c", Launch::Game, &[], 7),
+        ];
+        let id = |b: &Bookmark| b.id.clone();
+        let games = Filter::Launch(Launch::Game);
+        assert_eq!(view(&all, &games, HomeSort::Manual, id), [0, 2]);
+        assert_eq!(view(&all, &Filter::All, HomeSort::Recent, id), [1, 2, 0]);
+        assert_eq!(view(&all, &Filter::All, HomeSort::Name, id), [1, 0, 2]);
+    }
+
+    /// A tag reads the same in either case: one tab, spelled as first seen,
+    /// admitting every spelling.
+    #[test]
+    fn a_tag_filter_ignores_case() {
+        let all = [
+            tagged("a", Launch::Browser, &["News"], 0),
+            tagged("b", Launch::Browser, &["news"], 0),
+            tagged("c", Launch::Browser, &[], 0),
+        ];
+        let news = Filter::parse("NEWS");
+        let id = |b: &Bookmark| b.id.clone();
+        assert_eq!(view(&all, &news, HomeSort::Manual, id), [0, 1]);
+        let offered = filters(&all, &news);
+        assert_eq!(offered.len(), 2);
+        assert_eq!(offered[1].label(), "News");
+        assert_eq!(split_tags("News, news"), ["News"]);
     }
 
     #[test]

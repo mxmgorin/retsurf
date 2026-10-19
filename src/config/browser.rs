@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserConfig {
-    pub home_page: String,
     pub search_page: String,
     /// The User-Agent header sites see. Empty keeps Servo's platform default;
     /// the keywords `desktop`, `mobile` (or `android`), and `ios` pick the
@@ -16,7 +15,7 @@ pub struct BrowserConfig {
     /// (`cookie_jar.json`, `localstorage.json`, …). When false everything is
     /// in-memory only and gone on exit.
     pub persist_site_data: bool,
-    /// Reopen the tabs that were open at exit instead of `home_page`; off also
+    /// Reopen the tabs that were open at exit instead of `[home] page`; off also
     /// drops the stored session (see [`crate::data::session`]).
     pub restore_tabs: bool,
     /// Open-tab ceiling; `0` is unlimited. Each tab is a live webview Servo
@@ -35,8 +34,6 @@ pub struct BrowserConfig {
 impl Default for BrowserConfig {
     fn default() -> Self {
         Self {
-            // The built-in start page (crate::browser::home::HOME_URL).
-            home_page: "retsurf:home".to_string(),
             // DuckDuckGo's no-JS endpoint: results come rendered in the HTML,
             // where the main site builds them with a script.
             search_page: "https://lite.duckduckgo.com/lite/?q=%s".to_string(),

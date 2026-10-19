@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 mod adblock;
 mod audio;
 pub mod bounds;
+mod brand;
 mod browser;
 mod controls;
 mod data_saving;
@@ -21,7 +22,7 @@ mod downloads;
 mod experimental;
 mod game_mode;
 mod history;
-mod home_style;
+mod home;
 mod interface;
 mod osk;
 mod pad_layout;
@@ -36,6 +37,7 @@ mod video;
 
 pub use adblock::AdblockConfig;
 pub use audio::AudioConfig;
+pub use brand::Brand;
 pub use browser::{BrowserConfig, PageTheme};
 pub use controls::{ControlsConfig, CursorMode};
 pub use data_saving::DataSavingConfig;
@@ -45,7 +47,7 @@ pub use downloads::DownloadsConfig;
 pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use game_mode::{GameModeConfig, Scaling};
 pub use history::HistoryConfig;
-pub use home_style::HomeStyle;
+pub use home::{HomeConfig, HomeSort};
 pub use interface::{InterfaceConfig, ToolbarPosition};
 pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
@@ -66,6 +68,7 @@ pub struct AppConfig {
     pub experimental: ExperimentalConfig,
     pub game_mode: GameModeConfig,
     pub interface: InterfaceConfig,
+    pub home: HomeConfig,
     pub controls: ControlsConfig,
     pub osk: OskConfig,
     pub history: HistoryConfig,

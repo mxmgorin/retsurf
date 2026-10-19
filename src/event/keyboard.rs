@@ -255,6 +255,10 @@ fn on_key_down(
             if enter_confirms(key, commands) {
                 return;
             }
+            // Tab / Shift+Tab cycle the grid's filter, as L1/R1 do.
+            if tab_step(key, commands) {
+                return;
+            }
         }
     }
 

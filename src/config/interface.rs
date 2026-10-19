@@ -1,9 +1,8 @@
-use super::HomeStyle;
 use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 /// The browser's own chrome (`[interface]` in the config): its scale, the
-/// toolbar, the start page and cursor-visibility timing.
+/// toolbar and cursor-visibility timing.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InterfaceConfig {
@@ -20,11 +19,9 @@ pub struct InterfaceConfig {
     /// over the page on either edge: a strip that came and went would resize the
     /// web view, reflowing the page mid-scroll.
     pub toolbar_autohide: bool,
-    /// Show site icons on tabs, bookmarks, history and the speed dial. Servo
+    /// Show site icons on tabs, bookmarks, history and the start page. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
-    /// What heads the start page above its search field.
-    pub home_style: HomeStyle,
 }
 
 impl Default for InterfaceConfig {
@@ -35,7 +32,6 @@ impl Default for InterfaceConfig {
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
             page_icons: true,
-            home_style: HomeStyle::Banner,
         }
     }
 }

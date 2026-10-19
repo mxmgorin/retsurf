@@ -1,5 +1,5 @@
-//! Grid-with-a-field navigation for the start page: a text field above a tile
-//! grid.
+//! Grid-with-a-field navigation for the start page: a tile grid with a text
+//! field above it, or with none.
 
 /// The focused item: the field or a grid tile by index.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -10,18 +10,39 @@ enum GridItem {
 
 pub struct GridNav {
     item: GridItem,
+    /// Whether the field is there to be focused.
+    field: bool,
     /// Columns, recorded by the renderer each frame (it depends on the
     /// available width) so navigation steps by row.
     cols: usize,
 }
 
 impl GridNav {
-    /// Starts on the field.
-    pub fn new() -> Self {
-        Self {
+    /// Starts on the field, or the first tile without one.
+    pub fn new(field: bool) -> Self {
+        let mut nav = Self {
             item: GridItem::Field,
+            field,
             cols: 1,
+        };
+        nav.focus_first();
+        nav
+    }
+
+    /// Show or drop the field; a focus on a dropped field moves to the grid.
+    pub fn set_field(&mut self, field: bool) {
+        self.field = field;
+        if !field && self.item == GridItem::Field {
+            self.item = GridItem::Tile(0);
         }
+    }
+
+    /// Focus the field, or the first tile without one.
+    pub fn focus_first(&mut self) {
+        self.item = match self.field {
+            true => GridItem::Field,
+            false => GridItem::Tile(0),
+        };
     }
 
     pub fn field_focused(&self) -> bool {
@@ -57,11 +78,12 @@ impl GridNav {
             }
             GridItem::Tile(i) => {
                 if dy < 0 {
-                    self.item = match i.checked_sub(self.cols) {
-                        Some(up) => GridItem::Tile(up),
+                    match i.checked_sub(self.cols) {
+                        Some(up) => self.item = GridItem::Tile(up),
                         // Up from the top row crosses into the field.
-                        None => GridItem::Field,
-                    };
+                        None if self.field => self.item = GridItem::Field,
+                        None => {}
+                    }
                 } else if dy > 0 {
                     let n = i + self.cols;
                     if n < count {
@@ -76,14 +98,14 @@ impl GridNav {
         }
     }
 
-    /// Keep a tile selection valid if the grid shrank (falls back to the field
-    /// when it emptied).
+    /// Keep a tile selection valid if the grid shrank. An emptied grid falls
+    /// back to the field, or keeps the first slot for when one comes back.
     pub fn clamp(&mut self, count: usize) {
         if let GridItem::Tile(i) = self.item {
-            self.item = if count == 0 {
-                GridItem::Field
-            } else {
-                GridItem::Tile(i.min(count - 1))
+            self.item = match (count, self.field) {
+                (0, true) => GridItem::Field,
+                (0, false) => GridItem::Tile(0),
+                _ => GridItem::Tile(i.min(count - 1)),
             };
         }
     }

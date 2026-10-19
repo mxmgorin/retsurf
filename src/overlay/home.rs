@@ -17,9 +17,11 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new() -> Self {
+    /// A start page focused on its search field, or on its first tile when it
+    /// shows none (`search` false).
+    pub fn new(search: bool) -> Self {
         Self {
-            nav: GridNav::new(),
+            nav: GridNav::new(search),
             input: String::new(),
         }
     }
@@ -27,7 +29,7 @@ impl Home {
     /// Reset to the entry state (search field focused, empty buffer) — called
     /// when the start page becomes active.
     pub fn reset(&mut self) {
-        self.nav.focus_field();
+        self.nav.focus_first();
         self.input.clear();
     }
 
@@ -46,6 +48,11 @@ impl Home {
     /// The focused tile's index, if a tile (not the search field) is focused.
     pub fn tile(&self) -> Option<usize> {
         self.nav.tile()
+    }
+
+    /// Show or hide the search field.
+    pub fn set_search(&mut self, search: bool) {
+        self.nav.set_field(search);
     }
 
     /// Focus the search field (e.g. when the OSK opens to type).

@@ -7,7 +7,7 @@
 //! and answered with a blank dark page — never fetched — over which the egui
 //! overlay is composited.
 
-/// The internal URL the start page lives at. Used as the default `home_page`
+/// The internal URL the start page lives at. Used as the default `[home] page`
 /// (see [`crate::config`]); navigations here are intercepted, never fetched, and
 /// [`crate::browser::AppBrowser::on_home_page`] matches on it.
 pub const HOME_URL: &str = "retsurf:home";

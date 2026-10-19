@@ -6,8 +6,9 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Channel, CursorMode, ExperimentalPreset, HomeStyle, MemoryProfile, OskStyle,
-    PadLayout, PageTheme, Scaling, ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition,
+    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeSort, MemoryProfile,
+    OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution, TextureFilter, TextureLimit,
+    ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -376,6 +377,14 @@ const SHADER: Kind = Kind::Choice {
     set: |c, v| c.game_mode.view.shader = v.to_string(),
 };
 
+/// The start page's bookmark filter; a tag set in the file shows verbatim and
+/// cycles back into the list when adjusted.
+const HOME_FILTER: Kind = Kind::Choice {
+    opts: Opts::Fixed(crate::data::bookmarks::FILTER_CHOICES),
+    get: |c| c.home.bookmarks.filter.clone(),
+    set: |c, v| c.home.bookmarks.filter = v.to_string(),
+};
+
 /// The Web-features preset choice — derived from the experimental bools (shows
 /// "Custom" when they match no preset); picking a preset rewrites all of them
 /// (the bools are the source of truth, see [`ExperimentalPreset`]).
@@ -418,7 +427,6 @@ use SettingsSection as S;
 /// The binding list is not here: it is built dynamically behind a door row.
 #[rustfmt::skip]
 pub(super) static FIELDS: &[Field] = &[
-    f(S::Browser,  "Browser",     "Home page",              text!(browser.home_page), false),
     f(S::Browser,  "Browser",     "Search URL",             text!(browser.search_page), false),
     f(S::Browser,  "Browser",     "User agent",             ua_kind(), false).quick(Modes::Browser),
     f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
@@ -454,9 +462,14 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
     f(S::Interface, "Interface",  "Auto-hide toolbar",      flag!(interface.toolbar_autohide), false),
-    f(S::Interface, "Interface",  "Home style",             choice!(interface.home_style: HomeStyle), false),
     f(S::Interface, "Interface",  "Page icons",             flag!(interface.page_icons), false),
     f(S::Interface, "Interface",  "Cursor linger (ms)",     int!(interface.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
+
+    f(S::Interface, "Home",       "Home page",              text!(home.page), false),
+    f(S::Interface, "Home",       "Brand",                  choice!(home.brand: Brand), false),
+    f(S::Interface, "Home",       "Search",                 flag!(home.search), false),
+    f(S::Interface, "Home",       "Show",                   HOME_FILTER, false),
+    f(S::Interface, "Home",       "Sort",                   choice!(home.bookmarks.sort: HomeSort), false),
 
     // No sub-header: the door belongs to no group.
     f(S::Controls, "",            "Button bindings",        Kind::Door { door: Door::Bindings }, false),

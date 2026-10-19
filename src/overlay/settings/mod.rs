@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn restore_defaults_resets_the_drafts() {
         let mut cfg = AppConfig::default();
-        cfg.browser.home_page = "https://example.org/".to_string();
+        cfg.home.page = "https://example.org/".to_string();
         cfg.interface.scale = 1.45;
         cfg.controls.hint_badges = !cfg.controls.hint_badges;
 
@@ -568,7 +568,7 @@ mod tests {
 
         let defaults = AppConfig::default();
         let draft = settings.draft().expect("still open");
-        assert_eq!(draft.config.browser.home_page, defaults.browser.home_page);
+        assert_eq!(draft.config.home.page, defaults.home.page);
         assert_eq!(draft.config.interface.scale, defaults.interface.scale);
         assert_eq!(
             draft.config.controls.hint_badges,

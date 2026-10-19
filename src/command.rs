@@ -37,6 +37,8 @@ pub enum AppCommand {
     Prompt(PromptAction),
     /// An action on the settings overlay (see [`crate::overlay::settings`]).
     Settings(SettingsAction),
+    /// A change to the start page's view.
+    Home(HomeAction),
 }
 
 impl AppCommand {
@@ -57,7 +59,8 @@ impl AppCommand {
             | AppCommand::ToggleBookmark
             | AppCommand::FocusAddressBar
             | AppCommand::CloseTab
-            | AppCommand::Settings(_) => false,
+            | AppCommand::Settings(_)
+            | AppCommand::Home(_) => false,
         }
     }
 
@@ -72,6 +75,17 @@ impl AppCommand {
             _ => false,
         }
     }
+}
+
+/// Changes to the start page's view, saved to `[home]` as they are made.
+#[derive(Clone)]
+pub enum HomeAction {
+    /// Show the filter `delta` places along the offered ones, wrapping.
+    StepFilter(i32),
+    /// Show the filter of this config token.
+    SetFilter(String),
+    /// Order by the sort `delta` places along, wrapping.
+    StepSort(i32),
 }
 
 /// Actions on Quick Access. `Click` carries its target row; the rest act on

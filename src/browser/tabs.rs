@@ -211,7 +211,7 @@ impl AppBrowser {
     /// closes it in Servo, so its document and history go with it.
     fn replace_last_tab(&self, home: &str) {
         let Some(webview) = self.build_tab(home) else {
-            log::warn!("failed to parse home_page `{home}`");
+            log::warn!("failed to parse the home page `{home}`");
             return;
         };
         self.inner.tabs.borrow_mut().clear();

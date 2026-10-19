@@ -1,7 +1,7 @@
 //! Toolbar/router commands on [`AppBrowser`], and the page-zoom ladder.
 
 use super::{try_into_url, AppBrowser};
-use crate::config::BrowserConfig;
+use crate::config::AppConfig;
 
 #[derive(Clone)]
 pub enum BrowserCommand {
@@ -9,7 +9,7 @@ pub enum BrowserCommand {
     Forward,
     Reload,
     Load,
-    /// Navigate the active tab to the configured home page (`home_page`).
+    /// Navigate the active tab to the configured home page (`[home] page`).
     Home,
     /// Toggle reader mode on the active page (see [`super::reader`]).
     Reader,
@@ -27,7 +27,7 @@ const ZOOM_LADDER: &[f32] = &[
 ];
 
 impl AppBrowser {
-    pub fn execute_command(&mut self, command: &BrowserCommand, config: &BrowserConfig) {
+    pub fn execute_command(&mut self, command: &BrowserCommand, config: &AppConfig) {
         match command {
             BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
             BrowserCommand::Forward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),
@@ -50,7 +50,8 @@ impl AppBrowser {
                 let Some(tab) = tabs.get(active) else {
                     return;
                 };
-                let Some(url) = try_into_url(&tab.state.location, &config.search_page) else {
+                let Some(url) = try_into_url(&tab.state.location, &config.browser.search_page)
+                else {
                     log::warn!("failed to parse location");
                     return;
                 };
@@ -63,8 +64,8 @@ impl AppBrowser {
                 let Some(webview) = self.inner.active_webview() else {
                     return;
                 };
-                let Some(url) = try_into_url(&config.home_page, &config.search_page) else {
-                    log::warn!("failed to parse home_page `{}`", config.home_page);
+                let Some(url) = try_into_url(&config.home.page, &config.browser.search_page) else {
+                    log::warn!("failed to parse the home page `{}`", config.home.page);
                     return;
                 };
                 self.mark_loading();

@@ -8,8 +8,8 @@ mod memory_guard;
 mod router;
 
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, InputCommand, MenuAction, PromptAction,
-    QuickAccessAction, SettingsAction, UpdateNoticeAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, HomeAction, InputCommand, MenuAction,
+    PromptAction, QuickAccessAction, SettingsAction, UpdateNoticeAction,
 };
 
 use crate::browser::{AppBrowser, Favicon, LocalSite};
@@ -150,6 +150,7 @@ impl App {
         let mut ui = AppUi::new(
             &window,
             &config.interface,
+            &config.home,
             &config.history,
             &config.downloads,
             &config.osk,
@@ -501,7 +502,7 @@ impl App {
         {
             return;
         }
-        self.browser.open_tab(&self.config.browser.home_page);
+        self.browser.open_tab(&self.config.home.page);
     }
 
     /// Cache `url`'s site icon for the saved lists. With history off only the

@@ -195,7 +195,7 @@ impl App {
                 if self.ui.quick_access.confirm(Entry::Reload) {
                     self.ui.quick_access.close();
                     self.browser
-                        .execute_command(&BrowserCommand::Reload, &self.config.browser);
+                        .execute_command(&BrowserCommand::Reload, &self.config);
                 }
             }
             Entry::List(section) => {

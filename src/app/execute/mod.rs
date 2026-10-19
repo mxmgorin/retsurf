@@ -7,10 +7,12 @@
 mod game;
 
 use super::{
-    App, AppCommand, InputCommand, MenuAction, PromptAction, SettingsAction, UpdateNoticeAction,
+    App, AppCommand, HomeAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+    UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, HomeSort};
+use crate::data::bookmarks::Filter;
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, SettingsSection, Task};
@@ -38,9 +40,7 @@ impl App {
                 self.sync_screen_geometry();
                 self.ui.resize_browser(&self.window, &self.browser);
             }
-            AppCommand::Browser(command) => {
-                self.browser.execute_command(command, &self.config.browser)
-            }
+            AppCommand::Browser(command) => self.browser.execute_command(command, &self.config),
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
@@ -62,6 +62,7 @@ impl App {
             },
             AppCommand::Settings(action) => self.settings_action(action, out),
             AppCommand::UpdateNotice(action) => self.update_notice_action(action, out),
+            AppCommand::Home(action) => self.home_action(action),
         };
 
         // Commands drain after `ui.update` built the frame, so a UI change needs
@@ -120,15 +121,14 @@ impl App {
     /// Close the tab at `index`, resync the menu's row count, and reclaim what
     /// the torn-down document frees.
     pub(super) fn close_tab_at(&mut self, index: usize) {
-        self.browser
-            .close_tab(index, &self.config.browser.home_page);
+        self.browser.close_tab(index, &self.config.home.page);
         self.ui.menu.set_tab_count(self.browser.tab_count());
         self.schedule_heap_trim();
     }
 
     /// Open a new tab at the home page and close the menu.
     fn new_tab(&mut self) {
-        let home = self.config.browser.home_page.clone();
+        let home = self.config.home.page.clone();
         self.browser.open_tab(&home);
         self.ui.menu.close();
     }
@@ -355,7 +355,7 @@ impl App {
         self.ui.menu.downloads.clear_finished();
         self.session.discard();
         self.browser.clear_site_data();
-        self.browser.reset_tabs(&self.config.browser.home_page);
+        self.browser.reset_tabs(&self.config.home.page);
         self.ui
             .toast(Notice::new(bold::CHECK, "Browsing data cleared"));
         log::info!("cleared browsing data");
@@ -428,7 +428,7 @@ impl App {
             .set_toolbar_autohide(self.config.interface.toolbar_autohide);
         self.ui.set_hint_badges(self.config.controls.hint_badges);
         self.ui.set_page_icons(self.config.interface.page_icons);
-        self.ui.set_home_style(self.config.interface.home_style);
+        self.ui.set_home(&self.config.home);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.controls.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);
@@ -455,8 +455,8 @@ impl App {
     /// only; the start page's search field stands in for the address bar there.
     fn focus_address_bar(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.focus() {
-            Focus::Home => self.ui.home.focus_search(),
-            Focus::Page | Focus::Hints => {
+            Focus::Home if self.config.home.search => self.ui.home.focus_search(),
+            Focus::Home | Focus::Page | Focus::Hints => {
                 self.ui.hints.hide();
                 self.ui.focus_address_bar();
             }
@@ -475,15 +475,43 @@ impl App {
                 self.ui.menu.bookmarks.opened(&url);
                 self.open_url(url);
             }
-            None => self.ui.osk(OskCommand::Show, &self.browser, out),
+            None if self.ui.home.search_focused() => {
+                self.ui.osk(OskCommand::Show, &self.browser, out)
+            }
+            None => {}
         }
+    }
+
+    /// Change the start page's filter or sort, and save it.
+    pub(super) fn home_action(&mut self, action: &HomeAction) {
+        let view = &mut self.config.home.bookmarks;
+        match action {
+            HomeAction::StepFilter(delta) => {
+                let offered = self.ui.home_filters();
+                let current = Filter::parse(&view.filter);
+                let at = offered.iter().position(|f| *f == current).unwrap_or(0);
+                view.filter = offered[crate::list::wrap(at, *delta, offered.len())].token();
+            }
+            HomeAction::SetFilter(token) => view.filter = token.clone(),
+            HomeAction::StepSort(delta) => {
+                let sorts = HomeSort::CHOICES;
+                let at = sorts
+                    .iter()
+                    .position(|(_, token)| *token == view.sort.as_str())
+                    .unwrap_or(0);
+                view.sort =
+                    HomeSort::from_value(sorts[crate::list::wrap(at, *delta, sorts.len())].1);
+            }
+        }
+        self.config.save();
+        self.ui.set_home(&self.config.home);
     }
 
     /// Load `url` in the focused tab and close the menu.
     fn open_url(&mut self, url: String) {
         self.browser.get_state_mut().location = url;
         self.browser
-            .execute_command(&BrowserCommand::Load, &self.config.browser);
+            .execute_command(&BrowserCommand::Load, &self.config);
         self.ui.menu.close();
     }
 }

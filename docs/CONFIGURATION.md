@@ -23,7 +23,6 @@ Both take two presses. Rows marked `*` need a restart.
 
 ```toml
 [browser]
-home_page = "retsurf:home"     # built-in start page, or any URL
 search_page = "https://lite.duckduckgo.com/lite/?q=%s"   # %s = the query
 # Empty = the default; "desktop", "mobile" (or "android") or "ios" pretend to be that
 # browser. "mobile" gets phone layouts, which suit a small screen.
@@ -60,9 +59,17 @@ permissions = false           # Permissions API                  full
 scale = 1.0                # UI size, 0.6 to 1.6
 toolbar_position = "top"   # "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, show on scroll up
-home_style = "banner"      # start page header: "banner", "wordmark" or "compact"
-page_icons = true          # site icons in tabs, bookmarks, history and the dial
+page_icons = true          # site icons in tabs, bookmarks, history and the start page
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
+
+[home]
+page = "retsurf:home"      # what Home and a new tab open: the start page or any URL
+brand = "banner"           # start page header: "banner", "wordmark" or "none"
+search = true              # the search field
+
+[home.bookmarks]
+filter = "all"             # "all", "sites", "apps", "games" or a tag
+sort = "manual"            # "manual", "recent" (last opened first) or "name"
 
 [controls]
 deadzone = 0.25            # stick deflection treated as centered
@@ -195,8 +202,12 @@ Bookmarks are the start page's tiles and the menu's Bookmarks list. Each is one 
 name = "Wikipedia"                       # shown on the tile; without it, the site
 url = "https://en.wikipedia.org"
 order = 1                                # position; lower first, unset after the rest
+tags = ["reference"]                     # groups for the start page's filter
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
 ```
+
+On the start page L1 / R1 step the filter and Y steps the sort; both are
+saved to `[home.bookmarks]`.
 
 The id is the file name and never changes. A file that does not parse is skipped. Removing
 a bookmark that has tags or other settings takes a second press.
