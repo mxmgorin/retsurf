@@ -8,7 +8,7 @@
 use crate::command::{AppCommand, QuickAccessAction};
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
-use crate::overlay::quick_access::{Entry, QuickAccess, Strip};
+use crate::overlay::quick_access::{Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
 use crate::ui::panel::{self, center_selected, ROW_GAP, ROW_H};
@@ -64,10 +64,10 @@ pub(in crate::ui) fn add_quick_access(
     let width = outer - margin.x;
     // Each on the side of the button that opens it.
     let left = match panel.strip() {
-        Strip::QuickAccess => screen.right() - outer,
+        Strip::QuickAccess | Strip::Options => screen.right() - outer,
         Strip::QuickMenu => screen.left(),
     };
-    let title = panel.strip().name().to_uppercase();
+    let title = panel.title().to_uppercase();
     add_backdrop(ctx, screen, commands);
     egui::Area::new(egui::Id::new("quick_access"))
         .order(egui::Order::Foreground)
@@ -197,6 +197,12 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::List(Section::Bookmarks) => bold::BOOKMARKS,
         Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
+        Entry::Options(OptionsRow::Open) => bold::ARROW_SQUARE_OUT,
+        Entry::Options(OptionsRow::Rename) => bold::PENCIL_SIMPLE,
+        Entry::Options(OptionsRow::Tags) => bold::TAG,
+        Entry::Options(OptionsRow::MoveLeft) => bold::ARROW_LEFT,
+        Entry::Options(OptionsRow::MoveRight) => bold::ARROW_RIGHT,
+        Entry::Options(OptionsRow::Remove) => bold::TRASH,
         Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "Scaling" => bold::FRAME_CORNERS,
             "Shader" => bold::TELEVISION_SIMPLE,
@@ -221,7 +227,7 @@ mod tests {
     #[test]
     fn every_row_has_an_icon() {
         let mut panel = QuickAccess::new();
-        for strip in [Strip::QuickAccess, Strip::QuickMenu] {
+        for strip in [Strip::QuickAccess, Strip::QuickMenu, Strip::Options] {
             for mode in [TabMode::Page, TabMode::Reader, TabMode::Game] {
                 panel.open(strip, mode, &AppConfig::default());
                 for &row in panel.rows() {

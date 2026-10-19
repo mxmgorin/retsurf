@@ -172,6 +172,11 @@ impl App {
                 Focus::Hints | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
+                    // On a start-page tile X opens its options instead.
+                    if let Some(tile) = self.ui.home.tile().filter(|_| focus == Focus::Home) {
+                        self.open_options(tile);
+                        return;
+                    }
                     // On the start page, X types into the search field, or into
                     // the address bar when the page shows none.
                     if focus == Focus::Home {

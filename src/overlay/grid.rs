@@ -53,6 +53,11 @@ impl GridNav {
         self.item = GridItem::Field;
     }
 
+    /// Focus the tile at `index`.
+    pub fn select_tile(&mut self, index: usize) {
+        self.item = GridItem::Tile(index);
+    }
+
     /// The focused tile's index, if a tile (not the field) is focused.
     pub fn tile(&self) -> Option<usize> {
         match self.item {

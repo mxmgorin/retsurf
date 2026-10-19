@@ -18,7 +18,7 @@
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, MenuAction, PromptAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, MenuAction, PromptAction, QuickAccessAction,
 };
 use crate::config::{Face, OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
@@ -56,6 +56,8 @@ pub enum OskTarget<'a> {
     /// A Game Mode input map name, for a rename or a copy (see
     /// [`crate::overlay::game::input_maps`]); Enter is what commits it to a file.
     GameName(&'a mut String),
+    /// A bookmark's name or tags; Enter submits it, empty included.
+    OptionsText(&'a mut String),
     /// A layer name in the map editor (see [`crate::overlay::game::map_edit`]);
     /// Enter commits it, like a map's.
     LayerName(&'a mut String),
@@ -522,6 +524,7 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
+            | OskTarget::OptionsText(buf)
             | OskTarget::LayerName(buf) => buf.clear(),
             // Picking has no buffer to clear; the row keeps what it had.
             OskTarget::Capture(_) => {}
@@ -561,6 +564,7 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
+            | OskTarget::OptionsText(buf)
             | OskTarget::LayerName(buf) => self.remove_before(buf),
             OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
@@ -589,6 +593,7 @@ impl Osk {
             | OskTarget::Home(buf)
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
+            | OskTarget::OptionsText(buf)
             | OskTarget::LayerName(buf) => self.insert(buf, c),
             OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
@@ -629,6 +634,9 @@ impl Osk {
                     )));
                 }
             }
+            OskTarget::OptionsText(buf) => commands.push(AppCommand::QuickAccess(
+                QuickAccessAction::Text(buf.trim().to_string()),
+            )),
             OskTarget::LayerName(buf) => {
                 let text = buf.trim();
                 if !text.is_empty() {
@@ -685,6 +693,7 @@ fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
         | OskTarget::Home(buf)
         | OskTarget::Settings(buf)
         | OskTarget::GameName(buf)
+        | OskTarget::OptionsText(buf)
         | OskTarget::LayerName(buf) => buf.chars().count(),
         OskTarget::Capture(_) | OskTarget::Page => 0,
     }

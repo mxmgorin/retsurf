@@ -45,6 +45,11 @@ impl Home {
         self.nav.field_focused()
     }
 
+    /// Focus the tile at `index`.
+    pub fn select_tile(&mut self, index: usize) {
+        self.nav.select_tile(index);
+    }
+
     /// The focused tile's index, if a tile (not the search field) is focused.
     pub fn tile(&self) -> Option<usize> {
         self.nav.tile()

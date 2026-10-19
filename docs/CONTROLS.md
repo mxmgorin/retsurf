@@ -49,6 +49,17 @@ Invalid entries are logged and skipped. An action with nothing bound gets its de
 at startup, so actions added in a later release reach old files; to disable an action, bind
 it to a gesture you never press.
 
+## Start page
+
+| Pad | Mouse | Effect |
+| --- | --- | --- |
+| A on a tile | click | open the bookmark |
+| X on a tile | right-click | the bookmark's options: open, rename, tags, move left / right, remove |
+| L1 / R1 | click a chip | previous / next filter |
+| Y | click the sort chip | next sort |
+
+Move left / right shows only in the manual sort. Tags are typed comma-separated.
+
 ## Game Mode input maps (`input_maps/*.toml`)
 
 An input map is what each button, stick and key sends to the page in Game Mode.

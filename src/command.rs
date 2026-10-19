@@ -86,6 +86,8 @@ pub enum HomeAction {
     SetFilter(String),
     /// Order by the sort `delta` places along, wrapping.
     StepSort(i32),
+    /// Open the options of the tile at this index of the grid.
+    Options(usize),
 }
 
 /// Actions on Quick Access. `Click` carries its target row; the rest act on
@@ -102,6 +104,8 @@ pub enum QuickAccessAction {
     Click(usize),
     /// Left/Right on the focused row: step its value.
     Adjust(i32),
+    /// What the keyboard submitted for the bookmark's options.
+    Text(String),
 }
 
 /// Actions on Game Mode's input-map screens.

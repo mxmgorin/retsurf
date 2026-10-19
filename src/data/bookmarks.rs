@@ -373,6 +373,48 @@ impl Bookmarks {
         }
     }
 
+    /// The index in [`Self::all`] of bookmark `id`.
+    pub fn position(&self, id: &str) -> Option<usize> {
+        self.items.iter().position(|b| b.id == id)
+    }
+
+    /// Rename the bookmark at `index`; empty shows the site. Writes its file.
+    pub fn rename(&mut self, index: usize, name: String) {
+        if let Some(bookmark) = self.items.get_mut(index) {
+            bookmark.name = name;
+            bookmark.save();
+            self.items.sort_by(manual_order);
+        }
+    }
+
+    /// Replace the tags of the bookmark at `index`. Writes its file.
+    pub fn set_tags(&mut self, index: usize, tags: Vec<String>) {
+        if let Some(bookmark) = self.items.get_mut(index) {
+            bookmark.tags = clean_tags(tags);
+            bookmark.save();
+        }
+    }
+
+    /// Swap the manual positions of the bookmarks at `a` and `b`. Writes their
+    /// files, and first gives a position to every bookmark that lacks one.
+    pub fn swap(&mut self, a: usize, b: usize) {
+        if a == b || a >= self.items.len() || b >= self.items.len() {
+            return;
+        }
+        let mut next = self.items.iter().filter_map(|b| b.order).max().unwrap_or(0);
+        for bookmark in self.items.iter_mut().filter(|b| b.order.is_none()) {
+            next += 1;
+            bookmark.order = Some(next);
+            bookmark.save();
+        }
+        let (order_a, order_b) = (self.items[a].order, self.items[b].order);
+        self.items[a].order = order_b;
+        self.items[b].order = order_a;
+        self.items[a].save();
+        self.items[b].save();
+        self.items.sort_by(manual_order);
+    }
+
     /// Stamp `url`'s bookmark as opened now. Writes its file, unless it was
     /// stamped this same second: an open and the visit it lands are one opening.
     pub fn opened(&mut self, url: &str) {
@@ -438,6 +480,11 @@ fn manual_order(a: &Bookmark, b: &Bookmark) -> std::cmp::Ordering {
 /// so an exact match finds a page's bookmark; as given when it does not parse.
 fn normalize(url: &str) -> String {
     url::Url::parse(url).map_or_else(|_| url.to_string(), |parsed| parsed.to_string())
+}
+
+/// Tags typed as one comma-separated line.
+pub fn split_tags(text: &str) -> Vec<String> {
+    clean_tags(text.split(',').map(str::to_string).collect())
 }
 
 fn clean_tags(tags: Vec<String>) -> Vec<String> {
@@ -729,6 +776,12 @@ mod tests {
         assert_eq!(offered.len(), 2);
         assert_eq!(offered[1].label(), "News");
         assert_eq!(split_tags("News, news"), ["News"]);
+    }
+
+    #[test]
+    fn tags_split_on_commas() {
+        assert_eq!(split_tags(" arcade, ,co-op ,arcade"), ["arcade", "co-op"]);
+        assert!(split_tags("  ").is_empty());
     }
 
     #[test]

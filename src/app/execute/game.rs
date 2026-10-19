@@ -168,6 +168,7 @@ impl App {
                 self.ui.quick_access.select(*index);
                 self.quick_access_activate(out);
             }
+            QuickAccessAction::Text(text) => self.options_text(text),
         }
     }
 
@@ -221,6 +222,7 @@ impl App {
                 self.enter_game_mode(out);
             }
             Entry::Exit => self.leave_game_mode(),
+            Entry::Options(row) => self.options_row(row, out),
         }
     }
 

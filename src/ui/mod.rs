@@ -27,6 +27,7 @@ mod toolbar;
 mod update_notice;
 
 pub use self::game_mode::game_mode_hint;
+pub use self::home::bookmark_label;
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
 pub use self::toast::{browser_notice, Notice, TOAST};
@@ -584,7 +585,7 @@ impl AppUi {
     }
 
     /// Indices into the bookmarks of the start page's tiles, in their order.
-    pub(super) fn home_visible(&self) -> Vec<usize> {
+    pub fn home_visible(&self) -> Vec<usize> {
         let sort = self.home_config.bookmarks.sort;
         let all = self.menu.bookmarks.all();
         bookmarks::view(all, &self.home_filter(), sort, home::bookmark_label)
@@ -863,23 +864,27 @@ impl AppUi {
                         face,
                         commands,
                     );
-                } else if self.quick_access.visible {
-                    // Same as the menu's: a focused row would activate twice.
-                    drop_egui_focus(ctx);
-                    quick_access::add_quick_access(ctx, &self.quick_access, commands);
-                } else if self.osk.visible {
-                    // Clear a bottom toolbar so its address bar stays visible
-                    // below the keys.
-                    let bottom_inset = match self.toolbar_position {
-                        ToolbarPosition::Bottom => self.toolbar_height,
-                        ToolbarPosition::Top => 0.0,
-                    };
-                    let drawn =
-                        osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset, commands);
-                    let screen = ctx.content_rect();
-                    self.osk_height = screen.bottom() - drawn.top();
-                    if osk::keep_on_screen(&mut self.osk, drawn, screen) {
-                        self.request_repaint();
+                } else if self.quick_access.visible || self.osk.visible {
+                    if self.quick_access.visible {
+                        // Same as the menu's: a focused row would activate twice.
+                        drop_egui_focus(ctx);
+                        quick_access::add_quick_access(ctx, &self.quick_access, commands);
+                    }
+                    // Over the strip too, which names a bookmark through it.
+                    if self.osk.visible {
+                        // Clear a bottom toolbar so its address bar stays visible
+                        // below the keys.
+                        let bottom_inset = match self.toolbar_position {
+                            ToolbarPosition::Bottom => self.toolbar_height,
+                            ToolbarPosition::Top => 0.0,
+                        };
+                        let drawn =
+                            osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset, commands);
+                        let screen = ctx.content_rect();
+                        self.osk_height = screen.bottom() - drawn.top();
+                        if osk::keep_on_screen(&mut self.osk, drawn, screen) {
+                            self.request_repaint();
+                        }
                     }
                 } else if self.hints.visible {
                     // Rects the page has scrolled out from under are left

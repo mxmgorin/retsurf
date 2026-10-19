@@ -467,8 +467,12 @@ fn add_grid(
         let bookmark = &tiles.bookmarks[tiles.visible[i]];
         let selected = home.tile() == Some(i);
         let icon = tiles.icons.icon(&bookmark.url);
-        if add_tile(ui, bookmark, icon, selected).clicked() {
+        let resp = add_tile(ui, bookmark, icon, selected);
+        if resp.clicked() {
             commands.push(AppCommand::Menu(MenuAction::OpenUrl(bookmark.url.clone())));
+        }
+        if resp.secondary_clicked() {
+            commands.push(AppCommand::Home(HomeAction::Options(i)));
         }
     });
 }
@@ -540,7 +544,7 @@ fn add_tile(
 }
 
 /// What a bookmark is shown as: its name, else its site.
-pub(super) fn bookmark_label(bookmark: &Bookmark) -> String {
+pub fn bookmark_label(bookmark: &Bookmark) -> String {
     match bookmark.name.is_empty() {
         true => brand_label(&bookmark.url),
         false => bookmark.name.clone(),

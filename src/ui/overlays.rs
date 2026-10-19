@@ -84,6 +84,7 @@ enum OskDest {
     Settings,
     Capture,
     GameName,
+    OptionsText,
     LayerName,
     Home,
     AddressBar,
@@ -137,6 +138,8 @@ impl AppUi {
             Focus::GameMapEdit if self.map_edit.picking().is_some() => OskDest::Capture,
             // A map being renamed or copied: the keyboard types its name.
             Focus::GameInputMaps if self.input_maps.naming().is_some() => OskDest::GameName,
+            // A bookmark being renamed or tagged from its options.
+            Focus::QuickAccess if self.quick_access.naming().is_some() => OskDest::OptionsText,
             // A layer being added or renamed in the map editor.
             Focus::GameMapEdit if self.map_edit.naming().is_some() => OskDest::LayerName,
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
@@ -164,6 +167,11 @@ impl AppUi {
             OskDest::GameName => {
                 OskTarget::GameName(self.input_maps.naming_text_mut().expect("naming"))
             }
+            OskDest::OptionsText => OskTarget::OptionsText(
+                self.quick_access
+                    .naming_text_mut()
+                    .expect("OptionsText is routed only while the menu names a bookmark"),
+            ),
             OskDest::LayerName => OskTarget::LayerName(
                 self.map_edit
                     .naming_text_mut()
@@ -248,6 +256,7 @@ impl AppUi {
             OskDest::Settings
             | OskDest::Capture
             | OskDest::GameName
+            | OskDest::OptionsText
             | OskDest::LayerName
             | OskDest::Page => OskField::None,
         }

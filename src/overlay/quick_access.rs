@@ -1,6 +1,7 @@
-//! The two edge strips: Quick Access, the actions at the right edge, and Quick
-//! Menu, the places to go at the left. Each has one table per mode, so what a
-//! game hides from the browser and back is data rather than branches.
+//! The edge strips: Quick Access, the actions at the right edge, Quick Menu,
+//! the places to go at the left, and a bookmark's options at the right. Each has
+//! one table per mode, so what a game hides from the browser and back is data
+//! rather than branches.
 //! Quick rows are [`crate::overlay::settings`] rows flagged `quick`: the same
 //! label, values and config field, stepped live here instead of on close. The
 //! central router ([`crate::app`]) drives it; [`crate::ui`] renders it.
@@ -18,6 +19,8 @@ pub enum Strip {
     QuickAccess,
     /// Places to go, at the left edge.
     QuickMenu,
+    /// One bookmark's actions, at the right edge.
+    Options,
 }
 
 impl Strip {
@@ -25,8 +28,48 @@ impl Strip {
         match self {
             Strip::QuickAccess => "Quick Access",
             Strip::QuickMenu => "Quick Menu",
+            Strip::Options => "Options",
         }
     }
+}
+
+/// A row of a bookmark's options.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OptionsRow {
+    Open,
+    Rename,
+    Tags,
+    /// One place earlier in the manual order.
+    MoveLeft,
+    /// One place later in the manual order.
+    MoveRight,
+    Remove,
+}
+
+/// What the keyboard types for a bookmark's options.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OptionsText {
+    Name,
+    /// Comma-separated.
+    Tags,
+}
+
+impl OptionsText {
+    /// The row that asks for it.
+    pub fn row(self) -> OptionsRow {
+        match self {
+            OptionsText::Name => OptionsRow::Rename,
+            OptionsText::Tags => OptionsRow::Tags,
+        }
+    }
+}
+
+/// The bookmark a [`Strip::Options`] acts on.
+struct OptionsBookmark {
+    id: String,
+    title: String,
+    /// The text being typed, and for what.
+    naming: Option<(OptionsText, String)>,
 }
 
 /// Which tab modes a quick row shows in: the browser's (a page or its reader
@@ -69,6 +112,8 @@ pub enum Entry {
     Exit,
     /// Close retsurf, on a second press (see [`QuickAccess::confirm`]).
     Quit,
+    /// A row of a bookmark's options.
+    Options(OptionsRow),
 }
 
 /// A table row: an entry, a `quick` settings row by its quick label, or the
@@ -112,6 +157,16 @@ const MENU_BROWSER: &[Slot] = &[
 /// Quick Menu over a game: only what leaves the game where it is.
 const MENU_GAME: &[Slot] = &[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)];
 
+/// A bookmark's options; the moves show only where the order is the manual one.
+const OPTIONS: &[Slot] = &[
+    Slot::Row(Entry::Options(OptionsRow::Open)),
+    Slot::Row(Entry::Options(OptionsRow::Rename)),
+    Slot::Row(Entry::Options(OptionsRow::Tags)),
+    Slot::Row(Entry::Options(OptionsRow::MoveLeft)),
+    Slot::Row(Entry::Options(OptionsRow::MoveRight)),
+    Slot::Row(Entry::Options(OptionsRow::Remove)),
+];
+
 impl Entry {
     /// The row's label. No trailing ellipsis: that marks a row which asks for
     /// something before it acts.
@@ -129,6 +184,12 @@ impl Entry {
             Entry::Reload => "Reload",
             Entry::Exit => "Exit game mode",
             Entry::Quit => "Quit retsurf",
+            Entry::Options(OptionsRow::Open) => "Open",
+            Entry::Options(OptionsRow::Rename) => "Rename...",
+            Entry::Options(OptionsRow::Tags) => "Tags...",
+            Entry::Options(OptionsRow::MoveLeft) => "Move left",
+            Entry::Options(OptionsRow::MoveRight) => "Move right",
+            Entry::Options(OptionsRow::Remove) => "Remove",
         }
     }
 
@@ -138,6 +199,7 @@ impl Entry {
         match self {
             Entry::Quit => Some("press again to quit"),
             Entry::Reload => Some("press again to reload"),
+            Entry::Options(OptionsRow::Remove) => Some("press again to remove"),
             _ => None,
         }
     }
@@ -159,6 +221,7 @@ fn entries(strip: Strip, mode: TabMode) -> Vec<Entry> {
         (Strip::QuickAccess, true) => ACCESS_GAME,
         (Strip::QuickMenu, false) => MENU_BROWSER,
         (Strip::QuickMenu, true) => MENU_GAME,
+        (Strip::Options, _) => OPTIONS,
     };
     let quick = |i: usize| {
         let field = &Settings::fields()[i];
@@ -200,6 +263,8 @@ pub struct QuickAccess {
     selected: usize,
     /// A two-press row pressed once; any move disarms it.
     armed: Option<Entry>,
+    /// The bookmark [`Strip::Options`] is open on.
+    bookmark: Option<OptionsBookmark>,
 }
 
 impl QuickAccess {
@@ -212,6 +277,7 @@ impl QuickAccess {
             flags: Vec::new(),
             selected: 0,
             armed: None,
+            bookmark: None,
         }
     }
 
@@ -219,6 +285,7 @@ impl QuickAccess {
     pub fn open(&mut self, strip: Strip, mode: TabMode, config: &AppConfig) {
         self.visible = true;
         self.strip = strip;
+        self.bookmark = None;
         self.rows = entries(strip, mode);
         self.selected = 0;
         self.armed = None;
@@ -256,8 +323,86 @@ impl QuickAccess {
         }
     }
 
+    /// Show the options of bookmark `id`, titled `title`; `manual` offers the
+    /// moves, which mean nothing in another order.
+    pub fn open_options(
+        &mut self,
+        id: String,
+        title: String,
+        manual: bool,
+        mode: TabMode,
+        config: &AppConfig,
+    ) {
+        self.open(Strip::Options, mode, config);
+        if !manual {
+            self.rows.retain(|row| {
+                !matches!(
+                    row,
+                    Entry::Options(OptionsRow::MoveLeft | OptionsRow::MoveRight)
+                )
+            });
+            self.values.truncate(self.rows.len());
+            self.flags.truncate(self.rows.len());
+        }
+        self.bookmark = Some(OptionsBookmark {
+            id,
+            title,
+            naming: None,
+        });
+    }
+
+    /// The bookmark the options are open on.
+    pub fn bookmark_id(&self) -> Option<&str> {
+        self.bookmark.as_ref().map(|b| b.id.as_str())
+    }
+
+    /// Retitle the bookmark's options.
+    pub fn set_title(&mut self, title: String) {
+        if let Some(bookmark) = &mut self.bookmark {
+            bookmark.title = title;
+        }
+    }
+
+    /// What the strip's header reads.
+    pub fn title(&self) -> &str {
+        match &self.bookmark {
+            Some(bookmark) => &bookmark.title,
+            None => self.strip.name(),
+        }
+    }
+
+    /// Hand the keyboard `text` to edit as `what`.
+    pub fn start_naming(&mut self, what: OptionsText, text: String) {
+        if let Some(bookmark) = &mut self.bookmark {
+            bookmark.naming = Some((what, text));
+        }
+    }
+
+    /// What the keyboard is typing for, while it is.
+    pub fn naming(&self) -> Option<OptionsText> {
+        self.bookmark
+            .as_ref()?
+            .naming
+            .as_ref()
+            .map(|(what, _)| *what)
+    }
+
+    pub fn naming_text_mut(&mut self) -> Option<&mut String> {
+        self.bookmark
+            .as_mut()?
+            .naming
+            .as_mut()
+            .map(|(_, text)| text)
+    }
+
+    /// End the typing, with what it was for.
+    pub fn take_naming(&mut self) -> Option<OptionsText> {
+        self.bookmark.as_mut()?.naming.take().map(|(what, _)| what)
+    }
+
     pub fn close(&mut self) {
         self.visible = false;
+        self.bookmark = None;
     }
 
     pub fn strip(&self) -> Strip {
@@ -303,7 +448,17 @@ impl QuickAccess {
         }) {
             return hint;
         }
+        if let Some(typed) = self.typed(index) {
+            return typed;
+        }
         self.values.get(index).map_or("", String::as_str)
+    }
+
+    /// What the keyboard is typing, when it types for the row at `index`.
+    fn typed(&self, index: usize) -> Option<&str> {
+        let (what, text) = self.bookmark.as_ref()?.naming.as_ref()?;
+        let row = Entry::Options(what.row());
+        (self.rows.get(index) == Some(&row)).then_some(text.as_str())
     }
 
     /// The row's on/off state, or `None` for a row with a text value.
@@ -313,6 +468,11 @@ impl QuickAccess {
 
     pub fn row(&self) -> Entry {
         self.rows[self.selected]
+    }
+
+    #[cfg(test)]
+    fn value_count(&self) -> usize {
+        self.values.len().min(self.flags.len())
     }
 }
 
@@ -376,6 +536,8 @@ mod tests {
         assert!(!browser.iter().any(door));
         let menu = entries(Strip::QuickMenu, TabMode::Page);
         assert!(menu.iter().all(door));
+        let bookmark = entries(Strip::Options, TabMode::Page);
+        assert!(bookmark.iter().all(|row| matches!(row, Entry::Options(_))));
         assert_eq!(
             entries(Strip::QuickMenu, TabMode::Game),
             [Entry::Settings, Entry::Quit]
@@ -403,6 +565,21 @@ mod tests {
         let panel = open(TabMode::Reader);
         assert_eq!(reader_row(&panel), ("Reader view", Some(true)));
         assert_eq!(panel.rows(), open(TabMode::Page).rows());
+    }
+
+    #[test]
+    fn the_options_move_only_in_the_manual_order() {
+        let mut panel = QuickAccess::new();
+        let config = AppConfig::default();
+        let moves =
+            |panel: &QuickAccess| panel.rows().contains(&Entry::Options(OptionsRow::MoveLeft));
+        panel.open_options("a".into(), "A".into(), true, TabMode::Page, &config);
+        assert!(moves(&panel) && panel.title() == "A");
+        panel.open_options("a".into(), "A".into(), false, TabMode::Page, &config);
+        assert!(!moves(&panel));
+        assert_eq!(panel.rows().len(), panel.value_count());
+        panel.close();
+        assert_eq!(panel.bookmark_id(), None);
     }
 
     #[test]

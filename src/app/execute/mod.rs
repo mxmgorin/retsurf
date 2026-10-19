@@ -4,6 +4,7 @@
 //! to (menu / settings / start page / bookmarks) live here too. Input intents are
 //! mapped earlier, in [`super::router`].
 
+mod bookmarks;
 mod game;
 
 use super::{
@@ -482,18 +483,23 @@ impl App {
         }
     }
 
-    /// Change the start page's filter or sort, and save it.
+    /// Change the start page's filter or sort and save it, or open a tile's options.
     pub(super) fn home_action(&mut self, action: &HomeAction) {
-        let view = &mut self.config.home.bookmarks;
         match action {
+            HomeAction::Options(tile) => {
+                self.open_options(*tile);
+                return;
+            }
             HomeAction::StepFilter(delta) => {
                 let offered = self.ui.home_filters();
-                let current = Filter::parse(&view.filter);
+                let current = Filter::parse(&self.config.home.bookmarks.filter);
                 let at = offered.iter().position(|f| *f == current).unwrap_or(0);
-                view.filter = offered[crate::list::wrap(at, *delta, offered.len())].token();
+                let next = offered[crate::list::wrap(at, *delta, offered.len())].token();
+                self.config.home.bookmarks.filter = next;
             }
-            HomeAction::SetFilter(token) => view.filter = token.clone(),
+            HomeAction::SetFilter(token) => self.config.home.bookmarks.filter = token.clone(),
             HomeAction::StepSort(delta) => {
+                let view = &mut self.config.home.bookmarks;
                 let sorts = HomeSort::CHOICES;
                 let at = sorts
                     .iter()

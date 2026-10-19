@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Start page filter chips (sites, apps, games, tags) on L1 / R1 and a sort on Y: manual, recent or name
 - Start page without the search field (`[home] search = false`)
+- Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
 
 ### Changed
 
