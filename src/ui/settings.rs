@@ -429,6 +429,7 @@ pub(super) fn add_settings(
     update: &UpdateState,
     input_map_name: &str,
     face: FaceLabels,
+    button_hints: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -468,7 +469,10 @@ pub(super) fn add_settings(
                 (&[], "* needs restart"),
             ]
         };
-        keys::hint_row(ui, &hints);
+        // Capture's line says what to do, not which button does it.
+        if button_hints || settings.capturing() {
+            keys::hint_row(ui, &hints);
+        }
         if let Some(note) = settings.controls_note() {
             ui.label(egui::RichText::new(note).color(WARN));
         }

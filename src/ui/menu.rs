@@ -207,6 +207,7 @@ pub(super) fn add_menu(
     tabs: &[TabInfo],
     icons: &PageIcons,
     face: FaceLabels,
+    button_hints: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -244,7 +245,9 @@ pub(super) fn add_menu(
         ];
         hints.extend(y_action.map(|action| (&y[..], action)));
         hints.push((&b, "back"));
-        keys::hint_row(ui, &hints);
+        if button_hints {
+            keys::hint_row(ui, &hints);
+        }
         ui.add_space(8.0);
 
         match menu.section() {

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings), or in reader view; Quick Access gets Exit while one runs
 - Bookmark row in Game Mode's Quick Access
 - `retsurf --open ID` opens a bookmark as it asks
+- Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
 
 ### Changed
 

@@ -463,6 +463,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
     f(S::Interface, "Interface",  "Auto-hide toolbar",      flag!(interface.toolbar_autohide), false),
     f(S::Interface, "Interface",  "Page icons",             flag!(interface.page_icons), false),
+    f(S::Interface, "Interface",  "Button hints",           flag!(interface.button_hints), false),
     f(S::Interface, "Interface",  "Cursor linger (ms)",     int!(interface.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
 
     f(S::Interface, "Home",       "Home page",              text!(home.page), false),

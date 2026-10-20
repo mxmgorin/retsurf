@@ -22,6 +22,9 @@ pub struct InterfaceConfig {
     /// Show site icons on tabs, bookmarks, history and the start page. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
+    /// Name what the buttons do at the foot of the menus, the settings and the
+    /// start page, and the shoulders beside its filter tabs.
+    pub button_hints: bool,
 }
 
 impl Default for InterfaceConfig {
@@ -32,6 +35,7 @@ impl Default for InterfaceConfig {
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
             page_icons: true,
+            button_hints: true,
         }
     }
 }

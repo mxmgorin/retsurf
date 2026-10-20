@@ -61,6 +61,8 @@ pub(super) struct HomeView<'a> {
 pub(super) struct Tabs<'a> {
     pub filters: &'a [Filter],
     pub filter: Filter,
+    /// Whether the shoulders that step them are named either side.
+    pub shoulders: bool,
 }
 
 /// One footer hint: the buttons that do it, what it does, and what a click on
@@ -594,10 +596,18 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
         .map(|f| tab_text_width(ui, &f.label()) + pad + TAB_GAP)
         .sum::<f32>()
         - TAB_GAP;
-    let caps_w: f32 = SHOULDERS
-        .iter()
-        .map(|s| cap_size(ui, s, HINT_FONT).x + TAB_GAP)
-        .sum();
+    let caps_w: f32 = match tabs.shoulders {
+        true => SHOULDERS
+            .iter()
+            .map(|s| cap_size(ui, s, HINT_FONT).x + TAB_GAP)
+            .sum(),
+        false => 0.0,
+    };
+    let shoulder = |ui: &mut egui::Ui, at: usize| {
+        if tabs.shoulders {
+            key_cap(ui, SHOULDERS[at], HINT_FONT);
+        }
+    };
     let room = ui.available_width();
     let shown = egui::Id::new("home_tabs_active");
     let token = tabs.filter.token();
@@ -616,11 +626,11 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
     };
     if tabs_w + caps_w <= room {
         ui.add_space((room - tabs_w - caps_w) / 2.0);
-        key_cap(ui, SHOULDERS[0], HINT_FONT);
+        shoulder(ui, 0);
         add(ui, commands);
-        key_cap(ui, SHOULDERS[1], HINT_FONT);
+        shoulder(ui, 1);
     } else {
-        key_cap(ui, SHOULDERS[0], HINT_FONT);
+        shoulder(ui, 0);
         egui::ScrollArea::horizontal()
             .id_salt("home_tabs")
             .max_width(room - caps_w)
@@ -631,7 +641,7 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
                     add(ui, commands);
                 });
             });
-        key_cap(ui, SHOULDERS[1], HINT_FONT);
+        shoulder(ui, 1);
     }
     if moved {
         ui.ctx().data_mut(|d| d.insert_temp(shown, token));

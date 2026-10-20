@@ -321,6 +321,8 @@ pub struct AppUi {
     edge_scroll: (i8, i8),
     /// Whether hint mode draws combo badges; off = plain spatial hops.
     hint_badges: bool,
+    /// `[interface] button_hints`: what the buttons do, named under the menus.
+    button_hints: bool,
     /// Which letters and colours the face buttons wear on screen.
     pad_layout: PadLayout,
     /// Whether the last input came from the keyboard; picks the badge alphabet.
@@ -404,6 +406,7 @@ impl AppUi {
             scroll_mode: false,
             edge_scroll: (0, 0),
             hint_badges: controls.hint_badges,
+            button_hints: interface.button_hints,
             pad_layout: controls.pad_layout,
             last_input_keyboard: false,
             memory_overlay: debug.memory_overlay,
@@ -648,6 +651,11 @@ impl AppUi {
         bookmarks::view(all, &self.home_filter(), sort, home::bookmark_label)
     }
 
+    /// `[interface] button_hints`, applied live.
+    pub fn set_button_hints(&mut self, on: bool) {
+        self.button_hints = on;
+    }
+
     /// `[interface] page_icons`, applied live; off frees every icon texture.
     pub fn set_page_icons(&mut self, on: bool) {
         self.page_icons.set_enabled(on);
@@ -817,7 +825,10 @@ impl AppUi {
                 if self.home_active {
                     let visible = self.home_visible();
                     let filters = self.home_filters();
-                    let footer = self.home_footer(&visible, face);
+                    let footer = match self.button_hints {
+                        true => self.home_footer(&visible, face),
+                        false => Vec::new(),
+                    };
                     let filter = self.home_filter();
                     let mark = match self.home_config.brand {
                         Brand::Banner => self
@@ -830,6 +841,7 @@ impl AppUi {
                     let tabs = home::Tabs {
                         filters: &filters,
                         filter,
+                        shoulders: self.button_hints,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
@@ -865,6 +877,7 @@ impl AppUi {
                         &update,
                         &self.input_map_name,
                         face,
+                        self.button_hints,
                         commands,
                     );
                 }
@@ -920,6 +933,7 @@ impl AppUi {
                         &tab_infos,
                         &self.page_icons,
                         face,
+                        self.button_hints,
                         commands,
                     );
                 } else if self.quick_access.visible || self.osk.visible {

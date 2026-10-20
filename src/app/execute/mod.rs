@@ -462,6 +462,7 @@ impl App {
             .set_toolbar_autohide(self.config.interface.toolbar_autohide);
         self.ui.set_hint_badges(self.config.controls.hint_badges);
         self.ui.set_page_icons(self.config.interface.page_icons);
+        self.ui.set_button_hints(self.config.interface.button_hints);
         self.ui.set_home(&self.config.home);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.controls.pad_layout);
