@@ -1,11 +1,11 @@
 //! Rendering of the built-in start page overlay (state lives in
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
-//! none), a bar holding the search / URL field, a tab bar of filters, a grid
-//! of the bookmarks and a footer naming what the buttons do.
-//! Navigation is routed by [`crate::app`]; tiles open via [`HomeAction::Open`].
+//! none), a bar holding the search / URL field, a tab bar of filters and a grid
+//! of the bookmarks, scrolling as one stack over a footer naming what the
+//! buttons do. Navigation is routed by [`crate::app`]; tiles open via
+//! [`HomeAction::Open`].
 
 use super::favicon::{Icon, PageIcons};
-use super::panel::ROW_RADIUS;
 use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM};
 use super::OskCaret;
 use crate::command::{AppCommand, HomeAction, QuickAccessAction};
@@ -61,16 +61,13 @@ pub(super) struct HomeView<'a> {
 pub(super) struct Tabs<'a> {
     pub filters: &'a [Filter],
     pub filter: Filter,
-    /// Whether the shoulders that step them are named either side.
-    pub shoulders: bool,
+    pub sort: HomeSort,
 }
 
-/// One footer hint: the buttons that do it, what it does, and what a click on
-/// it does.
+/// One footer hint: the buttons that do it, then what it does.
 pub(super) struct FooterHint {
-    pub caps: Vec<String>,
-    pub label: String,
-    pub click: Option<HomeAction>,
+    pub caps: Vec<&'static str>,
+    pub label: &'static str,
 }
 
 /// The banner rasterized for the current pixel density. It is drawn at one
@@ -146,8 +143,11 @@ const WAVE_AMP: f32 = WORDMARK_SIZE * 0.08; // crest height
 const WAVE_STROKE: f32 = WORDMARK_SIZE * 0.045;
 const WAVE_BAND: f32 = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
 
-/// Clearance between the page's foot and the scrolling grid.
+/// Clearance between the page's foot and the scrolling stack.
 const FOOT: f32 = 12.0;
+/// The band over a scroll viewport's edge that dissolves into the page while
+/// more waits beyond it.
+const FADE: f32 = 24.0;
 
 /// Draw the start-page overlay over the (blank) web view, confined to the
 /// `webview` rect so the toolbar stays usable. Any activation is pushed as a
@@ -188,9 +188,9 @@ pub(super) fn add_home(
                     const FIELD_ANCHOR: f32 = 0.3; // field top, share of the height
                     const GAP_TOP_RATIO: f32 = 0.6; // mark to field, of the mark's own height
 
-                    // The grid scrolls in what is left, so a long one can't hide
+                    // The stack scrolls over the footer, so a long grid can't hide
                     // rows off the page.
-                    // Last frame's height: the footer is laid out after the grid.
+                    // Last frame's height: the footer is laid out after the stack.
                     let footer_id = egui::Id::new("home_footer_h");
                     let footer_h = match view.footer.is_empty() {
                         true => 0.0,
@@ -219,38 +219,48 @@ pub(super) fn add_home(
                         }
                     };
 
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(top);
-                        match view.mark {
-                            Mark::Banner(t) => {
-                                ui.add(egui::Image::new(t).fit_to_exact_size(banner_size(t)));
-                            }
-                            Mark::Wordmark => add_wordmark(ui),
-                            Mark::None => {}
-                        }
-                        ui.add_space(gap_top);
-                        let buttons = view.strip_buttons;
-                        if view.search {
-                            add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
-                            ui.add_space(ROW_GAP);
-                        }
-                        let tab_buttons = buttons && !view.search;
-                        if view.tabs.filters.len() > 1 || tab_buttons {
-                            add_tabs(ui, &view.tabs, block_w, tab_buttons, commands);
-                            ui.add_space(ROW_GAP);
-                        }
-                        let rest = (floor - ui.cursor().top()).max(TILE_H);
-                        // The viewport spans the page and the grid centers inside
-                        // it; shrunk to fit, the scrollbar would push it off-center.
-                        egui::ScrollArea::vertical()
-                            .max_height(rest)
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                ui.vertical_centered(|ui| {
-                                    add_grid(ui, home, view.tiles, block_w, cols, commands);
-                                });
+                    // One fade, ours below: egui's own is half-strength.
+                    ui.spacing_mut().scroll.fade.strength = 0.0;
+                    // The viewport spans the page and the stack centers inside
+                    // it; shrunk to fit, the scrollbar would push it off-center.
+                    let drawn = scroll_offset(ui, STACK_SALT);
+                    let stack = egui::ScrollArea::vertical()
+                        .id_salt(STACK_SALT)
+                        .max_height(floor - area.top())
+                        .auto_shrink([false, false])
+                        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                        .show(ui, |ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(top);
+                                match view.mark {
+                                    Mark::Banner(t) => {
+                                        let image = egui::Image::new(t);
+                                        ui.add(image.fit_to_exact_size(banner_size(t)));
+                                    }
+                                    Mark::Wordmark => add_wordmark(ui),
+                                    Mark::None => {}
+                                }
+                                ui.add_space(gap_top);
+                                let buttons = view.strip_buttons;
+                                if view.search {
+                                    add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
+                                    ui.add_space(ROW_GAP);
+                                }
+                                let tab_buttons = buttons && !view.search;
+                                add_tabs(ui, &view.tabs, block_w, tab_buttons, commands);
+                                ui.add_space(ROW_GAP);
+                                add_grid(ui, home, view.tiles, block_w, cols, commands);
                             });
-                    });
+                        });
+                    settle(ui, drawn, &stack);
+                    if scrolls_on(&stack, egui::Direction::TopDown) {
+                        let foot = stack.inner_rect.bottom();
+                        let band = egui::Rect::from_min_max(
+                            egui::pos2(stack.inner_rect.left(), foot - FADE),
+                            egui::pos2(stack.inner_rect.right(), foot),
+                        );
+                        fade(ui.painter(), band, egui::Direction::TopDown);
+                    }
                     if !view.footer.is_empty() {
                         let left = area.center().x - block_w / 2.0;
                         let top = area.bottom() - FOOT - footer_h;
@@ -258,7 +268,7 @@ pub(super) fn add_home(
                             egui::pos2(left, top),
                             egui::pos2(left + block_w, area.bottom()),
                         );
-                        let h = add_footer(ui, row, view.footer, commands);
+                        let h = add_footer(ui, row, view.footer);
                         if (h - footer_h).abs() > FOOTER_SETTLE {
                             ui.ctx().data_mut(|d| d.insert_temp(footer_id, h));
                             ui.ctx().request_repaint();
@@ -294,44 +304,100 @@ const DIVIDER_H: f32 = 22.0;
 const FIELD_FONT: f32 = 20.0;
 /// The magnifier's size, as a share of the field's type.
 const GLASS_SHARE: f32 = 0.8;
-/// A tab's height.
-const TAB_H: f32 = 28.0;
+/// A tab's height, its underline included.
+const TAB_H: f32 = 30.0;
+/// The active tab's underline.
+const UNDERLINE_W: f32 = 3.0;
 /// Space between tabs.
 const TAB_GAP: f32 = 6.0;
 
 /// The footer in `row`: a rule, then its hints centred; returns its height.
-fn add_footer(
-    ui: &mut egui::Ui,
-    row: egui::Rect,
-    footer: &[FooterHint],
-    commands: &mut Vec<AppCommand>,
-) -> f32 {
+fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 {
     ui.painter()
         .hline(row.x_range(), row.top(), egui::Stroke::new(LINE_W, BORDER));
-    let keys: Vec<Vec<&str>> = footer
+    let hints: Vec<super::keys::Hint> = footer
         .iter()
-        .map(|hint| hint.caps.iter().map(String::as_str).collect())
-        .collect();
-    let hints: Vec<super::keys::Hint> = keys
-        .iter()
-        .zip(footer)
-        .map(|(caps, hint)| (caps.as_slice(), hint.label.as_str()))
+        .map(|hint| (hint.caps.as_slice(), hint.label))
         .collect();
     let width = row.width();
     let inner = egui::Rect::from_min_max(row.min + egui::vec2(0.0, FOOTER_RULE_GAP), row.max);
-    let (responses, h) = ui
+    let h = ui
         .scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
             super::keys::centered_hints(ui, &hints, width)
         })
         .inner;
-    for (resp, hint) in responses.iter().zip(footer) {
-        if let Some(action) = &hint.click {
-            if resp.clicked() {
-                commands.push(AppCommand::Home(action.clone()));
-            }
-        }
-    }
     h + FOOTER_RULE_GAP
+}
+
+/// The scroll areas' ids: the stack, and the tabs row when it overflows.
+const STACK_SALT: &str = "home_stack";
+const TABS_SALT: &str = "home_tabs";
+
+/// The offset the scroll area salted `salt` under `ui` was last drawn at.
+fn scroll_offset(ui: &egui::Ui, salt: &str) -> Option<egui::Vec2> {
+    let id = ui.make_persistent_id(salt);
+    egui::scroll_area::State::load(ui.ctx(), id).map(|state| state.offset)
+}
+
+/// Repaint when `scroll` ended at another offset than `drawn`: egui clamps
+/// after shrunken content, or reaches a target, only once the frame is built.
+fn settle<R>(
+    ui: &egui::Ui,
+    drawn: Option<egui::Vec2>,
+    scroll: &egui::scroll_area::ScrollAreaOutput<R>,
+) {
+    if drawn != Some(scroll.state.offset) {
+        ui.ctx().request_repaint();
+    }
+}
+
+/// Whether `scroll` holds content past its viewport's edge in `dir`: the far
+/// edge of a top-down or left-to-right scroll, the near edge of the reverse.
+fn scrolls_on<R>(scroll: &egui::scroll_area::ScrollAreaOutput<R>, dir: egui::Direction) -> bool {
+    let (offset, span, content) = match dir {
+        egui::Direction::TopDown | egui::Direction::BottomUp => (
+            scroll.state.offset.y,
+            scroll.inner_rect.height(),
+            scroll.content_size.y,
+        ),
+        egui::Direction::LeftToRight | egui::Direction::RightToLeft => (
+            scroll.state.offset.x,
+            scroll.inner_rect.width(),
+            scroll.content_size.x,
+        ),
+    };
+    match dir {
+        egui::Direction::TopDown | egui::Direction::LeftToRight => {
+            offset + span < content - FOOTER_SETTLE
+        }
+        egui::Direction::BottomUp | egui::Direction::RightToLeft => offset > FOOTER_SETTLE,
+    }
+}
+
+/// Dissolve `band` into the page along `dir`: clear where it starts, solid
+/// where it ends, so clipped content fades instead of being cut.
+fn fade(painter: &egui::Painter, band: egui::Rect, dir: egui::Direction) {
+    let clear = egui::Color32::TRANSPARENT;
+    // Corners in mesh order: left-top, right-top, right-bottom, left-bottom.
+    let colors = match dir {
+        egui::Direction::TopDown => [clear, clear, BG, BG],
+        egui::Direction::BottomUp => [BG, BG, clear, clear],
+        egui::Direction::LeftToRight => [clear, BG, BG, clear],
+        egui::Direction::RightToLeft => [BG, clear, clear, BG],
+    };
+    let corners = [
+        band.left_top(),
+        band.right_top(),
+        band.right_bottom(),
+        band.left_bottom(),
+    ];
+    let mut mesh = egui::Mesh::default();
+    for (pos, color) in corners.into_iter().zip(colors) {
+        mesh.colored_vertex(pos, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 /// The search bar: the field, between the toolbar's strip buttons when
@@ -355,7 +421,7 @@ fn add_search_bar(
             if selected { ACCENT } else { BORDER },
         ));
     let inner_w = width - 2.0 * (BAR_MARGIN_X as f32 + BAR_STROKE);
-    frame.show(ui, |ui| {
+    let bar = frame.show(ui, |ui| {
         ui.set_width(inner_w);
         ui.set_height(BAR_H);
         ui.horizontal_centered(|ui| {
@@ -379,6 +445,7 @@ fn add_search_bar(
             }
         });
     });
+    keep_visible(ui, bar.response.id, bar.response.rect, selected);
 }
 
 /// A thin upright rule between the bar's parts.
@@ -550,7 +617,7 @@ const MARK_RADIUS: f32 = 10.0;
 /// How far the badge's center sits inside the glyph square's corner.
 const MARK_INSET: f32 = 4.0;
 
-/// The tab bar: the filter tabs between the shoulders that step them; with
+/// The tab bar: the filter tabs at the left, the sort at the right; with
 /// `buttons`, the strip buttons at either end.
 fn add_tabs(
     ui: &mut egui::Ui,
@@ -559,13 +626,18 @@ fn add_tabs(
     buttons: bool,
     commands: &mut Vec<AppCommand>,
 ) {
-    ui.allocate_ui_with_layout(
+    // Painted under the tabs once the row's place is known.
+    let rule = ui.painter().add(egui::Shape::Noop);
+    let row = ui.allocate_ui_with_layout(
         egui::vec2(width, TAB_H),
         egui::Layout::right_to_left(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = TAB_GAP;
             if buttons {
                 strip_button(ui, Strip::QuickAccess, commands);
+            }
+            if sort_button(ui, tabs.sort).clicked() {
+                commands.push(AppCommand::Home(HomeAction::StepSort(1)));
             }
             ui.allocate_ui_with_layout(
                 egui::vec2(ui.available_width(), TAB_H),
@@ -582,40 +654,58 @@ fn add_tabs(
             );
         },
     );
+    let rect = row.response.rect;
+    let y = rect.bottom() - LINE_W / 2.0;
+    let stroke = egui::Stroke::new(LINE_W, BORDER);
+    ui.painter()
+        .set(rule, egui::Shape::hline(rect.x_range(), y, stroke));
 }
 
-/// The shoulders and the filter tabs between them, in what is left of the row:
-/// centred when they fit, else the tabs scrolled to keep the active one in
-/// view when it changes.
-fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand>) {
-    use super::keys::{cap_size, key_cap, HINT_FONT, SHOULDERS};
+/// The sort as it stands, muted unless hovered.
+fn sort_button(ui: &mut egui::Ui, sort: HomeSort) -> egui::Response {
+    let text = format!("{}  {}", bold::SORT_ASCENDING, sort_label(sort));
     let pad = 2.0 * ui.spacing().button_padding.x;
-    let tabs_w: f32 = tabs
-        .filters
+    let size = egui::vec2(tab_text_width(ui, &text) + pad, TAB_H);
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let color = if resp.hovered() { INK } else { MUTED };
+    let center = egui::pos2(rect.center().x, rect.center().y - UNDERLINE_W / 2.0);
+    let font = egui::FontId::proportional(ROW_FONT);
+    ui.painter()
+        .text(center, egui::Align2::CENTER_CENTER, text, font, color);
+    resp
+}
+
+/// The filter tabs in what is left of the row, a rule parting the kinds from
+/// the tags: centred when they fit, else scrolled to keep the active one in
+/// view when it changes, the clipped end fading out.
+fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand>) {
+    let pad = 2.0 * ui.spacing().button_padding.x;
+    let labels: Vec<String> = tabs.filters.iter().map(Filter::label).collect();
+    let parted = |at: usize| {
+        at > 0
+            && matches!(tabs.filters[at], Filter::Tag(_))
+            && !matches!(tabs.filters[at - 1], Filter::Tag(_))
+    };
+    let tabs_w: f32 = labels
         .iter()
-        .map(|f| tab_text_width(ui, &f.label()) + pad + TAB_GAP)
+        .enumerate()
+        .map(|(at, label)| {
+            let rule = if parted(at) { LINE_W + TAB_GAP } else { 0.0 };
+            tab_text_width(ui, label) + pad + TAB_GAP + rule
+        })
         .sum::<f32>()
         - TAB_GAP;
-    let caps_w: f32 = match tabs.shoulders {
-        true => SHOULDERS
-            .iter()
-            .map(|s| cap_size(ui, s, HINT_FONT).x + TAB_GAP)
-            .sum(),
-        false => 0.0,
-    };
-    let shoulder = |ui: &mut egui::Ui, at: usize| {
-        if tabs.shoulders {
-            key_cap(ui, SHOULDERS[at], HINT_FONT);
-        }
-    };
     let room = ui.available_width();
     let shown = egui::Id::new("home_tabs_active");
     let token = tabs.filter.token();
     let moved = ui.ctx().data(|d| d.get_temp::<String>(shown)) != Some(token.clone());
     let add = |ui: &mut egui::Ui, commands: &mut Vec<AppCommand>| {
-        for filter in tabs.filters {
+        for (at, (filter, label)) in tabs.filters.iter().zip(&labels).enumerate() {
+            if parted(at) {
+                divider(ui);
+            }
             let active = *filter == tabs.filter;
-            let resp = tab(ui, &filter.label(), active);
+            let resp = tab(ui, label, active);
             if active && moved {
                 resp.scroll_to_me(None);
             }
@@ -624,16 +714,14 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
             }
         }
     };
-    if tabs_w + caps_w <= room {
-        ui.add_space((room - tabs_w - caps_w) / 2.0);
-        shoulder(ui, 0);
+    if tabs_w <= room {
+        ui.add_space((room - tabs_w) / 2.0);
         add(ui, commands);
-        shoulder(ui, 1);
     } else {
-        shoulder(ui, 0);
-        egui::ScrollArea::horizontal()
-            .id_salt("home_tabs")
-            .max_width(room - caps_w)
+        let drawn = scroll_offset(ui, TABS_SALT);
+        let scroll = egui::ScrollArea::horizontal()
+            .id_salt(TABS_SALT)
+            .max_width(room)
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -641,7 +729,19 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
                     add(ui, commands);
                 });
             });
-        shoulder(ui, 1);
+        settle(ui, drawn, &scroll);
+        // Above the rule, which runs whole.
+        let view = scroll
+            .inner_rect
+            .with_max_y(scroll.inner_rect.bottom() - LINE_W);
+        if scrolls_on(&scroll, egui::Direction::RightToLeft) {
+            let band = view.with_max_x(view.left() + FADE);
+            fade(ui.painter(), band, egui::Direction::RightToLeft);
+        }
+        if scrolls_on(&scroll, egui::Direction::LeftToRight) {
+            let band = view.with_min_x(view.right() - FADE);
+            fade(ui.painter(), band, egui::Direction::LeftToRight);
+        }
     }
     if moved {
         ui.ctx().data_mut(|d| d.insert_temp(shown, token));
@@ -656,16 +756,27 @@ pub(super) fn sort_label(sort: HomeSort) -> &'static str {
         .map_or("", |(label, _)| label)
 }
 
-/// One tab: white type, the active one filled.
+/// One tab: its name, muted unless active or hovered, the active one
+/// underlined in the accent along the tab bar's rule.
 fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
-    let text = egui::RichText::new(text)
-        .color(egui::Color32::WHITE)
-        .size(ROW_FONT);
-    ui.add(
-        egui::Button::selectable(on, text)
-            .corner_radius(ROW_RADIUS)
-            .min_size(egui::vec2(0.0, TAB_H)),
-    )
+    let pad = 2.0 * ui.spacing().button_padding.x;
+    let size = egui::vec2(tab_text_width(ui, text) + pad, TAB_H);
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let color = match (on, resp.hovered()) {
+        (true, _) => egui::Color32::WHITE,
+        (false, true) => INK,
+        (false, false) => MUTED,
+    };
+    let center = egui::pos2(rect.center().x, rect.center().y - UNDERLINE_W / 2.0);
+    let font = egui::FontId::proportional(ROW_FONT);
+    ui.painter()
+        .text(center, egui::Align2::CENTER_CENTER, text, font, color);
+    if on {
+        let y = rect.bottom() - UNDERLINE_W / 2.0;
+        let stroke = egui::Stroke::new(UNDERLINE_W, ACCENT);
+        ui.painter().hline(rect.x_range(), y, stroke);
+    }
+    resp
 }
 
 fn tab_text_width(ui: &egui::Ui, text: &str) -> f32 {
@@ -763,7 +874,7 @@ fn add_tile(
     selected: bool,
 ) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE_W, TILE_H), egui::Sense::click());
-    keep_visible(ui, &resp, rect, selected);
+    keep_visible(ui, resp.id, rect, selected);
     let label = bookmark_label(bookmark);
     let active = selected || resp.hovered();
     let glyph = paint_tile(ui.painter(), rect, &label, icon, active);
@@ -781,15 +892,15 @@ pub fn bookmark_label(bookmark: &Bookmark) -> String {
     }
 }
 
-/// Scroll a selected tile into view on the frame the selection reaches it. Going
-/// by visibility alone would fight a manual scroll, re-centring every frame.
+/// Scroll the selected item (`id` at `rect`) into view on the frame the
+/// selection reaches it: going by visibility alone would fight a manual scroll.
 /// No-op outside a scroll area, where the clip rect is the whole page.
-fn keep_visible(ui: &egui::Ui, resp: &egui::Response, rect: egui::Rect, selected: bool) {
-    let key = egui::Id::new(("dial_tile", resp.layer_id));
-    if !selected || ui.ctx().data(|d| d.get_temp::<egui::Id>(key)) == Some(resp.id) {
+fn keep_visible(ui: &egui::Ui, id: egui::Id, rect: egui::Rect, selected: bool) {
+    let key = egui::Id::new(("home_selected", ui.layer_id()));
+    if !selected || ui.ctx().data(|d| d.get_temp::<egui::Id>(key)) == Some(id) {
         return;
     }
-    ui.ctx().data_mut(|d| d.insert_temp(key, resp.id));
+    ui.ctx().data_mut(|d| d.insert_temp(key, id));
     if !ui.clip_rect().contains_rect(rect) {
         ui.scroll_to_rect(rect, None);
     }

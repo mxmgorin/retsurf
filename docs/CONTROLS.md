@@ -56,7 +56,7 @@ it to a gesture you never press.
 | A on a tile | click | open the bookmark |
 | X on a tile | right-click | the bookmark's options: open, launch as, reader view, rename, tags, move left / right, remove |
 | L1 / R1 | click a tab | previous / next filter |
-| Y | click Sort in the footer | next sort |
+| Y | click the sort beside the tabs | next sort |
 
 Move left / right shows only in the manual sort. Tags are typed comma-separated. Without the
 toolbar (`[home] toolbar = false`) the ends of the search bar (of the filter tabs, with no

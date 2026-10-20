@@ -26,8 +26,8 @@ const CAP_FILL: egui::Color32 = egui::Color32::from_gray(0x5c);
 pub(super) const SHOULDERS: [&str; 2] = ["L1", "R1"];
 
 /// One button or key as a badge, its label at `size`.
-pub(super) fn key_cap(ui: &mut egui::Ui, key: &str, size: f32) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(cap_size(ui, key, size), egui::Sense::hover());
+pub(super) fn key_cap(ui: &mut egui::Ui, key: &str, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(cap_size(ui, key, size), egui::Sense::hover());
     let painter = ui.painter();
     let radius = rect.height() / 2.0;
     match is_round(key) {
@@ -41,7 +41,6 @@ pub(super) fn key_cap(ui: &mut egui::Ui, key: &str, size: f32) -> egui::Response
         egui::FontId::proportional(size * CAP_FONT),
         BG,
     );
-    resp
 }
 
 /// A one-glyph label gets a circle.
@@ -85,12 +84,8 @@ pub(super) fn hint_row(ui: &mut egui::Ui, hints: &[Hint]) {
 }
 
 /// `hints` in lines centred across `width`, broken between hints and never
-/// inside one. Returns each hint's clickable response, then the height taken.
-pub(super) fn centered_hints(
-    ui: &mut egui::Ui,
-    hints: &[Hint],
-    width: f32,
-) -> (Vec<egui::Response>, f32) {
+/// inside one; returns the height they took.
+pub(super) fn centered_hints(ui: &mut egui::Ui, hints: &[Hint], width: f32) -> f32 {
     let widths: Vec<f32> = hints.iter().map(|hint| hint_width(ui, hint)).collect();
     let mut lines: Vec<std::ops::Range<usize>> = Vec::new();
     let (mut start, mut used) = (0, 0.0);
@@ -106,7 +101,6 @@ pub(super) fn centered_hints(
         lines.push(start..hints.len());
     }
     let top = ui.cursor().top();
-    let mut responses = Vec::with_capacity(hints.len());
     ui.vertical_centered(|ui| {
         ui.spacing_mut().item_spacing.y = CAP_GAP;
         for line in lines {
@@ -121,28 +115,22 @@ pub(super) fn centered_hints(
                         if i > 0 {
                             ui.add_space(HINT_GAP - CAP_GAP);
                         }
-                        responses.push(add_hint(ui, hint));
+                        add_hint(ui, hint);
                     }
                 },
             );
         }
     });
-    (responses, ui.cursor().top() - top)
+    ui.cursor().top() - top
 }
 
-/// One hint's badges, then its words, which never wrap; returns the whole
-/// hint as one clickable response.
-fn add_hint(ui: &mut egui::Ui, (keys, action): &Hint) -> egui::Response {
-    let start = ui.cursor().min;
-    let mut rect = egui::Rect::from_min_size(start, egui::Vec2::ZERO);
+/// One hint's badges, then its words, which never wrap.
+fn add_hint(ui: &mut egui::Ui, (keys, action): &Hint) {
     for key in *keys {
-        rect = rect.union(key_cap(ui, key, HINT_FONT).rect);
+        key_cap(ui, key, HINT_FONT);
     }
     let text = egui::RichText::new(*action).color(DIM).size(HINT_FONT);
-    let label = ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
-    let rect = rect.union(label.rect);
-    let id = ui.id().with(("hint", *action));
-    ui.interact(rect, id, egui::Sense::click())
+    ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
 }
 
 /// The width [`add_hint`] takes.

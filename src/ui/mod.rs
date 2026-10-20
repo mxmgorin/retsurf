@@ -587,50 +587,49 @@ impl AppUi {
         self.home.set_search(home.search);
     }
 
-    /// Whether the start page's footer names pad buttons; without a pad it
-    /// keeps only what a click does.
+    /// Whether the start page names pad buttons: its footer, the sort's.
     pub fn set_home_pad(&mut self, pad: bool) {
         self.home_pad = pad;
     }
 
     /// The start page's footer for its focus: what the confirm and options
-    /// buttons do there, then the sort, which a click steps too.
-    fn home_footer(&self, visible: &[usize], face: FaceLabels) -> Vec<home::FooterHint> {
-        let hint = |caps: &[&str], label: String| home::FooterHint {
-            caps: caps.iter().map(|c| c.to_string()).collect(),
+    /// buttons do there, then the shoulders over `filters` choices and the sort;
+    /// nothing without a pad.
+    fn home_footer(
+        &self,
+        visible: &[usize],
+        filters: usize,
+        face: FaceLabels,
+    ) -> Vec<home::FooterHint> {
+        let hint = |caps: &[&'static str], label: &'static str| home::FooterHint {
+            caps: caps.to_vec(),
             label,
-            click: None,
         };
         let mut out = Vec::new();
-        if self.home_pad {
-            match self.home.tile().and_then(|tile| visible.get(tile)) {
-                Some(&at) => {
-                    let open = match self.menu.bookmarks.all()[at].launch {
-                        Launch::Browser => "Open",
-                        Launch::App | Launch::Game => "Launch",
-                    };
-                    out.push(hint(&[face.a], open.to_string()));
-                    out.push(hint(&[face.x], "Options".to_string()));
-                }
-                None if self.home.search_focused() => {
-                    out.push(hint(&[face.a], "Type".to_string()));
-                    if !visible.is_empty() {
-                        let down = egui_phosphor::bold::CARET_DOWN;
-                        out.push(hint(&[down], "Bookmarks".to_string()));
-                    }
-                }
-                None => {}
-            }
+        if !self.home_pad {
+            return out;
         }
-        let caps: &[&str] = match self.home_pad {
-            true => &[face.y],
-            false => &[],
-        };
-        let sort = home::sort_label(self.home_config.bookmarks.sort);
-        out.push(home::FooterHint {
-            click: Some(crate::command::HomeAction::StepSort(1)),
-            ..hint(caps, format!("Sort: {sort}"))
-        });
+        match self.home.tile().and_then(|tile| visible.get(tile)) {
+            Some(&at) => {
+                let open = match self.menu.bookmarks.all()[at].launch {
+                    Launch::Browser => "Open",
+                    Launch::App | Launch::Game => "Launch",
+                };
+                out.push(hint(&[face.a], open));
+                out.push(hint(&[face.x], "Options"));
+            }
+            None if self.home.search_focused() => {
+                out.push(hint(&[face.a], "Type"));
+                if !visible.is_empty() {
+                    out.push(hint(&[egui_phosphor::bold::CARET_DOWN], "Bookmarks"));
+                }
+            }
+            None => {}
+        }
+        if filters > 1 {
+            out.push(hint(&keys::SHOULDERS, "Filter"));
+        }
+        out.push(hint(&[face.y], "Sort"));
         out
     }
 
@@ -826,7 +825,7 @@ impl AppUi {
                     let visible = self.home_visible();
                     let filters = self.home_filters();
                     let footer = match self.button_hints {
-                        true => self.home_footer(&visible, face),
+                        true => self.home_footer(&visible, filters.len(), face),
                         false => Vec::new(),
                     };
                     let filter = self.home_filter();
@@ -841,7 +840,7 @@ impl AppUi {
                     let tabs = home::Tabs {
                         filters: &filters,
                         filter,
-                        shoulders: self.button_hints,
+                        sort: self.home_config.bookmarks.sort,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
