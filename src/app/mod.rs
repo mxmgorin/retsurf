@@ -494,7 +494,10 @@ impl App {
         // A physical keyboard types already; Android raises its own instead.
         let needed = !self.event_handler.hardware_input()
             && !(cfg!(target_os = "android") && self.config.controls.system_keyboard);
-        if needed && (rose || (tapped && chrome) || (settled && page)) {
+        // The start page's field is selected like its tiles: Confirm opens the
+        // keyboard, or it would cover the grid on every visit.
+        let home = self.ui.focus() == crate::ui::Focus::Home;
+        if needed && ((rose && !home) || (tapped && chrome) || (settled && page)) {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         }
     }
