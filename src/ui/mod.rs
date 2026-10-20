@@ -37,10 +37,10 @@ use crate::{
     browser::{AppBrowser, Favicon},
     command::AppCommand,
     config::{
-        Brand, ControlsConfig, DebugConfig, DownloadsConfig, HistoryConfig, HomeConfig,
+        Brand, ControlsConfig, DebugConfig, DownloadsConfig, FaceLabels, HistoryConfig, HomeConfig,
         InterfaceConfig, OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
-    data::bookmarks::{self, Filter},
+    data::bookmarks::{self, Filter, Launch},
     data::session::TabInfo,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
@@ -197,11 +197,13 @@ struct ChromeHidden {
     game_mode: bool,
     /// The tab runs a bookmark as an app or a game.
     launched: bool,
+    /// The start page, set to show no toolbar.
+    home: bool,
 }
 
 impl ChromeHidden {
     fn any(self) -> bool {
-        self.page_fullscreen || self.game_mode || self.launched
+        self.page_fullscreen || self.game_mode || self.launched || self.home
     }
 }
 
@@ -304,6 +306,8 @@ pub struct AppUi {
     home_active: bool,
     /// `[home]`, and the banner it may draw, rasterized on first use.
     home_config: HomeConfig,
+    /// Whether the start page's footer names pad buttons.
+    home_pad: bool,
     banner: home::Banner,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
@@ -393,6 +397,7 @@ impl AppUi {
             home_active: false,
             page_icons: favicon::PageIcons::new(interface.page_icons),
             home_config: home_config.clone(),
+            home_pad: false,
             banner: home::Banner::default(),
             hints: Hints::new(),
             prompt: Prompt::new(),
@@ -568,6 +573,7 @@ impl AppUi {
                 page_fullscreen: browser.is_fullscreen(),
                 game_mode: browser.in_game_mode(),
                 launched: browser.launched().is_some(),
+                home: self.home_active && !self.home_config.toolbar,
             },
         }
     }
@@ -576,6 +582,53 @@ impl AppUi {
     pub fn set_home(&mut self, home: &HomeConfig) {
         self.home_config = home.clone();
         self.home.set_search(home.search);
+    }
+
+    /// Whether the start page's footer names pad buttons; without a pad it
+    /// keeps only what a click does.
+    pub fn set_home_pad(&mut self, pad: bool) {
+        self.home_pad = pad;
+    }
+
+    /// The start page's footer for its focus: what the confirm and options
+    /// buttons do there, then the sort, which a click steps too.
+    fn home_footer(&self, visible: &[usize], face: FaceLabels) -> Vec<home::FooterHint> {
+        let hint = |caps: &[&str], label: String| home::FooterHint {
+            caps: caps.iter().map(|c| c.to_string()).collect(),
+            label,
+            click: None,
+        };
+        let mut out = Vec::new();
+        if self.home_pad {
+            match self.home.tile().and_then(|tile| visible.get(tile)) {
+                Some(&at) => {
+                    let open = match self.menu.bookmarks.all()[at].launch {
+                        Launch::Browser => "Open",
+                        Launch::App | Launch::Game => "Launch",
+                    };
+                    out.push(hint(&[face.a], open.to_string()));
+                    out.push(hint(&[face.x], "Options".to_string()));
+                }
+                None if self.home.search_focused() => {
+                    out.push(hint(&[face.a], "Type".to_string()));
+                    if !visible.is_empty() {
+                        let down = egui_phosphor::bold::CARET_DOWN;
+                        out.push(hint(&[down], "Bookmarks".to_string()));
+                    }
+                }
+                None => {}
+            }
+        }
+        let caps: &[&str] = match self.home_pad {
+            true => &[face.y],
+            false => &[],
+        };
+        let sort = home::sort_label(self.home_config.bookmarks.sort);
+        out.push(home::FooterHint {
+            click: Some(crate::command::HomeAction::StepSort(1)),
+            ..hint(caps, format!("Sort: {sort}"))
+        });
+        out
     }
 
     /// The start page's bookmark filter.
@@ -764,6 +817,7 @@ impl AppUi {
                 if self.home_active {
                     let visible = self.home_visible();
                     let filters = self.home_filters();
+                    let footer = self.home_footer(&visible, face);
                     let filter = self.home_filter();
                     let mark = match self.home_config.brand {
                         Brand::Banner => self
@@ -773,11 +827,9 @@ impl AppUi {
                         Brand::Wordmark => home::Mark::Wordmark,
                         Brand::None => home::Mark::None,
                     };
-                    let chips = home::Chips {
+                    let tabs = home::Tabs {
                         filters: &filters,
                         filter,
-                        sort: self.home_config.bookmarks.sort,
-                        sort_key: face.y,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
@@ -788,7 +840,9 @@ impl AppUi {
                         tiles,
                         mark,
                         search: self.home_config.search,
-                        chips,
+                        tabs,
+                        strip_buttons: !self.home_config.toolbar,
+                        footer: &footer,
                     };
                     home::add_home(
                         ctx,
@@ -994,6 +1048,7 @@ mod tests {
             page_fullscreen: true,
             game_mode: true,
             launched: true,
+            home: false,
         };
         assert!(all.any());
         assert!(ChromeHidden {

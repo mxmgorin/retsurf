@@ -105,10 +105,17 @@ impl AppUi {
     pub(super) fn toolbar_layout(&self, chrome_hidden: ChromeHidden) -> ToolbarLayout {
         // Game Mode is the exception: nothing it opens types into the chrome,
         // so an overlay of its own must not bring the bar back over the game.
-        // Nor do the edge strips, nor a launched bookmark, which has no bar.
-        let typing = !matches!(self.focus(), Focus::Page | Focus::QuickAccess)
-            && !chrome_hidden.game_mode
-            && !chrome_hidden.launched;
+        let address = self.address_bar_focused() || (self.osk.visible && self.osk_on_address_bar);
+        let typing = match chrome_hidden.home {
+            // A start page without a bar has its own field; only the address brings the bar.
+            true => address,
+            // Nor do the edge strips, nor a launched bookmark, which has no bar.
+            false => {
+                !matches!(self.focus(), Focus::Page | Focus::QuickAccess)
+                    && !chrome_hidden.game_mode
+                    && !chrome_hidden.launched
+            }
+        };
         ToolbarLayout {
             position: self.toolbar_position,
             // Typing still wins: auto-hide forces the bar up for a focused field,

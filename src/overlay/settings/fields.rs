@@ -466,6 +466,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Interface",  "Cursor linger (ms)",     int!(interface.cursor_linger_ms as u64, bounds::CURSOR_LINGER_MS, 100), false),
 
     f(S::Interface, "Home",       "Home page",              text!(home.page), false),
+    f(S::Interface, "Home",       "Toolbar",                flag!(home.toolbar), false),
     f(S::Interface, "Home",       "Brand",                  choice!(home.brand: Brand), false),
     f(S::Interface, "Home",       "Search",                 flag!(home.search), false),
     f(S::Interface, "Home",       "Show",                   HOME_FILTER, false),

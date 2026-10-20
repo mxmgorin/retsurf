@@ -16,9 +16,6 @@ use egui_sdl2::egui;
 use inputbind::editor::{Bound, Row};
 use inputbind::Action as _;
 
-/// The caps of the section hint.
-const SHOULDERS: [&str; 2] = ["L1", "R1"];
-
 /// The reset rows, in the order the Controls list counts them.
 const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboard defaults"];
 
@@ -453,7 +450,7 @@ pub(super) fn add_settings(
         let (upright, sideways) = keys::dpad_caps();
         let (upright, sideways) = ([upright.as_str()], [sideways.as_str()]);
         let (ok, back) = ([face.a], [face.b]);
-        let section: keys::Hint = (&SHOULDERS, "section");
+        let section: keys::Hint = (&keys::SHOULDERS, "section");
         let mv: keys::Hint = (&upright, "move");
         let hints: Vec<keys::Hint> = if settings.capturing() {
             vec![(&[], "Press a button or key to bind"), (&["Esc"], "cancel")]

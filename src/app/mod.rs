@@ -326,6 +326,9 @@ impl App {
             // Set before `wait` handles input, so the UI's focus precedence and
             // the router both see `Focus::Home` this frame.
             let home_changed = self.ui.set_home_active(self.browser.on_home_page());
+            if home_changed {
+                self.ui.set_home_pad(self.event_handler.has_pad());
+            }
             self.sync_launch(&mut commands);
             if self.browser.take_reader_due() {
                 self.browser.toggle_reader();

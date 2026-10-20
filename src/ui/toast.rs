@@ -146,7 +146,9 @@ fn add_pill(ui: &mut egui::Ui, notice: &Notice) {
                             let text = egui::RichText::new(text).color(INK).size(ROW_FONT);
                             ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
                         }
-                        Part::Key(key) => super::keys::key_cap(ui, key, ROW_FONT),
+                        Part::Key(key) => {
+                            super::keys::key_cap(ui, key, ROW_FONT);
+                        }
                     }
                 }
             });

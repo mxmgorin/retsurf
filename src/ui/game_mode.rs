@@ -85,12 +85,17 @@ pub fn game_mode_hint(
     Notice::parts(bold::GAME_CONTROLLER, parts)
 }
 
+/// [`pad_caps`]'s verb for a held gesture.
+const HOLD: &str = "Hold";
+/// Its verb for a tap or a chord.
+const PRESS: &str = "Press";
+
 /// A pad gesture as a verb and the buttons it takes.
 fn pad_caps(gesture: PadGesture) -> (&'static str, Vec<String>) {
     let (verb, pads) = match gesture {
-        PadGesture::Hold(pad) => ("Hold", vec![pad]),
-        PadGesture::Tap(pad) => ("Press", vec![pad]),
-        PadGesture::Chord(leader, second) => ("Press", vec![leader, second]),
+        PadGesture::Hold(pad) => (HOLD, vec![pad]),
+        PadGesture::Tap(pad) => (PRESS, vec![pad]),
+        PadGesture::Chord(leader, second) => (PRESS, vec![leader, second]),
     };
     let caps = pads
         .into_iter()
@@ -112,7 +117,7 @@ fn key_caps(gesture: &str) -> (&'static str, Vec<String>) {
                 .unwrap_or_default()
         })
         .collect();
-    ("Press", caps)
+    (PRESS, caps)
 }
 
 #[cfg(test)]
