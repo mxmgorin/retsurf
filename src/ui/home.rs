@@ -126,9 +126,10 @@ pub(super) struct Tiles<'a> {
     pub icons: &'a PageIcons,
 }
 
-/// Tile footprint (logical px) and grid spacing.
+/// Tile footprint (logical px) and grid spacing. A tile is its glyph square
+/// over a label of up to [`LABEL_ROWS`] lines.
 pub(super) const TILE_W: f32 = 96.0;
-pub(super) const TILE_H: f32 = 84.0;
+pub(super) const TILE_H: f32 = GLYPH_TOP + GLYPH + LABEL_GAP + LABEL_ROWS as f32 * LABEL_LINE_H;
 pub(super) const GAP: f32 = 12.0;
 
 /// Wordmark type size (logical px); the wave band and the reserved height
@@ -613,9 +614,14 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
 }
 
 /// The launch mark's badge.
-const MARK_RADIUS: f32 = 10.0;
-/// How far the badge's center sits inside the glyph square's corner.
-const MARK_INSET: f32 = 4.0;
+const MARK_RADIUS: f32 = 12.0;
+/// How far the badge's center sits inside the glyph square's corner: under the
+/// radius, so the badge breaks the corner.
+const MARK_INSET: f32 = 6.0;
+/// The badge's rim in the page's colour, parting it from the square.
+const MARK_RIM: f32 = 2.0;
+/// The badge's glyph, as a share of its radius.
+const MARK_GLYPH: f32 = 1.2;
 
 /// The tab bar: the filter tabs at the left, the sort at the right; with
 /// `buttons`, the strip buttons at either end.
@@ -818,9 +824,9 @@ fn add_grid(
     });
 }
 
-/// Lay out `total` tiles in rows of `cols` centred within `width`. Each row is
-/// allocated at its exact content width so a partial last row stays centred — a
-/// plain `ui.horizontal` would take the full width and left-align.
+/// Lay out `total` tiles in rows of `cols` within `width`. Every row takes the
+/// full width from its left, so a partial last row keeps its columns under the
+/// ones above: Down lands on the tile drawn below.
 pub(super) fn tile_grid(
     ui: &mut egui::Ui,
     width: f32,
@@ -838,9 +844,8 @@ pub(super) fn tile_grid(
                     ui.add_space(GAP);
                 }
                 let n = (total - row_start).min(cols);
-                let row_w = n as f32 * TILE_W + (n.saturating_sub(1)) as f32 * GAP;
                 ui.allocate_ui_with_layout(
-                    egui::vec2(row_w, TILE_H),
+                    egui::vec2(width, TILE_H),
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
                         ui.spacing_mut().item_spacing.x = GAP;
@@ -854,8 +859,9 @@ pub(super) fn tile_grid(
     );
 }
 
-/// Glyph-square side length within a tile.
+/// Glyph-square side length within a tile, and its inset from the tile's top.
 pub(super) const GLYPH: f32 = 52.0;
+const GLYPH_TOP: f32 = 2.0;
 /// A site icon inside the glyph square: near the 32 px cache, so it stays sharp.
 const DIAL_ICON: f32 = 34.0;
 /// How much of an icon's tint colours its glyph square over [`SURFACE`].
@@ -863,6 +869,17 @@ const TINT_MIX: f32 = 0.35;
 /// Saturation and value of an iconless tile's fill; its hue comes from the label.
 const LETTER_SAT: f32 = 0.6;
 const LETTER_VAL: f32 = 0.42;
+/// An iconless tile's monogram: the initials of this many words, in this type.
+const MONOGRAM_WORDS: usize = 2;
+const MONOGRAM_FONT: f32 = 20.0;
+/// A word this short (an article, a preposition) lends the monogram no initial.
+const MONOGRAM_SKIP: usize = 2;
+/// The label under the glyph square: its type, its line, its lines, and the
+/// gap over it.
+const LABEL_FONT: f32 = 12.0;
+const LABEL_LINE_H: f32 = 15.0;
+const LABEL_ROWS: usize = 2;
+const LABEL_GAP: f32 = 8.0;
 
 /// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
 /// the brand name beneath it. Custom-painted (not a Button) for the two-tier
@@ -878,9 +895,7 @@ fn add_tile(
     let label = bookmark_label(bookmark);
     let active = selected || resp.hovered();
     let glyph = paint_tile(ui.painter(), rect, &label, icon, active);
-    if let Some(mark) = launch_mark(bookmark.launch) {
-        paint_launch_mark(ui.painter(), glyph, mark, active);
-    }
+    paint_launch_mark(ui.painter(), glyph, bookmark.launch);
     resp
 }
 
@@ -930,56 +945,68 @@ fn paint_tile(
             painter.image(texture.id(), at, uv, egui::Color32::WHITE);
         }
         None => {
-            let initial = label
-                .chars()
-                .next()
-                .map(|c| c.to_uppercase().to_string())
-                .unwrap_or_default();
             painter.text(
                 glyph.center(),
                 egui::Align2::CENTER_CENTER,
-                initial,
-                font(22.0),
+                monogram(label),
+                font(MONOGRAM_FONT),
                 INK,
             );
         }
     }
 
-    // The label under the glyph, truncated so a long one can't overflow.
-    painter.text(
-        egui::pos2(rect.center().x, glyph.bottom() + 14.0),
-        egui::Align2::CENTER_CENTER,
-        truncate(label, 12),
-        font(12.0),
-        if active { INK } else { MUTED },
+    // The label under the glyph, wrapped by word and elided past its lines.
+    let color = if active { INK } else { MUTED };
+    let mut job = egui::text::LayoutJob::simple(label.to_string(), font(LABEL_FONT), color, TILE_W);
+    job.halign = egui::Align::Center;
+    job.wrap.max_rows = LABEL_ROWS;
+    job.wrap.break_anywhere = false;
+    let galley = painter.layout_job(job);
+    painter.galley(
+        egui::pos2(rect.center().x, glyph.bottom() + LABEL_GAP),
+        galley,
+        color,
     );
     glyph
 }
 
-/// The corner mark of a bookmark that opens as a program; `None` for a site.
-fn launch_mark(launch: Launch) -> Option<&'static str> {
-    match launch {
-        Launch::Browser => None,
-        Launch::App => Some(bold::APP_WINDOW),
-        Launch::Game => Some(bold::GAME_CONTROLLER),
+/// The letters standing in for a missing icon: the initials of the label's
+/// first words, skipping the short ones; its first letter when that leaves none.
+fn monogram(label: &str) -> String {
+    let initial = |word: &str| word.chars().next().into_iter().flat_map(char::to_uppercase);
+    let initials: String = label
+        .split_whitespace()
+        .filter(|word| word.chars().count() > MONOGRAM_SKIP)
+        .take(MONOGRAM_WORDS)
+        .flat_map(initial)
+        .collect();
+    match initials.is_empty() {
+        true => label
+            .chars()
+            .next()
+            .into_iter()
+            .flat_map(char::to_uppercase)
+            .collect(),
+        false => initials,
     }
 }
 
-/// `mark` on a badge over the glyph square's bottom-right corner.
-fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, mark: &str, active: bool) {
+/// The badge over the glyph square's bottom-right corner of a bookmark that
+/// opens as a program: the accent for a game, muted for an app; none for a site.
+fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, launch: Launch) {
+    let (mark, fill) = match launch {
+        Launch::Browser => return,
+        Launch::App => (bold::APP_WINDOW, MUTED),
+        Launch::Game => (bold::GAME_CONTROLLER, ACCENT),
+    };
     let center = glyph.right_bottom() - egui::vec2(MARK_INSET, MARK_INSET);
-    painter.circle(
-        center,
-        MARK_RADIUS,
-        BG,
-        egui::Stroke::new(1.0, if active { ACCENT } else { BORDER }),
-    );
+    painter.circle(center, MARK_RADIUS, fill, egui::Stroke::new(MARK_RIM, BG));
     painter.text(
         center,
         egui::Align2::CENTER_CENTER,
         mark,
-        font(MARK_RADIUS * 1.2),
-        if active { ACCENT } else { INK },
+        font(MARK_RADIUS * MARK_GLYPH),
+        BG,
     );
 }
 
@@ -1018,7 +1045,7 @@ fn paint_glyph_square(
     fill: egui::Color32,
 ) -> egui::Rect {
     let glyph = egui::Rect::from_center_size(
-        egui::pos2(rect.center().x, rect.top() + GLYPH / 2.0 + 2.0),
+        egui::pos2(rect.center().x, rect.top() + GLYPH_TOP + GLYPH / 2.0),
         egui::vec2(GLYPH, GLYPH),
     );
     painter.rect_filled(glyph, 12.0, fill);
@@ -1032,15 +1059,6 @@ fn paint_glyph_square(
         egui::StrokeKind::Inside,
     );
     glyph
-}
-
-/// Trim a label to `max` characters, appending `…` when shortened.
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max - 1).collect::<String>())
-    }
 }
 
 thread_local! {
