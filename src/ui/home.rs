@@ -9,7 +9,6 @@ use super::favicon::{Icon, PageIcons};
 use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM};
 use super::OskCaret;
 use crate::command::{AppCommand, HomeAction, QuickAccessAction};
-use crate::config::HomeSort;
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
 use crate::overlay::quick_access::Strip;
@@ -61,7 +60,6 @@ pub(super) struct HomeView<'a> {
 pub(super) struct Tabs<'a> {
     pub filters: &'a [Filter],
     pub filter: Filter,
-    pub sort: HomeSort,
 }
 
 /// One footer hint: the buttons that do it, then what it does.
@@ -461,7 +459,7 @@ fn divider(ui: &mut egui::Ui) {
 fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>) {
     let icon = match strip {
         Strip::QuickMenu => bold::LIST,
-        Strip::QuickAccess | Strip::Options => bold::DOTS_THREE,
+        Strip::QuickAccess => bold::DOTS_THREE,
     };
     let size = egui::vec2(STRIP_BUTTON, STRIP_BUTTON);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -623,8 +621,8 @@ const MARK_RIM: f32 = 2.0;
 /// The badge's glyph, as a share of its radius.
 const MARK_GLYPH: f32 = 1.2;
 
-/// The tab bar: the filter tabs at the left, the sort at the right; with
-/// `buttons`, the strip buttons at either end.
+/// The tab bar: the filter tabs centred; with `buttons`, the strip buttons at
+/// either end.
 fn add_tabs(
     ui: &mut egui::Ui,
     tabs: &Tabs,
@@ -641,9 +639,6 @@ fn add_tabs(
             ui.spacing_mut().item_spacing.x = TAB_GAP;
             if buttons {
                 strip_button(ui, Strip::QuickAccess, commands);
-            }
-            if sort_button(ui, tabs.sort).clicked() {
-                commands.push(AppCommand::Home(HomeAction::StepSort(1)));
             }
             ui.allocate_ui_with_layout(
                 egui::vec2(ui.available_width(), TAB_H),
@@ -665,20 +660,6 @@ fn add_tabs(
     let stroke = egui::Stroke::new(LINE_W, BORDER);
     ui.painter()
         .set(rule, egui::Shape::hline(rect.x_range(), y, stroke));
-}
-
-/// The sort as it stands, muted unless hovered.
-fn sort_button(ui: &mut egui::Ui, sort: HomeSort) -> egui::Response {
-    let text = format!("{}  {}", bold::SORT_ASCENDING, sort_label(sort));
-    let pad = 2.0 * ui.spacing().button_padding.x;
-    let size = egui::vec2(tab_text_width(ui, &text) + pad, TAB_H);
-    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
-    let color = if resp.hovered() { INK } else { MUTED };
-    let center = egui::pos2(rect.center().x, rect.center().y - UNDERLINE_W / 2.0);
-    let font = egui::FontId::proportional(ROW_FONT);
-    ui.painter()
-        .text(center, egui::Align2::CENTER_CENTER, text, font, color);
-    resp
 }
 
 /// The filter tabs in what is left of the row, a rule parting the kinds from
@@ -752,14 +733,6 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
     if moved {
         ui.ctx().data_mut(|d| d.insert_temp(shown, token));
     }
-}
-
-/// A sort's display name.
-pub(super) fn sort_label(sort: HomeSort) -> &'static str {
-    HomeSort::CHOICES
-        .iter()
-        .find(|(_, token)| *token == sort.as_str())
-        .map_or("", |(label, _)| label)
 }
 
 /// One tab: its name, muted unless active or hovered, the active one

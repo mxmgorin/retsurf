@@ -549,6 +549,10 @@ impl App {
                     .unwrap_or(0);
                 view.sort =
                     HomeSort::from_value(sorts[crate::list::wrap(at, *delta, sorts.len())].1);
+                // Nothing on the page names the order; the strip and Settings do.
+                let notice =
+                    Notice::new(bold::SORT_ASCENDING, format!("Sort: {}", view.sort.label()));
+                self.ui.toast(notice);
             }
         }
         self.save_config();

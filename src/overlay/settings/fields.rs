@@ -471,7 +471,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Home",       "Brand",                  choice!(home.brand: Brand), false),
     f(S::Interface, "Home",       "Search",                 flag!(home.search), false),
     f(S::Interface, "Home",       "Show",                   HOME_FILTER, false),
-    f(S::Interface, "Home",       "Sort",                   choice!(home.bookmarks.sort: HomeSort), false),
+    f(S::Interface, "Home",       "Sort",                   choice!(home.bookmarks.sort: HomeSort), false).quick(Modes::Home),
 
     // No sub-header: the door belongs to no group.
     f(S::Controls, "",            "Button bindings",        Kind::Door { door: Door::Bindings }, false),

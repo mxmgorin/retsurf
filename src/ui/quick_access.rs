@@ -11,8 +11,9 @@ use crate::overlay::menu::Section;
 use crate::overlay::quick_access::{Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
+use crate::ui::keys::HINT_FONT;
 use crate::ui::panel::{self, center_selected, ROW_GAP, ROW_H};
-use crate::ui::theme::{self, ACCENT, ROW_FONT};
+use crate::ui::theme::{self, ACCENT, DIM, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 
@@ -64,7 +65,7 @@ pub(in crate::ui) fn add_quick_access(
     let width = outer - margin.x;
     // Each on the side of the button that opens it.
     let left = match panel.strip() {
-        Strip::QuickAccess | Strip::Options => screen.right() - outer,
+        Strip::QuickAccess => screen.right() - outer,
         Strip::QuickMenu => screen.left(),
     };
     let title = panel.title().to_uppercase();
@@ -100,6 +101,9 @@ pub(in crate::ui) fn add_quick_access(
 
 fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut Vec<AppCommand>) {
     for (index, &entry) in panel.rows().iter().enumerate() {
+        if let Some((_, head)) = panel.heads().iter().find(|(at, _)| *at == index) {
+            add_head(ui, head, index == 0);
+        }
         let selected = index == panel.selected();
         let label = format!("{}  {}", glyph(entry), panel.label(index));
         let flag = panel.flag(index);
@@ -175,6 +179,18 @@ fn add_header(ui: &mut egui::Ui, title: &str) {
     ui.add_space(ROW_GAP * 2.0);
 }
 
+/// A section's head over its rows, muted and cut to the strip; set off from
+/// the rows above unless it is the `first`.
+fn add_head(ui: &mut egui::Ui, head: &str, first: bool) {
+    if !first {
+        ui.add_space(ROW_GAP);
+    }
+    let text = egui::RichText::new(head.to_uppercase())
+        .color(DIM)
+        .size(HINT_FONT);
+    ui.add(egui::Label::new(text).truncate());
+}
+
 /// What a row with no icon of its own shows; the tests keep every row off it.
 const NO_ICON: &str = bold::DOT;
 
@@ -213,6 +229,7 @@ fn glyph(entry: Entry) -> &'static str {
             "Page theme" => bold::CIRCLE_HALF,
             "Ad blocker" => bold::SHIELD_CHECK,
             "User agent" => bold::DEVICES,
+            "Sort" => bold::SORT_ASCENDING,
             _ => NO_ICON,
         },
     }
@@ -223,19 +240,37 @@ mod tests {
     use super::*;
     use crate::browser::TabMode;
     use crate::config::AppConfig;
+    use crate::overlay::quick_access::{HomeTile, Over};
 
     /// A row added to either strip, or a newly flagged quick row, must pick
     /// an icon of its own.
     #[test]
     fn every_row_has_an_icon() {
         let mut panel = QuickAccess::new();
-        for strip in [Strip::QuickAccess, Strip::QuickMenu, Strip::Options] {
-            for mode in [TabMode::Page, TabMode::Reader, TabMode::Game] {
-                panel.open(strip, mode, true, &AppConfig::default());
+        let overs = [
+            Over::Tab(TabMode::Page),
+            Over::Tab(TabMode::Reader),
+            Over::Tab(TabMode::Game),
+            Over::Home,
+        ];
+        for strip in [Strip::QuickAccess, Strip::QuickMenu] {
+            for over in overs {
+                panel.open(strip, over, true, &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");
                 }
             }
+        }
+        let tile = HomeTile {
+            id: "a".into(),
+            title: "A".into(),
+            site: "a.example".into(),
+            manual: true,
+            game: false,
+        };
+        panel.open_home(Some(tile), false, &AppConfig::default());
+        for &row in panel.rows() {
+            assert_ne!(glyph(row), NO_ICON, "{row:?}");
         }
     }
 }

@@ -18,7 +18,7 @@ use crate::overlay::game::map_edit::{
 };
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, Strip};
+use crate::overlay::quick_access::{Entry, Over, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -41,10 +41,19 @@ impl App {
             self.ui.menu.close();
             return;
         }
+        // Over the start page the focused tile leads the strip.
+        if strip == Strip::QuickAccess && self.browser.on_home_page() {
+            self.open_home_access();
+            return;
+        }
         let launched = self.browser.launched().is_some();
+        let over = match self.browser.on_home_page() {
+            true => Over::Home,
+            false => Over::Tab(self.browser.mode()),
+        };
         self.ui
             .quick_access
-            .open(strip, self.browser.mode(), launched, &self.config);
+            .open(strip, over, launched, &self.config);
         let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",

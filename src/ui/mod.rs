@@ -840,7 +840,6 @@ impl AppUi {
                     let tabs = home::Tabs {
                         filters: &filters,
                         filter,
-                        sort: self.home_config.bookmarks.sort,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),

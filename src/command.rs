@@ -86,7 +86,7 @@ pub enum HomeAction {
     SetFilter(String),
     /// Order by the sort `delta` places along, wrapping.
     StepSort(i32),
-    /// Open the options of the tile at this index of the grid.
+    /// Open Quick Access on the tile at this index of the grid.
     Options(usize),
     /// Open the tile at this index of the grid.
     Open(usize),

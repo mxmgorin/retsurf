@@ -1,6 +1,7 @@
-//! Bookmarks in the app: opening one the way it asks, its options (the options
-//! strip of [`crate::overlay::quick_access`]), and the `[game_mode]` overrides
-//! of the one the active tab runs.
+//! Bookmarks in the app: opening one the way it asks, its options (the rows
+//! Quick Access leads with over the start page, see
+//! [`crate::overlay::quick_access`]), and the `[game_mode]` overrides of the
+//! one the active tab runs.
 //!
 //! A launched bookmark is tab state ([`crate::browser::AppBrowser::launched`]).
 //! Its overrides live in the config while the active tab runs it, with the
@@ -11,7 +12,7 @@ use super::super::{App, AppCommand};
 use crate::config::{overlay, HomeSort};
 use crate::data::bookmarks::{self, Launch};
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, OptionsRow, OptionsText};
+use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText};
 use crate::ui::{bookmark_label, Notice};
 use egui_phosphor::bold;
 
@@ -125,24 +126,38 @@ impl App {
         self.sync_launch(out);
     }
 
-    /// Open the options of the start-page tile at `tile`, the grid's own index.
+    /// Open Quick Access on the start-page tile at `tile`, the grid's own index.
     pub(in crate::app) fn open_options(&mut self, tile: usize) {
-        let Some(&at) = self.ui.home_visible().get(tile) else {
-            return;
-        };
-        self.ui.home.select_tile(tile);
-        self.show_options(at);
+        if tile < self.ui.home_visible().len() {
+            self.ui.home.select_tile(tile);
+            self.open_home_access();
+        }
     }
 
-    /// Show the options of the bookmark at `at`: rows that fit how it opens and the
-    /// order the grid is in, with its values.
-    fn show_options(&mut self, at: usize) {
-        let bookmark = &self.ui.menu.bookmarks.all()[at];
-        let (id, title) = (bookmark.id.clone(), bookmark_label(bookmark));
-        let manual = self.config.home.bookmarks.sort == HomeSort::Manual;
-        let game = bookmark.launch == Launch::Game;
-        self.ui.quick_access.open_options(id, title, manual, game);
+    /// Open Quick Access over the start page: the focused tile's rows, when a
+    /// tile is focused, then the page's own, with their values.
+    pub(in crate::app) fn open_home_access(&mut self) {
+        let tile = self
+            .ui
+            .home
+            .tile()
+            .and_then(|tile| self.ui.home_visible().get(tile).copied())
+            .map(|at| self.home_tile(at));
+        let launched = self.browser.launched().is_some();
+        self.ui.quick_access.open_home(tile, launched, &self.config);
         self.refresh_options();
+    }
+
+    /// The bookmark at `at` as the tile Quick Access leads with.
+    fn home_tile(&self, at: usize) -> HomeTile {
+        let bookmark = &self.ui.menu.bookmarks.all()[at];
+        HomeTile {
+            id: bookmark.id.clone(),
+            title: bookmark_label(bookmark),
+            site: site_of(&bookmark.url),
+            manual: self.config.home.bookmarks.sort == HomeSort::Manual,
+            game: bookmark.launch == Launch::Game,
+        }
     }
 
     /// The index in the store of the bookmark the options are open on.
@@ -159,7 +174,7 @@ impl App {
         let bookmark = &self.ui.menu.bookmarks.all()[at];
         let (tags, launch, reader) = (
             bookmark.tags.join(", "),
-            launch_label(bookmark.launch),
+            bookmark.launch.label(),
             bookmark.reader,
         );
         let menu = &mut self.ui.quick_access;
@@ -184,7 +199,7 @@ impl App {
                 let next = Launch::from_value(choices[crate::list::wrap(now, dx, choices.len())].1);
                 self.ui.menu.bookmarks.set_launch(at, next);
                 // The reader row comes and goes with the game.
-                self.show_options(at);
+                self.open_home_access();
                 self.ui.quick_access.select_entry(Entry::Options(row));
             }
             OptionsRow::Reader => {
@@ -280,10 +295,10 @@ impl App {
     }
 }
 
-/// How a [`Launch`] reads in the menu.
-fn launch_label(launch: Launch) -> &'static str {
-    Launch::CHOICES
-        .iter()
-        .find(|(_, token)| *token == launch.as_str())
-        .map_or("", |(label, _)| label)
+/// Where `url` leads, in a word: its host, else the whole of it.
+fn site_of(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_string))
+        .unwrap_or_else(|| url.to_string())
 }

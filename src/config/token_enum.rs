@@ -47,6 +47,14 @@ macro_rules! token_enum {
                 }
             }
 
+            /// The label this value shows under.
+            #[allow(dead_code)]
+            pub fn label(self) -> &'static str {
+                match self {
+                    $( $name::$variant => $label, )+
+                }
+            }
+
             /// Parse leniently: a case- and whitespace-insensitive match on the token
             /// or any of its aliases, falling back to the default so a typo in a
             /// hand-edited config can't break the whole parse.
