@@ -230,6 +230,8 @@ fn glyph(entry: Entry) -> &'static str {
             "Ad blocker" => bold::SHIELD_CHECK,
             "User agent" => bold::DEVICES,
             "Sort" => bold::SORT_ASCENDING,
+            "Layout" => bold::SQUARES_FOUR,
+            "Size" => bold::MAGNIFYING_GLASS_PLUS,
             _ => NO_ICON,
         },
     }

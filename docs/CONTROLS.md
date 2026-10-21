@@ -60,7 +60,7 @@ it to a gesture you never press.
 
 Move left / right shows only in the manual sort. Tags are typed comma-separated. Quick
 Access on the start page lists the focused bookmark's rows, then the page's own settings
-(Sort). Without the toolbar
+(Sort, Layout, Size). Without the toolbar
 (`[home] toolbar = false`) the ends of the search bar (of the filter tabs, with no search
 field) open Quick Menu and Quick Access; with a pad, the footer names what the buttons do.
 

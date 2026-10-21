@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Start page filter tabs (sites, apps, games, tags) on L1 / R1 and a sort on Y: manual, recent or name
+- Start page layouts (`[home.bookmarks] layout`): a grid or a list with each bookmark's site and tags; three sizes (`size`); both in Quick Access
 - Start page without the search field (`[home] search = false`)
 - Start page without the toolbar (`[home] toolbar`, off by default): Quick Menu and Quick Access at the ends of its search bar, a footer of button hints
 - Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
@@ -22,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bookmarks and the speed dial are one list: the start page shows the bookmarks as tiles, one file per bookmark in `bookmarks/`; `dial.toml` and `bookmarks.toml` are no longer read
 - Removing a bookmark that has tags or settings takes a second press
-- `[home]` holds the start page's settings: `page` (was `[browser] home_page`), `brand` (was `[interface] home_style`, `compact` is now `none`), `search`, and `[home.bookmarks] filter` / `sort`
+- `[home]` holds the start page's settings: `page` (was `[browser] home_page`), `brand` (was `[interface] home_style`, `compact` is now `none`), `search`, and `[home.bookmarks] filter` / `sort` / `layout` / `size`
 - License: GPL-3.0-or-later with the additional terms in `NOTICE`; the name and logo under `TRADEMARKS.md`
 
 ### Removed

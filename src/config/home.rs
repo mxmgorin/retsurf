@@ -26,6 +26,8 @@ pub struct HomeBookmarksConfig {
     /// [`crate::data::bookmarks::Filter`]).
     pub filter: String,
     pub sort: HomeSort,
+    pub layout: HomeLayout,
+    pub size: HomeSize,
 }
 
 impl Default for HomeConfig {
@@ -45,6 +47,8 @@ impl Default for HomeBookmarksConfig {
         Self {
             filter: crate::data::bookmarks::Filter::All.token(),
             sort: HomeSort::default(),
+            layout: HomeLayout::default(),
+            size: HomeSize::default(),
         }
     }
 }
@@ -58,5 +62,38 @@ token_enum! {
         /// Last opened first.
         Recent => "recent", "Recent",
         Name => "name", "Name",
+    }
+}
+
+pub use layout::HomeLayout;
+pub use size::HomeSize;
+
+// Own modules: a file holds one `token_enum!`, whose tests take a fixed name.
+mod layout {
+    use crate::config::token_enum::token_enum;
+
+    token_enum! {
+        /// How the start page draws its bookmarks.
+        pub enum HomeLayout {
+            default Grid;
+            /// Icon tiles with a label.
+            Grid => "grid", "Grid",
+            /// One row per bookmark: its name, site and tags.
+            List => "list", "List",
+        }
+    }
+}
+
+mod size {
+    use crate::config::token_enum::token_enum;
+
+    token_enum! {
+        /// The size of the start page's tiles and rows.
+        pub enum HomeSize {
+            default Medium;
+            Small => "small", "Small",
+            Medium => "medium", "Medium",
+            Large => "large", "Large",
+        }
     }
 }

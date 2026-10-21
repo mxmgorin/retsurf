@@ -48,7 +48,7 @@ pub use downloads::DownloadsConfig;
 pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use game_mode::{GameModeConfig, Scaling};
 pub use history::HistoryConfig;
-pub use home::{HomeBookmarksConfig, HomeConfig, HomeSort};
+pub use home::{HomeBookmarksConfig, HomeConfig, HomeLayout, HomeSize, HomeSort};
 pub use interface::{InterfaceConfig, ToolbarPosition};
 pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};

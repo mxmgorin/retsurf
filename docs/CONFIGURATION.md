@@ -72,6 +72,8 @@ search = true              # the search field
 [home.bookmarks]
 filter = "all"             # "all", "sites", "apps", "games" or a tag
 sort = "manual"            # "manual", "recent" (last opened first) or "name"
+layout = "grid"            # "grid" or "list" (name, site, tags)
+size = "medium"            # tiles and rows: "small", "medium" or "large"
 
 [controls]
 deadzone = 0.25            # stick deflection treated as centered

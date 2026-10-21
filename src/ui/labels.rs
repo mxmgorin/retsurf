@@ -9,6 +9,27 @@ thread_local! {
     /// Memoizes [`brand_label`] per URL: it parses a `Url`, and runs for every
     /// visible tile on each home repaint. Single-threaded — egui is main-thread.
     static BRAND_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    /// Memoizes [`site_label`] per URL, for the same reason.
+    static SITE_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+}
+
+/// A URL's site as a list row names it: its host without `www.`, else the
+/// URL itself.
+pub(super) fn site_label(url: &str) -> String {
+    SITE_LABELS.with(|cache| {
+        if let Some(label) = cache.borrow().get(url) {
+            return label.clone();
+        }
+        let label = url::Url::parse(url)
+            .ok()
+            .and_then(|u| {
+                u.host_str()
+                    .map(|h| h.trim_start_matches("www.").to_string())
+            })
+            .unwrap_or_else(|| url.to_string());
+        cache.borrow_mut().insert(url.to_owned(), label.clone());
+        label
+    })
 }
 
 /// What a bookmark is shown as: its name, else its site.

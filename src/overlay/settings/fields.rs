@@ -6,9 +6,9 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeSort, MemoryProfile,
-    OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution, TextureFilter, TextureLimit,
-    ToolbarPosition,
+    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout, HomeSize,
+    HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution,
+    TextureFilter, TextureLimit, ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -472,6 +472,8 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Home",       "Search",                 flag!(home.search), false),
     f(S::Interface, "Home",       "Show",                   HOME_FILTER, false),
     f(S::Interface, "Home",       "Sort",                   choice!(home.bookmarks.sort: HomeSort), false).quick(Modes::Home),
+    f(S::Interface, "Home",       "Layout",                 choice!(home.bookmarks.layout: HomeLayout), false).quick(Modes::Home),
+    f(S::Interface, "Home",       "Size",                   choice!(home.bookmarks.size: HomeSize), false).quick(Modes::Home),
 
     // No sub-header: the door belongs to no group.
     f(S::Controls, "",            "Button bindings",        Kind::Door { door: Door::Bindings }, false),

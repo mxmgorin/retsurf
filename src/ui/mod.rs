@@ -876,6 +876,8 @@ impl AppUi {
                     };
                     let view = home::HomeView {
                         tiles,
+                        layout: self.home_config.bookmarks.layout,
+                        size: self.home_config.bookmarks.size,
                         mark,
                         search: self.home_config.search,
                         tabs,
