@@ -94,6 +94,7 @@ impl App {
     /// `[game_mode]` keys that differ from the global table go to the bookmark
     /// and `config.toml` keeps the global table.
     pub(in crate::app) fn save_config(&mut self) {
+        self.config_dirty = false;
         let (Some(base), Some(id)) = (&self.game_base, &self.applied_launch) else {
             self.config.save();
             return;

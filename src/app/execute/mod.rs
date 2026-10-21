@@ -519,7 +519,8 @@ impl App {
         }
     }
 
-    /// Change the start page's filter or sort and save it, or open a tile's options.
+    /// Change the start page's filter or sort, kept in `[home]` and written with
+    /// the next flush, or open a tile's options.
     pub(super) fn home_action(&mut self, action: &HomeAction, out: &mut Vec<AppCommand>) {
         match action {
             HomeAction::Options(tile) => {
@@ -549,7 +550,7 @@ impl App {
                 self.ui.toast(notice);
             }
         }
-        self.save_config();
+        self.config_dirty = true;
         self.ui.set_home(&self.config.home);
     }
 

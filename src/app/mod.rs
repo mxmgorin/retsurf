@@ -50,6 +50,9 @@ pub struct App {
     /// A bookmark with settings asked to be removed, by id, and when: a second
     /// ask while its notice shows removes it.
     bookmark_remove_armed: Option<(String, Instant)>,
+    /// The config changed by a press and not yet written: the flush writes
+    /// it, so a run of presses costs one write.
+    config_dirty: bool,
     /// The bookmark whose `[game_mode]` overrides the config holds, by id.
     applied_launch: Option<String>,
     /// The global `[game_mode]` while a bookmark's overrides stand in for it.
@@ -194,6 +197,7 @@ impl App {
             osk_tap_at: None,
             hint_press_at: None,
             bookmark_remove_armed: None,
+            config_dirty: false,
             applied_launch: None,
             game_base: None,
             session: Session::load(),
@@ -291,6 +295,7 @@ impl App {
             if self.last_flush.elapsed() >= FLUSH_INTERVAL {
                 self.ui.menu.flush_history();
                 self.save_session();
+                self.flush_config();
                 self.last_flush = Instant::now();
             }
 
@@ -450,6 +455,7 @@ impl App {
         self.ui.menu.flush_history();
         self.save_session();
         self.save_window_size();
+        self.flush_config();
         // `process::exit` below skips every `Drop`, and the governor is
         // machine-wide.
         crate::platform::cpufreq::restore();
@@ -569,6 +575,13 @@ impl App {
     /// down has finished going away (see [`HEAP_TRIM_DELAY`]).
     fn schedule_heap_trim(&mut self) {
         self.heap_trim_at = Some(Instant::now() + HEAP_TRIM_DELAY);
+    }
+
+    /// Write the config when a press changed it since the last write.
+    fn flush_config(&mut self) {
+        if self.config_dirty {
+            self.save_config();
+        }
     }
 
     /// Snapshot the open tabs for the next launch. A no-op with `restore_tabs`
