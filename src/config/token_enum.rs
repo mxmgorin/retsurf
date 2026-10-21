@@ -55,6 +55,19 @@ macro_rules! token_enum {
                 }
             }
 
+            /// The variant `delta` places along the declaration order, past
+            /// either end to the other.
+            // Only the enums a button cycles read this.
+            #[allow(dead_code)]
+            pub fn step(self, delta: i32) -> Self {
+                const ALL: &[$name] = &[ $( $name::$variant, )+ ];
+                let at = ALL
+                    .iter()
+                    .position(|v| *v == self)
+                    .expect("ALL lists every variant");
+                ALL[$crate::list::wrap(at, delta, ALL.len())]
+            }
+
             /// Parse leniently: a case- and whitespace-insensitive match on the token
             /// or any of its aliases, falling back to the default so a typo in a
             /// hand-edited config can't break the whole parse.
@@ -118,6 +131,20 @@ macro_rules! token_enum {
                     super::$name::from_value("not-a-real-token"),
                     <super::$name as ::core::default::Default>::default(),
                 );
+            }
+
+            /// A full turn of steps either way lands back on the variant.
+            #[test]
+            fn a_full_turn_of_steps_comes_back() {
+                let turn = super::$name::CHOICES.len() as i32;
+                $(
+                    assert_eq!(super::$name::$variant.step(turn), super::$name::$variant);
+                    assert_eq!(super::$name::$variant.step(-turn), super::$name::$variant);
+                    assert_eq!(
+                        super::$name::$variant.step(1) != super::$name::$variant,
+                        turn > 1,
+                    );
+                )+
             }
         }
     };

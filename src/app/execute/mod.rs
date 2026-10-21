@@ -12,7 +12,7 @@ use super::{
     UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::{AppConfig, GameModeConfig, HomeSort};
+use crate::config::{AppConfig, GameModeConfig};
 use crate::data::bookmarks::{Filter, Launch};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
@@ -542,13 +542,7 @@ impl App {
             HomeAction::SetFilter(token) => self.config.home.bookmarks.filter = token.clone(),
             HomeAction::StepSort(delta) => {
                 let view = &mut self.config.home.bookmarks;
-                let sorts = HomeSort::CHOICES;
-                let at = sorts
-                    .iter()
-                    .position(|(_, token)| *token == view.sort.as_str())
-                    .unwrap_or(0);
-                view.sort =
-                    HomeSort::from_value(sorts[crate::list::wrap(at, *delta, sorts.len())].1);
+                view.sort = view.sort.step(*delta);
                 // Nothing on the page names the order; the strip and Settings do.
                 let notice =
                     Notice::new(bold::SORT_ASCENDING, format!("Sort: {}", view.sort.label()));

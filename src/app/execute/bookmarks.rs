@@ -191,12 +191,7 @@ impl App {
         let bookmark = &self.ui.menu.bookmarks.all()[at];
         match row {
             OptionsRow::LaunchAs => {
-                let choices = Launch::CHOICES;
-                let now = choices
-                    .iter()
-                    .position(|(_, token)| *token == bookmark.launch.as_str())
-                    .unwrap_or(0);
-                let next = Launch::from_value(choices[crate::list::wrap(now, dx, choices.len())].1);
+                let next = bookmark.launch.step(dx);
                 self.ui.menu.bookmarks.set_launch(at, next);
                 // The reader row comes and goes with the game.
                 self.open_home_access();
