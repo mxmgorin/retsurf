@@ -180,7 +180,7 @@ impl App {
                     // On the start page, X types into the search field, or into
                     // the address bar when the page shows none.
                     if focus == Focus::Home {
-                        match self.config.home.search {
+                        match self.config.home.search.shown() {
                             true => self.ui.home.focus_search(),
                             false => self.ui.focus_address_bar(),
                         }

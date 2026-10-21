@@ -2,12 +2,12 @@
 //! navigates with the gamepad exactly like the other overlays. It's shown over
 //! the active tab whenever that tab is on `retsurf:home` — a blank page; see
 //! [`crate::browser::home`]. State here is which item holds focus (via the
-//! shared [`GridNav`], field above the grid) and the search field's edit
+//! shared [`GridNav`], field above or below the grid) and the search field's edit
 //! buffer; the central router moves the selection and activates, and
 //! [`crate::ui::home`] renders it (reading the tile list from the menu's live
 //! bookmarks).
 
-use super::grid::GridNav;
+use super::grid::{FieldAt, GridNav};
 
 pub struct Home {
     nav: GridNav,
@@ -17,9 +17,9 @@ pub struct Home {
 }
 
 impl Home {
-    /// A start page focused on its search field, or on its first tile when it
-    /// shows none (`search` false).
-    pub fn new(search: bool) -> Self {
+    /// A start page focused on its search field on `search`'s side of the
+    /// grid, or on its first tile when it shows none.
+    pub fn new(search: Option<FieldAt>) -> Self {
         Self {
             nav: GridNav::new(search),
             input: String::new(),
@@ -55,8 +55,8 @@ impl Home {
         self.nav.tile()
     }
 
-    /// Show or hide the search field.
-    pub fn set_search(&mut self, search: bool) {
+    /// Place the search field on a side of the grid, or hide it.
+    pub fn set_search(&mut self, search: Option<FieldAt>) {
         self.nav.set_field(search);
     }
 
@@ -71,7 +71,7 @@ impl Home {
     }
 
     /// Move the selection by a dominant-axis step (`dx`/`dy` in -1..=1) across
-    /// the search field (on top) and the `count`-tile grid below it.
+    /// the search field and the `count`-tile grid.
     pub fn move_sel(&mut self, dx: i32, dy: i32, count: usize) {
         self.nav.move_sel(dx, dy, count);
     }

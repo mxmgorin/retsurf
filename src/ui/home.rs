@@ -13,7 +13,7 @@ use super::theme::{ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM}
 use super::wordmark;
 use super::OskCaret;
 use crate::command::{AppCommand, HomeAction, QuickAccessAction};
-use crate::config::{HomeLayout, HomeSize};
+use crate::config::{HomeLayout, HomeSearch, HomeSize};
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
 use crate::overlay::quick_access::Strip;
@@ -50,8 +50,11 @@ pub(super) struct HomeView<'a> {
     pub layout: HomeLayout,
     pub size: HomeSize,
     pub mark: Mark<'a>,
-    /// Whether the search field shows.
-    pub search: bool,
+    /// Where the search field sits, if anywhere.
+    pub search: HomeSearch,
+    /// The keyboard's top edge while it types into the field: a field pinned
+    /// at the bottom rises above it.
+    pub keys_top: Option<f32>,
     pub tabs: Tabs<'a>,
     /// Whether the page carries the toolbar's strip buttons, for a page
     /// without a toolbar.
@@ -349,6 +352,17 @@ pub(super) fn add_home(
                             .unwrap_or(FOOTER_LINE_H),
                     };
                     let floor = area.bottom() - FOOT - footer_h - FOOTER_GAP;
+                    let pinned = view.search == HomeSearch::Bottom;
+                    // A pinned field takes the stack's foot, over the keyboard while it types.
+                    let bar_h = BAR_H + 2.0 * BAR_STROKE;
+                    let bar_bottom = match view.keys_top {
+                        Some(keys) if pinned => floor.min(keys - FOOTER_GAP),
+                        _ => floor,
+                    };
+                    let stack_floor = match pinned {
+                        true => bar_bottom - bar_h - ROW_GAP,
+                        false => floor,
+                    };
                     let banner_size = |t: &egui::TextureHandle| {
                         let size = t.size_vec2() * (BANNER_H / t.size_vec2().y);
                         size * (area.width() / size.x).min(1.0)
@@ -361,9 +375,14 @@ pub(super) fn add_home(
                         }
                         Mark::None => (0.0, 0.0),
                     };
-                    let top = match view.mark {
-                        Mark::None => COMPACT_TOP,
-                        Mark::Banner(_) | Mark::Wordmark => {
+                    // A pinned field leaves the mark nothing to anchor to.
+                    let gap_top = match (pinned, view.mark) {
+                        (true, Mark::Banner(_) | Mark::Wordmark) => ROW_GAP,
+                        _ => gap_top,
+                    };
+                    let top = match (pinned, view.mark) {
+                        (true, _) | (false, Mark::None) => COMPACT_TOP,
+                        (false, Mark::Banner(_) | Mark::Wordmark) => {
                             ((floor - area.top()) * FIELD_ANCHOR - mark_h - gap_top).max(8.0)
                         }
                     };
@@ -375,7 +394,7 @@ pub(super) fn add_home(
                     let drawn = scroll_offset(ui, STACK_SALT);
                     let stack = egui::ScrollArea::vertical()
                         .id_salt(STACK_SALT)
-                        .max_height(floor - area.top())
+                        .max_height(stack_floor - area.top())
                         .auto_shrink([false, false])
                         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                         .show(ui, |ui| {
@@ -391,11 +410,11 @@ pub(super) fn add_home(
                                 }
                                 ui.add_space(gap_top);
                                 let buttons = view.strip_buttons;
-                                if view.search {
+                                if view.search == HomeSearch::Top {
                                     add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
                                     ui.add_space(ROW_GAP);
                                 }
-                                let tab_buttons = buttons && !view.search;
+                                let tab_buttons = buttons && !view.search.shown();
                                 add_tabs(ui, view.tabs, block_w, tab_buttons, commands);
                                 ui.add_space(ROW_GAP);
                                 let tiles = view.tiles;
@@ -411,6 +430,19 @@ pub(super) fn add_home(
                             egui::pos2(stack.inner_rect.right(), foot),
                         );
                         fade(ui.painter(), band, egui::Direction::TopDown);
+                    }
+                    if pinned {
+                        let rect = egui::Rect::from_min_size(
+                            egui::pos2(area.center().x - block_w / 2.0, bar_bottom - bar_h),
+                            egui::vec2(block_w, bar_h),
+                        );
+                        let builder = egui::UiBuilder::new()
+                            .max_rect(rect)
+                            .layout(egui::Layout::top_down(egui::Align::Center));
+                        let buttons = view.strip_buttons;
+                        ui.scope_builder(builder, |ui| {
+                            add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
+                        });
                     }
                     if !view.footer.is_empty() {
                         let left = area.center().x - block_w / 2.0;

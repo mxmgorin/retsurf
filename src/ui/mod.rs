@@ -40,12 +40,13 @@ use crate::{
     command::AppCommand,
     config::{
         Brand, ControlsConfig, DebugConfig, DownloadsConfig, FaceLabels, HistoryConfig, HomeConfig,
-        InterfaceConfig, OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
+        HomeSearch, InterfaceConfig, OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
     },
     data::bookmarks::{self, Filter, Launch},
     data::session::TabInfo,
     overlay::game::input_maps::InputMaps,
     overlay::game::map_edit::MapEdit,
+    overlay::grid::FieldAt,
     overlay::hints::Hints,
     overlay::home::Home,
     overlay::menu::{Menu, Section},
@@ -405,7 +406,7 @@ impl AppUi {
             settings: Settings::new(),
             update: Updater::new(update),
             update_notice: UpdateNotice::default(),
-            home: Home::new(home_config.search),
+            home: Home::new(search_field(home_config.search)),
             home_active: false,
             page_icons: favicon::PageIcons::new(interface.page_icons),
             home_config: home_config.clone(),
@@ -594,7 +595,7 @@ impl AppUi {
     /// `[home]`, applied live.
     pub fn set_home(&mut self, home: &HomeConfig) {
         self.home_config = home.clone();
-        self.home.set_search(home.search);
+        self.home.set_search(search_field(home.search));
     }
 
     /// Whether the start page names pad buttons: its footer, the sort's.
@@ -626,7 +627,11 @@ impl AppUi {
             None if self.home.search_focused() => {
                 out.push(hint(&[face.a], "Type"));
                 if !list.visible.is_empty() {
-                    out.push(hint(&[egui_phosphor::bold::CARET_DOWN], "Bookmarks"));
+                    let toward = match self.home_config.search {
+                        HomeSearch::Bottom => egui_phosphor::bold::CARET_UP,
+                        HomeSearch::Top | HomeSearch::Off => egui_phosphor::bold::CARET_DOWN,
+                    };
+                    out.push(hint(&[toward], "Bookmarks"));
                 }
             }
             None => {}
@@ -869,6 +874,7 @@ impl AppUi {
                         filters: &list.filters,
                         filter: &list.filter,
                     };
+                    let home_caret = caret_for(OskField::Home);
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
                         visible: &list.visible,
@@ -880,6 +886,7 @@ impl AppUi {
                         size: self.home_config.bookmarks.size,
                         mark,
                         search: self.home_config.search,
+                        keys_top: home_caret.map(|_| ctx.content_rect().bottom() - self.osk_height),
                         tabs,
                         strip_buttons: !self.home_config.toolbar,
                         footer: &footer,
@@ -889,7 +896,7 @@ impl AppUi {
                         &mut self.home,
                         view,
                         self.webview_rect,
-                        caret_for(OskField::Home),
+                        home_caret,
                         commands,
                     );
                 }
@@ -981,7 +988,12 @@ impl AppUi {
                         let drawn =
                             osk::add_osk(ctx, &self.osk, self.pad_layout, bottom_inset, commands);
                         let screen = ctx.content_rect();
-                        self.osk_height = screen.bottom() - drawn.top();
+                        let height = screen.bottom() - drawn.top();
+                        // Whatever clears the keys was laid out by last frame's height: redraw.
+                        if (height - self.osk_height).abs() > panel::EPSILON {
+                            self.request_repaint();
+                        }
+                        self.osk_height = height;
                         if osk::keep_on_screen(&mut self.osk, drawn, screen) {
                             self.request_repaint();
                         }
@@ -1060,6 +1072,15 @@ impl AppUi {
 /// SDL reports pixels, so one conversion too many aims one of them elsewhere.
 fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
     (x - webview.left(), y - webview.top())
+}
+
+/// The side of the grid `search` puts the start page's field on, if any.
+fn search_field(search: HomeSearch) -> Option<FieldAt> {
+    match search {
+        HomeSearch::Top => Some(FieldAt::Above),
+        HomeSearch::Bottom => Some(FieldAt::Below),
+        HomeSearch::Off => None,
+    }
 }
 
 #[cfg(test)]

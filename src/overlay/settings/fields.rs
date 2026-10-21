@@ -6,8 +6,8 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout, HomeSize,
-    HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution,
+    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout, HomeSearch,
+    HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution,
     TextureFilter, TextureLimit, ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
@@ -469,7 +469,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Interface, "Home",       "Home page",              text!(home.page), false),
     f(S::Interface, "Home",       "Toolbar",                flag!(home.toolbar), false),
     f(S::Interface, "Home",       "Brand",                  choice!(home.brand: Brand), false),
-    f(S::Interface, "Home",       "Search",                 flag!(home.search), false),
+    f(S::Interface, "Home",       "Search",                 choice!(home.search: HomeSearch), false),
     f(S::Interface, "Home",       "Show",                   HOME_FILTER, false),
     f(S::Interface, "Home",       "Sort",                   choice!(home.bookmarks.sort: HomeSort), false).quick(Modes::Home),
     f(S::Interface, "Home",       "Layout",                 choice!(home.bookmarks.layout: HomeLayout), false).quick(Modes::Home),

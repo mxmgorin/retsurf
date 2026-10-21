@@ -145,7 +145,7 @@ impl AppUi {
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
-            Focus::Home if self.home_config.search => OskDest::Home,
+            Focus::Home if self.home_config.search.shown() => OskDest::Home,
             _ if self.address_bar_focused() => OskDest::AddressBar,
             _ if self.osk.visible && self.osk_on_address_bar => OskDest::AddressBar,
             _ => OskDest::Page,

@@ -67,7 +67,7 @@ cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 page = "retsurf:home"      # what Home and a new tab open: the start page or any URL
 toolbar = false            # the toolbar on the start page
 brand = "banner"           # start page header: "banner", "wordmark" or "none"
-search = true              # the search field
+search = "bottom"          # the search field: "top", "bottom" (pinned above the footer) or "off"
 
 [home.bookmarks]
 filter = "all"             # "all", "sites", "apps", "games" or a tag

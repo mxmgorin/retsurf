@@ -12,8 +12,8 @@ pub struct HomeConfig {
     pub toolbar: bool,
     /// The brand mark at the top.
     pub brand: Brand,
-    /// The search and address field.
-    pub search: bool,
+    /// Where the search and address field sits, if anywhere.
+    pub search: HomeSearch,
     /// The bookmark grid (`[home.bookmarks]`).
     pub bookmarks: HomeBookmarksConfig,
 }
@@ -36,7 +36,7 @@ impl Default for HomeConfig {
             page: crate::browser::HOME_URL.to_string(),
             toolbar: false,
             brand: Brand::default(),
-            search: true,
+            search: HomeSearch::default(),
             bookmarks: HomeBookmarksConfig::default(),
         }
     }
@@ -66,6 +66,7 @@ token_enum! {
 }
 
 pub use layout::HomeLayout;
+pub use search::HomeSearch;
 pub use size::HomeSize;
 
 // Own modules: a file holds one `token_enum!`, whose tests take a fixed name.
@@ -94,6 +95,28 @@ mod size {
             Small => "small", "Small",
             Medium => "medium", "Medium",
             Large => "large", "Large",
+        }
+    }
+}
+
+mod search {
+    use crate::config::token_enum::token_enum;
+
+    token_enum! {
+        /// Where the start page's search field sits.
+        pub enum HomeSearch {
+            default Bottom;
+            /// Under the brand, scrolling with the page.
+            Top => "top", "Top",
+            /// Pinned above the footer, the page scrolling above it.
+            Bottom => "bottom", "Bottom",
+            Off => "off", "Off",
+        }
+    }
+
+    impl HomeSearch {
+        pub fn shown(self) -> bool {
+            self != Self::Off
         }
     }
 }

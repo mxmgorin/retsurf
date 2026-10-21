@@ -494,7 +494,7 @@ impl App {
             return;
         }
         match self.ui.focus() {
-            Focus::Home if self.config.home.search => self.ui.home.focus_search(),
+            Focus::Home if self.config.home.search.shown() => self.ui.home.focus_search(),
             Focus::Home | Focus::Page | Focus::Hints => {
                 self.ui.hints.hide();
                 self.ui.focus_address_bar();
