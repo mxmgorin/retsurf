@@ -58,10 +58,10 @@ pub(super) struct HomeView<'a> {
 }
 
 /// The tab bar: the filters offered and the one shown.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(super) struct Tabs<'a> {
     pub filters: &'a [Filter],
-    pub filter: Filter,
+    pub filter: &'a Filter,
 }
 
 /// One footer hint: the buttons that do it, then what it does.
@@ -232,7 +232,7 @@ pub(super) fn add_home(
                                     ui.add_space(ROW_GAP);
                                 }
                                 let tab_buttons = buttons && !view.search;
-                                add_tabs(ui, &view.tabs, block_w, tab_buttons, commands);
+                                add_tabs(ui, view.tabs, block_w, tab_buttons, commands);
                                 ui.add_space(ROW_GAP);
                                 add_grid(ui, home, view.tiles, block_w, cols, commands);
                             });
@@ -444,7 +444,7 @@ const MARK_GLYPH: f32 = 1.2;
 /// either end.
 fn add_tabs(
     ui: &mut egui::Ui,
-    tabs: &Tabs,
+    tabs: Tabs,
     width: f32,
     buttons: bool,
     commands: &mut Vec<AppCommand>,
@@ -484,7 +484,7 @@ fn add_tabs(
 /// The filter tabs in what is left of the row, a rule parting the kinds from
 /// the tags: centred when they fit, else scrolled to keep the active one in
 /// view when it changes, the clipped end fading out.
-fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand>) {
+fn add_filter_tabs(ui: &mut egui::Ui, tabs: Tabs, commands: &mut Vec<AppCommand>) {
     let pad = 2.0 * ui.spacing().button_padding.x;
     let labels: Vec<String> = tabs.filters.iter().map(Filter::label).collect();
     let parted = |at: usize| {
@@ -510,7 +510,7 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: &Tabs, commands: &mut Vec<AppCommand
             if parted(at) {
                 divider(ui);
             }
-            let active = *filter == tabs.filter;
+            let active = filter == tabs.filter;
             let resp = tab(ui, label, active);
             if active && moved {
                 resp.scroll_to_me(None);

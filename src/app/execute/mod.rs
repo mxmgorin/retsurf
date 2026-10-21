@@ -12,7 +12,7 @@ use super::{
     UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::{AppConfig, GameModeConfig};
+use crate::config::{AppConfig, GameModeConfig, HomeBookmarksConfig};
 use crate::data::bookmarks::{Filter, Launch};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
@@ -509,8 +509,7 @@ impl App {
     /// Open the start page's focused bookmark, or with its search field
     /// focused, the OSK to type into it.
     pub(super) fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
-        let tile = self.ui.home.tile();
-        match tile.and_then(|tile| self.ui.home_visible().get(tile).copied()) {
+        match self.ui.home_focused_bookmark() {
             Some(at) => self.open_bookmark(at, out),
             None if self.ui.home.search_focused() => {
                 self.ui.osk(OskCommand::Show, &self.browser, out)
@@ -519,37 +518,39 @@ impl App {
         }
     }
 
-    /// Change the start page's filter or sort, kept in `[home]` and written with
-    /// the next flush, or open a tile's options.
+    /// Open a tile or its options, or change the start page's filter or sort.
     pub(super) fn home_action(&mut self, action: &HomeAction, out: &mut Vec<AppCommand>) {
         match action {
             HomeAction::Options(tile) => {
                 self.open_options(*tile);
-                return;
+            }
+            HomeAction::Open(tile) => {
+                if let Some(at) = self.ui.home_bookmark_at(*tile) {
+                    self.open_bookmark(at, out);
+                }
             }
             HomeAction::StepFilter(delta) => {
                 let offered = self.ui.home_filters();
                 let current = Filter::parse(&self.config.home.bookmarks.filter);
                 let at = offered.iter().position(|f| *f == current).unwrap_or(0);
                 let next = offered[crate::list::wrap(at, *delta, offered.len())].token();
-                self.config.home.bookmarks.filter = next;
+                self.set_home_view(|view| view.filter = next);
             }
-            HomeAction::Open(tile) => {
-                if let Some(&at) = self.ui.home_visible().get(*tile) {
-                    self.open_bookmark(at, out);
-                }
-                return;
-            }
-            HomeAction::SetFilter(token) => self.config.home.bookmarks.filter = token.clone(),
+            HomeAction::SetFilter(token) => self.set_home_view(|view| view.filter = token.clone()),
             HomeAction::StepSort(delta) => {
-                let view = &mut self.config.home.bookmarks;
-                view.sort = view.sort.step(*delta);
+                let sort = self.config.home.bookmarks.sort.step(*delta);
+                self.set_home_view(|view| view.sort = sort);
                 // Nothing on the page names the order; the strip and Settings do.
-                let notice =
-                    Notice::new(bold::SORT_ASCENDING, format!("Sort: {}", view.sort.label()));
+                let notice = Notice::new(bold::SORT_ASCENDING, format!("Sort: {}", sort.label()));
                 self.ui.toast(notice);
             }
         }
+    }
+
+    /// Change how the start page shows its bookmarks: applied live, and kept
+    /// in `[home]`, written with the next flush.
+    fn set_home_view(&mut self, change: impl FnOnce(&mut HomeBookmarksConfig)) {
+        change(&mut self.config.home.bookmarks);
         self.config_dirty = true;
         self.ui.set_home(&self.config.home);
     }

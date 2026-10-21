@@ -43,7 +43,7 @@ impl App {
         }
         // Over the start page the focused tile leads the strip.
         if strip == Strip::QuickAccess && self.browser.on_home_page() {
-            self.open_home_access();
+            self.open_home_access(self.ui.home_focused_bookmark());
             return;
         }
         let launched = self.browser.launched().is_some();

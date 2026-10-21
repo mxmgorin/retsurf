@@ -191,6 +191,14 @@ fn page_icon_wants<'a>(
     wanted
 }
 
+/// The start page's bookmarks as a frame shows them: the filter in force, the
+/// filters offered as tabs, and the tiles as indices into the bookmarks.
+struct HomeList {
+    visible: Vec<usize>,
+    filters: Vec<Filter>,
+    filter: Filter,
+}
+
 /// The reasons the chrome hides, kept apart so leaving one does not reveal the
 /// bar while the other still holds it.
 #[derive(Clone, Copy, Default)]
@@ -595,14 +603,9 @@ impl AppUi {
     }
 
     /// The start page's footer for its focus: what the confirm and options
-    /// buttons do there, then the shoulders over `filters` choices and the sort;
-    /// nothing without a pad.
-    fn home_footer(
-        &self,
-        visible: &[usize],
-        filters: usize,
-        face: FaceLabels,
-    ) -> Vec<home::FooterHint> {
+    /// buttons do there, then the shoulders over the filter choices and the
+    /// sort; nothing without a pad.
+    fn home_footer(&self, list: &HomeList, face: FaceLabels) -> Vec<home::FooterHint> {
         let hint = |caps: &[&'static str], label: &'static str| home::FooterHint {
             caps: caps.to_vec(),
             label,
@@ -611,7 +614,7 @@ impl AppUi {
         if !self.home_pad {
             return out;
         }
-        match self.home.tile().and_then(|tile| visible.get(tile)) {
+        match self.home.tile().and_then(|tile| list.visible.get(tile)) {
             Some(&at) => {
                 let open = match self.menu.bookmarks.all()[at].launch {
                     Launch::Browser => "Open",
@@ -622,13 +625,13 @@ impl AppUi {
             }
             None if self.home.search_focused() => {
                 out.push(hint(&[face.a], "Type"));
-                if !visible.is_empty() {
+                if !list.visible.is_empty() {
                     out.push(hint(&[egui_phosphor::bold::CARET_DOWN], "Bookmarks"));
                 }
             }
             None => {}
         }
-        if filters > 1 {
+        if list.filters.len() > 1 {
             out.push(hint(&keys::SHOULDERS, "Filter"));
         }
         out.push(hint(&[face.y], "Sort"));
@@ -636,7 +639,7 @@ impl AppUi {
     }
 
     /// The start page's bookmark filter.
-    pub(super) fn home_filter(&self) -> Filter {
+    fn home_filter(&self) -> Filter {
         Filter::parse(&self.home_config.bookmarks.filter)
     }
 
@@ -652,6 +655,35 @@ impl AppUi {
         bookmarks::view(all, &self.home_filter(), sort, bookmark_label)
     }
 
+    /// The start page's list as of now: the filter, what it offers, what it shows.
+    fn home_list(&self) -> HomeList {
+        let filter = self.home_filter();
+        let all = self.menu.bookmarks.all();
+        HomeList {
+            visible: bookmarks::view(
+                all,
+                &filter,
+                self.home_config.bookmarks.sort,
+                bookmark_label,
+            ),
+            filters: bookmarks::filters(all, &filter),
+            filter,
+        }
+    }
+
+    /// The index in the bookmarks of the start-page tile at `tile`, the grid's
+    /// own index.
+    pub fn home_bookmark_at(&self, tile: usize) -> Option<usize> {
+        self.home_visible().get(tile).copied()
+    }
+
+    /// The index in the bookmarks of the start page's focused tile.
+    pub fn home_focused_bookmark(&self) -> Option<usize> {
+        self.home
+            .tile()
+            .and_then(|tile| self.home_bookmark_at(tile))
+    }
+
     /// `[interface] button_hints`, applied live.
     pub fn set_button_hints(&mut self, on: bool) {
         self.button_hints = on;
@@ -660,13 +692,6 @@ impl AppUi {
     /// `[interface] page_icons`, applied live; off frees every icon texture.
     pub fn set_page_icons(&mut self, on: bool) {
         self.page_icons.set_enabled(on);
-    }
-
-    /// Keep the start page's selection in range before it renders.
-    fn clamp_overlay_selections(&mut self) {
-        if self.home_active {
-            self.home.clamp(self.home_visible().len());
-        }
     }
 
     pub fn update(
@@ -704,7 +729,11 @@ impl AppUi {
         // Android's system bars stay hidden: the toolbar is the only chrome.
         #[cfg(target_os = "android")]
         window.hold_system_fullscreen();
-        self.clamp_overlay_selections();
+        // Once a frame: the selection is clamped to it, then it is drawn.
+        let home_list = self.home_active.then(|| self.home_list());
+        if let Some(list) = &home_list {
+            self.home.clamp(list.visible.len());
+        }
         // A startup find waits for a calm screen: nothing open over the page, no game.
         if matches!(self.focus(), Focus::Page | Focus::Home) && !browser.in_game_mode() {
             if let Some(version) = self.update.take_startup_offer() {
@@ -823,14 +852,11 @@ impl AppUi {
                 self.page_icons.sync(ctx, wanted);
 
                 // A backdrop over the blank web view, below the foreground overlays.
-                if self.home_active {
-                    let visible = self.home_visible();
-                    let filters = self.home_filters();
+                if let Some(list) = &home_list {
                     let footer = match self.button_hints {
-                        true => self.home_footer(&visible, filters.len(), face),
+                        true => self.home_footer(list, face),
                         false => Vec::new(),
                     };
-                    let filter = self.home_filter();
                     let mark = match self.home_config.brand {
                         Brand::Banner => self
                             .banner
@@ -840,12 +866,12 @@ impl AppUi {
                         Brand::None => home::Mark::None,
                     };
                     let tabs = home::Tabs {
-                        filters: &filters,
-                        filter,
+                        filters: &list.filters,
+                        filter: &list.filter,
                     };
                     let tiles = home::Tiles {
                         bookmarks: self.menu.bookmarks.all(),
-                        visible: &visible,
+                        visible: &list.visible,
                         icons: &self.page_icons,
                     };
                     let view = home::HomeView {

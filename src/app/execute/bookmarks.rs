@@ -127,23 +127,21 @@ impl App {
         self.sync_launch(out);
     }
 
-    /// Open Quick Access on the start-page tile at `tile`, the grid's own index.
-    pub(in crate::app) fn open_options(&mut self, tile: usize) {
-        if tile < self.ui.home_visible().len() {
-            self.ui.home.select_tile(tile);
-            self.open_home_access();
-        }
+    /// Open Quick Access on the start-page tile at `tile`, the grid's own
+    /// index; `false` when the grid has no such tile.
+    pub(in crate::app) fn open_options(&mut self, tile: usize) -> bool {
+        let Some(at) = self.ui.home_bookmark_at(tile) else {
+            return false;
+        };
+        self.ui.home.select_tile(tile);
+        self.open_home_access(Some(at));
+        true
     }
 
-    /// Open Quick Access over the start page: the focused tile's rows, when a
-    /// tile is focused, then the page's own, with their values.
-    pub(in crate::app) fn open_home_access(&mut self) {
-        let tile = self
-            .ui
-            .home
-            .tile()
-            .and_then(|tile| self.ui.home_visible().get(tile).copied())
-            .map(|at| self.home_tile(at));
+    /// Open Quick Access over the start page: the rows of the bookmark at
+    /// `at`, when one is given, then the page's own, with their values.
+    pub(in crate::app) fn open_home_access(&mut self, at: Option<usize>) {
+        let tile = at.map(|at| self.home_tile(at));
         let launched = self.browser.launched().is_some();
         self.ui.quick_access.open_home(tile, launched, &self.config);
         self.refresh_options();
@@ -194,8 +192,10 @@ impl App {
             OptionsRow::LaunchAs => {
                 let next = bookmark.launch.step(dx);
                 self.ui.menu.bookmarks.set_launch(at, next);
-                // The reader row comes and goes with the game.
-                self.open_home_access();
+                // The reader row comes and goes with the game; the panel stays
+                // on this bookmark even once the filter no longer shows it.
+                self.focus_home_tile(at);
+                self.open_home_access(Some(at));
                 self.ui.quick_access.select_entry(Entry::Options(row));
             }
             OptionsRow::Reader => {
@@ -271,6 +271,13 @@ impl App {
             OptionsText::Tags => store.set_tags(at, bookmarks::split_tags(text)),
         }
         self.refresh_options();
+    }
+
+    /// Put the grid's focus on the bookmark at `at`, where the view shows it.
+    fn focus_home_tile(&mut self, at: usize) {
+        if let Some(tile) = self.ui.home_visible().iter().position(|&i| i == at) {
+            self.ui.home.select_tile(tile);
+        }
     }
 
     /// Swap the bookmark at `at` with its neighbour `delta` tiles along the

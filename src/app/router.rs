@@ -173,8 +173,8 @@ impl App {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
                     // On a start-page tile X opens its options instead.
-                    if let Some(tile) = self.ui.home.tile().filter(|_| focus == Focus::Home) {
-                        self.open_options(tile);
+                    let tile = self.ui.home.tile().filter(|_| focus == Focus::Home);
+                    if tile.is_some_and(|tile| self.open_options(tile)) {
                         return;
                     }
                     // On the start page, X types into the search field, or into
