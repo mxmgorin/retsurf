@@ -11,6 +11,7 @@ mod game_mode;
 mod hints;
 mod home;
 mod keys;
+mod labels;
 mod memory;
 mod menu;
 mod osk;
@@ -26,9 +27,10 @@ mod theme;
 mod toast;
 mod toolbar;
 mod update_notice;
+mod wordmark;
 
 pub use self::game_mode::game_mode_hint;
-pub use self::home::bookmark_label;
+pub use self::labels::bookmark_label;
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
 pub use self::toast::{browser_notice, Notice, TOAST};
@@ -647,7 +649,7 @@ impl AppUi {
     pub fn home_visible(&self) -> Vec<usize> {
         let sort = self.home_config.bookmarks.sort;
         let all = self.menu.bookmarks.all();
-        bookmarks::view(all, &self.home_filter(), sort, home::bookmark_label)
+        bookmarks::view(all, &self.home_filter(), sort, bookmark_label)
     }
 
     /// `[interface] button_hints`, applied live.

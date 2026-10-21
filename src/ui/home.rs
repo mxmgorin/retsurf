@@ -6,7 +6,11 @@
 //! [`HomeAction::Open`].
 
 use super::favicon::{Icon, PageIcons};
-use super::theme::{lerp_color, ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM};
+use super::keys;
+use super::labels::bookmark_label;
+use super::panel::{fade, scroll_offset, scrolls_on, settle, EPSILON, FADE};
+use super::theme::{ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE};
+use super::wordmark;
 use super::OskCaret;
 use crate::command::{AppCommand, HomeAction, QuickAccessAction};
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
@@ -14,12 +18,10 @@ use crate::overlay::home::Home;
 use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
-use std::cell::RefCell;
-use std::collections::HashMap;
 
 /// Typeface for the start-page body text. egui bundles only two real text faces
 /// — `Ubuntu-Light` and `Hack`; swap the call below to flip between them. The
-/// wordmark stays on Hack via [`add_wordmark`] regardless.
+/// wordmark stays on Hack via [`wordmark`] regardless.
 fn font(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
 }
@@ -130,36 +132,20 @@ pub(super) const TILE_W: f32 = 96.0;
 pub(super) const TILE_H: f32 = GLYPH_TOP + GLYPH + LABEL_GAP + LABEL_ROWS as f32 * LABEL_LINE_H;
 pub(super) const GAP: f32 = 12.0;
 
-/// Wordmark type size (logical px); the wave band and the reserved height
-/// derive from it.
-const WORDMARK_SIZE: f32 = 36.0;
-/// Letter spacing as a share of the type size, matching the SVG wordmark.
-const WORDMARK_TRACKING: f32 = 0.1;
-/// The wave band below the text. Ratios track the SVG, nudged up so the thin
-/// stroke stays legible on a handheld.
-const WAVE_GAP: f32 = WORDMARK_SIZE * 0.2; // text bottom to wave centerline
-const WAVE_AMP: f32 = WORDMARK_SIZE * 0.08; // crest height
-const WAVE_STROKE: f32 = WORDMARK_SIZE * 0.045;
-const WAVE_BAND: f32 = WAVE_GAP + WAVE_AMP + WAVE_STROKE;
-
 /// Clearance between the page's foot and the scrolling stack.
 const FOOT: f32 = 12.0;
-/// The band over a scroll viewport's edge that dissolves into the page while
-/// more waits beyond it.
-const FADE: f32 = 24.0;
 
-/// Draw the start-page overlay over the (blank) web view, confined to the
-/// `webview` rect so the toolbar stays usable. Any activation is pushed as a
-/// command for the app to execute.
+/// Draw the start-page overlay over the (blank) web view, confined to `area`,
+/// the web view's rect, so the toolbar stays usable. Any activation is pushed
+/// as a command for the app to execute.
 pub(super) fn add_home(
     ctx: &egui::Context,
     home: &mut Home,
     view: HomeView,
-    webview: egui::Rect,
+    area: egui::Rect,
     osk_caret: Option<OskCaret>,
     commands: &mut Vec<AppCommand>,
 ) {
-    let area = webview;
     egui::Area::new(egui::Id::new("home"))
         .order(egui::Order::Middle)
         .fixed_pos(area.min)
@@ -206,7 +192,7 @@ pub(super) fn add_home(
                     let (mark_h, gap_top) = match view.mark {
                         Mark::Banner(t) => (banner_size(t).y, BANNER_GAP),
                         Mark::Wordmark => {
-                            let h = wordmark_height(ui);
+                            let h = wordmark::wordmark_height(ui);
                             (h, h * GAP_TOP_RATIO)
                         }
                         Mark::None => (0.0, 0.0),
@@ -236,7 +222,7 @@ pub(super) fn add_home(
                                         let image = egui::Image::new(t);
                                         ui.add(image.fit_to_exact_size(banner_size(t)));
                                     }
-                                    Mark::Wordmark => add_wordmark(ui),
+                                    Mark::Wordmark => wordmark::add_wordmark(ui),
                                     Mark::None => {}
                                 }
                                 ui.add_space(gap_top);
@@ -268,7 +254,7 @@ pub(super) fn add_home(
                             egui::pos2(left + block_w, area.bottom()),
                         );
                         let h = add_footer(ui, row, view.footer);
-                        if (h - footer_h).abs() > FOOTER_SETTLE {
+                        if (h - footer_h).abs() > EPSILON {
                             ui.ctx().data_mut(|d| d.insert_temp(footer_id, h));
                             ui.ctx().request_repaint();
                         }
@@ -283,12 +269,11 @@ const FOOTER_LINE_H: f32 = 32.0;
 const FOOTER_GAP: f32 = 8.0;
 /// The footer's rule to its hints.
 const FOOTER_RULE_GAP: f32 = 8.0;
-/// A change in the footer's height smaller than this is no change.
-const FOOTER_SETTLE: f32 = 0.5;
 /// Space between the page's rows.
 const ROW_GAP: f32 = 12.0;
-/// The search bar's height.
+/// The search bar's height, and its corners.
 const BAR_H: f32 = 44.0;
+const BAR_RADIUS: f32 = 10.0;
 /// The search bar's inner margin across.
 const BAR_MARGIN_X: i8 = 6;
 /// The search bar's widest stroke.
@@ -314,7 +299,7 @@ const TAB_GAP: f32 = 6.0;
 fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 {
     ui.painter()
         .hline(row.x_range(), row.top(), egui::Stroke::new(LINE_W, BORDER));
-    let hints: Vec<super::keys::Hint> = footer
+    let hints: Vec<keys::Hint> = footer
         .iter()
         .map(|hint| (hint.caps.as_slice(), hint.label))
         .collect();
@@ -322,7 +307,7 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
     let inner = egui::Rect::from_min_max(row.min + egui::vec2(0.0, FOOTER_RULE_GAP), row.max);
     let h = ui
         .scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-            super::keys::centered_hints(ui, &hints, width)
+            keys::centered_hints(ui, &hints, width)
         })
         .inner;
     h + FOOTER_RULE_GAP
@@ -331,73 +316,6 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
 /// The scroll areas' ids: the stack, and the tabs row when it overflows.
 const STACK_SALT: &str = "home_stack";
 const TABS_SALT: &str = "home_tabs";
-
-/// The offset the scroll area salted `salt` under `ui` was last drawn at.
-fn scroll_offset(ui: &egui::Ui, salt: &str) -> Option<egui::Vec2> {
-    let id = ui.make_persistent_id(salt);
-    egui::scroll_area::State::load(ui.ctx(), id).map(|state| state.offset)
-}
-
-/// Repaint when `scroll` ended at another offset than `drawn`: egui clamps
-/// after shrunken content, or reaches a target, only once the frame is built.
-fn settle<R>(
-    ui: &egui::Ui,
-    drawn: Option<egui::Vec2>,
-    scroll: &egui::scroll_area::ScrollAreaOutput<R>,
-) {
-    if drawn != Some(scroll.state.offset) {
-        ui.ctx().request_repaint();
-    }
-}
-
-/// Whether `scroll` holds content past its viewport's edge in `dir`: the far
-/// edge of a top-down or left-to-right scroll, the near edge of the reverse.
-fn scrolls_on<R>(scroll: &egui::scroll_area::ScrollAreaOutput<R>, dir: egui::Direction) -> bool {
-    let (offset, span, content) = match dir {
-        egui::Direction::TopDown | egui::Direction::BottomUp => (
-            scroll.state.offset.y,
-            scroll.inner_rect.height(),
-            scroll.content_size.y,
-        ),
-        egui::Direction::LeftToRight | egui::Direction::RightToLeft => (
-            scroll.state.offset.x,
-            scroll.inner_rect.width(),
-            scroll.content_size.x,
-        ),
-    };
-    match dir {
-        egui::Direction::TopDown | egui::Direction::LeftToRight => {
-            offset + span < content - FOOTER_SETTLE
-        }
-        egui::Direction::BottomUp | egui::Direction::RightToLeft => offset > FOOTER_SETTLE,
-    }
-}
-
-/// Dissolve `band` into the page along `dir`: clear where it starts, solid
-/// where it ends, so clipped content fades instead of being cut.
-fn fade(painter: &egui::Painter, band: egui::Rect, dir: egui::Direction) {
-    let clear = egui::Color32::TRANSPARENT;
-    // Corners in mesh order: left-top, right-top, right-bottom, left-bottom.
-    let colors = match dir {
-        egui::Direction::TopDown => [clear, clear, BG, BG],
-        egui::Direction::BottomUp => [BG, BG, clear, clear],
-        egui::Direction::LeftToRight => [clear, BG, BG, clear],
-        egui::Direction::RightToLeft => [BG, clear, clear, BG],
-    };
-    let corners = [
-        band.left_top(),
-        band.right_top(),
-        band.right_bottom(),
-        band.left_bottom(),
-    ];
-    let mut mesh = egui::Mesh::default();
-    for (pos, color) in corners.into_iter().zip(colors) {
-        mesh.colored_vertex(pos, color);
-    }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    painter.add(egui::Shape::mesh(mesh));
-}
 
 /// The search bar: the field, between the toolbar's strip buttons when
 /// `buttons` (Quick Menu at the left, Quick Access at the right, as the toolbar
@@ -414,7 +332,7 @@ fn add_search_bar(
     let frame = egui::Frame::default()
         .fill(SURFACE)
         .inner_margin(egui::Margin::symmetric(BAR_MARGIN_X, 0))
-        .corner_radius(10.0)
+        .corner_radius(BAR_RADIUS)
         .stroke(egui::Stroke::new(
             if selected { BAR_STROKE } else { LINE_W },
             if selected { ACCENT } else { BORDER },
@@ -470,105 +388,6 @@ fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>)
     if resp.clicked() {
         commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(strip)));
     }
-}
-
-/// The brand wordmark: "ret" in ink, "surf" in the brand gradient. egui has no
-/// gradient text fill, so the `surf` glyphs are tagged with a marker color
-/// ([`ACCENT`]), tessellated here, and recolored by height.
-fn wordmark_job(size: f32) -> egui::text::LayoutJob {
-    let mut job = egui::text::LayoutJob::default();
-    // Keep the wordmark on Hack (monospace) for its logo feel, independent of the
-    // body `font()` (Ubuntu-Light).
-    let fmt = |color: egui::Color32| egui::TextFormat {
-        font_id: egui::FontId::monospace(size),
-        color,
-        extra_letter_spacing: size * WORDMARK_TRACKING,
-        ..Default::default()
-    };
-    job.append("ret", 0.0, fmt(INK));
-    // epaint skips extra_letter_spacing on a section's first glyph, so the
-    // ret/surf joint needs it back. ACCENT is a marker recolored below.
-    job.append("surf", size * WORDMARK_TRACKING, fmt(ACCENT));
-    job
-}
-
-/// The mark's laid-out height, wave band included — the layout needs it before
-/// anything is drawn.
-fn wordmark_height(ui: &egui::Ui) -> f32 {
-    wordmark_text_size(ui, WORDMARK_SIZE).y + WAVE_BAND
-}
-
-fn add_wordmark(ui: &mut egui::Ui) {
-    let gsize = wordmark_text_size(ui, WORDMARK_SIZE);
-    let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(gsize.x, gsize.y + WAVE_BAND),
-        egui::Sense::hover(),
-    );
-    paint_wordmark_text(ui, rect.min, WORDMARK_SIZE);
-
-    // The brand wave: a solid-teal sine under the text, ~3 periods, starting on
-    // the centerline and dipping down first — the SVG path's phase.
-    const N: usize = 120;
-    const PERIODS: f32 = 3.0;
-    let over = gsize.x * 0.02;
-    let (x0, x1) = (rect.min.x - over, rect.max.x + over);
-    let cy = rect.min.y + gsize.y + WAVE_GAP;
-    let pts: Vec<egui::Pos2> = (0..=N)
-        .map(|i| {
-            let t = i as f32 / N as f32;
-            let y = cy + WAVE_AMP * (t * PERIODS * std::f32::consts::TAU).sin();
-            egui::pos2(x0 + (x1 - x0) * t, y)
-        })
-        .collect();
-    ui.painter().add(egui::Shape::line(
-        pts,
-        egui::Stroke::new(WAVE_STROKE, ACCENT),
-    ));
-}
-
-/// The laid-out size of the wordmark's text at type `size`, wave band excluded.
-pub(super) fn wordmark_text_size(ui: &egui::Ui, size: f32) -> egui::Vec2 {
-    ui.ctx()
-        .fonts_mut(|f| f.layout_job(wordmark_job(size)))
-        .size()
-}
-
-/// Paint the wordmark's text at type `size` with its top-left at `pos`,
-/// allocating nothing.
-pub(super) fn paint_wordmark_text(ui: &egui::Ui, pos: egui::Pos2, size: f32) {
-    let galley = ui.ctx().fonts_mut(|f| f.layout_job(wordmark_job(size)));
-
-    // Recolor the marker-colored `surf` vertices by height: teal over the lower
-    // ~55%, warming to coral — the stops of `_surf_gradient` in the brand SVGs.
-    let ppp = ui.ctx().pixels_per_point();
-    let tex = ui.ctx().fonts(|f| f.font_image_size());
-    let mut mesh = egui::epaint::Mesh::default();
-    let shape = egui::epaint::TextShape::new(pos, galley, INK);
-    let opts = egui::epaint::TessellationOptions::default();
-    egui::epaint::Tessellator::new(ppp, opts, tex, Vec::new()).tessellate_text(&shape, &mut mesh);
-
-    // Key the gradient to the x-height, not the full vertex span: `f`'s ascender
-    // reaches higher, and spanning to it left the other glyph tops short of coral.
-    let ys: Vec<f32> = mesh
-        .vertices
-        .iter()
-        .filter(|v| v.color == ACCENT)
-        .map(|v| v.pos.y)
-        .collect();
-    let bot = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    // Each glyph is one quad (4 verts); the x-height is the lowest of the glyph
-    // tops (the tall `f` top is the outlier and is excluded by taking the max).
-    let x_top = ys
-        .chunks(4)
-        .map(|g| g.iter().copied().fold(f32::INFINITY, f32::min))
-        .fold(f32::NEG_INFINITY, f32::max);
-    let span = (bot - x_top).max(1.0);
-    for v in mesh.vertices.iter_mut().filter(|v| v.color == ACCENT) {
-        let frac = ((bot - v.pos.y) / span).clamp(0.0, 1.0); // 0 baseline, 1 x-height+
-        let t = ((frac - 0.55) / 0.45).clamp(0.0, 1.0);
-        v.color = lerp_color(ACCENT, SURF_WARM, t);
-    }
-    ui.painter().add(egui::Shape::mesh(mesh));
 }
 
 /// The search / URL field, frameless inside the bar, `width` wide. Editable
@@ -763,8 +582,9 @@ fn tab_text_width(ui: &egui::Ui, text: &str) -> f32 {
     ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, INK).size().x)
 }
 
-/// Shown in place of an empty grid.
+/// Shown in place of an empty grid, in this type.
 const EMPTY_HINT: &str = "Bookmark a page from Quick Access to see it here";
+const EMPTY_FONT: f32 = 14.0;
 
 /// The bookmark grid: one tile per bookmark the view shows, in its order.
 fn add_grid(
@@ -778,7 +598,7 @@ fn add_grid(
     if tiles.visible.is_empty() {
         ui.label(
             egui::RichText::new(EMPTY_HINT)
-                .font(font(14.0))
+                .font(font(EMPTY_FONT))
                 .color(MUTED),
         );
         return;
@@ -870,14 +690,6 @@ fn add_tile(
     let glyph = paint_tile(ui.painter(), rect, &label, icon, active);
     paint_launch_mark(ui.painter(), glyph, bookmark.launch);
     resp
-}
-
-/// What a bookmark is shown as: its name, else its site.
-pub fn bookmark_label(bookmark: &Bookmark) -> String {
-    match bookmark.name.is_empty() {
-        true => brand_label(&bookmark.url),
-        false => bookmark.name.clone(),
-    }
 }
 
 /// Scroll the selected item (`id` at `rect`) into view on the frame the
@@ -1032,82 +844,4 @@ fn paint_glyph_square(
         egui::StrokeKind::Inside,
     );
     glyph
-}
-
-thread_local! {
-    /// Memoizes [`brand_label`] per URL: it parses a `Url`, and runs for every
-    /// visible tile on each home repaint. Single-threaded — egui is main-thread.
-    static BRAND_LABELS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
-}
-
-/// A short label for a tile or a menu URL row (memoized wrapper over
-/// [`compute_brand_label`]).
-pub(super) fn brand_label(url: &str) -> String {
-    BRAND_LABELS.with(|cache| {
-        if let Some(label) = cache.borrow().get(url) {
-            return label.clone();
-        }
-        let label = compute_brand_label(url);
-        cache.borrow_mut().insert(url.to_owned(), label.clone());
-        label
-    })
-}
-
-/// A short label for a tile: the registrable domain name (`en.wikipedia.org` ->
-/// `wikipedia`, `bbc.co.uk` -> `bbc`), falling back to the host, then the raw string.
-fn compute_brand_label(url: &str) -> String {
-    let Ok(parsed) = url::Url::parse(url) else {
-        return url.to_string();
-    };
-    let Some(host) = parsed.host() else {
-        return url.to_string();
-    };
-    // An address has no registrable domain to shorten to — splitting on dots
-    // would label `127.0.0.1` as "0".
-    if !matches!(host, url::Host::Domain(_)) {
-        return host.to_string();
-    }
-    let host = host.to_string();
-    let host = host.trim_start_matches("www.");
-    let parts: Vec<&str> = host.split('.').filter(|s| !s.is_empty()).collect();
-    let n = parts.len();
-    if n <= 1 {
-        return host.to_string();
-    }
-    let suffix_len = if n >= 3 && parts[n - 2].len() <= 3 && parts[n - 1].len() == 2 {
-        2
-    } else {
-        1
-    };
-    parts[n - suffix_len - 1].to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::compute_brand_label;
-
-    #[test]
-    fn brand_label_takes_the_registrable_domain() {
-        assert_eq!(
-            compute_brand_label("https://en.wikipedia.org/wiki/X"),
-            "wikipedia"
-        );
-        assert_eq!(compute_brand_label("https://www.google.com/"), "google");
-        assert_eq!(compute_brand_label("https://bbc.co.uk"), "bbc");
-        assert_eq!(compute_brand_label("http://localhost:8099/x"), "localhost");
-    }
-
-    /// An address has no registrable domain; splitting on dots used to yield "0".
-    #[test]
-    fn brand_label_keeps_addresses_whole() {
-        assert_eq!(compute_brand_label("http://127.0.0.1:8099/x"), "127.0.0.1");
-        assert_eq!(compute_brand_label("http://[::1]:8099/x"), "[::1]");
-    }
-
-    /// The internal pages (and anything unparseable) fall back to the raw string.
-    #[test]
-    fn brand_label_falls_back_to_the_input() {
-        assert_eq!(compute_brand_label("retsurf:home"), "retsurf:home");
-        assert_eq!(compute_brand_label("not a url"), "not a url");
-    }
 }

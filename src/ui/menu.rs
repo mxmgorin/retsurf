@@ -378,7 +378,7 @@ fn add_bookmarks_section(
                     true => url_tail(url),
                     false => url_without_scheme(url),
                 };
-                let label = super::home::bookmark_label(bookmark);
+                let label = super::labels::bookmark_label(bookmark);
                 let atoms = url_atoms(ui, label, tail, icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
@@ -490,7 +490,7 @@ fn add_history_section(
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             ui.horizontal(|ui| {
                 let icon = site_icon(icons, &entry.url);
-                let brand = super::home::brand_label(&entry.url);
+                let brand = super::labels::brand_label(&entry.url);
                 let atoms = url_atoms(ui, brand, url_tail(&entry.url), icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {

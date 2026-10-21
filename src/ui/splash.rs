@@ -3,8 +3,8 @@
 //! `Ui` rather than an area, whose first show is an invisible sizing pass.
 
 use super::brand::{self, Horizon};
-use super::home;
 use super::theme::BG;
+use super::wordmark;
 use egui_sdl2::egui;
 
 /// The sun's radius as a share of the screen's shorter side.
@@ -39,8 +39,8 @@ pub fn add_splash(ctx: &egui::Context) {
         &sun,
     );
     let size = sun.radius * MARK_SIZE;
-    let mark = home::wordmark_text_size(&ui, size);
+    let mark = wordmark::wordmark_text_size(&ui, size);
     let mark_top = horizon + sun.depth() + sun.radius * MARK_GAP;
     let left = screen.center().x - mark.x / 2.0;
-    home::paint_wordmark_text(&ui, egui::pos2(left, mark_top), size);
+    wordmark::paint_wordmark_text(&ui, egui::pos2(left, mark_top), size);
 }

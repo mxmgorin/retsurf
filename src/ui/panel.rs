@@ -1,7 +1,9 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, ACCENT, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT, WARN};
+use super::theme::{
+    close_button, ACCENT, BG, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT, WARN,
+};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
 
@@ -360,4 +362,81 @@ pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollA
     egui::ScrollArea::vertical()
         .auto_shrink([false; 2])
         .max_height(max_h)
+}
+
+/// The band over a scroll viewport's edge that dissolves into the page while
+/// more waits beyond it.
+pub(super) const FADE: f32 = 24.0;
+/// A difference in logical px under this is none: a measure that has settled,
+/// a scroll at its end.
+pub(super) const EPSILON: f32 = 0.5;
+
+/// The offset the scroll area salted `salt` under `ui` was last drawn at.
+pub(super) fn scroll_offset(ui: &egui::Ui, salt: &str) -> Option<egui::Vec2> {
+    let id = ui.make_persistent_id(salt);
+    egui::scroll_area::State::load(ui.ctx(), id).map(|state| state.offset)
+}
+
+/// Repaint when `scroll` ended at another offset than `drawn`: egui clamps
+/// after shrunken content, or reaches a target, only once the frame is built.
+pub(super) fn settle<R>(
+    ui: &egui::Ui,
+    drawn: Option<egui::Vec2>,
+    scroll: &egui::scroll_area::ScrollAreaOutput<R>,
+) {
+    if drawn != Some(scroll.state.offset) {
+        ui.ctx().request_repaint();
+    }
+}
+
+/// Whether `scroll` holds content past its viewport's edge in `dir`: the far
+/// edge of a top-down or left-to-right scroll, the near edge of the reverse.
+pub(super) fn scrolls_on<R>(
+    scroll: &egui::scroll_area::ScrollAreaOutput<R>,
+    dir: egui::Direction,
+) -> bool {
+    let (offset, span, content) = match dir {
+        egui::Direction::TopDown | egui::Direction::BottomUp => (
+            scroll.state.offset.y,
+            scroll.inner_rect.height(),
+            scroll.content_size.y,
+        ),
+        egui::Direction::LeftToRight | egui::Direction::RightToLeft => (
+            scroll.state.offset.x,
+            scroll.inner_rect.width(),
+            scroll.content_size.x,
+        ),
+    };
+    match dir {
+        egui::Direction::TopDown | egui::Direction::LeftToRight => {
+            offset + span < content - EPSILON
+        }
+        egui::Direction::BottomUp | egui::Direction::RightToLeft => offset > EPSILON,
+    }
+}
+
+/// Dissolve `band` into the page along `dir`: clear where it starts, solid
+/// where it ends, so clipped content fades instead of being cut.
+pub(super) fn fade(painter: &egui::Painter, band: egui::Rect, dir: egui::Direction) {
+    let clear = egui::Color32::TRANSPARENT;
+    // Corners in mesh order: left-top, right-top, right-bottom, left-bottom.
+    let colors = match dir {
+        egui::Direction::TopDown => [clear, clear, BG, BG],
+        egui::Direction::BottomUp => [BG, BG, clear, clear],
+        egui::Direction::LeftToRight => [clear, BG, BG, clear],
+        egui::Direction::RightToLeft => [BG, clear, clear, BG],
+    };
+    let corners = [
+        band.left_top(),
+        band.right_top(),
+        band.right_bottom(),
+        band.left_bottom(),
+    ];
+    let mut mesh = egui::Mesh::default();
+    for (pos, color) in corners.into_iter().zip(colors) {
+        mesh.colored_vertex(pos, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
 }
