@@ -46,14 +46,15 @@ impl App {
             self.open_home_access(self.ui.home_focused_bookmark());
             return;
         }
-        let launched = self.launched_name();
+        let site = self.site_name();
+        let launched = self.browser.launched().is_some();
         let over = match self.browser.on_home_page() {
             true => Over::Home,
             false => Over::Tab(self.browser.mode()),
         };
         self.ui
             .quick_access
-            .open(strip, over, launched.as_deref(), &self.config);
+            .open(strip, over, site.as_deref(), launched, &self.config);
         let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",
@@ -239,6 +240,12 @@ impl App {
             }
             Entry::Exit => self.leave_game_mode(),
             Entry::Leave => self.exit_launch(out),
+            Entry::ResetSite => {
+                if self.ui.quick_access.confirm(Entry::ResetSite) {
+                    self.reset_site(out);
+                    self.ui.quick_access.refresh(&self.config);
+                }
+            }
             Entry::Options(row) => self.options_row(row, out),
         }
     }

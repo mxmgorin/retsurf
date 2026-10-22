@@ -92,6 +92,9 @@ pub struct BrowserState {
     pub location: String,
     /// The tab's loaded URL, written only by [`delegate`] on real navigations.
     page_url: String,
+    /// Where a load of ours is taking the tab, until its URL commits or the
+    /// load ends.
+    heading: Option<String>,
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
@@ -130,6 +133,12 @@ impl BrowserState {
         &self.page_url
     }
 
+    /// The site the tab is on: where a load of ours is taking it, else what
+    /// it has loaded.
+    pub fn site_url(&self) -> &str {
+        self.heading.as_deref().unwrap_or(&self.page_url)
+    }
+
     /// For a tab whose webview was built already fetching a URL.
     fn loading() -> Self {
         Self {
@@ -144,6 +153,7 @@ impl Default for BrowserState {
         Self {
             location: "".into(),
             page_url: "".into(),
+            heading: None,
             loading: false,
             fullscreen: false,
             mode: TabMode::Page,
@@ -519,8 +529,11 @@ impl AppBrowser {
     }
 
     /// What the active tab shows over its page.
+    /// The active tab's mode; a page's before the first tab opens.
     pub fn mode(&self) -> TabMode {
-        self.state().mode
+        let tabs = self.inner.tabs.borrow();
+        tabs.get(self.inner.active.get())
+            .map_or(TabMode::Page, |tab| tab.state.mode)
     }
 
     pub fn set_mode(&self, mode: TabMode) {
@@ -533,11 +546,6 @@ impl AppBrowser {
     /// The bookmark the active tab runs, by id.
     pub fn launched(&self) -> Option<String> {
         self.state().launched.clone()
-    }
-
-    /// Whether the active tab runs the bookmark `id`, or none for `None`.
-    pub fn launched_is(&self, id: Option<&str>) -> bool {
-        self.state().launched.as_deref() == id
     }
 
     pub fn set_launched(&self, id: Option<String>) {
@@ -709,6 +717,42 @@ impl AppBrowser {
             tab.webview.notify_theme_change(engine::theme(theme));
             tab.state.loading = true;
             tab.webview.reload();
+        }
+    }
+
+    /// Take a site's user agent and page theme for later loads, reloading
+    /// nothing but, when `reload`, the shown tab if its page would now differ.
+    pub fn adopt_site(&self, config: &AppConfig, reload: bool) {
+        let theme = config.browser.page_theme;
+        let old_theme = self.inner.page_theme.replace(theme);
+        let mut stale = false;
+        if old_theme != theme {
+            self.inner.sync_forced_dark(theme);
+            stale |= old_theme.is_forced_dark() != theme.is_forced_dark();
+            if let Some(webview) = self.inner.active_webview() {
+                webview.notify_theme_change(engine::theme(theme));
+            }
+        }
+        let ua = effective_user_agent(&config.browser);
+        if *self.inner.user_agent.borrow() != ua {
+            self.inner
+                .servo
+                .set_preference("user_agent", servo::PrefValue::Str(ua.clone()));
+            self.inner.user_agent.replace(ua);
+            stale = true;
+        }
+        if reload && stale {
+            if let Some(webview) = self.inner.active_webview() {
+                self.mark_loading();
+                webview.reload();
+            }
+        }
+    }
+
+    /// Set the shown tab's page zoom.
+    pub fn set_active_zoom(&self, zoom: f32) {
+        if let Some(webview) = self.inner.active_webview() {
+            webview.set_page_zoom(zoom);
         }
     }
 

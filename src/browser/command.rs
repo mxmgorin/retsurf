@@ -44,30 +44,15 @@ impl AppBrowser {
                 }
             }
             BrowserCommand::Zoom(delta) => self.zoom(*delta),
-            BrowserCommand::Load => {
-                let active = self.inner.active.get();
-                let tabs = self.inner.tabs.borrow();
-                let Some(tab) = tabs.get(active) else {
+            BrowserCommand::Load | BrowserCommand::Home => {
+                let Some(url) = self.load_target(command, config) else {
+                    log::warn!("failed to parse the address to load");
                     return;
                 };
-                let Some(url) = try_into_url(&tab.state.location, &config.browser.search_page)
-                else {
-                    log::warn!("failed to parse location");
-                    return;
-                };
-                let webview = tab.webview.clone();
-                drop(tabs);
-                self.mark_loading();
-                webview.load(url);
-            }
-            BrowserCommand::Home => {
                 let Some(webview) = self.inner.active_webview() else {
                     return;
                 };
-                let Some(url) = try_into_url(&config.home.page, &config.browser.search_page) else {
-                    log::warn!("failed to parse the home page `{}`", config.home.page);
-                    return;
-                };
+                self.get_state_mut().heading = Some(url.to_string());
                 self.mark_loading();
                 webview.load(url);
             }
@@ -84,6 +69,16 @@ impl AppBrowser {
             // Not left to Servo's notify: a page that never sends it would hide
             // the chrome for the rest of the session.
             tab.state.fullscreen = false;
+        }
+    }
+
+    /// The URL `command` loads in the active tab, for a command that loads one.
+    pub fn load_target(&self, command: &BrowserCommand, config: &AppConfig) -> Option<::url::Url> {
+        let search = &config.browser.search_page;
+        match command {
+            BrowserCommand::Load => try_into_url(&self.state().location, search),
+            BrowserCommand::Home => try_into_url(&config.home.page, search),
+            _ => None,
         }
     }
 

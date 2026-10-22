@@ -58,6 +58,54 @@ where
     }
 }
 
+/// The settings a site's bookmark can override, as dotted paths: a section
+/// whole, or one key of it.
+pub const SITE_KEYS: &[&str] = &[
+    "browser.user_agent",
+    "browser.page_theme",
+    "browser.page_zoom",
+    "adblock.enabled",
+    "data_saving",
+    "experimental",
+    "game_mode",
+];
+
+/// The part of `table` under `paths`, nested as in it.
+pub fn pick(table: &Table, paths: &[&str]) -> Table {
+    let mut out = Table::new();
+    for path in paths {
+        let (section, key) = match path.split_once('.') {
+            Some((section, key)) => (section, Some(key)),
+            None => (*path, None),
+        };
+        let Some(value) = table.get(section) else {
+            continue;
+        };
+        match (key, value) {
+            (None, value) => {
+                out.insert(section.to_string(), value.clone());
+            }
+            (Some(key), toml::Value::Table(inner)) => {
+                if let Some(value) = inner.get(key) {
+                    let slot = out
+                        .entry(section.to_string())
+                        .or_insert_with(|| toml::Value::Table(Table::new()));
+                    if let toml::Value::Table(slot) = slot {
+                        slot.insert(key.to_string(), value.clone());
+                    }
+                }
+            }
+            (Some(_), _) => {}
+        }
+    }
+    out
+}
+
+/// The [`SITE_KEYS`] part of `config`, in its TOML form.
+pub fn site_part<T: serde::Serialize>(config: &T) -> Table {
+    Table::try_from(config).map_or_else(|_| Table::new(), |table| pick(&table, SITE_KEYS))
+}
+
 /// The keys of `working` that differ from `base`, as a table.
 pub fn changes<T: serde::Serialize>(working: &T, base: &T) -> Table {
     match (Table::try_from(working), Table::try_from(base)) {
@@ -86,6 +134,40 @@ mod tests {
             toml::from_str("input_map = \"wasd\"\n[view]\nscaling = \"fit\"\n").unwrap();
         assert_eq!(back, expected);
         assert!(changes(&base, &base).is_empty());
+    }
+
+    #[test]
+    fn pick_takes_whole_sections_and_single_keys() {
+        let table: Table = toml::from_str(
+            "[browser]\nuser_agent = \"mobile\"\nrestore_tabs = true\n\
+             [game_mode]\ninput_map = \"keys\"\n[interface]\nscale = 1.0\n",
+        )
+        .unwrap();
+        let picked = pick(
+            &table,
+            &["browser.user_agent", "browser.page_zoom", "game_mode"],
+        );
+        let expected: Table = toml::from_str(
+            "[browser]\nuser_agent = \"mobile\"\n[game_mode]\ninput_map = \"keys\"\n",
+        )
+        .unwrap();
+        assert_eq!(picked, expected);
+    }
+
+    /// The site part of a config carries every site key.
+    #[test]
+    fn the_site_part_covers_every_site_key() {
+        let part = site_part(&crate::config::AppConfig::default());
+        for path in SITE_KEYS {
+            let (section, key) = path
+                .split_once('.')
+                .map_or((*path, None), |(s, k)| (s, Some(k)));
+            let inner = part.get(section).and_then(|v| v.as_table());
+            assert!(inner.is_some(), "{path}");
+            if let Some(key) = key {
+                assert!(inner.is_some_and(|t| t.contains_key(key)), "{path}");
+            }
+        }
     }
 
     #[test]

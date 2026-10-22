@@ -1,12 +1,18 @@
 //! Bookmarks in the app: opening one the way it asks, its options (the rows
 //! Quick Access leads with over the start page, see
-//! [`crate::overlay::quick_access`]), and the `[game_mode]` overrides of the
-//! one the active tab runs.
+//! [`crate::overlay::quick_access`]), and the setting overrides of the one
+//! whose site the active tab is on.
 //!
-//! A launched bookmark is tab state ([`crate::browser::AppBrowser::launched`]).
-//! Its overrides live in the config while the active tab runs it, with the
-//! global table kept aside: [`App::save_config`] then writes their difference
-//! to the bookmark and the global table to `config.toml`.
+//! A launched bookmark is tab state ([`crate::browser::AppBrowser::launched`])
+//! and is that tab's site wherever it navigates; any other tab takes the
+//! bookmark its URL matches ([`bookmarks::Bookmarks::for_url`]). The site's
+//! overrides live in the config while it applies, with the global values of
+//! [`overlay::SITE_KEYS`] kept aside: [`App::save_config`] then writes their
+//! difference to the bookmark and the global values to `config.toml`.
+//!
+//! A load of ours switches the site before it starts; a page's own navigation
+//! switches it once its URL commits, reloading the tab when the user agent or
+//! forced dark changed under it; a tab switch switches it without a reload.
 
 use super::super::{App, AppCommand};
 use crate::config::{overlay, HomeSort};
@@ -16,8 +22,18 @@ use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText};
 use crate::ui::{bookmark_label, Notice};
 use egui_phosphor::bold;
 
-/// The config section a bookmark's overrides are laid on.
-const GAME_MODE_PATH: &str = "game_mode";
+/// What names a bookmark's overrides in a log line.
+const SITE_PATH: &str = "site";
+
+/// What the site sync last looked at: the shown tab, the bookmark it runs, the
+/// URL it is on and how many bookmarks there were.
+#[derive(PartialEq)]
+pub(in crate::app) struct SiteSeen {
+    tab: usize,
+    launched: Option<String>,
+    url: String,
+    bookmarks: usize,
+}
 
 impl App {
     /// Open the bookmark at `at` as it asks: navigate, or run it as an app or
@@ -25,7 +41,7 @@ impl App {
     /// canvas once.
     pub(in crate::app) fn open_bookmark(&mut self, at: usize, out: &mut Vec<AppCommand>) {
         if let Some(url) = self.start_bookmark(at, out) {
-            self.open_url(url);
+            self.open_url(url, out);
             self.arm_bookmark_reader(at);
         }
     }
@@ -42,12 +58,10 @@ impl App {
         self.ui.menu.bookmarks.opened(&url);
         match launch {
             // A site takes the tab back, chrome and all.
-            Launch::Browser => self.end_launch(out),
-            Launch::App | Launch::Game => {
-                self.browser.set_launched(Some(id));
-                self.sync_launch(out);
-            }
+            Launch::Browser => self.end_launch(),
+            Launch::App | Launch::Game => self.browser.set_launched(Some(id)),
         }
+        self.switch_site_for(&url, out);
         if launch == Launch::Game && !self.browser.in_game_mode() {
             self.enter_game_mode(out);
         }
@@ -65,58 +79,114 @@ impl App {
         }
     }
 
-    /// Hold the overrides of the bookmark the active tab runs, when that
-    /// changed: the global `[game_mode]` back first, then the new overrides on
-    /// it, then the result pushed live.
-    pub(in crate::app) fn sync_launch(&mut self, out: &mut Vec<AppCommand>) {
-        if self.browser.launched_is(self.applied_launch.as_deref()) {
+    /// The bookmark whose settings apply to the active tab at `url`: the one
+    /// it runs, else the one `url`'s site matches.
+    fn site_for(&self, url: &str) -> Option<String> {
+        self.browser
+            .launched()
+            .or_else(|| self.ui.menu.bookmarks.for_url(url).map(|b| b.id.clone()))
+    }
+
+    /// Switch to the site of `url` ahead of loading it in the active tab.
+    pub(in crate::app) fn switch_site_for(&mut self, url: &str, out: &mut Vec<AppCommand>) {
+        let site = self.site_for(url);
+        self.switch_site(site, false, out);
+    }
+
+    /// Follow the active tab's site once per frame: a new tab switches without
+    /// a reload, a navigation of the same tab with one where needed.
+    pub(in crate::app) fn sync_site(&mut self, out: &mut Vec<AppCommand>) {
+        let seen = SiteSeen {
+            tab: self.browser.active_tab(),
+            launched: self.browser.launched(),
+            url: self.browser.state().site_url().to_string(),
+            bookmarks: self.ui.menu.bookmarks.all().len(),
+        };
+        if self.site_seen.as_ref() == Some(&seen) {
             return;
         }
-        let launched = self.browser.launched();
-        if let Some(base) = self.game_base.take() {
-            self.config.game_mode = base;
+        let same_tab = self.site_seen.as_ref().is_some_and(|s| s.tab == seen.tab);
+        let site = self.site_for(&seen.url);
+        self.site_seen = Some(seen);
+        self.switch_site(site, same_tab, out);
+    }
+
+    /// Hold `site`'s overrides, when that changed: the global values back
+    /// first, then the new overrides on them, then the result pushed live.
+    /// `reload`: reload the shown tab if its page no longer matches.
+    pub(in crate::app) fn switch_site(
+        &mut self,
+        site: Option<String>,
+        reload: bool,
+        out: &mut Vec<AppCommand>,
+    ) {
+        if site == self.applied_site {
+            return;
         }
-        let over = launched
+        // Unwritten changes belong to the site being left.
+        if self.config_dirty {
+            self.save_config();
+        }
+        let zoom = self.config.browser.page_zoom;
+        if let Some(base) = self.site_base.take() {
+            self.config = overlay::apply(&self.config, &base, SITE_PATH);
+        }
+        let over = site
             .as_deref()
             .and_then(|id| self.ui.menu.bookmarks.get(id))
-            .map(|b| b.game_mode.clone());
+            .map(|b| b.settings.clone());
         if let Some(over) = over {
-            let base = self.config.game_mode.clone();
-            self.config.game_mode = overlay::apply(&base, &over, GAME_MODE_PATH);
+            self.site_base = Some(overlay::site_part(&self.config));
+            self.config = overlay::apply(&self.config, &over, SITE_PATH);
             self.config.sanitize();
-            self.game_base = Some(base);
         }
-        self.applied_launch = launched;
+        self.applied_site = site;
+        self.browser.adopt_site(&self.config, reload);
+        if self.config.browser.page_zoom != zoom {
+            self.browser.set_active_zoom(self.config.browser.page_zoom);
+        }
         self.apply_live(out);
     }
 
-    /// Persist the config. While a bookmark's overrides stand in, the
-    /// `[game_mode]` keys that differ from the global table go to the bookmark
-    /// and `config.toml` keeps the global table.
+    /// Drop the overrides of the site shown, back to the global values.
+    pub(in crate::app) fn reset_site(&mut self, out: &mut Vec<AppCommand>) {
+        let Some(id) = self.applied_site.clone() else {
+            return;
+        };
+        self.ui.menu.bookmarks.set_settings(&id, toml::Table::new());
+        self.applied_site = None;
+        self.switch_site(Some(id), true, out);
+        self.ui.toast(Notice::new(
+            bold::ARROW_COUNTER_CLOCKWISE,
+            "Site settings reset",
+        ));
+    }
+
+    /// Persist the config. While a site's overrides stand in, the
+    /// [`overlay::SITE_KEYS`] values that differ from the global ones go to its
+    /// bookmark and `config.toml` keeps the global ones.
     pub(in crate::app) fn save_config(&mut self) {
         self.config_dirty = false;
-        let (Some(base), Some(id)) = (&self.game_base, &self.applied_launch) else {
+        let (Some(base), Some(id)) = (&self.site_base, &self.applied_site) else {
             self.config.save();
             return;
         };
-        let changes = overlay::changes(&self.config.game_mode, base);
-        self.ui.menu.bookmarks.set_game_mode(id, changes);
-        let mut global = self.config.clone();
-        global.game_mode = base.clone();
-        global.save();
+        let changes = overlay::changes(&overlay::site_part(&self.config), base);
+        self.ui.menu.bookmarks.set_settings(id, changes);
+        overlay::apply(&self.config, base, SITE_PATH).save();
     }
 
     /// Stop running the bookmark: out of Game Mode, the global `[game_mode]`
     /// back, and the tab on the start page, which frees the page.
     pub(super) fn exit_launch(&mut self, out: &mut Vec<AppCommand>) {
         self.ui.quick_access.close();
-        self.end_launch(out);
-        self.open_url(crate::browser::HOME_URL.to_string());
+        self.end_launch();
+        self.open_url(crate::browser::HOME_URL.to_string(), out);
     }
 
     /// Stop running the bookmark the tab runs, if any, where it is: out of
-    /// Game Mode, the global `[game_mode]` back.
-    pub(super) fn end_launch(&mut self, out: &mut Vec<AppCommand>) {
+    /// Game Mode, its overrides kept until the tab's next site applies.
+    pub(super) fn end_launch(&mut self) {
         if self.browser.launched().is_none() {
             return;
         }
@@ -124,7 +194,6 @@ impl App {
             self.leave_game_mode();
         }
         self.browser.set_launched(None);
-        self.sync_launch(out);
     }
 
     /// Open Quick Access on the start-page tile at `tile`, the grid's own
@@ -142,21 +211,22 @@ impl App {
     /// `at`, when one is given, then the page's own, with their values.
     pub(in crate::app) fn open_home_access(&mut self, at: Option<usize>) {
         let tile = at.map(|at| self.home_tile(at));
-        let launched = self.launched_name();
+        let launched = self.browser.launched().and(self.site_name());
         self.ui
             .quick_access
             .open_home(tile, launched.as_deref(), &self.config);
         self.refresh_options();
     }
 
-    /// The shown name of the bookmark the tab runs; empty for one since removed.
-    pub(super) fn launched_name(&self) -> Option<String> {
-        let id = self.browser.launched()?;
+    /// The shown name of the bookmark whose settings apply; empty for one
+    /// since removed.
+    pub(super) fn site_name(&self) -> Option<String> {
+        let id = self.applied_site.as_deref()?;
         Some(
             self.ui
                 .menu
                 .bookmarks
-                .get(&id)
+                .get(id)
                 .map_or_else(String::new, bookmark_label),
         )
     }

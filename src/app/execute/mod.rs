@@ -5,6 +5,7 @@
 //! mapped earlier, in [`super::router`].
 
 mod bookmarks;
+pub(super) use bookmarks::SiteSeen;
 mod game;
 
 use super::{
@@ -12,7 +13,7 @@ use super::{
     UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
-use crate::config::{AppConfig, GameModeConfig, HomeBookmarksConfig};
+use crate::config::{overlay, AppConfig, HomeBookmarksConfig};
 use crate::data::bookmarks::{Filter, Launch};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
@@ -43,10 +44,10 @@ impl App {
             }
             // Home leaves a running bookmark too: the start page is no place to run one.
             AppCommand::Browser(BrowserCommand::Home) => {
-                self.end_launch(out);
-                self.browser
-                    .execute_command(&BrowserCommand::Home, &self.config);
+                self.end_launch();
+                self.load(&BrowserCommand::Home, out);
             }
+            AppCommand::Browser(BrowserCommand::Load) => self.load(&BrowserCommand::Load, out),
             AppCommand::Browser(command) => self.browser.execute_command(command, &self.config),
             AppCommand::Input(command) => self.route_input(command, out),
             AppCommand::Menu(action) => self.menu_action(action, out),
@@ -101,7 +102,7 @@ impl App {
             MenuAction::OpenSelected => self.menu_open_selected(out),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
-            MenuAction::OpenUrl(url) => self.open_url(url.clone()),
+            MenuAction::OpenUrl(url) => self.open_url(url.clone(), out),
             MenuAction::OpenBookmark(at) => self.open_bookmark(*at, out),
             MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
             MenuAction::RemoveAt(index) => match self.ui.menu.section() {
@@ -225,7 +226,7 @@ impl App {
         {
             self.open_bookmark(at, out);
         } else if let Some(url) = self.ui.menu.selected_url() {
-            self.open_url(url);
+            self.open_url(url, out);
         } else if self.ui.menu.section() != Section::Downloads {
             // A on an active/failed download has nothing to open — keep the menu
             // up so the user can watch the progress; other sections close.
@@ -293,7 +294,7 @@ impl App {
             // it in the focused tab (open_url also tidies the menu, harmless here).
             SettingsAction::OpenLink(url) => {
                 self.settings_close(out);
-                self.open_url(url.clone());
+                self.open_url(url.clone(), out);
             }
             // Binding capture (the binding list): the gesture performed, bound
             // to the listening action. The raw input comes from the event loop.
@@ -389,10 +390,10 @@ impl App {
     /// ship; bookmarks, history and tabs stay.
     fn restore_defaults(&mut self) {
         self.ui.settings.restore_defaults();
-        // The global `[game_mode]` goes back too, or the save would write the
-        // defaults into the running bookmark as overrides of the old global.
-        if self.game_base.is_some() {
-            self.game_base = Some(GameModeConfig::default());
+        // The global site values go back too, or the save would write the
+        // defaults into the shown site's bookmark as overrides of the old ones.
+        if self.site_base.is_some() {
+            self.site_base = Some(overlay::site_part(&AppConfig::default()));
         }
         self.ui.toast(Notice::new(bold::CHECK, "Defaults restored"));
         log::info!("restored default settings and bindings");
@@ -556,10 +557,17 @@ impl App {
     }
 
     /// Load `url` in the focused tab and close the menu.
-    fn open_url(&mut self, url: String) {
+    fn open_url(&mut self, url: String, out: &mut Vec<AppCommand>) {
         self.browser.get_state_mut().location = url;
-        self.browser
-            .execute_command(&BrowserCommand::Load, &self.config);
+        self.load(&BrowserCommand::Load, out);
         self.ui.menu.close();
+    }
+
+    /// Run a `command` that loads a page, its site's settings switched in first.
+    fn load(&mut self, command: &BrowserCommand, out: &mut Vec<AppCommand>) {
+        if let Some(url) = self.browser.load_target(command, &self.config) {
+            self.switch_site_for(url.as_str(), out);
+        }
+        self.browser.execute_command(command, &self.config);
     }
 }

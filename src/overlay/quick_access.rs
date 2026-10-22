@@ -2,7 +2,9 @@
 //! Menu, the places to go at the left. Each has one table per thing it opens
 //! over (a page, a game, the start page), so what one hides from another is
 //! data rather than branches. Over the start page Quick Access leads with the
-//! focused bookmark's rows, headed by its name, before the page's own.
+//! focused bookmark's rows, headed by its name, before the page's own; over a
+//! page whose site has a bookmark, the rows that set its site settings lead
+//! the same way, headed by the bookmark's name, before the page's own.
 //! Quick rows are [`crate::overlay::settings`] rows flagged `quick`: the same
 //! label, values and config field, stepped live here instead of on close. The
 //! central router ([`crate::app`]) drives it; [`crate::ui`] renders it.
@@ -134,6 +136,8 @@ pub enum Entry {
     Exit,
     /// Stop running the tab's bookmark and go back to the start page.
     Leave,
+    /// Drop the shown site's setting overrides, on a second press.
+    ResetSite,
     /// Close retsurf, on a second press (see [`QuickAccess::confirm`]).
     Quit,
     /// A row of a bookmark's options.
@@ -172,6 +176,9 @@ const ACCESS_GAME: &[Slot] = &[
 const ACCESS_HOME: &[Slot] = &[Slot::QuickRows];
 /// What heads the page's own rows when a tile's rows come first.
 const HOME_HEAD: &str = "Home";
+/// What heads a tab's own rows when its site's rows come first.
+const PAGE_HEAD: &str = "Page";
+const GAME_HEAD: &str = "Game";
 
 /// Quick Menu in the browser: where to go, so home leads.
 const MENU_BROWSER: &[Slot] = &[
@@ -216,6 +223,7 @@ impl Entry {
             Entry::Reload => "Reload",
             Entry::Exit => "Exit game mode",
             Entry::Leave => "Close",
+            Entry::ResetSite => "Reset site settings",
             Entry::Quit => "Quit retsurf",
             Entry::Options(OptionsRow::Open) => "Open",
             Entry::Options(OptionsRow::LaunchAs) => "Launch as",
@@ -234,9 +242,16 @@ impl Entry {
         match self {
             Entry::Quit => Some("press again to quit"),
             Entry::Reload => Some("press again to reload"),
+            Entry::ResetSite => Some("press again to reset"),
             Entry::Options(OptionsRow::Remove) => Some("press again to remove"),
             _ => None,
         }
+    }
+
+    /// Whether the row sets a site setting, and so leads under the site's
+    /// head where one applies.
+    fn sets_site(self) -> bool {
+        matches!(self, Entry::Quick(_) | Entry::InputMap)
     }
 
     /// Whether Left/Right step the row's value.
@@ -358,11 +373,39 @@ impl QuickAccess {
         }
     }
 
-    /// Show `strip`'s rows `over` what is on screen, highlighting the first;
-    /// `launched`: the name of the bookmark the tab runs, if any.
-    pub fn open(&mut self, strip: Strip, over: Over, launched: Option<&str>, config: &AppConfig) {
-        self.show(strip, entries(strip, over, launched.is_some()));
-        self.leave = leave_label(launched);
+    /// Show `strip`'s rows `over` what is on screen, highlighting the first.
+    /// `site`: the name of the bookmark whose settings apply, if any;
+    /// `launched`: whether the tab runs it.
+    pub fn open(
+        &mut self,
+        strip: Strip,
+        over: Over,
+        site: Option<&str>,
+        launched: bool,
+        config: &AppConfig,
+    ) {
+        let rows = entries(strip, over, launched);
+        let mut heads = Vec::new();
+        let rows = match (strip, over, site) {
+            (Strip::QuickAccess, Over::Tab(mode), Some(name)) => {
+                let (mut lead, rest): (Vec<Entry>, Vec<Entry>) =
+                    rows.into_iter().partition(|row| row.sets_site());
+                lead.push(Entry::ResetSite);
+                heads.push((0, name.to_string()));
+                let head = match mode {
+                    TabMode::Game => GAME_HEAD,
+                    TabMode::Page | TabMode::Reader => PAGE_HEAD,
+                };
+                if !rest.is_empty() {
+                    heads.push((lead.len(), head.to_string()));
+                }
+                lead.into_iter().chain(rest).collect()
+            }
+            _ => rows,
+        };
+        self.show(strip, rows);
+        self.heads = heads;
+        self.leave = leave_label(site.filter(|_| launched));
         self.refresh(config);
         if let Some(at) = self.position(Entry::Run(Action::Reader)) {
             self.flags[at] = Some(over == Over::Tab(TabMode::Reader));
@@ -592,6 +635,7 @@ mod tests {
             Strip::QuickAccess,
             Over::Tab(mode),
             None,
+            false,
             &AppConfig::default(),
         );
         panel
@@ -703,6 +747,60 @@ mod tests {
         assert!(!menu.contains(&Entry::Leave));
     }
 
+    /// A site's rows lead under its name, then the reset, then the page's.
+    #[test]
+    fn a_sites_rows_lead_under_its_name() {
+        let mut panel = QuickAccess::new();
+        let over = Over::Tab(TabMode::Page);
+        panel.open(
+            Strip::QuickAccess,
+            over,
+            Some("itch.io"),
+            false,
+            &AppConfig::default(),
+        );
+        let rows = panel.rows();
+        let reset = rows.iter().position(|r| *r == Entry::ResetSite).unwrap();
+        assert!(rows[..reset].iter().all(|r| r.sets_site()), "{rows:?}");
+        assert!(!rows[reset + 1..].iter().any(|r| r.sets_site()), "{rows:?}");
+        assert_eq!(
+            panel.heads(),
+            [
+                (0, "itch.io".to_string()),
+                (reset + 1, PAGE_HEAD.to_string())
+            ]
+        );
+        panel.open(Strip::QuickAccess, over, None, false, &AppConfig::default());
+        assert!(panel.heads().is_empty());
+        assert!(!panel.rows().contains(&Entry::ResetSite));
+    }
+
+    /// Every row that leads under a site's head writes only site settings.
+    #[test]
+    fn site_rows_set_only_site_settings() {
+        let base = AppConfig::default();
+        for (i, field) in Settings::fields().iter().enumerate() {
+            let over_page = field
+                .quick
+                .is_some_and(|m| m.includes(Over::Tab(TabMode::Page)));
+            let over_game = field
+                .quick
+                .is_some_and(|m| m.includes(Over::Tab(TabMode::Game)));
+            if !(over_page || over_game) {
+                continue;
+            }
+            assert!(Entry::Quick(i).sets_site());
+            for dx in [-1, 1] {
+                let mut config = base.clone();
+                settings::step(&field.kind, &mut config, dx);
+                let changed = crate::config::overlay::changes(&config, &base);
+                let site =
+                    crate::config::overlay::pick(&changed, crate::config::overlay::SITE_KEYS);
+                assert_eq!(changed, site, "{}", field.label);
+            }
+        }
+    }
+
     /// The way out names the bookmark it closes.
     #[test]
     fn the_way_out_names_the_launched_bookmark() {
@@ -712,11 +810,18 @@ mod tests {
             Strip::QuickAccess,
             over,
             Some("HexGL"),
+            true,
             &AppConfig::default(),
         );
         let last = panel.rows().len() - 1;
         assert_eq!(panel.label(last), "Close HexGL");
-        panel.open(Strip::QuickAccess, over, Some(""), &AppConfig::default());
+        panel.open(
+            Strip::QuickAccess,
+            over,
+            Some(""),
+            true,
+            &AppConfig::default(),
+        );
         assert_eq!(panel.label(last), "Close");
     }
 
@@ -787,6 +892,7 @@ mod tests {
             Strip::QuickMenu,
             Over::Tab(TabMode::Page),
             None,
+            false,
             &AppConfig::default(),
         );
         panel.move_sel(-1);

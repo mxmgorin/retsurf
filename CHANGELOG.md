@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `retsurf --open ID` opens a bookmark as it asks
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
 - Start page brand `icon`: the sun over the waves, no wordmark (`[home] brand`)
+- Site settings: a bookmark keeps its own user agent, page theme, zoom, ad blocker, data saving, experimental and Game Mode settings, applied while its site is shown and changed from Quick Access
 
 ### Changed
 

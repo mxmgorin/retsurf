@@ -46,6 +46,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             let mut tabs = self.tabs.borrow_mut();
             tabs[i].state.location = url.clone();
             tabs[i].state.page_url = url.clone();
+            tabs[i].state.heading = None;
             drop(tabs);
             if i == self.active.get() {
                 self.visited.push(url);
@@ -63,7 +64,13 @@ impl servo::WebViewDelegate for AppBrowserInner {
             servo::LoadStatus::HeadParsed => return,
         };
         let was_loading = match self.tab_index(webview.id()) {
-            Some(i) => std::mem::replace(&mut self.tabs.borrow_mut()[i].state.loading, loading),
+            Some(i) => {
+                let state = &mut self.tabs.borrow_mut()[i].state;
+                if !loading {
+                    state.heading = None;
+                }
+                std::mem::replace(&mut state.loading, loading)
+            }
             None => true,
         };
         // A `Connected` reaches only the document loaded when it was sent, and each

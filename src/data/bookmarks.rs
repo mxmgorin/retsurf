@@ -11,7 +11,7 @@
 
 use crate::clock;
 use crate::config::token_enum::token_enum;
-use crate::config::HomeSort;
+use crate::config::{overlay, HomeSort};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use toml::value::{Date, Datetime, Offset, Time};
@@ -205,8 +205,44 @@ struct Raw {
     order: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_opened: Option<Datetime>,
-    #[serde(skip_serializing_if = "toml::Table::is_empty")]
-    game_mode: toml::Table,
+    /// The config sections it overrides, at the file's top level.
+    #[serde(flatten)]
+    settings: toml::Table,
+}
+
+/// A URL as a site: its host without `www.` and its path without the trailing
+/// slash, for http(s) only.
+struct SiteKey {
+    host: String,
+    path: String,
+}
+
+impl SiteKey {
+    fn of(url: &str) -> Option<Self> {
+        let host = crate::data::page_icons::host_key(url)?;
+        let parsed = url::Url::parse(url).ok()?;
+        let path = parsed.path().trim_end_matches('/').to_string();
+        Some(Self { host, path })
+    }
+
+    /// Whether `page`'s path is this one's or under it, at a segment boundary.
+    fn contains(&self, page: &SiteKey) -> bool {
+        page.path
+            .strip_prefix(&self.path)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    }
+}
+
+/// The [`overlay::SITE_KEYS`] part of bookmark `id`'s extra tables; the rest
+/// is logged and dropped.
+fn site_settings(id: &str, extra: toml::Table) -> toml::Table {
+    let kept = overlay::pick(&extra, overlay::SITE_KEYS);
+    let dropped = overlay::changes(&extra, &kept);
+    if !dropped.is_empty() {
+        let keys: Vec<&String> = dropped.keys().collect();
+        log::warn!("bookmark `{id}`: no site setting under {keys:?}; ignored");
+    }
+    kept
 }
 
 fn is_default_launch(launch: &Launch) -> bool {
@@ -233,8 +269,9 @@ pub struct Bookmark {
     pub order: Option<i64>,
     /// Unix seconds it was last opened, `0` for never.
     pub last_opened: u64,
-    /// Overrides of `[game_mode]` while it runs as a game, in the config's shape.
-    pub game_mode: toml::Table,
+    /// Overrides of the [`overlay::SITE_KEYS`] settings while its site is shown,
+    /// in the config's shape.
+    pub settings: toml::Table,
 }
 
 impl Bookmark {
@@ -243,10 +280,11 @@ impl Bookmark {
         !self.tags.is_empty()
             || self.launch != Launch::default()
             || self.reader
-            || !self.game_mode.is_empty()
+            || !self.settings.is_empty()
     }
 
     fn from_raw(id: String, raw: Raw) -> Self {
+        let settings = site_settings(&id, raw.settings);
         Self {
             id,
             name: raw.name,
@@ -256,7 +294,7 @@ impl Bookmark {
             reader: raw.reader,
             order: raw.order,
             last_opened: raw.last_opened.as_ref().map_or(0, from_datetime),
-            game_mode: raw.game_mode,
+            settings,
         }
     }
 
@@ -269,7 +307,7 @@ impl Bookmark {
             reader: self.reader,
             order: self.order,
             last_opened: (self.last_opened != 0).then(|| to_datetime(self.last_opened)),
-            game_mode: self.game_mode.clone(),
+            settings: self.settings.clone(),
         }
     }
 
@@ -358,7 +396,7 @@ impl Bookmarks {
             reader: false,
             order: Some(order),
             last_opened: 0,
-            game_mode: toml::Table::new(),
+            settings: toml::Table::new(),
         };
         bookmark.save();
         self.items.push(bookmark);
@@ -403,15 +441,36 @@ impl Bookmarks {
         }
     }
 
-    /// Replace the `[game_mode]` overrides of bookmark `id`, writing its file
-    /// when they changed.
-    pub fn set_game_mode(&mut self, id: &str, game_mode: toml::Table) {
+    /// Replace the setting overrides of bookmark `id`, writing its file when
+    /// they changed.
+    pub fn set_settings(&mut self, id: &str, settings: toml::Table) {
         if let Some(bookmark) = self.items.iter_mut().find(|b| b.id == id) {
-            if bookmark.game_mode != game_mode {
-                bookmark.game_mode = game_mode;
+            if bookmark.settings != settings {
+                bookmark.settings = settings;
                 bookmark.save();
             }
         }
+    }
+
+    /// The bookmark whose site `url` is on: the same host, the longest path
+    /// prefix, else the first of that host in manual order.
+    pub fn for_url(&self, url: &str) -> Option<&Bookmark> {
+        let page = SiteKey::of(url)?;
+        let mut host_match = None;
+        let mut best: Option<(&Bookmark, usize)> = None;
+        for bookmark in &self.items {
+            let Some(site) = SiteKey::of(&bookmark.url) else {
+                continue;
+            };
+            if site.host != page.host {
+                continue;
+            }
+            host_match.get_or_insert(bookmark);
+            if site.contains(&page) && best.is_none_or(|(_, len)| site.path.len() > len) {
+                best = Some((bookmark, site.path.len()));
+            }
+        }
+        best.map(|(bookmark, _)| bookmark).or(host_match)
     }
 
     /// The bookmark of id `id`.
@@ -745,7 +804,9 @@ mod tests {
         assert_eq!(bookmark.tags, ["roguelike"]);
         assert_eq!(bookmark.launch, Launch::Game);
         assert_eq!(bookmark.last_opened, 1_760_805_997);
-        assert!(bookmark.game_mode.contains_key("view"));
+        assert!(bookmark.settings["game_mode"]
+            .as_table()
+            .is_some_and(|t| t.contains_key("view")));
         assert!(bookmark.has_settings());
     }
 
@@ -756,6 +817,70 @@ mod tests {
             last_opened,
             ..Bookmark::from_raw(id.to_string(), Raw::default())
         }
+    }
+
+    fn at(id: &str, url: &str) -> Bookmark {
+        Bookmark {
+            url: url.to_string(),
+            ..Bookmark::from_raw(id.to_string(), Raw::default())
+        }
+    }
+
+    fn store(items: Vec<Bookmark>) -> Bookmarks {
+        Bookmarks {
+            items,
+            cursor: crate::data::ListCursor::new(0),
+        }
+    }
+
+    #[test]
+    fn a_page_takes_the_bookmark_of_its_site() {
+        let store = store(vec![
+            at("itch", "https://itch.io/"),
+            at("html5", "https://itch.io/games/html5"),
+            at("dev", "https://berzee.itch.io/"),
+            at("wiki", "https://www.wikipedia.org/wiki"),
+        ]);
+        let site = |url| store.for_url(url).map(|b| b.id.as_str());
+        assert_eq!(site("https://itch.io/games/html5/top"), Some("html5"));
+        assert_eq!(site("https://itch.io/games/html5"), Some("html5"));
+        assert_eq!(site("https://itch.io/games/html5x"), Some("itch"));
+        assert_eq!(site("https://itch.io/jams"), Some("itch"));
+        assert_eq!(site("https://berzee.itch.io/a-game"), Some("dev"));
+        assert_eq!(site("https://wikipedia.org/w/index.php"), Some("wiki"));
+        assert_eq!(site("https://example.com/"), None);
+        assert_eq!(site("retsurf:home"), None);
+    }
+
+    #[test]
+    fn site_settings_read_back_and_the_rest_is_dropped() {
+        let text = r#"
+            name = "itch.io"
+            url = "https://itch.io/"
+
+            [browser]
+            user_agent = "mobile"
+            restore_tabs = false
+
+            [adblock]
+            enabled = false
+
+            [interface]
+            scale = 2.0
+        "#;
+        let raw: Raw = toml::from_str(text).unwrap();
+        let bookmark = Bookmark::from_raw("itch".to_string(), raw);
+        let expected: toml::Table =
+            toml::from_str("[browser]\nuser_agent = \"mobile\"\n[adblock]\nenabled = false\n")
+                .unwrap();
+        assert_eq!(bookmark.settings, expected);
+        let written = toml::to_string_pretty(&bookmark.to_raw()).unwrap();
+        let again = Bookmark::from_raw("itch".to_string(), toml::from_str(&written).unwrap());
+        assert_eq!(again.settings, expected);
+        assert!(
+            written.starts_with("name = \"itch.io\"\nurl = "),
+            "{written}"
+        );
     }
 
     #[test]

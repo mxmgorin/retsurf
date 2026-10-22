@@ -53,10 +53,13 @@ pub struct App {
     /// The config changed by a press and not yet written: the flush writes
     /// it, so a run of presses costs one write.
     config_dirty: bool,
-    /// The bookmark whose `[game_mode]` overrides the config holds, by id.
-    applied_launch: Option<String>,
-    /// The global `[game_mode]` while a bookmark's overrides stand in for it.
-    game_base: Option<crate::config::GameModeConfig>,
+    /// The bookmark whose setting overrides the config holds, by id.
+    applied_site: Option<String>,
+    /// The global values of the site settings while a bookmark's overrides
+    /// stand in for them.
+    site_base: Option<toml::Table>,
+    /// What the per-frame site sync last looked at.
+    site_seen: Option<execute::SiteSeen>,
     /// The tabs to reopen at startup (`[browser] restore_tabs`).
     session: Session,
     /// Last time the deferred stores (history, tab session) were written. The
@@ -198,8 +201,9 @@ impl App {
             hint_press_at: None,
             bookmark_remove_armed: None,
             config_dirty: false,
-            applied_launch: None,
-            game_base: None,
+            applied_site: None,
+            site_base: None,
+            site_seen: None,
             session: Session::load(),
             last_flush: Instant::now(),
             last_memory_report: Instant::now(),
@@ -246,8 +250,17 @@ impl App {
         let first = bookmark
             .map(|at| self.ui.menu.bookmarks.all()[at].url.clone())
             .or_else(|| self.launch_url.clone());
-        self.open_first_tabs(first.as_deref());
         let mut commands = Vec::with_capacity(4);
+        // Before the first load, which reads the user agent and the engine prefs.
+        let site = match bookmark {
+            Some(at) => Some(self.ui.menu.bookmarks.all()[at].id.clone()),
+            None => first
+                .as_deref()
+                .and_then(|url| self.ui.menu.bookmarks.for_url(url))
+                .map(|b| b.id.clone()),
+        };
+        self.switch_site(site, false, &mut commands);
+        self.open_first_tabs(first.as_deref());
         if let Some(at) = bookmark {
             self.start_bookmark(at, &mut commands);
             self.arm_bookmark_reader(at);
@@ -334,7 +347,7 @@ impl App {
             if home_changed {
                 self.ui.set_home_pad(self.event_handler.has_pad());
             }
-            self.sync_launch(&mut commands);
+            self.sync_site(&mut commands);
             if self.browser.take_reader_due() {
                 self.browser.toggle_reader();
             }

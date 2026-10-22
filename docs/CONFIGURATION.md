@@ -211,14 +211,36 @@ launch = "browser"                       # "browser", "app" (no toolbar) or "gam
 reader = false                           # open in reader view; not for a game
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
 
-[game_mode.view]                         # a game's own [game_mode] settings, any key of it
+[browser]                                # the site's own settings, see below
+page_theme = "forced-dark"
+
+[game_mode.view]
 scaling = "fit"
 ```
 
 An app or a game opens without the toolbar and keeps it hidden through its own links;
-Quick Access ends in **Close** and the bookmark's name, back to the start page. While a game runs, the `[game_mode]`
-settings changed in Quick Access or Settings are written to its bookmark, not to
-`config.toml`. A bookmark made in Game Mode is a game.
+Quick Access ends in **Close** and the bookmark's name, back to the start page. A bookmark
+made in Game Mode is a game.
+
+### Site settings
+
+A bookmark can override these settings for its site:
+
+| Section | Keys |
+|---|---|
+| `[browser]` | `user_agent`, `page_theme`, `page_zoom` |
+| `[adblock]` | `enabled` |
+| `[data_saving]` | any |
+| `[experimental]` | any |
+| `[game_mode]` | any |
+
+They apply while the shown tab is on the bookmark's site: the bookmark it runs as an app or
+a game, else the bookmark of the same host with the longest matching path, else the first
+bookmark of that host. Other keys in a bookmark file are ignored.
+
+While they apply, Quick Access lists the site's rows first under the bookmark's name, with
+**Reset site settings** after them, and a change to one of these settings, in Quick Access
+or Settings, is written to the bookmark, not to `config.toml`.
 
 On the start page L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.
