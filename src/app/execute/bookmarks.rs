@@ -142,9 +142,23 @@ impl App {
     /// `at`, when one is given, then the page's own, with their values.
     pub(in crate::app) fn open_home_access(&mut self, at: Option<usize>) {
         let tile = at.map(|at| self.home_tile(at));
-        let launched = self.browser.launched().is_some();
-        self.ui.quick_access.open_home(tile, launched, &self.config);
+        let launched = self.launched_name();
+        self.ui
+            .quick_access
+            .open_home(tile, launched.as_deref(), &self.config);
         self.refresh_options();
+    }
+
+    /// The shown name of the bookmark the tab runs; empty for one since removed.
+    pub(super) fn launched_name(&self) -> Option<String> {
+        let id = self.browser.launched()?;
+        Some(
+            self.ui
+                .menu
+                .bookmarks
+                .get(&id)
+                .map_or_else(String::new, bookmark_label),
+        )
     }
 
     /// The bookmark at `at` as the tile Quick Access leads with.

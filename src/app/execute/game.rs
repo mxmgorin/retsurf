@@ -46,14 +46,14 @@ impl App {
             self.open_home_access(self.ui.home_focused_bookmark());
             return;
         }
-        let launched = self.browser.launched().is_some();
+        let launched = self.launched_name();
         let over = match self.browser.on_home_page() {
             true => Over::Home,
             false => Over::Tab(self.browser.mode()),
         };
         self.ui
             .quick_access
-            .open(strip, over, launched, &self.config);
+            .open(strip, over, launched.as_deref(), &self.config);
         let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",

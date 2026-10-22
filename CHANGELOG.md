@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Start page search field pinned at the bottom (default), at the top or off (`[home] search`)
 - Start page without the toolbar (`[home] toolbar`, off by default): Quick Menu and Quick Access at the ends of its search bar, a footer of button hints
 - Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
-- Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings), or in reader view; Quick Access gets Exit while one runs
+- Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings), or in reader view; Quick Access gets Close while one runs
 - Bookmark row in Game Mode's Quick Access
 - `retsurf --open ID` opens a bookmark as it asks
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)

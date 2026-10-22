@@ -216,7 +216,7 @@ scaling = "fit"
 ```
 
 An app or a game opens without the toolbar and keeps it hidden through its own links;
-Quick Access ends in **Exit**, back to the start page. While a game runs, the `[game_mode]`
+Quick Access ends in **Close** and the bookmark's name, back to the start page. While a game runs, the `[game_mode]`
 settings changed in Quick Access or Settings are written to its bookmark, not to
 `config.toml`. A bookmark made in Game Mode is a game.
 

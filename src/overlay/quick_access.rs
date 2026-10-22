@@ -215,7 +215,7 @@ impl Entry {
             Entry::Settings => "Settings",
             Entry::Reload => "Reload",
             Entry::Exit => "Exit game mode",
-            Entry::Leave => "Exit",
+            Entry::Leave => "Close",
             Entry::Quit => "Quit retsurf",
             Entry::Options(OptionsRow::Open) => "Open",
             Entry::Options(OptionsRow::LaunchAs) => "Launch as",
@@ -297,6 +297,15 @@ fn entries(strip: Strip, over: Over, launched: bool) -> Vec<Entry> {
     rows
 }
 
+/// [`Entry::Leave`]'s label for the bookmark named `launched`.
+fn leave_label(launched: Option<&str>) -> String {
+    let close = Entry::Leave.label();
+    match launched {
+        Some(name) if !name.is_empty() => format!("{close} {name}"),
+        _ => close.to_string(),
+    }
+}
+
 /// A bookmark's options rows: `manual` offers the moves, which mean nothing in
 /// another order, and `game` drops the reader view, which a game cannot open in.
 fn options_rows(manual: bool, game: bool) -> Vec<Entry> {
@@ -329,6 +338,8 @@ pub struct QuickAccess {
     bookmark: Option<OptionsBookmark>,
     /// Section heads: each drawn over the row at its index.
     heads: Vec<(usize, String)>,
+    /// [`Entry::Leave`]'s label, naming the bookmark it closes.
+    leave: String,
 }
 
 impl QuickAccess {
@@ -343,13 +354,15 @@ impl QuickAccess {
             armed: None,
             bookmark: None,
             heads: Vec::new(),
+            leave: String::new(),
         }
     }
 
     /// Show `strip`'s rows `over` what is on screen, highlighting the first;
-    /// `launched`: whether the tab runs a bookmark.
-    pub fn open(&mut self, strip: Strip, over: Over, launched: bool, config: &AppConfig) {
-        self.show(strip, entries(strip, over, launched));
+    /// `launched`: the name of the bookmark the tab runs, if any.
+    pub fn open(&mut self, strip: Strip, over: Over, launched: Option<&str>, config: &AppConfig) {
+        self.show(strip, entries(strip, over, launched.is_some()));
+        self.leave = leave_label(launched);
         self.refresh(config);
         if let Some(at) = self.position(Entry::Run(Action::Reader)) {
             self.flags[at] = Some(over == Over::Tab(TabMode::Reader));
@@ -371,7 +384,12 @@ impl QuickAccess {
 
     /// Show Quick Access over the start page: `tile`'s rows, headed by its
     /// name, then the page's own rows headed as the page.
-    pub fn open_home(&mut self, tile: Option<HomeTile>, launched: bool, config: &AppConfig) {
+    pub fn open_home(
+        &mut self,
+        tile: Option<HomeTile>,
+        launched: Option<&str>,
+        config: &AppConfig,
+    ) {
         let mut rows = Vec::new();
         let mut heads = Vec::new();
         if let Some(tile) = &tile {
@@ -379,8 +397,9 @@ impl QuickAccess {
             rows.extend(options_rows(tile.manual, tile.game));
             heads.push((rows.len(), HOME_HEAD.to_string()));
         }
-        rows.extend(entries(Strip::QuickAccess, Over::Home, launched));
+        rows.extend(entries(Strip::QuickAccess, Over::Home, launched.is_some()));
         self.show(Strip::QuickAccess, rows);
+        self.leave = leave_label(launched);
         self.refresh(config);
         self.heads = heads;
         if let Some(tile) = tile {
@@ -519,8 +538,12 @@ impl QuickAccess {
         &self.rows
     }
 
-    pub fn label(&self, index: usize) -> &'static str {
-        self.rows.get(index).map_or("", |row| row.label())
+    pub fn label(&self, index: usize) -> &str {
+        match self.rows.get(index) {
+            Some(Entry::Leave) => &self.leave,
+            Some(row) => row.label(),
+            None => "",
+        }
     }
 
     pub fn value(&self, index: usize) -> &str {
@@ -568,7 +591,7 @@ mod tests {
         panel.open(
             Strip::QuickAccess,
             Over::Tab(mode),
-            false,
+            None,
             &AppConfig::default(),
         );
         panel
@@ -653,14 +676,14 @@ mod tests {
 
     #[test]
     fn the_reader_row_shows_whether_the_tab_is_in_it() {
-        let reader_row = |panel: &QuickAccess| {
+        fn reader_row(panel: &QuickAccess) -> (&str, Option<bool>) {
             let at = panel
                 .rows()
                 .iter()
                 .position(|row| *row == Entry::Run(Action::Reader))
                 .expect("the browser rows carry the reader view");
             (panel.label(at), panel.flag(at))
-        };
+        }
         assert_eq!(
             reader_row(&open(TabMode::Page)),
             ("Reader view", Some(false))
@@ -680,6 +703,23 @@ mod tests {
         assert!(!menu.contains(&Entry::Leave));
     }
 
+    /// The way out names the bookmark it closes.
+    #[test]
+    fn the_way_out_names_the_launched_bookmark() {
+        let mut panel = QuickAccess::new();
+        let over = Over::Tab(TabMode::Game);
+        panel.open(
+            Strip::QuickAccess,
+            over,
+            Some("HexGL"),
+            &AppConfig::default(),
+        );
+        let last = panel.rows().len() - 1;
+        assert_eq!(panel.label(last), "Close HexGL");
+        panel.open(Strip::QuickAccess, over, Some(""), &AppConfig::default());
+        assert_eq!(panel.label(last), "Close");
+    }
+
     fn tile(manual: bool, game: bool) -> HomeTile {
         HomeTile {
             id: "a".into(),
@@ -695,7 +735,7 @@ mod tests {
     #[test]
     fn a_tile_leads_quick_access_over_the_start_page() {
         let mut panel = QuickAccess::new();
-        panel.open_home(Some(tile(true, false)), false, &AppConfig::default());
+        panel.open_home(Some(tile(true, false)), None, &AppConfig::default());
         let options = options_rows(true, false);
         assert_eq!(&panel.rows()[..options.len()], &options[..]);
         assert!(panel.rows()[options.len()..]
@@ -708,7 +748,7 @@ mod tests {
         assert_eq!(panel.value(0), "a.example");
         panel.set_title("B".into());
         assert_eq!(panel.heads()[0].1, "B");
-        panel.open_home(None, false, &AppConfig::default());
+        panel.open_home(None, None, &AppConfig::default());
         assert!(panel.heads().is_empty());
         assert!(panel
             .rows()
@@ -721,9 +761,9 @@ mod tests {
         let mut panel = QuickAccess::new();
         let moves =
             |panel: &QuickAccess| panel.rows().contains(&Entry::Options(OptionsRow::MoveLeft));
-        panel.open_home(Some(tile(true, false)), false, &AppConfig::default());
+        panel.open_home(Some(tile(true, false)), None, &AppConfig::default());
         assert!(moves(&panel) && panel.bookmark_id() == Some("a"));
-        panel.open_home(Some(tile(false, true)), false, &AppConfig::default());
+        panel.open_home(Some(tile(false, true)), None, &AppConfig::default());
         assert!(!moves(&panel));
         assert!(!panel.rows().contains(&Entry::Options(OptionsRow::Reader)));
         assert_eq!(panel.rows().len(), panel.value_count());
@@ -746,7 +786,7 @@ mod tests {
         panel.open(
             Strip::QuickMenu,
             Over::Tab(TabMode::Page),
-            false,
+            None,
             &AppConfig::default(),
         );
         panel.move_sel(-1);

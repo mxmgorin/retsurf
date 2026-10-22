@@ -200,7 +200,8 @@ fn glyph(entry: Entry) -> &'static str {
     match entry {
         Entry::Enter => bold::GAME_CONTROLLER,
         Entry::Reload => bold::ARROW_CLOCKWISE,
-        Entry::Exit | Entry::Leave => bold::SIGN_OUT,
+        Entry::Exit => bold::SIGN_OUT,
+        Entry::Leave => bold::X,
         Entry::InputMap => bold::JOYSTICK,
         Entry::Osk => bold::KEYBOARD,
         Entry::Settings => bold::GEAR,
@@ -257,7 +258,7 @@ mod tests {
         ];
         for strip in [Strip::QuickAccess, Strip::QuickMenu] {
             for over in overs {
-                panel.open(strip, over, true, &AppConfig::default());
+                panel.open(strip, over, Some("A"), &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");
                 }
@@ -270,7 +271,7 @@ mod tests {
             manual: true,
             game: false,
         };
-        panel.open_home(Some(tile), false, &AppConfig::default());
+        panel.open_home(Some(tile), None, &AppConfig::default());
         for &row in panel.rows() {
             assert_ne!(glyph(row), NO_ICON, "{row:?}");
         }
