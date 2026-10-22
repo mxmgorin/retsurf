@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bookmark row in Game Mode's Quick Access
 - `retsurf --open ID` opens a bookmark as it asks
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
+- Start page brand `icon`: the sun over the waves, no wordmark (`[home] brand`)
 
 ### Changed
 

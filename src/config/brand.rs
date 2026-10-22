@@ -8,6 +8,8 @@ token_enum! {
         Banner => "banner", "Banner",
         /// The wordmark over a single wave.
         Wordmark => "wordmark", "Wordmark",
+        /// The app icon's sun rising over its waves, no wordmark.
+        Icon => "icon", "Icon",
         /// Nothing: the rest of the page moves up, for small screens.
         None => "none", "None",
     }

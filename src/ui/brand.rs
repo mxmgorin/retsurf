@@ -70,6 +70,12 @@ impl Horizon {
         self.radius / WAVE_REF_RADIUS
     }
 
+    /// From the horizon line down to the lower of the near wave and the halo.
+    pub fn glow_depth(&self) -> f32 {
+        let halo = self.radius * (HALO_SCALE - 1.0) + self.sink * self.radius * 2.0;
+        self.depth().max(halo)
+    }
+
     /// From the halo's top down to the horizon line.
     pub fn rise(&self) -> f32 {
         self.radius * (1.0 + HALO_SCALE) - self.sink * self.radius * 2.0

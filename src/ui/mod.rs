@@ -868,6 +868,7 @@ impl AppUi {
                             .texture(ctx)
                             .map_or(home::Mark::Wordmark, home::Mark::Banner),
                         Brand::Wordmark => home::Mark::Wordmark,
+                        Brand::Icon => home::Mark::Icon,
                         Brand::None => home::Mark::None,
                     };
                     let tabs = home::Tabs {

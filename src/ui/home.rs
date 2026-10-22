@@ -5,6 +5,7 @@
 //! buttons do. Navigation is routed by [`crate::app`]; tiles open via
 //! [`HomeAction::Open`].
 
+use super::brand::{self, Horizon};
 use super::favicon::{Icon, PageIcons};
 use super::keys;
 use super::labels::{bookmark_label, site_label};
@@ -33,6 +34,16 @@ static BANNER_SVG: &[u8] = include_bytes!("../../resources/retsurf-banner-bare.s
 const BANNER_H: f32 = 72.0;
 /// Banner bottom to the search field; the scene's own sea is its margin.
 const BANNER_GAP: f32 = 12.0;
+/// The icon mark's sun, a third risen like the app icon's.
+const ICON_SUN: Horizon = Horizon {
+    radius: 20.0,
+    sink: 0.3,
+    dim: 0.0,
+};
+/// The icon mark's wave span, in sun radii.
+const ICON_SPAN: f32 = 8.0;
+/// The end fades' reach past the waves' ends (logical px).
+const ICON_OVERHANG: f32 = 2.0;
 /// The search field's top with no mark above it (logical px).
 const COMPACT_TOP: f32 = 16.0;
 
@@ -41,6 +52,7 @@ const COMPACT_TOP: f32 = 16.0;
 pub(super) enum Mark<'a> {
     Banner(&'a egui::TextureHandle),
     Wordmark,
+    Icon,
     None,
 }
 
@@ -102,6 +114,40 @@ impl Banner {
         }
         self.texture.as_ref().map(|(_, t)| t)
     }
+}
+
+/// The icon mark, allocated in `ui`: [`ICON_SUN`] over its sea, which fades out
+/// at both ends and below the near wave, under the halo.
+fn add_icon(ui: &mut egui::Ui) {
+    let size = egui::vec2(ICON_SUN.radius * ICON_SPAN, icon_height());
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let horizon = rect.top() + ICON_SUN.rise();
+    let painter = ui.painter();
+    let x_range = rect.x_range();
+    brand::paint_horizon(
+        painter,
+        x_range,
+        horizon,
+        rect.bottom(),
+        rect.center().x,
+        &ICON_SUN,
+    );
+    let foot = horizon + ICON_SUN.depth();
+    fade(painter, rect.with_min_y(foot), egui::Direction::TopDown);
+    // Overhang: a stroke's feathering reaches past its last point.
+    let ends = [
+        (rect.left() - ICON_OVERHANG, egui::Direction::RightToLeft),
+        (rect.right() - FADE, egui::Direction::LeftToRight),
+    ];
+    for (left, dir) in ends {
+        let x = left..=left + FADE + ICON_OVERHANG;
+        fade(painter, egui::Rect::from_x_y_ranges(x, rect.y_range()), dir);
+    }
+}
+
+/// The icon mark's height, halo top to the halo's bottom under the sea.
+fn icon_height() -> f32 {
+    ICON_SUN.rise() + ICON_SUN.glow_depth()
 }
 
 /// [`BANNER_SVG`] at `height` px, its width to the SVG's aspect.
@@ -373,16 +419,17 @@ pub(super) fn add_home(
                             let h = wordmark::wordmark_height(ui);
                             (h, h * GAP_TOP_RATIO)
                         }
+                        Mark::Icon => (icon_height(), BANNER_GAP),
                         Mark::None => (0.0, 0.0),
                     };
                     // A pinned field leaves the mark nothing to anchor to.
                     let gap_top = match (pinned, view.mark) {
-                        (true, Mark::Banner(_) | Mark::Wordmark) => ROW_GAP,
+                        (true, Mark::Banner(_) | Mark::Wordmark | Mark::Icon) => ROW_GAP,
                         _ => gap_top,
                     };
                     let top = match (pinned, view.mark) {
                         (true, _) | (false, Mark::None) => COMPACT_TOP,
-                        (false, Mark::Banner(_) | Mark::Wordmark) => {
+                        (false, Mark::Banner(_) | Mark::Wordmark | Mark::Icon) => {
                             ((floor - area.top()) * FIELD_ANCHOR - mark_h - gap_top).max(8.0)
                         }
                     };
@@ -406,6 +453,7 @@ pub(super) fn add_home(
                                         ui.add(image.fit_to_exact_size(banner_size(t)));
                                     }
                                     Mark::Wordmark => wordmark::add_wordmark(ui),
+                                    Mark::Icon => add_icon(ui),
                                     Mark::None => {}
                                 }
                                 ui.add_space(gap_top);
