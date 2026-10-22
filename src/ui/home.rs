@@ -30,7 +30,7 @@ fn font(size: f32) -> egui::FontId {
 /// The banner scene without its plate; the start page supplies the background.
 static BANNER_SVG: &[u8] = include_bytes!("../../resources/retsurf-banner-bare.svg");
 /// The banner's drawn height (logical px); its width follows the SVG's aspect.
-const BANNER_H: f32 = 100.0;
+const BANNER_H: f32 = 72.0;
 /// Banner bottom to the search field; the scene's own sea is its margin.
 const BANNER_GAP: f32 = 12.0;
 /// The search field's top with no mark above it (logical px).

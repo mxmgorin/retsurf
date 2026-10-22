@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The start page banner and wordmark are smaller
 - Bookmarks and the speed dial are one list: the start page shows the bookmarks as tiles, one file per bookmark in `bookmarks/`; `dial.toml` and `bookmarks.toml` are no longer read
 - Removing a bookmark that has tags or settings takes a second press
 - `[home]` holds the start page's settings: `page` (was `[browser] home_page`), `brand` (was `[interface] home_style`, `compact` is now `none`), `search`, and `[home.bookmarks] filter` / `sort` / `layout` / `size`

@@ -8,7 +8,7 @@ use egui_sdl2::egui;
 
 /// Wordmark type size (logical px); the wave band and the reserved height
 /// derive from it.
-const WORDMARK_SIZE: f32 = 36.0;
+const WORDMARK_SIZE: f32 = 26.0;
 /// Letter spacing as a share of the type size, matching the SVG wordmark.
 const WORDMARK_TRACKING: f32 = 0.1;
 /// The wave band below the text. Ratios track the SVG, nudged up so the thin
