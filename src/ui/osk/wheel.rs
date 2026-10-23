@@ -13,12 +13,12 @@ use std::f32::consts::TAU;
 
 /// The wheel's geometry: group centres sit on `WHEEL_RADIUS`, each group's
 /// characters on a `FACE_RADIUS` button `FACE_OFFSET` out toward their face.
-const WHEEL_RADIUS: f32 = 92.0;
-const GROUP_RADIUS: f32 = 32.0;
-const FACE_OFFSET: f32 = 16.0;
-const FACE_RADIUS: f32 = 9.5;
+const WHEEL_RADIUS: f32 = 74.0;
+const GROUP_RADIUS: f32 = 26.0;
+const FACE_OFFSET: f32 = 13.0;
+const FACE_RADIUS: f32 = 7.5;
 /// The band past the groups that carries the shoulder-button tabs.
-const RIM_BAND: f32 = 18.0;
+const RIM_BAND: f32 = 15.0;
 const RIM_RADIUS: f32 = WHEEL_RADIUS + GROUP_RADIUS + RIM_BAND;
 /// Air between the disc and the bottom edge.
 const WHEEL_MARGIN: f32 = 8.0;
@@ -35,15 +35,15 @@ const BOTTOM_TAB: f32 = TAU * 0.05;
 /// The hub disk, clear of the groups, and its marks' distance from the centre.
 const HUB_GAP: f32 = 6.0;
 const HUB_RADIUS: f32 = WHEEL_RADIUS - GROUP_RADIUS - HUB_GAP;
-const HUB_MARK_OFFSET: f32 = 26.0;
+const HUB_MARK_OFFSET: f32 = 21.0;
 /// The aimed-group pointer: a triangle just inside the hub's edge.
 const POINTER_INSET: f32 = 8.0;
 const POINTER_LENGTH: f32 = 7.0;
 const POINTER_HALF_WIDTH: f32 = 4.5;
-const GROUP_FONT: f32 = 13.0;
-const AIMED_FONT: f32 = 15.0;
-const TAB_FONT: f32 = 10.0;
-const HUB_ICON: f32 = 16.0;
+const GROUP_FONT: f32 = 11.0;
+const AIMED_FONT: f32 = 13.0;
+const TAB_FONT: f32 = 9.0;
+const HUB_ICON: f32 = 14.0;
 /// The drawn space mark, a bracket open upward.
 const SPACE_MARK_W: f32 = 12.0;
 const SPACE_MARK_H: f32 = 4.0;
