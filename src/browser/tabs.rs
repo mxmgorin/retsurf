@@ -60,6 +60,37 @@ impl AppBrowser {
         )
     }
 
+    /// Reopen the shown tab at `url` in a fresh webview, whose pages start new
+    /// runtimes with the JS preset of now; the tab keeps its state, but not its
+    /// history. `false` when `url` won't parse.
+    pub fn reopen_active(&self, url: &str) -> bool {
+        let Some(webview) = self.build_tab(url) else {
+            return false;
+        };
+        let preset = self.inner.js_preset_id();
+        let mut tabs = self.inner.tabs.borrow_mut();
+        let Some(tab) = tabs.get_mut(self.inner.active.get()) else {
+            return false;
+        };
+        tab.webview.hide();
+        tab.webview.set_focused(false);
+        webview.show();
+        webview.set_focused(true);
+        let old = std::mem::replace(&mut tab.webview, webview);
+        let state = &mut tab.state;
+        state.loading = true;
+        state.heading = Some(url.to_string());
+        state.js_preset = preset;
+        if state.mode == super::TabMode::Reader {
+            state.mode = super::TabMode::Page;
+        }
+        drop(tabs);
+        // Dropping the webview closes it in Servo, which may call back in.
+        drop(old);
+        self.inner.repaint_pending.set(true);
+        true
+    }
+
     /// Open a new tab at `url` and make it the active (shown) one.
     pub fn open_tab(&mut self, url: &str) {
         let Some(webview) = self.build_tab(url) else {

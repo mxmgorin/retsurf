@@ -55,6 +55,9 @@ impl App {
         self.ui
             .quick_access
             .open(strip, over, site.as_deref(), launched, &self.config);
+        let page_js = Some(self.browser.page_js_preset()).filter(|p| !p.is_empty());
+        self.ui.quick_access.set_page_js(page_js);
+        self.ui.quick_access.refresh(&self.config);
         let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",
@@ -186,7 +189,12 @@ impl App {
 
     /// A / Enter on the focused Quick Access row.
     fn quick_access_activate(&mut self, out: &mut Vec<AppCommand>) {
-        match self.ui.quick_access.row() {
+        let row = self.ui.quick_access.row();
+        match row {
+            Entry::Quick(_) if self.ui.quick_access.wants_reopen(row, &self.config) => {
+                self.ui.quick_access.close();
+                self.reopen_page();
+            }
             Entry::Quick(field) => self.step_quick(field, 1, out),
             Entry::InputMap => {
                 self.ui.quick_access.close();

@@ -100,6 +100,8 @@ pub enum Over {
 pub enum Modes {
     Browser,
     Game,
+    /// Over a tab in any mode.
+    Tab,
     Home,
 }
 
@@ -108,6 +110,7 @@ impl Modes {
         match self {
             Modes::Browser => matches!(over, Over::Tab(mode) if mode != TabMode::Game),
             Modes::Game => over == Over::Tab(TabMode::Game),
+            Modes::Tab => matches!(over, Over::Tab(_)),
             Modes::Home => over == Over::Home,
         }
     }
@@ -174,6 +177,9 @@ const ACCESS_GAME: &[Slot] = &[
 
 /// Quick Access over the start page: how it shows its bookmarks.
 const ACCESS_HOME: &[Slot] = &[Slot::QuickRows];
+/// Put before the JS engine row's value while A would reopen the page.
+const REOPEN_HINT: &str = "Reopen: ";
+
 /// What heads the page's own rows when a tile's rows come first.
 const HOME_HEAD: &str = "Home";
 /// What heads a tab's own rows when its site's rows come first.
@@ -355,6 +361,8 @@ pub struct QuickAccess {
     heads: Vec<(usize, String)>,
     /// [`Entry::Leave`]'s label, naming the bookmark it closes.
     leave: String,
+    /// The JS preset the page opened with, while one is known.
+    page_js: Option<String>,
 }
 
 impl QuickAccess {
@@ -370,6 +378,7 @@ impl QuickAccess {
             bookmark: None,
             heads: Vec::new(),
             leave: String::new(),
+            page_js: None,
         }
     }
 
@@ -417,6 +426,7 @@ impl QuickAccess {
         self.visible = true;
         self.strip = strip;
         self.bookmark = None;
+        self.page_js = None;
         self.heads.clear();
         self.selected = 0;
         self.armed = None;
@@ -495,8 +505,30 @@ impl QuickAccess {
                 if let Kind::Bool { get, .. } = kind {
                     self.flags[at] = Some(get(config));
                 }
+                if self.wants_reopen(*row, config) {
+                    self.values[at].insert_str(0, REOPEN_HINT);
+                }
             }
         }
+    }
+
+    /// Tell the rows which JS preset the page opened with, `None` where
+    /// none applies.
+    pub fn set_page_js(&mut self, preset: Option<String>) {
+        self.page_js = preset;
+    }
+
+    /// Whether `row` is the JS engine row set to another preset than the
+    /// page opened with, which A then reopens it in.
+    pub fn wants_reopen(&self, row: Entry, config: &AppConfig) -> bool {
+        let Entry::Quick(i) = row else {
+            return false;
+        };
+        Settings::fields()[i].label == settings::JS_ENGINE
+            && self
+                .page_js
+                .as_deref()
+                .is_some_and(|page| page != config.performance.js_preset)
     }
 
     /// The bookmark the options rows are open on.
@@ -660,6 +692,7 @@ mod tests {
                 "Bookmark",
                 "User agent",
                 "Ad blocker",
+                "JS engine",
                 "Reader view",
                 "Page theme"
             ]

@@ -53,6 +53,8 @@ pub struct PerformanceConfig {
     /// WebGL for pages. Off, no GL is loaded for it, which matters where it runs
     /// on the CPU. Applies at startup.
     pub webgl: bool,
+    /// The JS engine preset pages open with (see [`super::js_preset`]).
+    pub js_preset: String,
 }
 
 /// The `webgl_texture_units` cap a software GL gets by default: WebGL 1's minimum.
@@ -85,6 +87,7 @@ impl Default for PerformanceConfig {
             max_fps: 30,
             webgl_texture_units: 0,
             webgl: true,
+            js_preset: super::js_preset::AUTO.to_string(),
         }
     }
 }

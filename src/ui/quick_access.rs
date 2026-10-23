@@ -231,6 +231,7 @@ fn glyph(entry: Entry) -> &'static str {
             "Page theme" => bold::CIRCLE_HALF,
             "Ad blocker" => bold::SHIELD_CHECK,
             "User agent" => bold::DEVICES,
+            "JS engine" => bold::LIGHTNING,
             "Sort" => bold::SORT_ASCENDING,
             "Layout" => bold::SQUARES_FOUR,
             "Size" => bold::MAGNIFYING_GLASS_PLUS,

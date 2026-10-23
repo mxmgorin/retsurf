@@ -6,9 +6,9 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout, HomeSearch,
-    HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution,
-    TextureFilter, TextureLimit, ToolbarPosition,
+    bounds, js_preset, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout,
+    HomeSearch, HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling,
+    ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -65,19 +65,19 @@ pub enum Opts {
     Fixed(&'static [(&'static str, &'static str)]),
     /// Listed when stepped; `label` names a value without listing.
     Listed {
-        list: fn() -> Vec<(String, String)>,
+        list: fn(&AppConfig) -> Vec<(String, String)>,
         label: fn(&str) -> String,
     },
 }
 
 impl Opts {
-    fn list(&self) -> Vec<(String, String)> {
+    fn list(&self, config: &AppConfig) -> Vec<(String, String)> {
         match self {
             Opts::Fixed(opts) => opts
                 .iter()
                 .map(|(l, v)| (l.to_string(), v.to_string()))
                 .collect(),
-            Opts::Listed { list, .. } => list(),
+            Opts::Listed { list, .. } => list(config),
         }
     }
 
@@ -316,7 +316,7 @@ pub fn step(kind: &Kind, config: &mut AppConfig, dx: i32) {
         }
         Kind::Choice { opts, get, set } => {
             let cur = get(config);
-            let opts = opts.list();
+            let opts = opts.list(config);
             let n = opts.len() as i32;
             let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
             let next = (idx + dx).rem_euclid(n) as usize;
@@ -367,10 +367,28 @@ const fn ua_kind() -> Kind {
     }
 }
 
+/// The JS engine preset row's label, which Quick Access finds it by.
+pub const JS_ENGINE: &str = "JS engine";
+
+/// The JS engine preset; its options include the user's own.
+const JS_PRESET: Kind = Kind::Choice {
+    opts: Opts::Listed {
+        list: |c| {
+            js_preset::all(&c.js_presets)
+                .into_iter()
+                .map(|(id, _)| (js_preset::label(&id), id))
+                .collect()
+        },
+        label: js_preset::label,
+    },
+    get: |c| c.performance.js_preset.clone(),
+    set: |c, v| c.performance.js_preset = v.to_string(),
+};
+
 /// The page shader; its options include the user's files.
 const SHADER: Kind = Kind::Choice {
     opts: Opts::Listed {
-        list: shaders::list,
+        list: |_| shaders::list(),
         label: shaders::label,
     },
     get: |c| c.game_mode.view.shader.clone(),
@@ -524,6 +542,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::System,   "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::System,   "Performance", "Frame cap (fps)",        int!(performance.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
     f(S::System,   "Performance", "WebGL",                  flag!(performance.webgl), true),
+    f(S::System,   "Performance", JS_ENGINE,                JS_PRESET, false).quick(Modes::Tab),
     f(S::System,   "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
     f(S::System,   "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
     f(S::System,   "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),
@@ -581,7 +600,7 @@ mod tests {
                     assert_eq!(get(&c), "roundtrip", "{}", field.label);
                 }
                 Kind::Choice { opts, get, set } => {
-                    let opts = opts.list();
+                    let opts = opts.list(&c);
                     assert!(!opts.is_empty(), "{}", field.label);
                     for (_, token) in &opts {
                         set(&mut c, token);

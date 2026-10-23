@@ -8,6 +8,7 @@
 
 use crate::platform::render::shaders;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 mod adblock;
 mod audio;
@@ -24,6 +25,7 @@ mod game_mode;
 mod history;
 mod home;
 mod interface;
+pub mod js_preset;
 mod osk;
 pub mod overlay;
 mod pad_layout;
@@ -78,6 +80,9 @@ pub struct AppConfig {
     pub audio: AudioConfig,
     pub video: VideoConfig,
     pub performance: PerformanceConfig,
+    /// The user's JS engine presets, by id (see [`js_preset`]).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub js_presets: BTreeMap<String, js_preset::JsPreset>,
     pub display: DisplayConfig,
     pub downloads: DownloadsConfig,
     pub update: UpdateConfig,
@@ -250,6 +255,12 @@ impl AppConfig {
             &mut self.performance.http_disk_cache_mb,
             b::HTTP_DISK_CACHE_MB,
         );
+
+        let preset = &mut self.performance.js_preset;
+        if !js_preset::exists(&self.js_presets, preset) {
+            log::warn!("config: performance.js_preset = {preset} unknown; using auto");
+            *preset = js_preset::AUTO.to_string();
+        }
 
         let shader = &mut self.game_mode.view.shader;
         if !shaders::exists(shader) {

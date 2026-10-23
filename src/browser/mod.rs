@@ -49,7 +49,10 @@ use crate::data::downloads::{BlobDownload, DownloadRequest};
 use crate::platform::clipboard::Clipboard;
 use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
-    config::{AppConfig, BrowserConfig, ExperimentalConfig, PageTheme},
+    config::{
+        js_preset::{self, JsPreset},
+        AppConfig, BrowserConfig, ExperimentalConfig, PageTheme,
+    },
     event::user::{FrameQueue, UserEvent, UserEventSender},
 };
 use servo::profile_traits::mem::MemoryReportResult;
@@ -84,6 +87,8 @@ pub enum BrowserNotice {
 
 pub struct AppBrowser {
     inner: Rc<AppBrowserInner>,
+    /// The memory profile's JS engine values, under every preset.
+    js_base: engine::JsBase,
 }
 
 pub struct BrowserState {
@@ -95,6 +100,8 @@ pub struct BrowserState {
     /// Where a load of ours is taking the tab, until its URL commits or the
     /// load ends.
     heading: Option<String>,
+    /// The JS preset its page's runtime started with, by id.
+    js_preset: String,
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
@@ -154,6 +161,7 @@ impl Default for BrowserState {
             location: "".into(),
             page_url: "".into(),
             heading: None,
+            js_preset: String::new(),
             loading: false,
             fullscreen: false,
             mode: TabMode::Page,
@@ -267,6 +275,8 @@ struct AppBrowserInner {
     page_theme: Cell<PageTheme>,
     /// The User-Agent in force, to skip a save that leaves it unchanged.
     user_agent: RefCell<String>,
+    /// The JS preset set in the engine prefs, by id and as resolved.
+    js_applied: RefCell<Option<(String, JsPreset)>>,
     /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
     /// The forced-dark sheet, attached to `user_content` while the theme asks
@@ -387,6 +397,7 @@ impl AppBrowserInner {
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             user_agent: RefCell::new(effective_user_agent(browser)),
+            js_applied: RefCell::new(None),
             page_icons: Cell::new(config.interface.page_icons),
             forced_dark,
             pads: RefCell::new(PadSlots::default()),
@@ -439,6 +450,14 @@ impl AppBrowserInner {
 
     /// Adopt `tab` as the new shown tab: hide the current one first (all tabs
     /// share one rendering context, so only one may be shown at a time).
+    /// The id of the JS preset set in the engine prefs.
+    fn js_preset_id(&self) -> String {
+        self.js_applied
+            .borrow()
+            .as_ref()
+            .map_or_else(String::new, |(id, _)| id.clone())
+    }
+
     fn adopt_tab(&self, tab: Tab) {
         if let Some(cur) = self.active_webview() {
             cur.hide();
@@ -485,12 +504,11 @@ impl AppBrowser {
     ) -> Result<Self, String> {
         // Servo renders into an FBO in SDL2's shared GL context
         // (see `SdlRenderingContext`); egui composites that FBO's texture.
+        let prefs = engine::build_preferences(&config.browser, &config.performance);
+        let js_base = engine::JsBase::of(&prefs);
         let servo = servo::ServoBuilder::default()
             .opts(engine::build_opts(&config.browser))
-            .preferences(engine::build_preferences(
-                &config.browser,
-                &config.performance,
-            ))
+            .preferences(prefs)
             .event_loop_waker(event_sender.clone_box())
             .build();
         engine::set_experimental_prefs(&servo, &config.experimental);
@@ -510,9 +528,12 @@ impl AppBrowser {
                 .add_script(Rc::new(servo::UserScript::new(js, None)));
         }
 
-        Ok(Self {
+        let browser = Self {
             inner: Rc::new(inner),
-        })
+            js_base,
+        };
+        browser.set_js_preset(config);
+        Ok(browser)
     }
 
     #[inline]
@@ -625,6 +646,7 @@ impl AppBrowser {
         self.set_experimental_prefs(&config.experimental);
         self.set_page_theme(config.browser.page_theme);
         self.set_user_agent(&config.browser);
+        self.set_js_preset(config);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
         self.set_page_icons(config.interface.page_icons);
@@ -747,6 +769,26 @@ impl AppBrowser {
                 webview.reload();
             }
         }
+    }
+
+    /// Run `config`'s JS preset in the pages opened from now on.
+    fn set_js_preset(&self, config: &AppConfig) {
+        let id = &config.performance.js_preset;
+        let next = (id.clone(), js_preset::get(&config.js_presets, id));
+        if self.inner.js_applied.borrow().as_ref() == Some(&next) {
+            return;
+        }
+        for (name, value) in engine::js_pref_values(self.js_base, &next.1) {
+            self.inner.servo.set_preference(name, value);
+        }
+        log::info!("js preset: {id}");
+        self.inner.js_applied.replace(Some(next));
+    }
+
+    /// The JS preset the shown tab's page opened with; empty before its first
+    /// page.
+    pub fn page_js_preset(&self) -> String {
+        self.state().js_preset.clone()
     }
 
     /// Set the shown tab's page zoom.

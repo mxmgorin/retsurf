@@ -43,7 +43,13 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // only log to history when it's the tab the user is actually viewing.
         if let Some(i) = self.tab_index(webview.id()) {
             let url = url.to_string();
+            let preset = self.js_preset_id();
             let mut tabs = self.tabs.borrow_mut();
+            // A new host gets a new runtime, which starts with the preset of now.
+            let host = crate::data::page_icons::host_key;
+            if tabs[i].state.js_preset.is_empty() || host(&tabs[i].state.page_url) != host(&url) {
+                tabs[i].state.js_preset = preset;
+            }
             tabs[i].state.location = url.clone();
             tabs[i].state.page_url = url.clone();
             tabs[i].state.heading = None;

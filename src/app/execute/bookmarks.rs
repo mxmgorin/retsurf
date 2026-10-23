@@ -15,7 +15,7 @@
 //! forced dark changed under it; a tab switch switches it without a reload.
 
 use super::super::{App, AppCommand};
-use crate::config::{overlay, HomeSort};
+use crate::config::{js_preset, overlay, HomeSort};
 use crate::data::bookmarks::{self, Launch};
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText};
@@ -40,10 +40,35 @@ impl App {
     /// a game. A game enters Game Mode before the page loads, which sizes its
     /// canvas once.
     pub(in crate::app) fn open_bookmark(&mut self, at: usize, out: &mut Vec<AppCommand>) {
-        if let Some(url) = self.start_bookmark(at, out) {
-            self.open_url(url, out);
-            self.arm_bookmark_reader(at);
+        let Some(url) = self.start_bookmark(at, out) else {
+            return;
+        };
+        // A runtime of an earlier visit would keep its old preset.
+        let fresh = self.browser.launched().is_some()
+            && self.config.performance.js_preset != js_preset::AUTO;
+        match fresh && self.browser.reopen_active(&url) {
+            true => {
+                self.browser.set_active_zoom(self.config.browser.page_zoom);
+                self.ui.menu.close();
+            }
+            false => self.open_url(url, out),
         }
+        self.arm_bookmark_reader(at);
+    }
+
+    /// Reopen the shown page in a fresh webview, so it runs the JS preset of
+    /// now.
+    pub(super) fn reopen_page(&mut self) {
+        let url = self.browser.state().site_url().to_string();
+        if !self.browser.reopen_active(&url) {
+            return;
+        }
+        self.browser.set_active_zoom(self.config.browser.page_zoom);
+        let label = js_preset::label(&self.config.performance.js_preset);
+        self.ui.toast(Notice::new(
+            bold::LIGHTNING,
+            format!("Reopened with {label} JS"),
+        ));
     }
 
     /// Set the active tab up to run the bookmark at `at`, short of loading it;

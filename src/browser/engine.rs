@@ -5,7 +5,9 @@
 
 use crate::{
     browser::memory,
-    config::{self, BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig},
+    config::{
+        self, js_preset::JsPreset, BrowserConfig, ExperimentalConfig, PageTheme, PerformanceConfig,
+    },
 };
 
 /// Servo options: with `persist_site_data` on, `config_dir` points at the
@@ -83,6 +85,62 @@ pub(super) fn build_preferences(
         prefs.js_mem_max,
     );
     prefs
+}
+
+/// The memory profile's JS engine values, which a preset's unset keys keep.
+#[derive(Clone, Copy)]
+pub(super) struct JsBase {
+    ion: bool,
+    wasm_ion: bool,
+    baseline_jit: bool,
+    offthread_compilation: bool,
+    /// MB; negative is unlimited.
+    mem_max: i64,
+}
+
+impl JsBase {
+    pub(super) fn of(prefs: &servo::Preferences) -> Self {
+        Self {
+            ion: prefs.js_ion_enabled,
+            wasm_ion: prefs.js_wasm_ion_enabled,
+            baseline_jit: prefs.js_baseline_jit_enabled,
+            offthread_compilation: prefs.js_offthread_compilation_enabled,
+            mem_max: prefs.js_mem_max,
+        }
+    }
+}
+
+/// The engine prefs that run `preset` over `base`; SpiderMonkey reads them when
+/// a page's runtime starts.
+pub(super) fn js_pref_values(
+    base: JsBase,
+    preset: &JsPreset,
+) -> [(&'static str, servo::PrefValue); 5] {
+    use servo::PrefValue::{Bool, Int};
+    let mem_max = match (base.mem_max, preset.heap) {
+        (max, Some(scale)) if max > 0 => ((max as f32 * scale).round() as i64).max(1),
+        (max, _) => max,
+    };
+    [
+        ("js_ion_enabled", Bool(preset.ion.unwrap_or(base.ion))),
+        (
+            "js_wasm_ion_enabled",
+            Bool(preset.wasm_ion.unwrap_or(base.wasm_ion)),
+        ),
+        (
+            "js_baseline_jit_enabled",
+            Bool(preset.baseline_jit.unwrap_or(base.baseline_jit)),
+        ),
+        (
+            "js_offthread_compilation_enabled",
+            Bool(
+                preset
+                    .offthread_compilation
+                    .unwrap_or(base.offthread_compilation),
+            ),
+        ),
+        ("js_mem_max", Int(mem_max)),
+    ]
 }
 
 /// `RETSURF_SERVO_PREFS=name=value[,...]` sets engine prefs the config does not
@@ -228,6 +286,31 @@ pub(super) fn set_experimental_prefs(servo: &servo::Servo, exp: &ExperimentalCon
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A preset's unset keys keep the profile's values; the heap scales a
+    /// ceiling but leaves an unlimited one so.
+    #[test]
+    fn a_js_preset_lays_its_keys_over_the_profile() {
+        let mut prefs = servo::Preferences {
+            js_ion_enabled: false,
+            js_mem_max: 100,
+            ..servo::Preferences::default()
+        };
+        let base = JsBase::of(&prefs);
+        let preset = JsPreset {
+            wasm_ion: Some(false),
+            heap: Some(1.5),
+            ..JsPreset::default()
+        };
+        let values = js_pref_values(base, &preset);
+        let get = |name: &str| values.iter().find(|(n, _)| *n == name).unwrap().1.clone();
+        assert_eq!(get("js_ion_enabled"), servo::PrefValue::Bool(false));
+        assert_eq!(get("js_wasm_ion_enabled"), servo::PrefValue::Bool(false));
+        assert_eq!(get("js_mem_max"), servo::PrefValue::Int(150));
+        prefs.js_mem_max = -1;
+        let unlimited = js_pref_values(JsBase::of(&prefs), &preset);
+        assert_eq!(unlimited[4].1, servo::PrefValue::Int(-1));
+    }
 
     /// A tier that kept its memory cache only gains the disk file and budget.
     #[test]

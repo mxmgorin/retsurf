@@ -113,6 +113,10 @@ http_disk_cache_mb = 0     # keep cached pages on disk across restarts, 0 = off;
 max_fps = 30               # frame cap for software rendering, 0 = none
 webgl_texture_units = 0    # texture units WebGL pages see, 0 = 8 on a software GL; restart
 webgl = true               # WebGL for pages; off loads no GL for it; restart
+js_preset = "auto"         # JS engine preset: "auto", "fast", "lean", "safe" or a [js_presets] id
+
+[js_presets.fast]          # a built-in's keys override it; a new id adds a preset
+heap = 3.0
 
 [display]
 width = 640                # desktop window size, remembered on exit
@@ -233,6 +237,7 @@ A bookmark can override these settings for its site:
 | `[data_saving]` | any |
 | `[experimental]` | any |
 | `[game_mode]` | any |
+| `[performance]` | `js_preset` |
 
 They apply while the shown tab is on the bookmark's site: the bookmark it runs as an app or
 a game, else the bookmark of the same host with the longest matching path, else the first
@@ -247,6 +252,24 @@ saved to `[home.bookmarks]`.
 
 The id is the file name and never changes. A file that does not parse is skipped. Removing
 a bookmark that has tags or other settings takes a second press.
+
+## JS engine presets
+
+A preset sets the JS engine's JIT and heap size. A page takes the preset in force when it
+opens: after changing it, Quick Access's **JS engine** row reads `Reopen: <preset>`, and A
+reopens the page in a fresh tab state, history dropped. An app or a game with a preset
+other than `auto` always opens that way.
+
+| Preset | `ion` | `wasm_ion` | `baseline_jit` | `offthread_compilation` | `heap` |
+|---|---|---|---|---|---|
+| `auto` | profile | profile | profile | profile | profile |
+| `fast` | true | true | true | true | 2.0 |
+| `lean` | false | false | true | profile | 0.5 |
+| `safe` | false | false | false | profile | profile |
+
+"profile" is the memory profile's value; `heap` multiplies the profile's JS heap ceiling.
+A `[js_presets.<id>]` table sets any of these keys: with a built-in's id it overrides those
+keys, with a new id it adds a preset that keeps the profile's value for the keys it leaves out.
 
 ## Page icons
 

@@ -68,6 +68,7 @@ pub const SITE_KEYS: &[&str] = &[
     "data_saving",
     "experimental",
     "game_mode",
+    "performance.js_preset",
 ];
 
 /// The part of `table` under `paths`, nested as in it.
