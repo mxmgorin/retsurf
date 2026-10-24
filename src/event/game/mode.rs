@@ -102,9 +102,9 @@ pub struct GameInput {
     triggers: [Trigger; 2],
     /// The browser gestures still answered inside the mode, each opening a strip.
     reserved: Vec<Mirror>,
-    /// The release owed for a tap handed over late, sent a frame after its
-    /// press: a game polling once a frame would miss the two in one.
-    deferred: Option<Target>,
+    /// The release owed for a tap handed over late, and when it falls due: a
+    /// game polling once a frame would miss the two in one.
+    deferred: Option<(Target, Instant)>,
     /// Key edges a modified key owes later, with when each falls due; fired in
     /// that order (see [`Self::hold_chord`]).
     scheduled: Vec<(KeyTarget, bool, Instant)>,
@@ -208,7 +208,7 @@ impl GameInput {
             Some(target) => target.clone(),
         };
         self.fire(&target, true, browser, commands);
-        self.deferred = Some(target);
+        self.deferred = Some((target, Instant::now() + DELAYED_KEY_HOLD));
     }
 
     /// One pad edge, from a controller button or a key-wired pad (Miyoo).
@@ -611,10 +611,10 @@ impl GameInput {
     /// Per-frame: end a tap handed over late, fire a due reserved hold, and emit
     /// whatever the sticks are bound to (the router moves the cursor from it).
     pub fn tick(&mut self, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
-        if let Some(target) = self.deferred.take() {
+        let now = Instant::now();
+        if let Some((target, _)) = self.deferred.take_if(|(_, at)| *at <= now) {
             self.fire(&target, false, browser, commands);
         }
-        let now = Instant::now();
         let (mut due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.scheduled)
             .into_iter()
             .partition(|(_, _, at)| *at <= now);
