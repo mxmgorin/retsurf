@@ -105,7 +105,11 @@ impl AppUi {
         let (Some(toast), Some(left)) = (self.toast.as_ref(), self.toast_visible_for()) else {
             return false;
         };
-        let opacity = (left.as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+        // One layer fades at a time: translucent content over a translucent pill
+        // stacks, so the key caps would outlast the rest.
+        let fade = (left.as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+        let pill = (2.0 * fade).min(1.0);
+        let content = (2.0 * fade - 1.0).max(0.0);
         let screen = ctx.content_rect();
         let mut floor = screen.bottom();
         if self.toolbar_position == ToolbarPosition::Bottom && self.toolbar_rect.is_positive() {
@@ -122,20 +126,22 @@ impl AppUi {
             .order(egui::Order::Tooltip)
             .interactable(false)
             .show(ctx, |ui| {
-                ui.set_opacity(opacity);
-                add_pill(ui, &toast.notice);
+                ui.set_opacity(pill);
+                add_pill(ui, &toast.notice, content);
             });
         true
     }
 }
 
-fn add_pill(ui: &mut egui::Ui, notice: &Notice) {
+/// The pill with its line drawn at `content` opacity over it.
+fn add_pill(ui: &mut egui::Ui, notice: &Notice, content: f32) {
     egui::Frame::new()
         .fill(PANEL_FILL)
         .stroke(egui::Stroke::new(1.0, BORDER))
         .corner_radius(egui::CornerRadius::same(u8::MAX))
         .inner_margin(egui::Margin::symmetric(16, 8))
         .show(ui, |ui| {
+            ui.multiply_opacity(content);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 let tint = if notice.warn { WARN } else { ACCENT };
