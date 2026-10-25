@@ -23,6 +23,7 @@ mod quick_access;
 mod scale;
 mod settings;
 mod splash;
+mod svg;
 mod theme;
 mod toast;
 mod toolbar;
@@ -319,7 +320,9 @@ pub struct AppUi {
     home_config: HomeConfig,
     /// Whether the start page's footer names pad buttons.
     home_pad: bool,
-    banner: home::Banner,
+    banner: svg::SvgTexture,
+    /// The About tab's icon, rasterized on first use.
+    about_icon: svg::SvgTexture,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
     /// Link-hint navigation state; the rects come from the browser.
@@ -411,7 +414,8 @@ impl AppUi {
             page_icons: favicon::PageIcons::new(interface.page_icons),
             home_config: home_config.clone(),
             home_pad: false,
-            banner: home::Banner::default(),
+            banner: home::banner(),
+            about_icon: settings::about_icon(),
             hints: Hints::new(),
             prompt: Prompt::new(),
             scroll_mode: false,
@@ -907,10 +911,17 @@ impl AppUi {
                     // The overlay owns its row selection; an egui-focused row
                     // would take Enter a second time and activate twice.
                     drop_egui_focus(ctx);
+                    let about = settings::AboutView {
+                        update: &update,
+                        icon: match self.settings.is_info_section() {
+                            true => self.about_icon.texture(ctx),
+                            false => None,
+                        },
+                    };
                     settings::add_settings(
                         ctx,
                         &self.settings,
-                        &update,
+                        about,
                         &self.input_map_name,
                         face,
                         self.button_hints,

@@ -20,7 +20,7 @@ mod about;
 mod controls;
 mod fields;
 
-pub use about::about_info;
+pub use about::{about_info, data_folder, AboutLink, NOTICE};
 pub use controls::RESET_ROWS;
 pub use fields::{step, value_of, Door, Field, Kind, Task, JS_ENGINE};
 
@@ -162,7 +162,7 @@ impl Draft {
 /// The About tab's gamepad-focusable rows: the update block, whose `update_rows`
 /// the caller computes from the live state, then the static links.
 fn about_row_count(update_rows: usize) -> usize {
-    update_rows + about_info().links.len()
+    update_rows + about_info().focusable().count()
 }
 
 /// The settings overlay. The drafts are the screen's: closing frees them, and

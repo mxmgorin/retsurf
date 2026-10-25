@@ -250,6 +250,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let builtin = match req.is_for_main_frame {
             true if super::home::is_home(&url) => Some(super::home::render()),
             true if super::junk_surfer::is_junk_surfer(&url) => Some(super::junk_surfer::render()),
+            true if super::about::is_about(&url) => Some(super::about::render()),
             _ => None,
         };
 

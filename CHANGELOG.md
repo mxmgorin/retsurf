@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - License: GPL-3.0-or-later with the additional terms in `NOTICE`; the name and logo under `TRADEMARKS.md`
 - Every release package carries `LICENSE` and `NOTICE`
 - Release files carry build provenance attestations, checked with `gh attestation verify`
+- About tab: the app icon and author, the data folder, links to the website, a bug report with the version filled in, Discussions and Ko-fi; License and credits opens `retsurf:about`, which shows the license, the credits and the component versions offline
 
 ### Removed
 

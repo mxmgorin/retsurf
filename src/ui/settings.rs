@@ -5,11 +5,12 @@
 
 use super::keys;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
+use super::svg::SvgTexture;
+use super::theme::{self, ACCENT, DIM, WARN};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{Door, Kind, Settings, SettingsSection, RESET_ROWS};
+use crate::overlay::settings::{AboutLink, Door, Kind, Settings, SettingsSection, RESET_ROWS};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -21,6 +22,10 @@ const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboar
 
 /// The square step buttons trailing a numeric row.
 const STEP_W: f32 = 26.0;
+/// The app icon, square.
+static ICON_SVG: &[u8] = include_bytes!("../../resources/retsurf.svg");
+/// The About tab's icon side (logical px).
+const ABOUT_ICON: f32 = 56.0;
 /// The shared row shape (see [`panel::row`]), taking this file's owned strings.
 fn setting_row(
     ui: &mut egui::Ui,
@@ -44,22 +49,6 @@ fn step_button(
         [STEP_W, panel::ROW_H],
         egui::Button::new(theme::icon(glyph).color(color)).corner_radius(ROW_RADIUS),
     )
-}
-
-/// One read-only `label : value` line on the About tab — label in white, value
-/// in the accent, pushed to the trailing edge so the values line up like the
-/// field rows do (but without the selectable button chrome).
-fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(label)
-                .color(egui::Color32::WHITE)
-                .size(ROW_FONT),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(egui::RichText::new(value).color(ACCENT).size(ROW_FONT));
-        });
-    });
 }
 
 /// The [`SettingsAction`] the About tab's update row triggers for `state`, or
@@ -161,13 +150,7 @@ fn add_update(
     update: &UpdateState,
     commands: &mut Vec<AppCommand>,
 ) -> usize {
-    ui.add_space(10.0);
-    ui.label(
-        egui::RichText::new("Updates")
-            .color(ACCENT)
-            .strong()
-            .size(13.0),
-    );
+    heading(ui, "Updates");
 
     // Row 0: the primary action (check / install / download / quit-to-apply / retry).
     let (label, value) = update_row_text(update);
@@ -213,15 +196,33 @@ fn add_update(
     update_row_count(update)
 }
 
+/// A titled block on the About tab: the space above it and its accent title.
+fn heading(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(10.0);
+    ui.label(egui::RichText::new(title).color(ACCENT).strong().size(13.0));
+}
+
+/// What the About tab draws besides its compiled-in facts.
+pub(super) struct AboutView<'a> {
+    pub update: &'a UpdateState,
+    /// The app icon; `None` when it does not rasterize.
+    pub icon: Option<&'a egui::TextureHandle>,
+}
+
+/// The app icon heading the About tab, rasterized on first use.
+pub(super) fn about_icon() -> SvgTexture {
+    SvgTexture::new("about-icon", ICON_SVG, ABOUT_ICON)
+}
+
 /// Render the read-only About tab (pulls its facts from
-/// [`crate::overlay::settings::about_info`]): the build identity, a table of
-/// resolved component versions, the attribution block, and clickable links.
+/// [`crate::overlay::settings::about_info`]): the icon and build identity, the
+/// data folder, the update block, the project links and the legal notices.
 fn add_about(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     dim: egui::Color32,
     sel: usize,
-    update: &UpdateState,
+    view: &AboutView,
     commands: &mut Vec<AppCommand>,
 ) {
     let info = crate::overlay::settings::about_info();
@@ -229,70 +230,72 @@ fn add_about(
     section_scroll(ui, screen).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
 
-        ui.label(
-            egui::RichText::new(format!("retsurf {}", info.version))
-                .color(egui::Color32::WHITE)
-                .strong()
-                .size(20.0),
-        );
-        for line in info.description {
-            ui.label(egui::RichText::new(*line).color(dim).size(13.0));
-        }
-        ui.add_space(10.0);
-
-        info_row(ui, "Build", info.git_hash);
-        info_row(ui, "Date", info.build_date);
+        ui.horizontal(|ui| {
+            if let Some(icon) = view.icon {
+                ui.add(egui::Image::new(icon).fit_to_exact_size(egui::Vec2::splat(ABOUT_ICON)));
+            }
+            ui.vertical(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("retsurf {}", info.version))
+                        .color(egui::Color32::WHITE)
+                        .strong()
+                        .size(20.0),
+                );
+                let build = format!(
+                    "{}, {}, Servo {}",
+                    info.git_hash, info.build_date, info.engine
+                );
+                for line in [info.tagline, &build] {
+                    ui.label(egui::RichText::new(line).color(dim).size(13.0));
+                }
+            });
+        });
 
         // Self-update block: About focus rows 0..; returns its row count so the
         // links below can offset past it.
-        let update_rows = add_update(ui, full_w, sel, update, commands);
+        let update_rows = add_update(ui, full_w, sel, view.update, commands);
 
-        ui.add_space(10.0);
-        ui.label(
-            egui::RichText::new("Components")
-                .color(ACCENT)
-                .strong()
-                .size(13.0),
+        heading(ui, "Data folder");
+        let folder = crate::overlay::settings::data_folder();
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(folder)
+                    .color(egui::Color32::WHITE)
+                    .size(13.0),
+            )
+            .wrap(),
         );
-        for (name, version) in info.components {
-            info_row(ui, name, version);
-        }
 
-        ui.add_space(10.0);
-        ui.label(
-            egui::RichText::new("Credits")
-                .color(ACCENT)
-                .strong()
-                .size(13.0),
-        );
-        for line in info.credits {
-            ui.label(egui::RichText::new(*line).color(dim).size(13.0));
-        }
-
-        ui.add_space(10.0);
-        ui.label(
-            egui::RichText::new("Links")
-                .color(ACCENT)
-                .strong()
-                .size(13.0),
-        );
-        // Links are About focus rows `update_rows..`, selectable so the gamepad can
-        // open them (A -> OpenLink); the scheme is stripped to read as a link.
-        for (i, (label, url)) in info.links.iter().enumerate() {
-            let selected = sel == update_rows + i;
-            let shown = url
-                .trim_start_matches("https://")
-                .trim_start_matches("http://");
-            let resp = setting_row(ui, full_w, selected, label.to_string(), shown.to_string());
+        // About focus rows `update_rows..`; indices follow `AboutInfo::focusable`.
+        let mut link_row = |ui: &mut egui::Ui, index: usize, link: &AboutLink| {
+            let selected = sel == update_rows + index;
+            let resp = setting_row(
+                ui,
+                full_w,
+                selected,
+                link.label.to_string(),
+                link.value.to_string(),
+            );
             if selected {
                 center_selected(&resp);
             }
             if resp.clicked() {
                 commands.push(AppCommand::Settings(SettingsAction::OpenLink(
-                    url.to_string(),
+                    link.url.to_string(),
                 )));
             }
+        };
+
+        heading(ui, "Project");
+        for (i, link) in info.links.iter().enumerate() {
+            link_row(ui, i, link);
         }
+
+        heading(ui, "Legal");
+        for line in info.legal {
+            ui.label(egui::RichText::new(line).color(dim).size(13.0));
+        }
+        link_row(ui, info.links.len(), &info.license);
     });
 }
 
@@ -426,7 +429,7 @@ fn section_icon(section: SettingsSection) -> &'static str {
 pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
-    update: &UpdateState,
+    about: AboutView,
     input_map_name: &str,
     face: FaceLabels,
     button_hints: bool,
@@ -480,7 +483,7 @@ pub(super) fn add_settings(
 
         // The About tab is read-only info, not a FIELDS list.
         if settings.is_info_section() {
-            add_about(ui, screen, dim, settings.selected(), update, commands);
+            add_about(ui, screen, dim, settings.selected(), &about, commands);
             return;
         }
 

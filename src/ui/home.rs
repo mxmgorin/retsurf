@@ -10,6 +10,7 @@ use super::favicon::{Icon, PageIcons};
 use super::keys;
 use super::labels::{bookmark_label, site_label};
 use super::panel::{fade, scroll_offset, scrolls_on, settle, EPSILON, FADE};
+use super::svg::SvgTexture;
 use super::theme::{ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM};
 use super::wordmark;
 use super::OskCaret;
@@ -32,6 +33,12 @@ fn font(size: f32) -> egui::FontId {
 static BANNER_SVG: &[u8] = include_bytes!("../../resources/retsurf-banner-bare.svg");
 /// The banner's drawn height (logical px); its width follows the SVG's aspect.
 const BANNER_H: f32 = 72.0;
+
+/// The banner, rasterized on first use.
+pub(super) fn banner() -> SvgTexture {
+    SvgTexture::new("home-banner", BANNER_SVG, BANNER_H)
+}
+
 /// Banner bottom to the search field; the scene's own sea is its margin.
 const BANNER_GAP: f32 = 12.0;
 /// The icon mark's sun, a third risen like the app icon's.
@@ -88,34 +95,6 @@ pub(super) struct FooterHint {
     pub label: &'static str,
 }
 
-/// The banner rasterized for the current pixel density. It is drawn at one
-/// logical size, so a new rasterization is only needed when the scale changes.
-#[derive(Default)]
-pub(super) struct Banner {
-    texture: Option<(f32, egui::TextureHandle)>,
-    /// The SVG would not rasterize; not retried every frame.
-    failed: bool,
-}
-
-impl Banner {
-    pub fn texture(&mut self, ctx: &egui::Context) -> Option<&egui::TextureHandle> {
-        let ppp = ctx.pixels_per_point();
-        if self.failed {
-            return None;
-        }
-        if self.texture.as_ref().is_none_or(|(at, _)| *at != ppp) {
-            let Some(image) = rasterize_banner((BANNER_H * ppp).round() as u32) else {
-                log::warn!("start page: the banner SVG did not rasterize");
-                self.failed = true;
-                return None;
-            };
-            let texture = ctx.load_texture("home-banner", image, egui::TextureOptions::LINEAR);
-            self.texture = Some((ppp, texture));
-        }
-        self.texture.as_ref().map(|(_, t)| t)
-    }
-}
-
 /// The icon mark, allocated in `ui`: [`ICON_SUN`] over its sea, which fades out
 /// at both ends and below the near wave, under the halo.
 fn add_icon(ui: &mut egui::Ui) {
@@ -148,25 +127,6 @@ fn add_icon(ui: &mut egui::Ui) {
 /// The icon mark's height, halo top to the halo's bottom under the sea.
 fn icon_height() -> f32 {
     ICON_SUN.rise() + ICON_SUN.glow_depth()
-}
-
-/// [`BANNER_SVG`] at `height` px, its width to the SVG's aspect.
-fn rasterize_banner(height: u32) -> Option<egui::ColorImage> {
-    use resvg::{tiny_skia, usvg};
-    let tree = usvg::Tree::from_data(BANNER_SVG, &usvg::Options::default()).ok()?;
-    let size = tree.size();
-    let scale = height as f32 / size.height();
-    let width = (size.width() * scale).round() as u32;
-    let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
-    resvg::render(
-        &tree,
-        tiny_skia::Transform::from_scale(scale, scale),
-        &mut pixmap.as_mut(),
-    );
-    Some(egui::ColorImage::from_rgba_premultiplied(
-        [width as usize, height as usize],
-        pixmap.data(),
-    ))
 }
 
 /// The bookmarks with the site icons to draw them by.

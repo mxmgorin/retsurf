@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About retsurf</title>
+  <style>
+    html { background: #16171a; }
+    body { margin: 0 auto; padding: 16px; max-width: 760px; color: #d6d8dc; font: 15px/1.5 sans-serif; }
+    h1 { margin: 0 0 4px; color: #fff; font-size: 22px; }
+    h2 { margin: 24px 0 8px; color: #3fb8a0; font-size: 15px; }
+    a { color: #3fb8a0; }
+    .dim { color: #8a8f98; }
+    table { border-collapse: collapse; }
+    td { padding: 2px 24px 2px 0; }
+    td + td { color: #3fb8a0; }
+    pre { margin: 0; white-space: pre-wrap; font: 12px/1.45 monospace; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>retsurf ${version}</h1>
+  <div class="dim">${build}</div>
+
+  <h2>Components</h2>
+  <table>${components}</table>
+
+  <h2>Source code</h2>
+  <a href="${source}">${source}</a>
+
+  <h2>License</h2>
+  <pre>${notice}</pre>
+
+  <h2>Credits</h2>
+  <ul>${credits}</ul>
+
+  <h2>GNU General Public License</h2>
+  <pre>${license}</pre>
+</body>
+</html>

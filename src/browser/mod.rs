@@ -10,6 +10,7 @@
 //! [`blob_download`] and [`forced_dark`] (user-content scripts), [`adblock`] and
 //! [`content_filter`] (load filtering).
 
+mod about;
 pub mod adblock;
 mod blob_download;
 pub mod content_filter;
@@ -32,6 +33,7 @@ mod reader;
 mod tabs;
 mod url;
 
+pub use about::ABOUT_URL;
 pub use command::BrowserCommand;
 pub use engine::effective_user_agent;
 pub use favicon::Favicon;

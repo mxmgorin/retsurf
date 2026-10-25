@@ -313,9 +313,9 @@ impl AppUi {
             }
         } else {
             crate::overlay::settings::about_info()
-                .links
-                .get(sel - update_rows)
-                .map(|(_, url)| SettingsAction::OpenLink(url.to_string()))
+                .focusable()
+                .nth(sel - update_rows)
+                .map(|link| SettingsAction::OpenLink(link.url.to_string()))
         }
     }
 
