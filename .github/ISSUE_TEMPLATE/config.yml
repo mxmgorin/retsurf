@@ -1,6 +1,9 @@
 blank_issues_enabled: true
 
 contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mxmgorin/retsurf/security/advisories/new
+    about: Report it privately, not as a public issue.
   - name: Questions and help
     url: https://github.com/mxmgorin/retsurf/discussions/categories/q-a
     about: Installing, configuring, or "does it run on my device?" Ask in Discussions.
