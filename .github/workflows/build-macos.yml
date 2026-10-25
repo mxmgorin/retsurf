@@ -91,11 +91,13 @@ jobs:
             <key>CFBundleExecutable</key><string>retsurf</string>
             <key>CFBundleVersion</key><string>$VERSION</string>
             <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>NSHumanReadableCopyright</key><string>Copyright (C) 2025-2026 Maxim Gorin</string>
             <key>NSHighResolutionCapable</key><true/>
           </dict>
           </plist>
           EOF
           codesign --force --deep -s - "$APP"
+          cp LICENSE NOTICE dist/
           ls -la dist/
 
       # hdiutil builds the dmg by copying dist/ into a mounted image and then

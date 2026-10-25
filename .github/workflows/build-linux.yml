@@ -64,7 +64,7 @@ jobs:
         run: |
           set -eux
           mkdir -p dist
-          cp target/release/retsurf dist/
+          cp target/release/retsurf LICENSE NOTICE dist/
           strip dist/retsurf || true
           ls -la dist/
 
@@ -74,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: retsurf-linux-x86_64
-          path: dist/retsurf
+          path: dist/
           retention-days: 14
 
       - name: Zip for release

@@ -187,9 +187,8 @@ jobs:
           cp packaging/portmaster/gameinfo.xml "$pm/retsurf/"
           cp packaging/portmaster/README.md "$pm/retsurf/"
           cp packaging/portmaster/screenshot.png "$pm/retsurf/"
-          # Bring over any bundled gamedir assets (licenses/), minus .gitkeep.
-          cp -r packaging/portmaster/retsurf/. "$pm/retsurf/"
-          rm -f "$pm/retsurf/.gitkeep"
+          mkdir -p "$pm/retsurf/licenses"
+          cp LICENSE NOTICE "$pm/retsurf/licenses/"
           # All three optimized variants; Retsurf.sh execs the matching one.
           cp bins/retsurf.a35 bins/retsurf.a53 bins/retsurf.a55 "$pm/retsurf/"
           chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
@@ -369,6 +368,7 @@ jobs:
           set -eux
           mkdir -p dist
           cp target/release/retsurf dist/retsurf-linux-aarch64
+          cp LICENSE NOTICE dist/
           strip dist/retsurf-linux-aarch64 || true
           ls -la dist/
 
@@ -376,14 +376,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: retsurf-linux-aarch64
-          path: dist/retsurf-linux-aarch64
+          path: dist/
           retention-days: 14
 
       - name: Zip for release
         if: github.event_name == 'release'
         run: |
           set -eux
-          cd dist && zip ../retsurf-linux-aarch64.zip retsurf-linux-aarch64
+          cd dist && zip ../retsurf-linux-aarch64.zip retsurf-linux-aarch64 LICENSE NOTICE
           cd ..
           # Checksum sidecar the in-app updater verifies against (src/update).
           sha256sum retsurf-linux-aarch64.zip > retsurf-linux-aarch64.zip.sha256

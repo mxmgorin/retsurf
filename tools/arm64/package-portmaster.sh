@@ -30,9 +30,8 @@ cp "$pkg/port.json" "$pm/retsurf/"
 cp "$pkg/gameinfo.xml" "$pm/retsurf/"
 cp "$pkg/README.md" "$pm/retsurf/"
 cp "$pkg/screenshot.png" "$pm/retsurf/"
-# Bundled gamedir assets (licenses/), minus the placeholder.
-cp -r "$pkg/retsurf/." "$pm/retsurf/"
-rm -f "$pm/retsurf/.gitkeep"
+mkdir -p "$pm/retsurf/licenses"
+cp "$repo/LICENSE" "$repo/NOTICE" "$pm/retsurf/licenses/"
 cp "$bins"/retsurf.a35 "$bins"/retsurf.a53 "$bins"/retsurf.a55 "$pm/retsurf/"
 chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
   "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"

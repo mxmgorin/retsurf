@@ -127,7 +127,7 @@ for fw in "${firmwares[@]}"; do
   cp "$shared/config.toml" "$app/etc/"
   cp "$ca" "$app/etc/ssl/cacert.pem"
   cp "$src/config.json" "$src/launch.sh" "$app/"
-  cp "$pkg/$fw/README.md" "$icon" "$app/"
+  cp "$pkg/$fw/README.md" "$icon" "$repo/LICENSE" "$repo/NOTICE" "$app/"
   install -m 755 "$bin" "$app/retsurf"
   chmod 755 "$app/launch.sh"
   # Allium's Games tab entry, which hands over to the install under `Apps/`.
