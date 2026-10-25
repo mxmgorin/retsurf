@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[home]` holds the start page's settings: `page` (was `[browser] home_page`), `brand` (was `[interface] home_style`, `compact` is now `none`), `search`, and `[home.bookmarks] filter` / `sort` / `layout` / `size`
 - License: GPL-3.0-or-later with the additional terms in `NOTICE`; the name and logo under `TRADEMARKS.md`
 - Every release package carries `LICENSE` and `NOTICE`
+- Release files carry build provenance attestations, checked with `gh attestation verify`
 
 ### Removed
 

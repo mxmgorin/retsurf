@@ -16,6 +16,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-linux:
@@ -84,6 +86,12 @@ jobs:
           cd ..
           # Checksum sidecar the in-app updater verifies against (src/update).
           sha256sum retsurf-linux-x86_64.zip > retsurf-linux-x86_64.zip.sha256
+
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: retsurf-linux-x86_64.zip
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'

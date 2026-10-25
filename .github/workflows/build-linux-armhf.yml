@@ -26,6 +26,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   TARGET: armv7-unknown-linux-gnueabihf
@@ -392,6 +394,15 @@ jobs:
           name: retsurf-spruceos-armhf
           path: dist/retsurf-spruceos-armhf.zip
           retention-days: 14
+
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/retsurf-allium.zip
+            dist/retsurf-onionos.zip
+            dist/retsurf-spruceos-armhf.zip
 
       # No checksum sidecars beside these: on armhf the in-app updater is
       # Kind::Manual (src/update), so nothing ever downloads them to verify.

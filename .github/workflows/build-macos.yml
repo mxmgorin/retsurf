@@ -16,6 +16,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-macos:
@@ -135,6 +137,12 @@ jobs:
           name: retsurf-macos-aarch64
           path: retsurf-macos-aarch64.dmg
           retention-days: 14
+
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: retsurf-macos-aarch64.dmg
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'

@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
   actions: read
+  # The called builds request these too, and a callee cannot exceed its caller.
+  id-token: write
+  attestations: write
 
 # Never two at once: they would race for the tag.
 concurrency:
@@ -135,6 +138,14 @@ jobs:
             sha256sum "$a.zip" > "$a.zip.sha256"
           done
           ls -la
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            out/*.zip
+            out/*.dmg
+            out/*.apk
 
       # The tag follows main rather than accumulating one tag per night.
       - name: Move the nightly tag

@@ -16,6 +16,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   # The oldest userland we target, ArkOS. Kept in step with
@@ -285,6 +287,16 @@ jobs:
           # is `<hex>  <filename>`; the updater takes the first field.
           sha256sum retsurf-portmaster.zip > retsurf-portmaster.zip.sha256
 
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            retsurf-portmaster.zip
+            retsurf-spruceos-aarch64.zip
+            retsurf-crossmix.zip
+            retsurf-nextui.zip
+
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
@@ -387,6 +399,12 @@ jobs:
           cd ..
           # Checksum sidecar the in-app updater verifies against (src/update).
           sha256sum retsurf-linux-aarch64.zip > retsurf-linux-aarch64.zip.sha256
+
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: retsurf-linux-aarch64.zip
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'

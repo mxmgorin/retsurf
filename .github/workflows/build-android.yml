@@ -27,6 +27,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   NDK_VERSION: "27.2.12479018"   # r27c
@@ -177,6 +179,12 @@ jobs:
           set -eux
           cp android/app/build/outputs/apk/release/app-release.apk retsurf-android-arm64.apk
         # then attach
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: retsurf-android-arm64.apk
+
       - name: Attach APK to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
