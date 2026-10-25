@@ -541,7 +541,7 @@ def run_case(case, harness, binary, keep):
     os.makedirs(profile)
     with open(os.path.join(profile, "config.toml"), "w") as config:
         config.write("[browser]\nrestore_tabs = false\n")
-        config.write(f'home_page = "http://127.0.0.1:{harness.port}/{case.url}"\n')
+        config.write(f'[home]\npage = "http://127.0.0.1:{harness.port}/{case.url}"\n')
         if case.config:
             config.write("\n" + case.config.format(profile=profile))
 
