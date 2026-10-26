@@ -7,12 +7,22 @@ cd "$gamedir" || exit 1
 mkdir -p "$gamedir/data" "$gamedir/downloads"
 : > "$gamedir/log.txt"
 
-# These SoCs are homogeneous, so the first core's part id speaks for all.
 cpu_part=$(grep -m1 -i 'CPU part' /proc/cpuinfo | grep -oiE '0x[0-9a-f]+' | head -1 | tr 'A-Z' 'a-z')
-case "$cpu_part" in
-  0xd05) grep -qw atomics /proc/cpuinfo && bin=retsurf.a55 || bin=retsurf.a53 ;; # A523
-  *)     bin=retsurf.a53 ;; # A133 Plus, and any ARMv8.0 core
-esac
+# What the a55 build's target-cpu compiles in, by /proc/cpuinfo name.
+# Keep in sync with the a55 target-cpu in the build.
+a55_features="aes pmull sha1 sha2 crc32 atomics fphp asimdhp asimdrdm lrcpc dcpop asimddp"
+# Every core must list all of a55_features.
+if awk -v need="$a55_features" '
+  tolower($1) == "features" {
+    cores++
+    n = split(need, f, " ")
+    for (i = 1; i <= n; i++) if (index(" " $0 " ", " " f[i] " ") == 0) missing = 1
+  }
+  END { exit !(cores && !missing) }' /proc/cpuinfo; then
+  bin=retsurf.a55 # A523
+else
+  bin=retsurf.a53 # A133 Plus, and any ARMv8.0 core
+fi
 [ -x "$gamedir/$bin" ] || bin=retsurf.a53
 echo "retsurf: CPU part ${cpu_part:-unknown}, selected $bin" >> "$gamedir/log.txt"
 
