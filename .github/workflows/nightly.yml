@@ -126,6 +126,9 @@ jobs:
           cp art/retsurf-spruceos-armhf/retsurf-spruceos-armhf.zip out/
           cp art/retsurf-macos-aarch64/*.dmg out/retsurf-macos-aarch64.dmg
           cp art/retsurf-android-arm64/*.apk out/retsurf-android-arm64.apk
+          # Artifacts drop file modes: restore +x on what the build workflows mark executable.
+          find art -type f \( -name '*.sh' -o -name retsurf -o -name 'retsurf.a[0-9]*' \
+            -o -name retsurf-linux-aarch64 \) -exec chmod +x {} +
           for a in retsurf-linux-x86_64 retsurf-linux-aarch64 retsurf-portmaster \
                    retsurf-spruceos-aarch64 retsurf-crossmix retsurf-nextui \
                    retsurf-windows-x86_64; do
