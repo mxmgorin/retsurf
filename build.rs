@@ -10,6 +10,8 @@
 //!   from `Cargo.lock` so they track the actual dependency graph rather than the
 //!   looser semver ranges in `Cargo.toml`.
 //!
+//! With the `eink` feature it also links the prebuilt FBInk archive ([`link_eink`]).
+//!
 //! All vars are always emitted (falling back to `"unknown"`) so the `env!`s never
 //! fail to compile, on a git checkout or a source tarball alike.
 
@@ -35,6 +37,8 @@ fn main() {
     println!("cargo:rustc-env=RETSURF_VERSION={}", version(&date));
     println!("cargo:rerun-if-env-changed=GITHUB_WORKFLOW_REF");
 
+    link_eink();
+
     let lock = std::fs::read_to_string("Cargo.lock").unwrap_or_default();
     for (pkg, suffix) in COMPONENTS {
         let ver = lock_version(&lock, pkg).unwrap_or_else(|| "unknown".to_string());
@@ -54,6 +58,23 @@ fn main() {
         // Where the tip lives once the ref is packed away.
         rerun_if_exists(".git/packed-refs");
     }
+}
+
+/// Links the `eink` feature's static FBInk + shim, prebuilt by `tools/kindle/fbink.sh`.
+fn link_eink() {
+    if std::env::var_os("CARGO_FEATURE_EINK").is_none() {
+        return;
+    }
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/fbink");
+    let lib = dir.join("libretsurf_eink.a");
+    assert!(
+        lib.exists(),
+        "{} missing: run tools/kindle/fbink.sh",
+        lib.display()
+    );
+    println!("cargo:rerun-if-changed={}", lib.display());
+    println!("cargo:rustc-link-search=native={}", dir.display());
+    println!("cargo:rustc-link-lib=static=retsurf_eink");
 }
 
 /// The crate version, with the commit date on a nightly build.

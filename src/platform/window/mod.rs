@@ -331,8 +331,11 @@ fn build_window(
     video_subsystem: &VideoSubsystem,
     config: &DisplayConfig,
     gl: bool,
+    size: Option<(u32, u32)>,
 ) -> Result<sdl2::video::Window, String> {
-    let (w, h) = panel_size(video_subsystem).unwrap_or((config.width, config.height));
+    let (w, h) = size
+        .or_else(|| panel_size(video_subsystem))
+        .unwrap_or((config.width, config.height));
     let mut builder: WindowBuilder = video_subsystem.window("retsurf", w, h);
     if gl {
         builder.opengl();

@@ -75,6 +75,9 @@ pub(super) struct SoftwareBackend {
     partial: bool,
     /// The frame cap, as a minimum frame time (see [`frame_interval`]).
     frame_interval: Option<Duration>,
+    /// Takes the composed frame in place of the SDL window when open.
+    #[cfg(feature = "eink")]
+    eink: Option<crate::platform::eink::Panel>,
 }
 
 impl SoftwareBackend {
@@ -86,7 +89,13 @@ impl SoftwareBackend {
         ctx_init: fn(&egui::Context),
     ) -> Result<Self, String> {
         keep_gl_off_x11_framebuffer(video_subsystem);
-        let mut window = build_window(video_subsystem, config, false)?;
+        #[cfg(feature = "eink")]
+        let eink = crate::platform::eink::Panel::open();
+        #[cfg(feature = "eink")]
+        let fixed_size = eink.as_ref().map(|panel| (panel.width, panel.height));
+        #[cfg(not(feature = "eink"))]
+        let fixed_size = None;
+        let mut window = build_window(video_subsystem, config, false, fixed_size)?;
         set_window_icon(&mut window);
 
         // No vsync request: some drivers on this path don't advertise it, and
@@ -121,6 +130,8 @@ impl SoftwareBackend {
             last_changed: None,
             partial: partial_present(),
             frame_interval: frame_interval(max_fps),
+            #[cfg(feature = "eink")]
+            eink,
         };
         backend.style_ctx();
         Ok(backend)
@@ -148,6 +159,8 @@ impl SoftwareBackend {
             last_changed,
             partial,
             size,
+            #[cfg(feature = "eink")]
+            eink,
             ..
         } = self;
         let mut timing = CompositeTiming::default();
@@ -192,6 +205,17 @@ impl SoftwareBackend {
         // `None`: frame identical to the panel's, skip the copy. What is sent
         // is the whole frame — see `partial_present`.
         let changed = union(redraw, page_painted.then_some(*page_rect).flatten());
+        // Only what changed: the panel keeps its pixels between refreshes.
+        #[cfg(feature = "eink")]
+        if let Some(panel) = eink {
+            let at = Instant::now();
+            let surface = offscreen.surface();
+            if let (Some(changed), Some(pixels)) = (changed, surface.without_lock()) {
+                panel.present(pixels, surface.pitch() as usize, changed);
+            }
+            timing.present = at.elapsed();
+            return timing;
+        }
         let region = changed.map(|changed| {
             if *partial {
                 union(Some(changed), *last_changed).unwrap_or(changed)

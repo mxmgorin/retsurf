@@ -28,6 +28,9 @@ webgl = ["servo/webgl"]
 # swgl rasterizes the page, SDL's own renderer paints the chrome. Opt-in because
 # swgl compiles every WebRender shader as C++, which no GPU-bearing target needs.
 software = ["dep:swgl", "egui-sdl2/canvas-backend"]
+# E-ink panel output through FBInk (Kindle), over the software renderer. Links
+# target/fbink/libretsurf_eink.a, built by tools/kindle/fbink.sh.
+eink = ["software"]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
 

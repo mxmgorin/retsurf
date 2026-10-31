@@ -29,7 +29,7 @@ fn open_gl_window(
     video_subsystem: &VideoSubsystem,
     config: &DisplayConfig,
 ) -> Result<(sdl2::video::Window, GLContext), String> {
-    let mut window = build_window(video_subsystem, config, true)?;
+    let mut window = build_window(video_subsystem, config, true, None)?;
     set_window_icon(&mut window);
 
     let gl_context = window
