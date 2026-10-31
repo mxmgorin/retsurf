@@ -1,0 +1,11 @@
+# Kindle defaults, installed by the launcher on a first run.
+
+[browser]
+max_tabs = 2
+
+[performance]
+# Every presented frame is an e-ink refresh.
+max_fps = 5
+
+[display]
+software_render = true

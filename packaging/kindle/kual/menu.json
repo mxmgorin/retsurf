@@ -1,0 +1,17 @@
+{
+	"items": [
+	{
+		"name": "Retsurf",
+		"priority": 0,
+		"items": [
+		{
+			"name": "Start Retsurf",
+			"priority": 1,
+			"action": "/mnt/us/retsurf/retsurf.sh",
+			"exitmenu": true,
+			"status": false
+		}
+		]
+	}
+	]
+}
