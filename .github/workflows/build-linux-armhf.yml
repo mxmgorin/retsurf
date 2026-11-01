@@ -5,8 +5,8 @@ name: Linux ARMhf
 # cross-compiles from x86_64, so they share no runner, no cache and no wall
 # clock. Nothing here can slow the aarch64 build down.
 #
-# Four artifacts: the bare binary, and the Allium, OnionOS and spruceOS card
-# layouts around it — the same binary in all three.
+# Five artifacts: the bare binary, its Allium, OnionOS and spruceOS card layouts,
+# and the Kindle package around a second build with the `eink` feature.
 #
 # Kept in step with tools/armhf/, which builds the same thing locally; the
 # reasoning behind the toolchain choice lives in that Dockerfile.
@@ -316,32 +316,43 @@ jobs:
         run: |
           set -eux
           cargo build --release --no-default-features --features software,webgl --target "$TARGET"
+          cp "target/$TARGET/release/retsurf" "$RUNNER_TEMP/retsurf-miyoo"
+          # The Kindle build differs by one feature of this crate, so the engine
+          # is not rebuilt, only relinked.
+          RETSURF_NO_DOCKER=1 tools/kindle/fbink.sh
+          cargo build --release --no-default-features --features eink,webgl --target "$TARGET"
+          cp "target/$TARGET/release/retsurf" "$RUNNER_TEMP/retsurf-kindle"
           df -h /
 
       - name: Stage binary
         run: |
           set -eux
           mkdir -p dist
-          cp "target/$TARGET/release/retsurf" dist/retsurf-linux-armhf
-          arm-linux-gnueabihf-strip dist/retsurf-linux-armhf
-          file dist/retsurf-linux-armhf
-          arm-linux-gnueabihf-readelf -d dist/retsurf-linux-armhf | grep NEEDED
+          cp "$RUNNER_TEMP/retsurf-miyoo" dist/retsurf-linux-armhf
+          cp "$RUNNER_TEMP/retsurf-kindle" dist/retsurf-kindle-armhf
+          for bin in dist/retsurf-linux-armhf dist/retsurf-kindle-armhf; do
+            arm-linux-gnueabihf-strip "$bin"
+            file "$bin"
+            arm-linux-gnueabihf-readelf -d "$bin" | grep NEEDED
+          done
           ls -la dist/
 
       - name: Check the glibc floor
         run: |
           set -eux
           # Above the floor the loader refuses the binary on the device. Fail
-          # here instead of there.
-          arm-linux-gnueabihf-readelf -V dist/retsurf-linux-armhf \
-            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV
-          newer=$(arm-linux-gnueabihf-readelf -V dist/retsurf-linux-armhf \
-            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV \
-            | awk -F. -v f="${GLIBC_FLOOR#2.}" '$2 > f' | tr '\n' ' ')
-          if [ -n "$newer" ]; then
-            echo "binary requires $newer; the floor is GLIBC_$GLIBC_FLOOR" >&2
-            exit 1
-          fi
+          # here instead of there. The Kindle's floor is the glibc it ships.
+          for bin in dist/retsurf-linux-armhf dist/retsurf-kindle-armhf; do
+            arm-linux-gnueabihf-readelf -V "$bin" \
+              | grep -o 'GLIBC_2\.[0-9]*' | sort -uV
+            newer=$(arm-linux-gnueabihf-readelf -V "$bin" \
+              | grep -o 'GLIBC_2\.[0-9]*' | sort -uV \
+              | awk -F. -v f="${GLIBC_FLOOR#2.}" '$2 > f' | tr '\n' ' ')
+            if [ -n "$newer" ]; then
+              echo "$bin requires $newer; the floor is GLIBC_$GLIBC_FLOOR" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v7
@@ -395,6 +406,21 @@ jobs:
           path: dist/retsurf-spruceos-armhf.zip
           retention-days: 14
 
+      # Builds its own libraries: the firmware is soft-float, so the package
+      # carries its own userland.
+      - name: Package for Kindle
+        env:
+          RETSURF_NO_DOCKER: "1"
+          RETSURF_FONTS_DIR: /usr/share/fonts/truetype/dejavu
+        run: tools/kindle/package.sh dist/retsurf-kindle-armhf
+
+      - name: Upload the Kindle package
+        uses: actions/upload-artifact@v7
+        with:
+          name: retsurf-kindle
+          path: dist/retsurf-kindle.zip
+          retention-days: 14
+
       - name: Attest build provenance
         if: github.event_name == 'release'
         uses: actions/attest-build-provenance@v4
@@ -403,6 +429,7 @@ jobs:
             dist/retsurf-allium.zip
             dist/retsurf-onionos.zip
             dist/retsurf-spruceos-armhf.zip
+            dist/retsurf-kindle.zip
 
       # No checksum sidecars beside these: on armhf the in-app updater is
       # Kind::Manual (src/update), so nothing ever downloads them to verify.
@@ -414,3 +441,4 @@ jobs:
             dist/retsurf-allium.zip
             dist/retsurf-onionos.zip
             dist/retsurf-spruceos-armhf.zip
+            dist/retsurf-kindle.zip

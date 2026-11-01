@@ -124,6 +124,7 @@ jobs:
           cp art/retsurf-allium/retsurf-allium.zip out/
           cp art/retsurf-onionos/retsurf-onionos.zip out/
           cp art/retsurf-spruceos-armhf/retsurf-spruceos-armhf.zip out/
+          cp art/retsurf-kindle/retsurf-kindle.zip out/
           cp art/retsurf-macos-aarch64/*.dmg out/retsurf-macos-aarch64.dmg
           cp art/retsurf-android-arm64/*.apk out/retsurf-android-arm64.apk
           # Artifacts drop file modes: restore +x on what the build workflows mark executable.
