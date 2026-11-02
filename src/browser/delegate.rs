@@ -66,7 +66,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
     fn notify_load_status_changed(&self, webview: WebView, status: servo::LoadStatus) {
         let loading = match status {
             servo::LoadStatus::Started => true,
-            servo::LoadStatus::Complete => false,
+            servo::LoadStatus::Complete | servo::LoadStatus::Stopped => false,
             servo::LoadStatus::HeadParsed => return,
         };
         let was_loading = match self.tab_index(webview.id()) {
@@ -80,7 +80,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             None => true,
         };
         // A `Connected` reaches only the document loaded when it was sent, and each
-        // one adds a pad, so it is repeated only for a `Complete` that ends a load.
+        // one adds a pad, so it is repeated only for a `Complete` or `Stopped` that ends a load.
         if was_loading && !loading {
             for (slot, name) in self.pads.borrow().live() {
                 webview.notify_input_event(servo::InputEvent::Gamepad(

@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Speed-dial editor and the start page's settings tile
 
+### Fixed
+
+- Thin white line along the right edge of pages on some high-DPI screens
+- Android: keyboard input and paste in fields of sites built with web components, such as Reddit's login
+- Tap or click in fields of sites built with web components, such as Reddit's login, places the caret
+
 ## [0.10.0] - 2026-10-08
 
 ### Added

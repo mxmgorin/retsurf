@@ -12,9 +12,9 @@ pub struct ExperimentalConfig {
     pub webgpu: bool,
     /// OffscreenCanvas (`dom_offscreen_canvas_enabled`) — canvas off the main thread.
     pub offscreen_canvas: bool,
-    /// CSS multi-column (`layout_columns_enabled`).
+    /// CSS multi-column (`layout_css_columns_enabled`).
     pub columns: bool,
-    /// CSS container queries (`layout_container_queries_enabled`).
+    /// CSS container queries (`layout_css_container_queries_enabled`).
     pub container_queries: bool,
     /// Web fonts (`dom_fontface_enabled`) — `@font-face` / FontFace API.
     pub fontface: bool,
