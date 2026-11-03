@@ -202,7 +202,10 @@ impl App {
                     self.osk_input(PadInput::Nav(*dx, *dy), out);
                 }
                 Focus::Prompt => self.ui.prompt.move_sel(*dx, *dy),
-                Focus::UpdateNotice => self.ui.update_notice.move_sel(*dx),
+                Focus::UpdateNotice => {
+                    let state = self.ui.update.snapshot();
+                    self.ui.update_notice.move_sel(*dx, &state);
+                }
                 Focus::Menu => {
                     if *dx != 0 {
                         self.ui.menu.switch_section(*dx);

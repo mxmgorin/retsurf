@@ -17,9 +17,10 @@ use crate::config::{overlay, AppConfig, HomeBookmarksConfig};
 use crate::data::bookmarks::{Filter, Launch};
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::settings::{Door, SettingsSection, Task};
+use crate::overlay::settings::{Door, Task};
 use crate::overlay::update_notice::Choice;
 use crate::ui::{Focus, Notice};
+use crate::update::UpdateState;
 use egui_phosphor::bold;
 use std::time::Instant;
 
@@ -356,20 +357,30 @@ impl App {
         }
     }
 
-    /// Close the notice; Update goes on to the About tab, which holds the notes
-    /// and the install row.
+    /// Press a notice button; Install and Retry keep the card up to follow the
+    /// work they start.
     fn update_notice_action(&mut self, action: &UpdateNoticeAction, out: &mut Vec<AppCommand>) {
+        let state = self.ui.update.snapshot();
         let choice = match action {
-            UpdateNoticeAction::Activate => self.ui.update_notice.selected(),
+            UpdateNoticeAction::Activate => self.ui.update_notice.selected(&state),
             UpdateNoticeAction::Choose(choice) => *choice,
             UpdateNoticeAction::Cancel => Choice::Later,
         };
-        self.ui.update_notice.close();
-        if choice == Choice::Update {
-            out.push(AppCommand::Settings(SettingsAction::Open));
-            out.push(AppCommand::Settings(SettingsAction::SetSection(
-                SettingsSection::About,
-            )));
+        self.ui.update_notice.focus(choice);
+        match choice {
+            Choice::Install => self.ui.update.install(&self.event_sender),
+            Choice::Retry => self.ui.update.check(&self.event_sender),
+            Choice::Open => {
+                self.ui.update_notice.close();
+                if let UpdateState::Available {
+                    page: Some(page), ..
+                } = state
+                {
+                    self.open_url(page, out);
+                }
+            }
+            Choice::Quit => self.shutdown(),
+            Choice::Later | Choice::Hide => self.ui.update_notice.close(),
         }
     }
 

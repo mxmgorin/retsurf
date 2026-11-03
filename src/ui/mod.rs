@@ -974,7 +974,7 @@ impl AppUi {
                 // Below the page's prompt, whose layer order is higher.
                 if self.update_notice.visible() {
                     drop_egui_focus(ctx);
-                    update_notice::add_update_notice(ctx, &self.update_notice, face, commands);
+                    update_notice::add_update_notice(ctx, &self.update_notice, &update, commands);
                 }
 
                 self.transients_built.cursor = false;
