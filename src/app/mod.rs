@@ -465,10 +465,8 @@ impl App {
 
         // Persist what was buffered since the last throttle tick — `Drop` won't
         // run (we `process::exit` below), so this must be explicit.
-        self.ui.menu.flush_history();
-        self.save_session();
         self.save_window_size();
-        self.flush_config();
+        self.flush_user_data();
         // `process::exit` below skips every `Drop`, and the governor is
         // machine-wide.
         crate::platform::cpufreq::restore();
@@ -588,6 +586,19 @@ impl App {
     /// down has finished going away (see [`HEAP_TRIM_DELAY`]).
     fn schedule_heap_trim(&mut self) {
         self.heap_trim_at = Some(Instant::now() + HEAP_TRIM_DELAY);
+    }
+
+    /// Write retsurf's own buffered state (history, tab session, config) to disk.
+    fn flush_user_data(&mut self) {
+        self.ui.menu.flush_history();
+        self.save_session();
+        self.flush_config();
+    }
+
+    /// Write everything kept across restarts to disk, site data included.
+    fn persist(&mut self) {
+        self.flush_user_data();
+        self.browser.persist_site_data();
     }
 
     /// Write the config when a press changed it since the last write.

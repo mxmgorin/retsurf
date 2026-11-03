@@ -862,6 +862,12 @@ impl AppBrowser {
         log::info!("cleared cookies, cache, storage of {} sites", sites.len());
     }
 
+    /// Queue a write of the cookies, HSTS list and HTTP auth cache to disk. A
+    /// no-op with `persist_site_data` off.
+    pub fn persist_site_data(&self) {
+        self.inner.servo.site_data_manager().persist();
+    }
+
     /// Shut Servo down cleanly: drop every webview, then the `Servo` handle —
     /// its `Drop` spins the exit pass in which the net/storage threads write the
     /// persisted site data. Skipping it (a bare `process::exit`) loses logins.

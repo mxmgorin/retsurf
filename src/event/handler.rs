@@ -821,6 +821,8 @@ impl AppEventHandler {
                 self.on_pad_button(which, button, false, ui, browser, commands);
             }
             Event::Quit { .. } => commands.push(AppCommand::Shutdown),
+            // The OS may kill a backgrounded app without a quit.
+            Event::AppDidEnterBackground { .. } => commands.push(AppCommand::Persist),
             // Every user event is a pure wake ([`UserEvent`]); the pass this
             // event started runs the per-frame drains, which is the delivery.
             Event::User { .. } => {}

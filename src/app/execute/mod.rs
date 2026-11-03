@@ -36,6 +36,7 @@ impl App {
         }
         match command {
             AppCommand::Shutdown => self.shutdown(),
+            AppCommand::Persist => self.persist(),
             // On a window resize, size the browser to the new central area straight
             // away from the actual window (egui's reactive sizing can lag a frame).
             AppCommand::Resize => {
@@ -80,6 +81,7 @@ impl App {
             AppCommand::Input(InputCommand::Analog { .. })
                 | AppCommand::Resize
                 | AppCommand::Shutdown
+                | AppCommand::Persist
         ) {
             self.ui.request_repaint();
         }

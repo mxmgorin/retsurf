@@ -82,6 +82,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // A `Connected` reaches only the document loaded when it was sent, and each
         // one adds a pad, so it is repeated only for a `Complete` or `Stopped` that ends a load.
         if was_loading && !loading {
+            // A hard kill skips the write at shutdown.
+            self.servo.site_data_manager().persist();
             for (slot, name) in self.pads.borrow().live() {
                 webview.notify_input_event(servo::InputEvent::Gamepad(
                     crate::event::gamepad_api::connected(slot, name, self.haptics.get()),

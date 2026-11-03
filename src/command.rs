@@ -13,6 +13,8 @@ use crate::overlay::update_notice::Choice;
 #[derive(Clone)]
 pub enum AppCommand {
     Shutdown,
+    /// Write everything kept across restarts to disk now.
+    Persist,
     /// The window was resized. Carries no size on purpose: the executor re-reads
     /// the live drawable size from the window itself, which is already adjusted
     /// for the toolbar and DPI.
@@ -47,6 +49,7 @@ impl AppCommand {
     pub fn in_game_mode(&self) -> bool {
         match self {
             AppCommand::Shutdown
+            | AppCommand::Persist
             | AppCommand::Resize
             | AppCommand::Input(_)
             | AppCommand::Prompt(_)
@@ -317,6 +320,7 @@ mod tests {
             AppCommand::Input(InputCommand::Cancel),
             AppCommand::Prompt(PromptAction::Cancel),
             AppCommand::Shutdown,
+            AppCommand::Persist,
             AppCommand::Resize,
         ] {
             assert!(command.in_game_mode());
