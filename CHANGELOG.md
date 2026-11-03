@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Thin white line along the right edge of pages on some high-DPI screens
 - Android: keyboard input and paste in fields of sites built with web components, such as Reddit's login
 - Tap or click in fields of sites built with web components, such as Reddit's login, places the caret
+- Pop-up menus that showed open on pages, such as the ... menus in GitHub's feed (`[experimental] adopted_stylesheets`)
 
 ## [0.10.0] - 2026-10-08
 

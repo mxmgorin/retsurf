@@ -48,6 +48,7 @@ intersection_observer = true  # IntersectionObserver             minimal
 resize_observer = true        # ResizeObserver                   minimal
 indexeddb = true              # IndexedDB                        minimal
 storage_manager = true        # navigator.storage                minimal
+adopted_stylesheets = true    # adoptedStyleSheets               minimal
 webgl2 = true                 # WebGL 2                          balanced
 offscreen_canvas = true       # OffscreenCanvas                  balanced
 webgpu = false                # WebGPU                           full

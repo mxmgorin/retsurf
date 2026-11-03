@@ -30,6 +30,10 @@ pub struct ExperimentalConfig {
     /// persistence. Libraries probe `estimate()` to tell private mode from
     /// normal, so its absence sends them down the wrong branch.
     pub storage_manager: bool,
+    /// `adoptedStyleSheets` (`dom_adoptedstylesheet_enabled`). Servo exposes the
+    /// `CSSStyleSheet` constructor either way, so a page that tests for it then
+    /// fails to adopt the sheet.
+    pub adopted_stylesheets: bool,
     /// Web Notifications (`dom_notification_enabled`).
     pub notification: bool,
     /// Async Clipboard API (`dom_async_clipboard_enabled`).
@@ -52,8 +56,8 @@ pub enum ExperimentalPreset {
     /// All features off — most stable, but breaks most modern sites.
     Off,
     /// Layout + compatibility essentials only (columns, container queries,
-    /// web fonts, Intersection/ResizeObserver, IndexedDB, navigator.storage);
-    /// graphics and niche DOM APIs off.
+    /// web fonts, Intersection/ResizeObserver, IndexedDB, navigator.storage,
+    /// adoptedStyleSheets); graphics and niche DOM APIs off.
     Minimal,
     /// Handheld default: the essentials plus WebGL2 + OffscreenCanvas.
     Balanced,
@@ -116,6 +120,7 @@ impl ExperimentalPreset {
             resize_observer: on,
             indexeddb: on,
             storage_manager: on,
+            adopted_stylesheets: on,
             notification: on,
             async_clipboard: on,
             permissions: on,
@@ -132,6 +137,7 @@ impl ExperimentalPreset {
                 resize_observer: true,
                 indexeddb: true,
                 storage_manager: true,
+                adopted_stylesheets: true,
                 ..uniform(false)
             },
             // Handheld default: essentials + the graphics the hardware supports.
@@ -163,7 +169,7 @@ mod tests {
     fn default_is_balanced() {
         let c = ExperimentalConfig::default();
         assert!(c.columns && c.fontface && c.intersection_observer);
-        assert!(c.indexeddb && c.storage_manager);
+        assert!(c.indexeddb && c.storage_manager && c.adopted_stylesheets);
         assert!(c.webgl2 && c.offscreen_canvas);
         assert!(!c.webgpu && !c.notification && !c.permissions && !c.async_clipboard);
         assert_eq!(ExperimentalPreset::detect(&c), ExperimentalPreset::Balanced);

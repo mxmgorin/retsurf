@@ -240,7 +240,7 @@ fn resolve_user_agent(value: &str) -> Option<String> {
 
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
-fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 13] {
+fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
     // Destructured without `..` so a new feature fails to compile here rather
     // than shipping unapplied.
     let ExperimentalConfig {
@@ -254,6 +254,7 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         resize_observer,
         indexeddb,
         storage_manager,
+        adopted_stylesheets,
         notification,
         async_clipboard,
         permissions,
@@ -269,6 +270,7 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         ("dom_resize_observer_enabled", *resize_observer),
         ("dom_indexeddb_enabled", *indexeddb),
         ("dom_storage_manager_api_enabled", *storage_manager),
+        ("dom_adoptedstylesheet_enabled", *adopted_stylesheets),
         ("dom_notification_enabled", *notification),
         ("dom_async_clipboard_enabled", *async_clipboard),
         ("dom_permissions_enabled", *permissions),
