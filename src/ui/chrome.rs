@@ -47,6 +47,11 @@ impl AppUi {
     /// spelling of the set, so a scroll site cannot silently skip one.
     pub fn scroll_page(&mut self, browser: &AppBrowser, dx: f32, dy: f32, x: f32, y: f32) {
         browser.scroll(dx, dy, x, y);
+        self.page_scrolled(dy);
+    }
+
+    /// Feed everything a scroll drives for one the engine performs itself.
+    pub fn page_scrolled(&mut self, dy: f32) {
         self.notify_page_scroll(dy);
         // Hint rects are viewport-relative, so page movement invalidates them.
         self.hints.mark_stale();

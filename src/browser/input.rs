@@ -39,6 +39,18 @@ impl AppBrowser {
         ));
     }
 
+    /// A touch point of `finger` at `(x, y)` (web-view points). The engine pans,
+    /// flings, pinches and clicks with these.
+    pub fn touch(&self, kind: servo::TouchEventType, finger: i64, x: f32, y: f32) {
+        let (x, y) = self.page_px(x, y);
+        self.handle_input(servo::InputEvent::Touch(servo::TouchEvent::new(
+            kind,
+            servo::TouchId(finger as i32),
+            servo::DevicePoint::new(x, y).into(),
+            servo::TouchPointerType::Touch,
+        )));
+    }
+
     pub fn handle_input(&self, event: servo::InputEvent) {
         let Some(tab) = self.inner.active_webview() else {
             return;

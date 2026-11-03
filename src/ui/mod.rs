@@ -507,6 +507,12 @@ impl AppUi {
         self.webview_rect.width()
     }
 
+    /// The web view's top-left corner in points.
+    #[inline]
+    pub fn webview_origin(&self) -> (f32, f32) {
+        (self.webview_rect.left(), self.webview_rect.top())
+    }
+
     /// A window pixel (as SDL reports events) in web-view points — the space the
     /// page's own rects come back in.
     #[inline]

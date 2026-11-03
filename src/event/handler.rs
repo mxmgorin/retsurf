@@ -64,6 +64,10 @@ const CAPTURE_DEFLECTION: f32 = 0.7;
 /// to send is paid at this rate; a delivered frame returns the wait at once.
 const ANIMATION_WAIT: Duration = Duration::from_millis(16);
 
+/// Whether touches go to the page, which pans, flings and pinches them itself.
+/// E-ink keeps the plain drag: a fling there is a run of panel refreshes.
+const PAGE_TOUCH: bool = !cfg!(feature = "eink");
+
 /// `SDL_TOUCH_MOUSEID`: the `which` of mouse events SDL synthesizes from touch.
 const SDL_TOUCH_MOUSE_ID: u32 = u32::MAX;
 
@@ -126,8 +130,9 @@ pub struct AppEventHandler {
     /// Game Mode, for as long as the mode or one of its screens is up (see
     /// [`Self::wait`]).
     game: Option<GameMode>,
-    /// Single-finger touch gestures (drag scrolls, tap clicks) over the web view.
+    /// The first finger's tap or drag over the web view.
     touch: super::touch::TouchState,
+    page_touches: super::touch::PageTouches,
     /// Whether the finger now down landed outside the on-screen keyboard, and
     /// whether on the chrome rather than the page.
     touch_outside_osk: bool,
@@ -189,6 +194,7 @@ impl AppEventHandler {
             listening: None,
             game: None,
             touch: super::touch::TouchState::new(),
+            page_touches: super::touch::PageTouches::default(),
             touch_outside_osk: false,
             touch_on_chrome: false,
             tapped: false,
@@ -722,6 +728,11 @@ impl AppEventHandler {
                 // leak: egui consumes its up, so the gesture never resolves.
                 if !self.touch_on_chrome {
                     self.touch.down(finger_id, px, py);
+                    if PAGE_TOUCH {
+                        let at = ui.to_points(px, py);
+                        let (bx, by) = self.page_touches.down(finger_id, at, ui.webview_origin());
+                        browser.touch(servo::TouchEventType::Down, finger_id, bx, by);
+                    }
                 }
             }
             Event::FingerMotion {
@@ -729,20 +740,38 @@ impl AppEventHandler {
             } => {
                 let (w, h) = window.size();
                 let (px, py) = (x * w as f32, y * h as f32);
+                if let Some((bx, by)) = self.page_touches.motion(finger_id, ui.to_points(px, py)) {
+                    browser.touch(servo::TouchEventType::Move, finger_id, bx, by);
+                }
                 if let Some((dx, dy)) = self.touch.motion(finger_id, px, py) {
-                    let (bx, by) = ui.to_browser_rel_pos(px, py);
                     let (dx, dy) = ui.to_points(dx, dy);
                     // Content follows the finger, and Servo's positive dy reveals
                     // lower content, so the deltas are negated.
-                    ui.scroll_page(browser, -dx, -dy, bx, by);
+                    if PAGE_TOUCH {
+                        ui.page_scrolled(-dy);
+                    } else {
+                        let (bx, by) = ui.to_browser_rel_pos(px, py);
+                        ui.scroll_page(browser, -dx, -dy, bx, by);
+                    }
                 }
             }
-            Event::FingerUp { finger_id, .. } => {
+            Event::FingerUp {
+                finger_id, x, y, ..
+            } => {
+                let (w, h) = window.size();
+                let (px, py) = (x * w as f32, y * h as f32);
+                if let Some((bx, by)) = self.page_touches.up(finger_id, ui.to_points(px, py)) {
+                    browser.touch(servo::TouchEventType::Up, finger_id, bx, by);
+                }
                 let outside_osk = std::mem::take(&mut self.touch_outside_osk);
                 let end = self.touch.up(finger_id);
                 // A drag scrolled the page; only a tap may ask for the keyboard.
                 let page_tap = matches!(end, super::touch::TouchEnd::Tap(..));
                 self.tapped |= outside_osk && (self.touch_on_chrome || page_tap);
+                // The engine clicks the taps it was handed.
+                if PAGE_TOUCH {
+                    return;
+                }
                 if let super::touch::TouchEnd::Tap(px, py) = end {
                     let (bx, by) = ui.to_browser_rel_pos(px, py);
                     for down in [true, false] {
