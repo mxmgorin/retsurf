@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Sites stay logged in after retsurf is closed from Android's recent apps or killed
+- Android: Ctrl+C, Ctrl+V and other editing shortcuts from hardware-keyboard input methods such as Pastiera
 - Thin white line along the right edge of pages on some high-DPI screens
 - Android: keyboard input and paste in fields of sites built with web components, such as Reddit's login
 - Tap or click in fields of sites built with web components, such as Reddit's login, places the caret
