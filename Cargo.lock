@@ -1291,7 +1291,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.6",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -8083,7 +8083,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "surfman"
 version = "0.14.0"
-source = "git+https://github.com/mxmgorin/surfman?tag=retsurf-main-0.10.0#2d745108c8a5e9d7893dc4c0dfac31f6fe868807"
+source = "git+https://github.com/mxmgorin/surfman?tag=retsurf-main-0.11.0#b1fc1e9be28fd7149af9e0455d21bbdac064eacd"
 dependencies = [
  "bitflags 2.13.2",
  "cfg_aliases",

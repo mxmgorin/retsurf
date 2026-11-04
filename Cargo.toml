@@ -166,7 +166,6 @@ servo = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.11.0"
 servo-base = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.11.0" }
 servo-media = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.11.0" }
 servo-media-dummy = { git = "https://github.com/mxmgorin/servo", tag = "retsurf-main-0.11.0" }
-# Our surfman: upstream asks eglChooseConfig for a desktop-GL config unconditionally,
-# which no Mali blob has, and loads core GL only through eglGetProcAddress, which
-# EGL 1.4 blobs (PowerVR) answer with null. Graph-wide, so Servo resolves to the same copy.
-surfman = { git = "https://github.com/mxmgorin/surfman", tag = "retsurf-main-0.10.0" }
+# Our surfman: v0.14.0 plus GLES configs for Mali, core GL lookup on EGL 1.4, no dummy pbuffer on
+# surfaceless and no panic on a failed make-current. Graph-wide, so Servo resolves to the same copy.
+surfman = { git = "https://github.com/mxmgorin/surfman", tag = "retsurf-main-0.11.0" }
