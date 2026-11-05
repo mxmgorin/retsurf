@@ -29,6 +29,9 @@ const BUILD_ID: &str = concat!(
     ")"
 );
 
+/// The engine's module that logs every request's cookie header at info.
+const COOKIE_LOG: &str = "net::cookie_storage";
+
 /// Shared startup for the desktop and Android entry points. Everything
 /// platform-specific is `cfg`-gated here.
 pub fn run_app() {
@@ -106,7 +109,13 @@ fn init_logging() {
     let logcat = android_logger::AndroidLogger::new(
         android_logger::Config::default()
             .with_max_level(level)
-            .with_tag("retsurf"),
+            .with_tag("retsurf")
+            .with_filter(
+                android_logger::FilterBuilder::new()
+                    .filter_level(level)
+                    .filter_module(COOKIE_LOG, log::LevelFilter::Warn)
+                    .build(),
+            ),
     );
     let mut open_error = None;
     let file = std::env::var("RETSURF_LOG_FILE").ok().and_then(|path| {
@@ -119,6 +128,7 @@ fn init_logging() {
     let mirror = file.map(|file| {
         env_logger::Builder::new()
             .filter_level(level)
+            .filter_module(COOKIE_LOG, log::LevelFilter::Warn)
             .write_style(env_logger::WriteStyle::Never)
             .target(env_logger::Target::Pipe(Box::new(file)))
             .build()
@@ -140,7 +150,11 @@ fn init_logging() {
     let env = env_logger::Env::default()
         .filter_or("RETSURF_LOG_LEVEL", "info")
         .write_style_or("RETSURF_LOG_STYLE", "always");
-    let mut builder = env_logger::Builder::from_env(env);
+    let mut builder = env_logger::Builder::new();
+    // Before the env, so `RETSURF_LOG_LEVEL` can still ask for it.
+    builder
+        .filter_module(COOKIE_LOG, log::LevelFilter::Warn)
+        .parse_env(env);
     // The handheld launcher discards stderr too: mirror logs to a file when asked.
     if let Ok(path) = std::env::var("RETSURF_LOG_FILE") {
         match std::fs::File::create(&path) {
