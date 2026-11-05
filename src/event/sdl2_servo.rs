@@ -12,7 +12,7 @@ pub fn into_keyboard_event(
     };
     let event = keyboard_types::KeyboardEvent {
         state,
-        key: sdl2_keyboard_types::into_key(kc),
+        key: typed_key(sdl2_keyboard_types::into_key(kc), m),
         code: sdl2_keyboard_types::into_code(sc),
         location: keyboard_types::Location::Standard,
         modifiers: sdl2_keyboard_types::into_modifiers(m),
@@ -21,6 +21,60 @@ pub fn into_keyboard_event(
     };
 
     servo::KeyboardEvent::new(event)
+}
+
+/// The character a key types under `m`, where `key` names the unshifted key.
+/// Shifted symbols follow the US layout, which SDL's keys synthesized from IME text use.
+fn typed_key(key: keyboard_types::Key, m: sdl2::keyboard::Mod) -> keyboard_types::Key {
+    use sdl2::keyboard::Mod;
+    let keyboard_types::Key::Character(text) = &key else {
+        return key;
+    };
+    let mut chars = text.chars();
+    let (Some(c), None) = (chars.next(), chars.next()) else {
+        return key;
+    };
+    let shift = m.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+    let typed = if c.is_ascii_lowercase() {
+        match shift != m.contains(Mod::CAPSMOD) {
+            true => c.to_ascii_uppercase(),
+            false => c,
+        }
+    } else if shift {
+        us_shifted(c).unwrap_or(c)
+    } else {
+        c
+    };
+    keyboard_types::Key::Character(typed.to_string())
+}
+
+/// The symbol Shift puts on a US-layout digit or punctuation key.
+fn us_shifted(c: char) -> Option<char> {
+    let shifted = match c {
+        '1' => '!',
+        '2' => '@',
+        '3' => '#',
+        '4' => '$',
+        '5' => '%',
+        '6' => '^',
+        '7' => '&',
+        '8' => '*',
+        '9' => '(',
+        '0' => ')',
+        '`' => '~',
+        '-' => '_',
+        '=' => '+',
+        '[' => '{',
+        ']' => '}',
+        '\\' => '|',
+        ';' => ':',
+        '\'' => '"',
+        ',' => '<',
+        '.' => '>',
+        '/' => '?',
+        _ => return None,
+    };
+    Some(shifted)
 }
 
 pub fn into_mouse_button_event(
@@ -208,8 +262,9 @@ pub fn named_keyboard_event(
 
 #[cfg(test)]
 mod tests {
-    use super::{code_for_char, code_for_named, location_for};
-    use keyboard_types::{Code, Location};
+    use super::{code_for_char, code_for_named, location_for, typed_key};
+    use keyboard_types::{Code, Key, Location, NamedKey};
+    use sdl2::keyboard::Mod;
 
     /// A modifier is the one named key whose `code` is not its own spelling:
     /// the key is `Control`, the code names a side. A map that wrote the name
@@ -243,5 +298,38 @@ mod tests {
         assert_eq!(code_for_char(' '), Code::Space);
         assert_eq!(code_for_char('/'), Code::Slash);
         assert_eq!(code_for_char('?'), Code::Unidentified);
+    }
+
+    fn typed(key: &str, m: Mod) -> Key {
+        typed_key(Key::Character(key.into()), m)
+    }
+
+    #[test]
+    fn shift_and_caps_lock_type_the_capital_and_cancel_out() {
+        assert_eq!(typed("d", Mod::NOMOD), Key::Character("d".into()));
+        assert_eq!(typed("d", Mod::LSHIFTMOD), Key::Character("D".into()));
+        assert_eq!(typed("d", Mod::RSHIFTMOD), Key::Character("D".into()));
+        assert_eq!(typed("d", Mod::CAPSMOD), Key::Character("D".into()));
+        assert_eq!(
+            typed("d", Mod::CAPSMOD | Mod::LSHIFTMOD),
+            Key::Character("d".into())
+        );
+    }
+
+    #[test]
+    fn shift_types_the_us_symbol_and_caps_lock_leaves_symbols_alone() {
+        assert_eq!(typed("1", Mod::LSHIFTMOD), Key::Character("!".into()));
+        assert_eq!(typed("/", Mod::LSHIFTMOD), Key::Character("?".into()));
+        assert_eq!(typed("1", Mod::CAPSMOD), Key::Character("1".into()));
+        assert_eq!(
+            typed("\u{44f}", Mod::LSHIFTMOD),
+            Key::Character("\u{44f}".into())
+        );
+    }
+
+    #[test]
+    fn a_named_key_is_untouched_by_shift() {
+        let enter = Key::Named(NamedKey::Enter);
+        assert_eq!(typed_key(enter.clone(), Mod::LSHIFTMOD), enter);
     }
 }
