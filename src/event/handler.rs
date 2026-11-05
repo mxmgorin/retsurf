@@ -860,6 +860,14 @@ impl AppEventHandler {
                     commands.push(cmd);
                 }
             }
+            // SDL types all-ASCII IME text as keys too, and sends any other only as text.
+            #[cfg(target_os = "android")]
+            Event::TextInput { text, .. } => {
+                let page = ui.focus() == crate::ui::Focus::Page && !self.routing();
+                if page && browser.text_input_focused() && !text.is_ascii() {
+                    browser.type_text(&text);
+                }
+            }
             _ => {}
         }
     }

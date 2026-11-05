@@ -60,6 +60,19 @@ impl AppBrowser {
         }
     }
 
+    /// Type `text` into the page, one key press per character; control
+    /// characters are dropped.
+    #[cfg(target_os = "android")]
+    pub fn type_text(&self, text: &str) {
+        for c in text.chars().filter(|c| !c.is_control()) {
+            for down in [true, false] {
+                self.handle_input(servo::InputEvent::Keyboard(
+                    crate::event::sdl2_servo::char_keyboard_event(c, false, down),
+                ));
+            }
+        }
+    }
+
     pub fn handle_input(&self, event: servo::InputEvent) {
         let Some(tab) = self.inner.active_webview() else {
             return;

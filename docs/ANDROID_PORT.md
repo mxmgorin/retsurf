@@ -11,10 +11,10 @@ Building: see [Building from source](BUILDING.md#android).
 
 Works: browsing, touch scrolling and tapping, HiDPI, rotation, WebGL (surfman's
 `hardware_buffer` backend), hidden system bars, returning from the background, and the
-system keyboard for the address bar and for keycode typing in page fields.
+system keyboard for the address bar and page fields, non-Latin text included.
 
-Open: full IME in page fields. SDL's `TextInput`/`TextEditing` reach egui but not Servo, so
-composition (CJK), non-ASCII text and swipe or autocorrect input never reach a page.
+Open: IME composition in page fields. SDL sends composing text as typed text, so a page
+gets no composition events.
 
 ## How it fits together
 

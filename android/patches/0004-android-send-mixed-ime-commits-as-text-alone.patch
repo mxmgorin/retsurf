@@ -1,0 +1,25 @@
+android: send mixed IME commits as text alone
+
+SDL spells out each ASCII character of a commit as keys but sends the rest
+only as text, after them, so a commit mixing both scripts lands out of order.
+
+--- a/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
++++ b/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
+@@ -2057,6 +2057,8 @@
+ 
+         if (matchLength < text.length()) {
+             String pendingText = text.subSequence(matchLength, text.length()).toString();
++            // Keys only for all-ASCII text: a key typed before the rest of a mixed commit lands out of order.
++            boolean keys = java.nio.charset.StandardCharsets.US_ASCII.newEncoder().canEncode(pendingText);
+             for (offset = 0; offset < pendingText.length(); ) {
+                 int codePoint = pendingText.codePointAt(offset);
+                 if (codePoint == '\n') {
+@@ -2065,7 +2067,7 @@
+                     }
+                 }
+                 /* Higher code points don't generate simulated scancodes */
+-                if (codePoint < 128) {
++                if (keys) {
+                     nativeGenerateScancodeForUnichar((char)codePoint);
+                 }
+                 offset += Character.charCount(codePoint);
