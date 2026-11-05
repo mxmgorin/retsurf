@@ -411,10 +411,16 @@ fn set_window_icon(window: &mut sdl2::video::Window) {
 /// crate doesn't wrap the calls. Desktop keeps SDL's default and never calls it.
 #[allow(dead_code)] // only called on Android; still type-checked on desktop
 pub fn set_text_input(active: bool) {
-    let cur = unsafe { sdl2::sys::SDL_IsTextInputActive() } == sdl2::sys::SDL_bool::SDL_TRUE;
+    let cur = text_input_active();
     if active && !cur {
         unsafe { sdl2::sys::SDL_StartTextInput() };
     } else if !active && cur {
         unsafe { sdl2::sys::SDL_StopTextInput() };
     }
+}
+
+/// Whether SDL's text input is on; Android's Back can switch it off.
+pub fn text_input_active() -> bool {
+    let active = unsafe { sdl2::sys::SDL_IsTextInputActive() };
+    active == sdl2::sys::SDL_bool::SDL_TRUE
 }

@@ -43,6 +43,9 @@ pub struct App {
     /// waiting out [`OSK_TAP_SETTLE`].
     osk_field_focused: bool,
     osk_tap_at: Option<Instant>,
+    /// Whether the last frame asked for the system keyboard.
+    #[cfg(target_os = "android")]
+    system_keyboard_up: bool,
     /// When A/Enter went down on a hint, for the tap-vs-hold split (tap clicks
     /// the hint, hold opens its link in a background tab). `None` when no press
     /// is in flight over a hint.
@@ -198,6 +201,8 @@ impl App {
             osk_nav_next: Instant::now(),
             osk_field_focused: false,
             osk_tap_at: None,
+            #[cfg(target_os = "android")]
+            system_keyboard_up: false,
             hint_press_at: None,
             bookmark_remove_armed: None,
             config_dirty: false,
@@ -425,16 +430,9 @@ impl App {
             }
 
             // Android raises the system soft keyboard to match focus; desktop
-            // leaves SDL's always-on text input alone and uses the OSK. Not under
-            // the OSK: SDL's text view then takes the stick's motion events.
+            // leaves SDL's always-on text input alone and uses the OSK.
             #[cfg(target_os = "android")]
-            {
-                let osk_up = self.ui.focus() == crate::ui::Focus::Osk;
-                let want = self.config.controls.system_keyboard
-                    && !osk_up
-                    && (self.ui.wants_keyboard() || self.browser.text_input_focused());
-                crate::platform::window::set_text_input(want);
-            }
+            self.sync_system_keyboard();
 
             // egui sizes a fresh overlay invisibly on its first pass, so a change
             // needs a follow-up frame; requested after `update` rebuilt the wait.
@@ -517,6 +515,25 @@ impl App {
         if needed && ((rose && !home) || (tapped && chrome) || (settled && page)) {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         }
+    }
+
+    /// Raise the system keyboard while a text field holds focus; one the system
+    /// closed (Back) takes that focus with it.
+    #[cfg(target_os = "android")]
+    fn sync_system_keyboard(&mut self) {
+        use crate::platform::window;
+        // Re-raising it would swallow every Back.
+        if self.system_keyboard_up && !window::text_input_active() {
+            self.ui.drop_keyboard_focus();
+            self.browser.dismiss_text_input();
+        }
+        // Not under the OSK: SDL's text view then takes the stick's motion events.
+        let osk_up = self.ui.focus() == crate::ui::Focus::Osk;
+        let want = self.config.controls.system_keyboard
+            && !osk_up
+            && (self.ui.wants_keyboard() || self.browser.text_input_focused());
+        window::set_text_input(want);
+        self.system_keyboard_up = want;
     }
 
     fn shutdown(&mut self) {

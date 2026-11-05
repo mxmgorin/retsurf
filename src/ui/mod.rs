@@ -467,6 +467,12 @@ impl AppUi {
         self.egui_ctx.egui_wants_keyboard_input()
     }
 
+    /// Take keyboard focus off the chrome's text fields.
+    #[cfg(target_os = "android")]
+    pub fn drop_keyboard_focus(&self) {
+        drop_egui_focus(&self.egui_ctx);
+    }
+
     #[inline]
     pub fn take_repaint_delay(&mut self) -> Option<Duration> {
         self.repaint_delay.take()

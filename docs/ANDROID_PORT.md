@@ -28,7 +28,8 @@ composition (CJK), non-ASCII text and swipe or autocorrect input never reach a p
 - **GLES**: always on (`src/platform/startup.rs`), and the Wayland alignment is skipped.
 - **Input**: `SDL_TOUCH_MOUSE_EVENTS=0`, so a scroll does not end in a click. Touches start a
   page gesture only over the web view; the chrome's belong to egui. The system keyboard
-  rises for a focused field unless `[input] system_keyboard` is off.
+  rises for a focused field unless `[input] system_keyboard` is off; Back closes it and
+  leaves the field.
 - **Rotation**: SDL sends no resize event, so `AppUi::sync_window_size` runs every frame.
 - **Resume**: SDL keeps the GL context but replaces its EGL surfaces; the WebGL composite
   path rewraps them when `eglGetCurrentSurface` changes.

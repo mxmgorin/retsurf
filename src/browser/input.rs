@@ -51,6 +51,15 @@ impl AppBrowser {
         )));
     }
 
+    /// Take focus off the page's text field, as a closed keyboard does.
+    #[cfg(target_os = "android")]
+    pub fn dismiss_text_input(&self) {
+        // Cleared now, or the keyboard rises again before the page's blur lands.
+        if self.inner.ime_control.take().is_some() {
+            self.handle_input(servo::InputEvent::Ime(servo::ImeEvent::Dismissed));
+        }
+    }
+
     pub fn handle_input(&self, event: servo::InputEvent) {
         let Some(tab) = self.inner.active_webview() else {
             return;
