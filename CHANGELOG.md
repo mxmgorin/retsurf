@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Android: keyboard input and paste in fields of sites built with web components, such as Reddit's login
 - Tap or click in fields of sites built with web components, such as Reddit's login, places the caret
 - Pop-up menus that showed open on pages, such as the ... menus in GitHub's feed (`[experimental] adopted_stylesheets`)
+- Quit hanging after sites that use a shared worker, such as GitHub while signed in; on Android the next launch stayed black
 
 ## [0.10.0] - 2026-10-08
 
