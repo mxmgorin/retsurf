@@ -630,9 +630,12 @@ impl QuickAccess {
         }
     }
 
-    /// A on a two-press row: arms it, or `true` when it already was.
+    /// A on a two-press row: arms it, or disarms it and returns `true` when
+    /// it already was.
     pub fn confirm(&mut self, row: Entry) -> bool {
-        self.armed.replace(row) == Some(row)
+        let confirmed = self.armed == Some(row);
+        self.armed = (!confirmed).then_some(row);
+        confirmed
     }
 
     pub fn selected(&self) -> usize {
@@ -1044,6 +1047,9 @@ mod tests {
         assert!(!panel.confirm(Entry::Quit));
         assert!(!panel.confirm(Entry::Reload));
         assert!(panel.confirm(Entry::Reload));
+        // A row that stays up once confirmed drops its hint.
+        assert_eq!(panel.value(panel.selected()), "");
+        assert!(!panel.confirm(Entry::Reload));
     }
 
     /// Regression: stepping Scaling blanked the input map's value.
