@@ -218,7 +218,7 @@ impl App {
             }
             // Direct, not queued: the mode's command filter drops browser commands.
             Entry::Reload => {
-                if self.ui.quick_access.confirm(Entry::Reload) {
+                if !self.browser.in_game_mode() || self.ui.quick_access.confirm(Entry::Reload) {
                     self.ui.quick_access.close();
                     self.browser
                         .execute_command(&BrowserCommand::Reload, &self.config);

@@ -133,7 +133,7 @@ pub enum Entry {
     Osk,
     /// Open the settings screen, on the tab the mode suggests.
     Settings,
-    /// Reload the game's page, on a second press.
+    /// Reload the page; over a game, on a second press.
     Reload,
     /// Turn Game Mode off.
     Exit,
@@ -158,6 +158,7 @@ enum Slot {
 
 /// Quick Access in the browser. B closes a strip, so no row goes back.
 const ACCESS_BROWSER: &[Slot] = &[
+    Slot::Row(Entry::Reload),
     Slot::Row(Entry::Enter),
     Slot::Row(Entry::Run(Action::Bookmark)),
     Slot::QuickRows,
@@ -683,11 +684,12 @@ mod tests {
         panel.move_sel(1);
         assert_eq!(panel.row(), Entry::Reload);
         let mut panel = open(TabMode::Page);
-        assert_eq!(panel.row(), Entry::Enter);
+        assert_eq!(panel.row(), Entry::Reload);
         let labels: Vec<_> = (0..panel.rows().len()).map(|i| panel.label(i)).collect();
         assert_eq!(
             labels,
             [
+                "Reload",
                 "Enter game mode",
                 "Bookmark",
                 "User agent",
