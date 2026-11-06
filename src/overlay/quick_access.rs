@@ -3,8 +3,9 @@
 //! over (a page, a game, the start page), so what one hides from another is
 //! data rather than branches. Over the start page Quick Access leads with the
 //! focused bookmark's rows, headed by its name, before the page's own; over a
-//! page whose site has a bookmark, the rows that set its site settings lead
-//! the same way, headed by the bookmark's name, before the page's own.
+//! page whose site has a bookmark, how it launches and the rows that set its
+//! site settings lead the same way, headed by the bookmark's name, before the
+//! page's own.
 //! Quick rows are [`crate::overlay::settings`] rows flagged `quick`: the same
 //! label, values and config field, stepped live here instead of on close. The
 //! central router ([`crate::app`]) drives it; [`crate::ui`] renders it.
@@ -78,6 +79,14 @@ pub struct HomeTile {
     pub manual: bool,
     /// Whether it opens as a game, which has no reader view.
     pub game: bool,
+}
+
+/// The bookmark whose settings apply to the tab a strip opens over.
+#[derive(Clone, Copy)]
+pub struct SiteHead<'a> {
+    pub id: &'a str,
+    /// Its shown name; empty for one since removed.
+    pub name: &'a str,
 }
 
 /// The bookmark the options rows act on.
@@ -200,6 +209,9 @@ const MENU_BROWSER: &[Slot] = &[
 
 /// Quick Menu over a game: only what leaves the game where it is.
 const MENU_GAME: &[Slot] = &[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)];
+
+/// The options that lead a tab's site rows.
+const SITE_OPTIONS: &[OptionsRow] = &[OptionsRow::LaunchAs];
 
 /// A bookmark's options; the moves show only where the order is the manual one.
 const OPTIONS: &[Slot] = &[
@@ -384,24 +396,29 @@ impl QuickAccess {
     }
 
     /// Show `strip`'s rows `over` what is on screen, highlighting the first.
-    /// `site`: the name of the bookmark whose settings apply, if any;
-    /// `launched`: whether the tab runs it.
+    /// `site`: the bookmark whose settings apply, if any; `launched`: whether
+    /// the tab runs it.
     pub fn open(
         &mut self,
         strip: Strip,
         over: Over,
-        site: Option<&str>,
+        site: Option<SiteHead>,
         launched: bool,
         config: &AppConfig,
     ) {
         let rows = entries(strip, over, launched);
         let mut heads = Vec::new();
         let rows = match (strip, over, site) {
-            (Strip::QuickAccess, Over::Tab(mode), Some(name)) => {
-                let (mut lead, rest): (Vec<Entry>, Vec<Entry>) =
+            (Strip::QuickAccess, Over::Tab(mode), Some(site)) => {
+                let (settings, rest): (Vec<Entry>, Vec<Entry>) =
                     rows.into_iter().partition(|row| row.sets_site());
+                let mut lead: Vec<Entry> = SITE_OPTIONS
+                    .iter()
+                    .map(|row| Entry::Options(*row))
+                    .collect();
+                lead.extend(settings);
                 lead.push(Entry::ResetSite);
-                heads.push((0, name.to_string()));
+                heads.push((0, site.name.to_string()));
                 let head = match mode {
                     TabMode::Game => GAME_HEAD,
                     TabMode::Page | TabMode::Reader => PAGE_HEAD,
@@ -415,7 +432,13 @@ impl QuickAccess {
         };
         self.show(strip, rows);
         self.heads = heads;
-        self.leave = leave_label(site.filter(|_| launched));
+        self.leave = leave_label(site.filter(|_| launched).map(|site| site.name));
+        if let Some(site) = site.filter(|_| strip == Strip::QuickAccess) {
+            self.bookmark = Some(OptionsBookmark {
+                id: site.id.to_string(),
+                naming: None,
+            });
+        }
         self.refresh(config);
         if let Some(at) = self.position(Entry::Run(Action::Reader)) {
             self.flags[at] = Some(over == Over::Tab(TabMode::Reader));
@@ -782,7 +805,13 @@ mod tests {
         assert!(!menu.contains(&Entry::Leave));
     }
 
-    /// A site's rows lead under its name, then the reset, then the page's.
+    const ITCH: SiteHead = SiteHead {
+        id: "itch",
+        name: "itch.io",
+    };
+
+    /// A site's options and settings lead under its name, then the reset,
+    /// then the page's.
     #[test]
     fn a_sites_rows_lead_under_its_name() {
         let mut panel = QuickAccess::new();
@@ -790,13 +819,22 @@ mod tests {
         panel.open(
             Strip::QuickAccess,
             over,
-            Some("itch.io"),
+            Some(ITCH),
             false,
             &AppConfig::default(),
         );
         let rows = panel.rows();
+        let options = SITE_OPTIONS.len();
+        let site: Vec<_> = SITE_OPTIONS
+            .iter()
+            .map(|row| Entry::Options(*row))
+            .collect();
+        assert_eq!(rows[..options], site[..]);
         let reset = rows.iter().position(|r| *r == Entry::ResetSite).unwrap();
-        assert!(rows[..reset].iter().all(|r| r.sets_site()), "{rows:?}");
+        assert!(
+            rows[options..reset].iter().all(|r| r.sets_site()),
+            "{rows:?}"
+        );
         assert!(!rows[reset + 1..].iter().any(|r| r.sets_site()), "{rows:?}");
         assert_eq!(
             panel.heads(),
@@ -805,9 +843,35 @@ mod tests {
                 (reset + 1, PAGE_HEAD.to_string())
             ]
         );
+        assert_eq!(panel.bookmark_id(), Some("itch"));
         panel.open(Strip::QuickAccess, over, None, false, &AppConfig::default());
         assert!(panel.heads().is_empty());
         assert!(!panel.rows().contains(&Entry::ResetSite));
+        assert_eq!(panel.bookmark_id(), None);
+    }
+
+    /// A game's site leads with how it launches, in Quick Access alone.
+    #[test]
+    fn a_games_site_leads_with_how_it_launches() {
+        let mut panel = QuickAccess::new();
+        let over = Over::Tab(TabMode::Game);
+        panel.open(
+            Strip::QuickAccess,
+            over,
+            Some(ITCH),
+            true,
+            &AppConfig::default(),
+        );
+        assert_eq!(panel.row(), Entry::Options(OptionsRow::LaunchAs));
+        panel.open(
+            Strip::QuickMenu,
+            over,
+            Some(ITCH),
+            true,
+            &AppConfig::default(),
+        );
+        assert!(!panel.rows().iter().any(|r| matches!(r, Entry::Options(_))));
+        assert_eq!(panel.bookmark_id(), None);
     }
 
     /// Every row that leads under a site's head writes only site settings.
@@ -841,19 +905,24 @@ mod tests {
     fn the_way_out_names_the_launched_bookmark() {
         let mut panel = QuickAccess::new();
         let over = Over::Tab(TabMode::Game);
+        let site = SiteHead {
+            id: "hexgl",
+            name: "HexGL",
+        };
         panel.open(
             Strip::QuickAccess,
             over,
-            Some("HexGL"),
+            Some(site),
             true,
             &AppConfig::default(),
         );
         let last = panel.rows().len() - 1;
         assert_eq!(panel.label(last), "Close HexGL");
+        let site = SiteHead { name: "", ..site };
         panel.open(
             Strip::QuickAccess,
             over,
-            Some(""),
+            Some(site),
             true,
             &AppConfig::default(),
         );

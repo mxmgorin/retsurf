@@ -1,7 +1,7 @@
 //! Bookmarks in the app: opening one the way it asks, its options (the rows
-//! Quick Access leads with over the start page, see
-//! [`crate::overlay::quick_access`]), and the setting overrides of the one
-//! whose site the active tab is on.
+//! Quick Access leads with over the start page, and how it launches over its
+//! site's pages, see [`crate::overlay::quick_access`]), and the setting
+//! overrides of the one whose site the active tab is on.
 //!
 //! A launched bookmark is tab state ([`crate::browser::AppBrowser::launched`])
 //! and is that tab's site wherever it navigates; any other tab takes the
@@ -18,7 +18,7 @@ use super::super::{App, AppCommand};
 use crate::config::{js_preset, overlay, HomeSort};
 use crate::data::bookmarks::{self, Launch};
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText};
+use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText, Strip};
 use crate::ui::{bookmark_label, Notice};
 use egui_phosphor::bold;
 
@@ -221,6 +221,24 @@ impl App {
         self.browser.set_launched(None);
     }
 
+    /// Run the shown tab the way `launch` opens the bookmark at `at`, where it
+    /// is, and reopen Quick Access over it.
+    fn run_tab_as(&mut self, at: usize, launch: Launch, out: &mut Vec<AppCommand>) {
+        let game = launch == Launch::Game;
+        if self.browser.in_game_mode() && !game {
+            self.leave_game_mode();
+        }
+        let id = self.ui.menu.bookmarks.all()[at].id.clone();
+        self.browser
+            .set_launched((launch != Launch::Browser).then_some(id));
+        if game && !self.browser.in_game_mode() {
+            self.enter_game_mode(out);
+        }
+        // A site no longer launched may match another bookmark.
+        self.sync_site(out);
+        self.open_strip(Strip::QuickAccess);
+    }
+
     /// Open Quick Access on the start-page tile at `tile`, the grid's own
     /// index; `false` when the grid has no such tile.
     pub(in crate::app) fn open_options(&mut self, tile: usize) -> bool {
@@ -275,7 +293,7 @@ impl App {
     }
 
     /// Show the bookmark's values beside their rows.
-    fn refresh_options(&mut self) {
+    pub(super) fn refresh_options(&mut self) {
         let Some(at) = self.options_bookmark() else {
             return;
         };
@@ -291,20 +309,27 @@ impl App {
         menu.set_flag(Entry::Options(OptionsRow::Reader), reader);
     }
 
-    /// Left/Right on a row of the bookmark's options that holds a value.
-    pub(super) fn step_options_row(&mut self, row: OptionsRow, dx: i32) {
+    /// Left/Right on a row of the bookmark's options that holds a value. Over
+    /// its site's page the tab follows at once.
+    pub(super) fn step_options_row(&mut self, row: OptionsRow, dx: i32, out: &mut Vec<AppCommand>) {
         let Some(at) = self.options_bookmark() else {
             return;
         };
         let bookmark = &self.ui.menu.bookmarks.all()[at];
+        let on_home = self.browser.on_home_page();
         match row {
             OptionsRow::LaunchAs => {
                 let next = bookmark.launch.step(dx);
                 self.ui.menu.bookmarks.set_launch(at, next);
-                // The reader row comes and goes with the game; the panel stays
-                // on this bookmark even once the filter no longer shows it.
-                self.focus_home_tile(at);
-                self.open_home_access(Some(at));
+                match on_home {
+                    // The reader row comes and goes with the game; the panel stays
+                    // on this bookmark even once the filter no longer shows it.
+                    true => {
+                        self.focus_home_tile(at);
+                        self.open_home_access(Some(at));
+                    }
+                    false => self.run_tab_as(at, next, out),
+                }
                 self.ui.quick_access.select_entry(Entry::Options(row));
             }
             OptionsRow::Reader => {
@@ -333,7 +358,7 @@ impl App {
                 self.ui.quick_access.close();
                 self.open_bookmark(at, out);
             }
-            OptionsRow::LaunchAs | OptionsRow::Reader => self.step_options_row(row, 1),
+            OptionsRow::LaunchAs | OptionsRow::Reader => self.step_options_row(row, 1, out),
             OptionsRow::Rename => {
                 let name = bookmark_label(bookmark);
                 self.ask_options_text(OptionsText::Name, name, out);

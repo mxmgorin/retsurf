@@ -245,9 +245,13 @@ They apply while the shown tab is on the bookmark's site: the bookmark it runs a
 a game, else the bookmark of the same host with the longest matching path, else the first
 bookmark of that host. Other keys in a bookmark file are ignored.
 
-While they apply, Quick Access lists the site's rows first under the bookmark's name, with
-**Reset site settings** after them, and a change to one of these settings, in Quick Access
-or Settings, is written to the bookmark, not to `config.toml`.
+While they apply, Quick Access lists the site's rows first under the bookmark's name:
+
+| Row | Effect |
+|---|---|
+| **Launch as** | site, app or game; the open page switches at once |
+| these settings | a change here or in Settings is written to the bookmark, not to `config.toml` |
+| **Reset site settings** | drops the overrides |
 
 On the start page L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.

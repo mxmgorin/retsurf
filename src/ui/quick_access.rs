@@ -245,7 +245,7 @@ mod tests {
     use super::*;
     use crate::browser::TabMode;
     use crate::config::AppConfig;
-    use crate::overlay::quick_access::{HomeTile, Over};
+    use crate::overlay::quick_access::{HomeTile, Over, SiteHead};
 
     /// A row added to either strip, or a newly flagged quick row, must pick
     /// an icon of its own.
@@ -260,7 +260,8 @@ mod tests {
         ];
         for strip in [Strip::QuickAccess, Strip::QuickMenu] {
             for over in overs {
-                panel.open(strip, over, Some("A"), true, &AppConfig::default());
+                let site = SiteHead { id: "a", name: "A" };
+                panel.open(strip, over, Some(site), true, &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");
                 }

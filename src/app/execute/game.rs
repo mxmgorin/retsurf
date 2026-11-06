@@ -18,7 +18,7 @@ use crate::overlay::game::map_edit::{
 };
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, Over, Strip};
+use crate::overlay::quick_access::{Entry, Over, SiteHead, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -41,12 +41,22 @@ impl App {
             self.ui.menu.close();
             return;
         }
+        self.open_strip(strip);
+    }
+
+    /// Open `strip` over what is shown, with its rows' values.
+    pub(super) fn open_strip(&mut self, strip: Strip) {
         // Over the start page the focused tile leads the strip.
         if strip == Strip::QuickAccess && self.browser.on_home_page() {
             self.open_home_access(self.ui.home_focused_bookmark());
             return;
         }
-        let site = self.site_name();
+        let name = self.site_name();
+        let site = self
+            .applied_site
+            .as_deref()
+            .zip(name.as_deref())
+            .map(|(id, name)| SiteHead { id, name });
         let launched = self.browser.launched().is_some();
         let over = match self.browser.on_home_page() {
             true => Over::Home,
@@ -54,7 +64,8 @@ impl App {
         };
         self.ui
             .quick_access
-            .open(strip, over, site.as_deref(), launched, &self.config);
+            .open(strip, over, site, launched, &self.config);
+        self.refresh_options();
         let page_js = Some(self.browser.page_js_preset()).filter(|p| !p.is_empty());
         self.ui.quick_access.set_page_js(page_js);
         self.ui.quick_access.refresh(&self.config);
@@ -176,7 +187,7 @@ impl App {
                 Entry::Quick(field) => self.step_quick(field, *dx, out),
                 Entry::InputMap => self.step_input_map(*dx, out),
                 Entry::Run(Action::Reader) => self.quick_access_activate(out),
-                Entry::Options(row) => self.step_options_row(row, *dx),
+                Entry::Options(row) => self.step_options_row(row, *dx, out),
                 _ => {}
             },
             QuickAccessAction::Click(index) => {
