@@ -57,6 +57,11 @@ const ICON_VARIANT: Variant = Variant::Bold;
 /// code point, so the solid one would shadow the outlined one.
 const FILL_FAMILY: &str = "phosphor-fill";
 
+/// The UI's text face. It leads the proportional family, so its metrics set
+/// the rows; it maps U+ECE0, so Phosphor's `DOT_OUTLINE` would draw as its
+/// glyph instead.
+const UI_FONT: &str = "IBMPlexSans-Regular";
+
 /// Icon size for buttons and rows. Phosphor draws its artwork inset in the em
 /// box, so an icon needs a few points over the body text to match it optically.
 pub const ICON_SIZE: f32 = 15.0;
@@ -65,18 +70,30 @@ pub const ICON_SIZE: f32 = 15.0;
 /// accent fill behind selected widgets, ringed by the solid accent, plus
 /// accent-colored links and caret.
 pub fn apply(ctx: &egui::Context) {
-    // `add_to_fonts` puts Phosphor *second*: Ubuntu-Light keeps the family's
-    // metrics, and Phosphor still wins the private-use range the emoji faces map.
     let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        UI_FONT.to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "../../resources/fonts/IBMPlexSans-Regular.ttf"
+        ))
+        .into(),
+    );
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, UI_FONT.to_owned());
+    // `add_to_fonts` puts Phosphor *second*: the UI face keeps the family's
+    // metrics, and Phosphor still wins the private-use range the emoji faces map.
     egui_phosphor::add_to_fonts(&mut fonts, ICON_VARIANT);
     fonts
         .font_data
         .insert(FILL_FAMILY.to_owned(), Variant::Fill.font_data().into());
-    // Ubuntu-Light leads this family too, so a filled icon lays out identically
+    // The UI face leads this family too, so a filled icon lays out identically
     // to the outlined one it swaps with.
     fonts.families.insert(
         egui::FontFamily::Name(FILL_FAMILY.into()),
-        vec!["Ubuntu-Light".to_owned(), FILL_FAMILY.to_owned()],
+        vec![UI_FONT.to_owned(), FILL_FAMILY.to_owned()],
     );
     ctx.set_fonts(fonts);
 

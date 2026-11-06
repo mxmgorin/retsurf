@@ -43,4 +43,4 @@ Additional terms under section 7 of the GNU General Public License
 Third-party files
 
 Files that carry their own copyright and license notice, such as those under
-vendor/ and resources/shaders/, remain under those terms.
+vendor/, resources/shaders/ and resources/fonts/, remain under those terms.

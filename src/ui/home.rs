@@ -22,9 +22,9 @@ use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 
-/// Typeface for the start-page body text. egui bundles only two real text faces
-/// — `Ubuntu-Light` and `Hack`; swap the call below to flip between them. The
-/// wordmark stays on Hack via [`wordmark`] regardless.
+/// Typeface for the start-page body text: the UI face or `Hack`; swap the call
+/// below to flip between them. The wordmark stays on Hack via [`wordmark`]
+/// regardless.
 fn font(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
 }

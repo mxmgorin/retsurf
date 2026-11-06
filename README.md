@@ -133,7 +133,7 @@ If you find the project useful, here is how you can help:
 - [SDL2](https://libsdl.org) through [rust-sdl2](https://github.com/Rust-SDL2/rust-sdl2)
   for window, input and audio
 - [egui](https://github.com/emilk/egui) draws every overlay, with icons from
-  [Phosphor](https://phosphoricons.com/)
+  [Phosphor](https://phosphoricons.com/) and text in [IBM Plex Sans](https://github.com/IBM/plex)
 - Blocking by Brave's [adblock-rust](https://github.com/brave/adblock-rust), over
   [EasyList](https://easylist.to/) and EasyPrivacy
 - Reader view by Mozilla's [Readability](https://github.com/mozilla/readability)
