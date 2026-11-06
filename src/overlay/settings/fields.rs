@@ -8,7 +8,7 @@ use super::SettingsSection;
 use crate::config::{
     bounds, js_preset, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout,
     HomeSearch, HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling,
-    ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition,
+    ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition, UiTheme,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -478,6 +478,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Gaming, "Game Mode",   "Cursor",                 flag!(game_mode.view.cursor), false).quick(Modes::Game),
     f(S::Gaming, "Game Mode",   "Game patches",           flag!(game_mode.patches), false),
 
+    f(S::Interface, "Interface",  "Theme",                  choice!(interface.theme: UiTheme), false),
     f(S::Interface, "Interface",  "Interface scale",        float!(interface.scale as f32, bounds::SCALE, bounds::SCALE_STEP, 2), false),
     f(S::Interface, "Interface",  "Toolbar position",       choice!(interface.toolbar_position: ToolbarPosition), false),
     f(S::Interface, "Interface",  "Auto-hide toolbar",      flag!(interface.toolbar_autohide), false),

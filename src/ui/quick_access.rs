@@ -13,7 +13,7 @@ use crate::overlay::settings::Settings;
 use crate::ui::brand;
 use crate::ui::keys::HINT_FONT;
 use crate::ui::panel::{self, center_selected, ROW_GAP, ROW_H};
-use crate::ui::theme::{self, ACCENT, DIM, ROW_FONT};
+use crate::ui::theme::{self, palette, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 
@@ -56,7 +56,7 @@ pub(in crate::ui) fn add_quick_access(
     // A shadow rather than a line: the edges on the screen's border cast it off
     // screen, so only the one facing the page shows.
     let frame = theme::card_frame()
-        .fill(theme::PANEL_FILL.gamma_multiply(STRIP_OPACITY))
+        .fill(theme::palette().panel_fill.gamma_multiply(STRIP_OPACITY))
         .stroke(egui::Stroke::NONE)
         .shadow(STRIP_SHADOW)
         .corner_radius(0.0);
@@ -172,7 +172,7 @@ fn add_backdrop(ctx: &egui::Context, screen: egui::Rect, commands: &mut Vec<AppC
 fn add_header(ui: &mut egui::Ui, title: &str) {
     ui.label(
         egui::RichText::new(title)
-            .color(ACCENT)
+            .color(palette().accent)
             .size(ROW_FONT)
             .strong(),
     );
@@ -186,7 +186,7 @@ fn add_head(ui: &mut egui::Ui, head: &str, first: bool) {
         ui.add_space(ROW_GAP);
     }
     let text = egui::RichText::new(head.to_uppercase())
-        .color(DIM)
+        .color(palette().dim)
         .size(HINT_FONT);
     ui.add(egui::Label::new(text).truncate());
 }

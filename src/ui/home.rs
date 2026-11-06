@@ -11,7 +11,7 @@ use super::keys;
 use super::labels::{bookmark_label, site_label};
 use super::panel::{fade, scroll_offset, scrolls_on, settle, EPSILON, FADE};
 use super::svg::SvgTexture;
-use super::theme::{ACCENT, BG, BORDER, INK, MUTED, ROW_FONT, SURFACE, SURF_WARM};
+use super::theme::{palette, ROW_FONT};
 use super::wordmark;
 use super::OskCaret;
 use crate::command::{AppCommand, HomeAction, QuickAccessAction};
@@ -318,7 +318,7 @@ pub(super) fn add_home(
         .constrain(false)
         .show(ctx, |ui| {
             egui::Frame::default()
-                .fill(BG)
+                .fill(palette().bg)
                 .inner_margin(0.0)
                 .show(ui, |ui| {
                     // `Area` caches its size by id and `set_min_size` only grows,
@@ -503,8 +503,11 @@ const TAB_GAP: f32 = 6.0;
 
 /// The footer in `row`: a rule, then its hints centred; returns its height.
 fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 {
-    ui.painter()
-        .hline(row.x_range(), row.top(), egui::Stroke::new(LINE_W, BORDER));
+    ui.painter().hline(
+        row.x_range(),
+        row.top(),
+        egui::Stroke::new(LINE_W, palette().border),
+    );
     let hints: Vec<keys::Hint> = footer
         .iter()
         .map(|hint| (hint.caps.as_slice(), hint.label))
@@ -536,12 +539,16 @@ fn add_search_bar(
 ) {
     let selected = home.search_focused();
     let frame = egui::Frame::default()
-        .fill(SURFACE)
+        .fill(palette().surface)
         .inner_margin(egui::Margin::symmetric(BAR_MARGIN_X, 0))
         .corner_radius(BAR_RADIUS)
         .stroke(egui::Stroke::new(
             if selected { BAR_STROKE } else { LINE_W },
-            if selected { ACCENT } else { BORDER },
+            if selected {
+                palette().accent
+            } else {
+                palette().border
+            },
         ));
     let inner_w = width - 2.0 * (BAR_MARGIN_X as f32 + BAR_STROKE);
     let bar = frame.show(ui, |ui| {
@@ -554,7 +561,7 @@ fn add_search_bar(
             }
             let glass = egui::RichText::new(bold::MAGNIFYING_GLASS)
                 .font(font(FIELD_FONT * GLASS_SHARE))
-                .color(MUTED);
+                .color(palette().muted);
             ui.label(glass);
             let tail = match buttons {
                 true => STRIP_BUTTON + LINE_W + 2.0 * ui.spacing().item_spacing.x,
@@ -575,7 +582,7 @@ fn add_search_bar(
 fn divider(ui: &mut egui::Ui) {
     let size = egui::vec2(LINE_W, DIVIDER_H);
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-    let stroke = egui::Stroke::new(LINE_W, BORDER);
+    let stroke = egui::Stroke::new(LINE_W, palette().border);
     ui.painter().vline(rect.center().x, rect.y_range(), stroke);
 }
 
@@ -587,7 +594,11 @@ fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>)
     };
     let size = egui::vec2(STRIP_BUTTON, STRIP_BUTTON);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
-    let color = if resp.hovered() { ACCENT } else { INK };
+    let color = if resp.hovered() {
+        palette().accent
+    } else {
+        palette().ink
+    };
     let center = egui::Align2::CENTER_CENTER;
     ui.painter()
         .text(rect.center(), center, icon, font(FIELD_FONT), color);
@@ -616,7 +627,7 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
         .desired_width(width)
         .font(field_font)
         .vertical_align(egui::Align::Center)
-        .text_color(INK);
+        .text_color(palette().ink);
     let resp = ui.add(edit);
     // Clicking the field selects it (so the highlight follows the mouse).
     if resp.gained_focus() {
@@ -680,7 +691,7 @@ fn add_tabs(
     );
     let rect = row.response.rect;
     let y = rect.bottom() - LINE_W / 2.0;
-    let stroke = egui::Stroke::new(LINE_W, BORDER);
+    let stroke = egui::Stroke::new(LINE_W, palette().border);
     ui.painter()
         .set(rule, egui::Shape::hline(rect.x_range(), y, stroke));
 }
@@ -765,9 +776,9 @@ fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let size = egui::vec2(tab_text_width(ui, text) + pad, TAB_H);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let color = match (on, resp.hovered()) {
-        (true, _) => egui::Color32::WHITE,
-        (false, true) => INK,
-        (false, false) => MUTED,
+        (true, _) => palette().text,
+        (false, true) => palette().ink,
+        (false, false) => palette().muted,
     };
     let center = egui::pos2(rect.center().x, rect.center().y - UNDERLINE_W / 2.0);
     let font = egui::FontId::proportional(ROW_FONT);
@@ -775,7 +786,7 @@ fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
         .text(center, egui::Align2::CENTER_CENTER, text, font, color);
     if on {
         let y = rect.bottom() - UNDERLINE_W / 2.0;
-        let stroke = egui::Stroke::new(UNDERLINE_W, ACCENT);
+        let stroke = egui::Stroke::new(UNDERLINE_W, palette().accent);
         ui.painter().hline(rect.x_range(), y, stroke);
     }
     resp
@@ -783,7 +794,11 @@ fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
 
 fn tab_text_width(ui: &egui::Ui, text: &str) -> f32 {
     let font = egui::FontId::proportional(ROW_FONT);
-    ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, INK).size().x)
+    ui.fonts_mut(|f| {
+        f.layout_no_wrap(text.to_string(), font, palette().ink)
+            .size()
+            .x
+    })
 }
 
 /// Shown in place of an empty grid, in this type.
@@ -805,7 +820,7 @@ fn add_grid(
         ui.label(
             egui::RichText::new(EMPTY_HINT)
                 .font(font(EMPTY_FONT))
-                .color(MUTED),
+                .color(palette().muted),
         );
         return;
     }
@@ -923,7 +938,7 @@ fn add_row(
     let active = selected || resp.hovered();
     let painter = ui.painter();
     if active {
-        painter.rect_filled(rect, ROW_RADIUS, SURFACE);
+        painter.rect_filled(rect, ROW_RADIUS, palette().surface);
     }
     let glyph = egui::Rect::from_min_size(
         egui::pos2(
@@ -951,16 +966,16 @@ fn add_row(
         job.wrap.max_rows = 1;
         painter.layout_job(job)
     };
-    let name = line(label, style.name, INK);
+    let name = line(label, style.name, palette().ink);
     let site = style
         .site
-        .then(|| line(site_label(&bookmark.url), SITE_FONT, MUTED));
+        .then(|| line(site_label(&bookmark.url), SITE_FONT, palette().muted));
     let site_h = site.as_ref().map_or(0.0, |g| g.size().y);
     let top = rect.center().y - (name.size().y + site_h) / 2.0;
     let name_h = name.size().y;
-    painter.galley(egui::pos2(left, top), name, INK);
+    painter.galley(egui::pos2(left, top), name, palette().ink);
     if let Some(site) = site {
-        painter.galley(egui::pos2(left, top + name_h), site, MUTED);
+        painter.galley(egui::pos2(left, top + name_h), site, palette().muted);
     }
     resp
 }
@@ -969,7 +984,7 @@ fn add_row(
 /// across; the ones that do not fit count in a closing `+N` pill. Returns the
 /// left edge drawn to, or `right` with no tags.
 fn paint_tags(painter: &egui::Painter, tags: &[String], right: f32, y: f32, budget: f32) -> f32 {
-    let pill = |text: String| painter.layout_no_wrap(text, font(TAG_FONT), MUTED);
+    let pill = |text: String| painter.layout_no_wrap(text, font(TAG_FONT), palette().muted);
     let width = |g: &std::sync::Arc<egui::Galley>| g.size().x + 2.0 * TAG_PAD_X;
     let mut pills: Vec<_> = Vec::new();
     let mut used = 0.0;
@@ -995,10 +1010,10 @@ fn paint_tags(painter: &egui::Painter, tags: &[String], right: f32, y: f32, budg
             egui::pos2(x - width(&galley), y - TAG_H / 2.0),
             egui::pos2(x, y + TAG_H / 2.0),
         );
-        let stroke = egui::Stroke::new(LINE_W, BORDER);
+        let stroke = egui::Stroke::new(LINE_W, palette().border);
         painter.rect_stroke(rect, TAG_H / 2.0, stroke, egui::StrokeKind::Inside);
         let at = rect.center() - galley.size() / 2.0;
-        painter.galley(at, galley, MUTED);
+        painter.galley(at, galley, palette().muted);
         x = rect.left() - TAG_GAP;
     }
     match x == right {
@@ -1039,7 +1054,11 @@ fn paint_tile(
     paint_glyph(painter, glyph, style.glyph, label, icon, active);
 
     // The label under the glyph, wrapped by word and elided past its lines.
-    let color = if active { INK } else { MUTED };
+    let color = if active {
+        palette().ink
+    } else {
+        palette().muted
+    };
     let mut job =
         egui::text::LayoutJob::simple(label.to_string(), font(LABEL_FONT), color, style.w);
     job.halign = egui::Align::Center;
@@ -1065,8 +1084,8 @@ fn paint_glyph(
     active: bool,
 ) {
     let fill = match icon {
-        Some(icon) if icon.dark => INK,
-        Some(icon) => SURFACE.lerp_to_gamma(icon.tint, TINT_MIX),
+        Some(icon) if icon.dark => palette().ink,
+        Some(icon) => palette().surface.lerp_to_gamma(icon.tint, TINT_MIX),
         None => letter_fill(label),
     };
     paint_glyph_square(painter, glyph, style.radius, active, fill);
@@ -1083,7 +1102,7 @@ fn paint_glyph(
                 egui::Align2::CENTER_CENTER,
                 monogram(label),
                 font(style.monogram),
-                INK,
+                palette().ink,
             );
         }
     }
@@ -1115,14 +1134,19 @@ fn monogram(label: &str) -> String {
 /// accent for an app and in the brand's warm end for a game.
 fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, launch: Launch) {
     let (mark, ink) = match launch {
-        Launch::Browser => (bold::GLOBE, MUTED),
-        Launch::App => (bold::APP_WINDOW, ACCENT),
-        Launch::Game => (bold::GAME_CONTROLLER, SURF_WARM),
+        Launch::Browser => (bold::GLOBE, palette().muted),
+        Launch::App => (bold::APP_WINDOW, palette().accent),
+        Launch::Game => (bold::GAME_CONTROLLER, palette().surf_warm),
     };
     let radius = radius * MARK_SCALE;
     let inset = radius * MARK_INSET;
     let center = glyph.right_bottom() - egui::vec2(inset, inset);
-    painter.circle(center, radius, BG, egui::Stroke::new(LINE_W, BORDER));
+    painter.circle(
+        center,
+        radius,
+        palette().bg,
+        egui::Stroke::new(LINE_W, palette().border),
+    );
     painter.text(
         center,
         egui::Align2::CENTER_CENTER,
@@ -1173,7 +1197,11 @@ fn paint_glyph_square(
         radius,
         egui::Stroke::new(
             if active { 2.0 } else { 1.0 },
-            if active { ACCENT } else { BORDER },
+            if active {
+                palette().accent
+            } else {
+                palette().border
+            },
         ),
         egui::StrokeKind::Inside,
     );

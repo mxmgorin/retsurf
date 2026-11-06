@@ -1,9 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{
-    close_button, ACCENT, BG, CLOSE_SIZE, DIM, HAIRLINE, PANEL_FILL, ROW_FONT, WARN,
-};
+use super::theme::{close_button, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
 
@@ -42,7 +40,7 @@ pub(super) fn panel(
     // An area's first show is an invisible sizing pass, which would leave the
     // page on screen for that frame; a painted layer needs no such pass.
     ctx.layer_painter(egui::LayerId::background())
-        .rect_filled(screen, 0.0, PANEL_FILL);
+        .rect_filled(screen, 0.0, palette().panel_fill);
     egui::Area::new(egui::Id::new(id))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
@@ -52,7 +50,7 @@ pub(super) fn panel(
         .fade_in(false)
         .show(ctx, |ui| {
             egui::Frame::default()
-                .fill(PANEL_FILL)
+                .fill(palette().panel_fill)
                 .inner_margin(egui::Margin::symmetric(PAD_X as i8, PAD_Y as i8))
                 .show(ui, |ui| {
                     ui.set_min_size(screen.size() - egui::vec2(SIDES, PAD_Y * 2.0));
@@ -87,9 +85,9 @@ pub(super) fn paint_switch(ui: &egui::Ui, row: egui::Rect, on: bool) {
         egui::vec2(SWITCH_W, SWITCH_H),
     );
     let (fill, knob_fill) = if on {
-        (ACCENT, egui::Color32::WHITE)
+        (palette().accent, palette().text)
     } else {
-        (HAIRLINE, DIM)
+        (palette().hairline, palette().dim)
     };
     let painter = ui.painter();
     painter.rect_filled(track, SWITCH_H / 2.0, fill);
@@ -127,13 +125,15 @@ fn row_texts(label: &str, value: &str) -> (egui::RichText, egui::RichText) {
 
 fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
     let color = match tone {
-        Tone::Plain => egui::Color32::WHITE,
-        Tone::Action => ACCENT,
-        Tone::Danger => WARN,
+        Tone::Plain => palette().text,
+        Tone::Action => palette().accent,
+        Tone::Danger => palette().warn,
     };
     (
         egui::RichText::new(label).color(color).size(ROW_FONT),
-        egui::RichText::new(value).color(ACCENT).size(ROW_FONT),
+        egui::RichText::new(value)
+            .color(palette().accent)
+            .size(ROW_FONT),
     )
 }
 
@@ -198,7 +198,7 @@ pub(super) fn grouped_row_list_above(
     panel(ctx, id, screen, |ui| {
         ui.label(
             egui::RichText::new(title)
-                .color(ACCENT)
+                .color(palette().accent)
                 .size(ROW_FONT)
                 .strong(),
         );
@@ -255,7 +255,7 @@ fn toned_row(
 fn divider(ui: &mut egui::Ui, width: f32) {
     ui.add_space(ROW_GAP);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, HAIRLINE);
+    ui.painter().rect_filled(rect, 0.0, palette().hairline);
     ui.add_space(ROW_GAP);
 }
 
@@ -268,7 +268,7 @@ fn heading(ui: &mut egui::Ui, text: &str) {
         ui.add_space(indent);
         ui.label(
             egui::RichText::new(text)
-                .color(DIM)
+                .color(palette().dim)
                 .size(HEADING_FONT)
                 .strong(),
         );
@@ -316,7 +316,7 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
             let tab = egui::Button::selectable(
                 section == active,
                 egui::RichText::new(text)
-                    .color(egui::Color32::WHITE)
+                    .color(palette().text)
                     .size(ROW_FONT),
             )
             .corner_radius(ROW_RADIUS)
@@ -421,10 +421,10 @@ pub(super) fn fade(painter: &egui::Painter, band: egui::Rect, dir: egui::Directi
     let clear = egui::Color32::TRANSPARENT;
     // Corners in mesh order: left-top, right-top, right-bottom, left-bottom.
     let colors = match dir {
-        egui::Direction::TopDown => [clear, clear, BG, BG],
-        egui::Direction::BottomUp => [BG, BG, clear, clear],
-        egui::Direction::LeftToRight => [clear, BG, BG, clear],
-        egui::Direction::RightToLeft => [BG, clear, clear, BG],
+        egui::Direction::TopDown => [clear, clear, palette().bg, palette().bg],
+        egui::Direction::BottomUp => [palette().bg, palette().bg, clear, clear],
+        egui::Direction::LeftToRight => [clear, palette().bg, palette().bg, clear],
+        egui::Direction::RightToLeft => [palette().bg, clear, clear, palette().bg],
     };
     let corners = [
         band.left_top(),

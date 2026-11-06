@@ -1,6 +1,8 @@
 //! A bundled SVG drawn at one logical height, rasterized for the current pixel
-//! density on first use and again only when the density changes.
+//! density on first use and again only when the density or the palette changes.
+//! Its brand colors follow the palette (see [`theme::recolor_svg`]).
 
+use super::theme::{self, Palette};
 use egui_sdl2::egui;
 
 /// An SVG and the texture it last rasterized to.
@@ -10,7 +12,8 @@ pub(super) struct SvgTexture {
     svg: &'static [u8],
     /// Drawn height (logical px); the width follows the SVG's aspect.
     height: f32,
-    texture: Option<(f32, egui::TextureHandle)>,
+    /// The texture, and the pixel density and palette it was drawn for.
+    texture: Option<(f32, &'static Palette, egui::TextureHandle)>,
     /// The SVG would not rasterize; not retried every frame.
     failed: bool,
 }
@@ -29,19 +32,23 @@ impl SvgTexture {
     /// The texture for `ctx`'s pixel density; `None` when the SVG does not rasterize.
     pub fn texture(&mut self, ctx: &egui::Context) -> Option<&egui::TextureHandle> {
         let ppp = ctx.pixels_per_point();
+        let palette = theme::palette();
         if self.failed {
             return None;
         }
-        if self.texture.as_ref().is_none_or(|(at, _)| *at != ppp) {
-            let Some(image) = rasterize(self.svg, (self.height * ppp).round() as u32) else {
+        let stale =
+            |(at, drawn, _): &(f32, &Palette, _)| *at != ppp || !std::ptr::eq(*drawn, palette);
+        if self.texture.as_ref().is_none_or(stale) {
+            let svg = theme::recolor_svg(self.svg);
+            let Some(image) = rasterize(&svg, (self.height * ppp).round() as u32) else {
                 log::warn!("{}: the SVG did not rasterize", self.name);
                 self.failed = true;
                 return None;
             };
             let texture = ctx.load_texture(self.name, image, egui::TextureOptions::LINEAR);
-            self.texture = Some((ppp, texture));
+            self.texture = Some((ppp, palette, texture));
         }
-        self.texture.as_ref().map(|(_, t)| t)
+        self.texture.as_ref().map(|(_, _, t)| t)
     }
 }
 

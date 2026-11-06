@@ -13,7 +13,7 @@
 //! hints whose codes no longer match fade out, leaving only the live targets —
 //! the spatial selection frame stays so confirm still works.
 
-use super::theme::ACCENT;
+use super::theme::palette;
 use crate::config::FaceLabels;
 use crate::overlay::hints::{Hints, Label, Sym};
 use egui_sdl2::egui;
@@ -43,9 +43,18 @@ pub(super) fn add_hints(
         egui::Order::Foreground,
         egui::Id::new("hints"),
     ));
-    let frame = egui::Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 110);
-    let selected_fill =
-        egui::Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 45);
+    let frame = egui::Color32::from_rgba_unmultiplied(
+        palette().accent.r(),
+        palette().accent.g(),
+        palette().accent.b(),
+        110,
+    );
+    let selected_fill = egui::Color32::from_rgba_unmultiplied(
+        palette().accent.r(),
+        palette().accent.g(),
+        palette().accent.b(),
+        45,
+    );
     let typed = hints.typed();
 
     for (i, hint) in hints.hints().iter().enumerate() {
@@ -64,7 +73,7 @@ pub(super) fn add_hints(
                 rect.expand(2.0),
                 3.0,
                 selected_fill.gamma_multiply(fade),
-                egui::Stroke::new(2.0, ACCENT.gamma_multiply(fade)),
+                egui::Stroke::new(2.0, palette().accent.gamma_multiply(fade)),
                 egui::StrokeKind::Outside,
             );
         } else {
@@ -105,7 +114,7 @@ fn draw_badge(
         let (pill, ink) = if j < done {
             (DONE_PILL, DONE_INK)
         } else {
-            (ACCENT, PILL_INK)
+            (palette().accent, PILL_INK)
         };
         // Cells abut with no gap; round only the row's outer corners so a code
         // reads as one pill.

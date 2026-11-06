@@ -4,7 +4,7 @@
 //! `resources/retsurf.svg`; the sea under the first wave occludes the sun, so
 //! it sets behind a real wave rather than a flat cut.
 
-use super::theme::{lerp_color, ACCENT, DEEP_TEAL, PANEL_FILL, SURF_WARM};
+use super::theme::{lerp_color, palette};
 use egui_sdl2::egui;
 
 /// The icon gradient's top stop, warmer than [`SURF_WARM`].
@@ -91,7 +91,7 @@ impl Horizon {
     }
 
     fn tint(&self, color: egui::Color32) -> egui::Color32 {
-        lerp_color(color, PANEL_FILL, self.dim)
+        lerp_color(color, palette().panel_fill, self.dim)
     }
 }
 
@@ -113,7 +113,7 @@ pub(super) fn paint_horizon(
     let stroke = |color| egui::Stroke::new(WAVE_STROKE * k, color);
     let far = wave_points(x_range, horizon, WAVE_AMP * k, 0.0);
     painter.add(egui::Shape::mesh(sea_mesh(&far, bottom)));
-    painter.add(egui::Shape::line(far, stroke(DEEP_TEAL)));
+    painter.add(egui::Shape::line(far, stroke(palette().deep_teal)));
     let near = wave_points(x_range, horizon + WAVE_SPACING * k, WAVE_AMP * k, 0.25);
     painter.add(egui::Shape::line(near, stroke(WAVE_MID)));
 }
@@ -145,7 +145,7 @@ fn sea_mesh(wave: &[egui::Pos2], bottom: f32) -> egui::Mesh {
 
 /// The coral glow ring from the sun's edge out to [`HALO_SCALE`].
 fn halo_mesh(center: egui::Pos2, sun: &Horizon) -> egui::Mesh {
-    let inner = sun.tint(SURF_WARM);
+    let inner = sun.tint(palette().surf_warm);
     let inner = egui::Color32::from_rgba_unmultiplied(inner.r(), inner.g(), inner.b(), HALO_ALPHA);
     let mut mesh = egui::Mesh::default();
     for i in 0..HALO_SEGMENTS as u32 {
@@ -215,8 +215,12 @@ fn sun_mesh(ppp: f32, center: egui::Pos2, sun: &Horizon) -> egui::Mesh {
 /// The icon gradient at `f` of the way down the disk.
 fn gradient(f: f32) -> egui::Color32 {
     match f < WARM_STOP {
-        true => lerp_color(SUN_TOP, SURF_WARM, f / WARM_STOP),
-        false => lerp_color(SURF_WARM, ACCENT, (f - WARM_STOP) / (1.0 - WARM_STOP)),
+        true => lerp_color(SUN_TOP, palette().surf_warm, f / WARM_STOP),
+        false => lerp_color(
+            palette().surf_warm,
+            palette().accent,
+            (f - WARM_STOP) / (1.0 - WARM_STOP),
+        ),
     }
 }
 

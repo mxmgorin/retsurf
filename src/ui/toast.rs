@@ -3,7 +3,7 @@
 //! one replaces whatever is up. Every toast is a pill at the bottom centre: an
 //! icon, then words and key caps, fading out at the end of its time.
 
-use super::theme::{ACCENT, BORDER, INK, PANEL_FILL, ROW_FONT, WARN};
+use super::theme::{palette, ROW_FONT};
 use super::AppUi;
 use crate::browser::BrowserNotice;
 use crate::config::ToolbarPosition;
@@ -136,20 +136,26 @@ impl AppUi {
 /// The pill with its line drawn at `content` opacity over it.
 fn add_pill(ui: &mut egui::Ui, notice: &Notice, content: f32) {
     egui::Frame::new()
-        .fill(PANEL_FILL)
-        .stroke(egui::Stroke::new(1.0, BORDER))
+        .fill(palette().panel_fill)
+        .stroke(egui::Stroke::new(1.0, palette().border))
         .corner_radius(egui::CornerRadius::same(u8::MAX))
         .inner_margin(egui::Margin::symmetric(16, 8))
         .show(ui, |ui| {
             ui.multiply_opacity(content);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                let tint = if notice.warn { WARN } else { ACCENT };
+                let tint = if notice.warn {
+                    palette().warn
+                } else {
+                    palette().accent
+                };
                 ui.label(egui::RichText::new(notice.icon).color(tint).size(ROW_FONT));
                 for part in &notice.parts {
                     match part {
                         Part::Text(text) => {
-                            let text = egui::RichText::new(text).color(INK).size(ROW_FONT);
+                            let text = egui::RichText::new(text)
+                                .color(palette().ink)
+                                .size(ROW_FONT);
                             ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
                         }
                         Part::Key(key) => super::keys::key_cap(ui, key, ROW_FONT),

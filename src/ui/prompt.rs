@@ -4,7 +4,7 @@
 //! page dimmed behind it.
 
 use super::keys;
-use super::theme::{self, ACCENT, DIM, SCRIM};
+use super::theme::{self, palette};
 use super::OskCaret;
 use crate::command::{AppCommand, PromptAction};
 use crate::config::FaceLabels;
@@ -32,7 +32,7 @@ pub(super) fn add_prompt(
         egui::Order::Foreground,
         egui::Id::new("prompt_dim"),
     ))
-    .rect_filled(screen, 0.0, SCRIM);
+    .rect_filled(screen, 0.0, palette().scrim);
 
     // Dialog text is cloned out first so the prompt can hand out its edit
     // buffer mutably while rendering (the select arm only needs reads).
@@ -78,7 +78,7 @@ fn add_select(
     face: FaceLabels,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     let multiple = select.allow_select_multiple();
     let row_w = (screen.width() - 96.0).min(448.0);
     match multiple {
@@ -133,7 +133,7 @@ fn add_select(
             [90.0, ROW_H],
             egui::Button::selectable(
                 ok_slot == selected_slot,
-                egui::RichText::new("OK").color(egui::Color32::WHITE),
+                egui::RichText::new("OK").color(palette().text),
             ),
         );
         if ok.clicked() {
@@ -173,16 +173,15 @@ fn add_option_row(
     let Some(this) = slot else {
         ui.add_sized(
             [row_w, ROW_H],
-            egui::Label::new(egui::RichText::new(label).color(egui::Color32::from_gray(0x66)))
-                .truncate(),
+            egui::Label::new(egui::RichText::new(label).color(palette().disabled)).truncate(),
         );
         return;
     };
 
     let text = if chosen {
-        egui::RichText::new(label).color(ACCENT).strong()
+        egui::RichText::new(label).color(palette().accent).strong()
     } else {
-        egui::RichText::new(label).color(egui::Color32::WHITE)
+        egui::RichText::new(label).color(palette().text)
     };
     let row = ui.add_sized(
         [row_w, ROW_H],
@@ -206,7 +205,7 @@ fn add_dialog(
     osk_caret: Option<OskCaret>,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     // Web content can't draw browser chrome — the header marks the message as
     // coming from the page so it can't impersonate the UI.
     ui.label(egui::RichText::new("The page says:").color(dim));
@@ -214,7 +213,7 @@ fn add_dialog(
     egui::ScrollArea::vertical()
         .max_height(screen.height() * 0.5)
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(message).color(egui::Color32::WHITE));
+            ui.label(egui::RichText::new(message).color(palette().text));
         });
     ui.add_space(8.0);
 
@@ -242,7 +241,7 @@ fn add_dialog(
             [90.0, ROW_H],
             egui::Button::selectable(
                 selected == 0,
-                egui::RichText::new("OK").color(egui::Color32::WHITE),
+                egui::RichText::new("OK").color(palette().text),
             ),
         );
         if ok.clicked() {
@@ -253,7 +252,7 @@ fn add_dialog(
                 [90.0, ROW_H],
                 egui::Button::selectable(
                     selected == 1,
-                    egui::RichText::new("Cancel").color(egui::Color32::WHITE),
+                    egui::RichText::new("Cancel").color(palette().text),
                 ),
             );
             if cancel.clicked() {

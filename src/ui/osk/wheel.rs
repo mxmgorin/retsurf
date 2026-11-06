@@ -6,7 +6,7 @@ use super::osk_area;
 use crate::config::{Face, PadLayout};
 use crate::overlay::osk::wheel::{FACES, WHEEL_SECTORS};
 use crate::overlay::osk::Osk;
-use crate::ui::theme::ACCENT;
+use crate::ui::theme::palette;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 use std::f32::consts::TAU;
@@ -241,14 +241,14 @@ pub(super) fn add_wheel(
 
         // Triggers outside, shoulders inside, each on its own side of the pad.
         let shift = match osk.shift() || osk.caps {
-            true => ACCENT,
+            true => palette().accent,
             false => TAB_FILL,
         };
         paint_tab(painter, centre, -TRIGGER_TAB, ("L2", "SHIFT"), shift);
         paint_tab(painter, centre, -SHOULDER_TAB, ("L1", "DEL"), TAB_FILL);
         paint_tab(painter, centre, SHOULDER_TAB, ("R1", "SPACE"), TAB_FILL);
         let digits = match osk.digits() {
-            true => ACCENT,
+            true => palette().accent,
             false => TAB_FILL,
         };
         paint_tab(painter, centre, TRIGGER_TAB, ("R2", "NUM"), digits);

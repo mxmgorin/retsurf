@@ -4,7 +4,7 @@
 //! hint rows built from them share one measure, so a row is laid out before it
 //! is drawn.
 
-use super::theme::{BG, DIM};
+use super::theme::palette;
 use egui_sdl2::egui;
 
 /// Type size of a hint row.
@@ -39,7 +39,7 @@ pub(super) fn key_cap(ui: &mut egui::Ui, key: &str, size: f32) {
         egui::Align2::CENTER_CENTER,
         key,
         egui::FontId::proportional(size * CAP_FONT),
-        BG,
+        palette().bg,
     );
 }
 
@@ -129,7 +129,9 @@ fn add_hint(ui: &mut egui::Ui, (keys, action): &Hint) {
     for key in *keys {
         key_cap(ui, key, HINT_FONT);
     }
-    let text = egui::RichText::new(*action).color(DIM).size(HINT_FONT);
+    let text = egui::RichText::new(*action)
+        .color(palette().dim)
+        .size(HINT_FONT);
     ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
 }
 
@@ -144,5 +146,9 @@ fn hint_width(ui: &egui::Ui, (keys, action): &Hint) -> f32 {
 
 fn text_width(ui: &egui::Ui, text: &str, size: f32) -> f32 {
     let font = egui::FontId::proportional(size);
-    ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, DIM).size().x)
+    ui.fonts_mut(|f| {
+        f.layout_no_wrap(text.to_string(), font, palette().dim)
+            .size()
+            .x
+    })
 }

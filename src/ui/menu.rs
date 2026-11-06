@@ -5,7 +5,7 @@
 use super::favicon::PageIcons;
 use super::keys;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
-use super::theme::{self, ACCENT, DIM, ROW_FONT, WARN};
+use super::theme::{self, palette, ROW_FONT};
 use crate::command::{AppCommand, MenuAction};
 use crate::config::FaceLabels;
 use crate::data::history;
@@ -22,7 +22,7 @@ const DEL_W: f32 = 26.0;
 
 /// A row's leading delete button, accent on the selected row.
 fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui::Response {
-    let color = if selected { ACCENT } else { dim };
+    let color = if selected { palette().accent } else { dim };
     ui.add_sized(
         [DEL_W, ROW_H],
         egui::Button::new(theme::icon(bold::X).color(color)).corner_radius(ROW_RADIUS),
@@ -33,7 +33,7 @@ fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui:
 /// trailing buttons line up across rows.
 fn bookmark_button(ui: &mut egui::Ui, bookmarked: bool, dim: egui::Color32) -> egui::Response {
     let star = if bookmarked {
-        theme::icon_fill(fill::STAR).color(ACCENT)
+        theme::icon_fill(fill::STAR).color(palette().accent)
     } else {
         theme::icon(bold::STAR).color(dim)
     };
@@ -94,10 +94,10 @@ fn url_atoms(
     }
     let brand = egui::RichText::new(brand_text)
         .size(ROW_FONT)
-        .color(egui::Color32::WHITE);
+        .color(palette().text);
     let tail = egui::RichText::new(elide_middle(ui, tail, &font, budget))
         .size(ROW_FONT)
-        .color(DIM);
+        .color(palette().dim);
     let mut atoms = egui::Atoms::new((brand, tail.atom_shrink(true), egui::Atom::grow()));
     if let Some(icon) = icon {
         atoms.push_left(icon);
@@ -108,7 +108,7 @@ fn url_atoms(
 /// Rendered width of `text` in `font` (logical px).
 fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
     ui.ctx().fonts_mut(|f| {
-        f.layout_no_wrap(text.to_owned(), font.clone(), DIM)
+        f.layout_no_wrap(text.to_owned(), font.clone(), palette().dim)
             .size()
             .x
     })
@@ -157,11 +157,11 @@ fn clear_row(
     commands: &mut Vec<AppCommand>,
 ) {
     let text = if armed {
-        egui::RichText::new(format!("{label} — press again to confirm")).color(WARN)
+        egui::RichText::new(format!("{label} — press again to confirm")).color(palette().warn)
     } else if enabled {
-        egui::RichText::new(label).color(DIM)
+        egui::RichText::new(label).color(palette().dim)
     } else {
-        egui::RichText::new(label).color(egui::Color32::from_gray(0x66))
+        egui::RichText::new(label).color(palette().disabled)
     };
     let resp = row_button(ui, width, selected, text);
     if selected {
@@ -272,7 +272,7 @@ fn add_tabs_section(
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     let selected = menu.tab_selected();
     // Title width, less the two trailing buttons and the spacing before each.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
@@ -284,7 +284,7 @@ fn add_tabs_section(
             ui,
             screen.width() - SIDES,
             selected == 0,
-            egui::RichText::new("+ New tab").color(egui::Color32::WHITE),
+            egui::RichText::new("+ New tab").color(palette().text),
         );
         if selected == 0 {
             center_selected(&new_tab);
@@ -300,9 +300,9 @@ fn add_tabs_section(
                 // selectable highlight: the two must read apart on one row.
                 let text = egui::RichText::new(&tab.title).size(ROW_FONT);
                 let text = if tab.active {
-                    text.color(ACCENT).strong()
+                    text.color(palette().accent).strong()
                 } else {
-                    text.color(egui::Color32::WHITE)
+                    text.color(palette().text)
                 };
                 let mut atoms = egui::Atoms::new((text.atom_shrink(true), egui::Atom::grow()));
                 if let Some(icon) = site_icon(icons, &tab.url) {
@@ -341,7 +341,7 @@ fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
         Some(icon) => egui::Image::new(icon.row).fit_to_exact_size(side).into(),
         None => egui::RichText::new(bold::GLOBE)
             .size(ROW_FONT)
-            .color(DIM)
+            .color(palette().dim)
             .into(),
     })
 }
@@ -355,7 +355,7 @@ fn add_bookmarks_section(
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     let bookmarks = &menu.bookmarks;
     if bookmarks.all().is_empty() {
         ui.label(
@@ -404,7 +404,7 @@ fn add_downloads_section(
     menu: &Menu,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     let downloads = &menu.downloads;
     if downloads.items().is_empty() {
         ui.label(egui::RichText::new("No downloads yet.").color(dim));
@@ -431,7 +431,7 @@ fn add_downloads_section(
                     ui,
                     row_w,
                     selected,
-                    egui::RichText::new(&item.filename).color(egui::Color32::WHITE),
+                    egui::RichText::new(&item.filename).color(palette().text),
                 );
                 if selected {
                     center_selected(&resp);
@@ -462,7 +462,7 @@ fn add_history_section(
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
-    let dim = DIM;
+    let dim = palette().dim;
     let hist = menu.history();
     if hist.entries().is_empty() {
         ui.label(egui::RichText::new("No history yet.").color(dim));

@@ -4,7 +4,7 @@
 //! the live [`UpdateState`], from the release summary through download and install
 //! to the quit that applies it.
 
-use super::theme::{self, ACCENT, DIM, SCRIM, WARN};
+use super::theme::{self, palette};
 use crate::command::{AppCommand, UpdateNoticeAction};
 use crate::data::downloads::{format_progress, format_size};
 use crate::overlay::update_notice::{choices, Choice, UpdateNotice};
@@ -48,7 +48,7 @@ pub(super) fn add_update_notice(
     ctx.move_to_top(notice_layer());
     let screen = ctx.content_rect();
     ctx.layer_painter(notice_layer())
-        .rect_filled(screen, 0.0, SCRIM);
+        .rect_filled(screen, 0.0, palette().scrim);
     let width = (screen.width() - 2.0 * SCREEN_MARGIN).min(CARD_W);
 
     egui::Area::new(egui::Id::new("update_notice"))
@@ -73,17 +73,17 @@ fn add_header(ui: &mut egui::Ui, version: &str, state: &UpdateState) {
         ui.label(
             theme::icon(bold::ARROW_CIRCLE_UP)
                 .size(BADGE_SIZE)
-                .color(ACCENT),
+                .color(palette().accent),
         );
         ui.vertical(|ui| {
             ui.label(
                 egui::RichText::new(format!("retsurf {}", display_version(version)))
                     .size(TITLE_FONT)
-                    .color(egui::Color32::WHITE)
+                    .color(palette().text)
                     .strong(),
             );
             let current = display_version(env!("RETSURF_VERSION"));
-            ui.label(egui::RichText::new(format!("You have {current}")).color(DIM));
+            ui.label(egui::RichText::new(format!("You have {current}")).color(palette().dim));
         });
         if let UpdateState::Available {
             offer: Offer::Install { size, .. },
@@ -91,7 +91,7 @@ fn add_header(ui: &mut egui::Ui, version: &str, state: &UpdateState) {
         } = state
         {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                ui.label(egui::RichText::new(format_size(*size)).color(DIM));
+                ui.label(egui::RichText::new(format_size(*size)).color(palette().dim));
             });
         }
     });
@@ -120,19 +120,19 @@ fn add_status(ui: &mut egui::Ui, state: &UpdateState) {
             ui.add(egui::ProgressBar::new(fraction).text(format_progress(*received, *total)));
         }
         UpdateState::Checking => {
-            ui.label(egui::RichText::new("Checking for updates...").color(DIM));
+            ui.label(egui::RichText::new("Checking for updates...").color(palette().dim));
         }
         UpdateState::Installing => {
-            ui.label(egui::RichText::new("Installing...").color(DIM));
+            ui.label(egui::RichText::new("Installing...").color(palette().dim));
         }
         UpdateState::Installed { .. } => {
-            ui.label(egui::RichText::new("Installed. Quit to apply.").color(egui::Color32::WHITE));
+            ui.label(egui::RichText::new("Installed. Quit to apply.").color(palette().text));
         }
         UpdateState::Error(e) => {
-            ui.label(egui::RichText::new(format!("Update failed: {e}")).color(WARN));
+            ui.label(egui::RichText::new(format!("Update failed: {e}")).color(palette().warn));
         }
         UpdateState::UpToDate { .. } => {
-            ui.label(egui::RichText::new("Up to date").color(DIM));
+            ui.label(egui::RichText::new("Up to date").color(palette().dim));
         }
         UpdateState::Idle => {}
     }
@@ -150,7 +150,7 @@ fn add_buttons(
         for &choice in choices(state).iter().rev() {
             let button = egui::Button::selectable(
                 selected == choice,
-                egui::RichText::new(label(choice)).color(egui::Color32::WHITE),
+                egui::RichText::new(label(choice)).color(palette().text),
             );
             if ui.add_sized(BUTTON, button).clicked() {
                 commands.push(AppCommand::UpdateNotice(UpdateNoticeAction::Choose(choice)));

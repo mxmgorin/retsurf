@@ -57,6 +57,7 @@ async_clipboard = false       # Async Clipboard API              full
 permissions = false           # Permissions API                  full
 
 [interface]
+theme = "night"            # "night" or "oled" (black, for OLED screens)
 scale = 1.0                # UI size, 0.6 to 1.6
 toolbar_position = "top"   # "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, show on scroll up

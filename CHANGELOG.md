@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Site settings: a bookmark keeps its own user agent, page theme, zoom, ad blocker, data saving, experimental and Game Mode settings, applied while its site is shown and changed from Quick Access
 - JS engine presets (auto, fast, lean, safe and your own `[js_presets]`) for the JIT and JS heap, global or per site; Quick Access reopens the page to apply one
 - Android: flick scrolling, pinch zoom, and touch for sites and web games
+- Interface themes (`[interface] theme`): Night and OLED
 
 ### Changed
 

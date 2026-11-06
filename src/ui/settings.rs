@@ -6,7 +6,7 @@
 use super::keys;
 use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
 use super::svg::SvgTexture;
-use super::theme::{self, ACCENT, DIM, WARN};
+use super::theme::{self, palette};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
@@ -44,7 +44,7 @@ fn step_button(
     selected: bool,
     dim: egui::Color32,
 ) -> egui::Response {
-    let color = if selected { ACCENT } else { dim };
+    let color = if selected { palette().accent } else { dim };
     ui.add_sized(
         [STEP_W, panel::ROW_H],
         egui::Button::new(theme::icon(glyph).color(color)).corner_radius(ROW_RADIUS),
@@ -172,7 +172,7 @@ fn add_update(
     {
         ui.label(
             egui::RichText::new(notes_preview(body))
-                .color(DIM)
+                .color(palette().dim)
                 .size(12.0),
         );
     }
@@ -199,7 +199,12 @@ fn add_update(
 /// A titled block on the About tab: the space above it and its accent title.
 fn heading(ui: &mut egui::Ui, title: &str) {
     ui.add_space(10.0);
-    ui.label(egui::RichText::new(title).color(ACCENT).strong().size(13.0));
+    ui.label(
+        egui::RichText::new(title)
+            .color(palette().accent)
+            .strong()
+            .size(13.0),
+    );
 }
 
 /// What the About tab draws besides its compiled-in facts.
@@ -237,7 +242,7 @@ fn add_about(
             ui.vertical(|ui| {
                 ui.label(
                     egui::RichText::new(format!("retsurf {}", info.version))
-                        .color(egui::Color32::WHITE)
+                        .color(palette().text)
                         .strong()
                         .size(20.0),
                 );
@@ -258,12 +263,7 @@ fn add_about(
         heading(ui, "Data folder");
         let folder = crate::overlay::settings::data_folder();
         ui.add(
-            egui::Label::new(
-                egui::RichText::new(folder)
-                    .color(egui::Color32::WHITE)
-                    .size(13.0),
-            )
-            .wrap(),
+            egui::Label::new(egui::RichText::new(folder).color(palette().text).size(13.0)).wrap(),
         );
 
         // About focus rows `update_rows..`; indices follow `AboutInfo::focusable`.
@@ -356,7 +356,12 @@ fn add_controls(
             let (label, value) = match row {
                 Row::Group(name) => {
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new(*name).color(ACCENT).strong().size(13.0));
+                    ui.label(
+                        egui::RichText::new(*name)
+                            .color(palette().accent)
+                            .strong()
+                            .size(13.0),
+                    );
                     continue;
                 }
                 Row::Command {
@@ -436,7 +441,7 @@ pub(super) fn add_settings(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let dim = DIM;
+    let dim = palette().dim;
     let closed = panel::panel(ctx, "settings", screen, |ui| {
         let active = settings.section();
         let clicked = panel::section_bar(
@@ -477,7 +482,7 @@ pub(super) fn add_settings(
             keys::hint_row(ui, &hints);
         }
         if let Some(note) = settings.controls_note() {
-            ui.label(egui::RichText::new(note).color(WARN));
+            ui.label(egui::RichText::new(note).color(palette().warn));
         }
         ui.add_space(8.0);
 
@@ -514,7 +519,7 @@ pub(super) fn add_settings(
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(field.cat)
-                            .color(ACCENT)
+                            .color(palette().accent)
                             .strong()
                             .size(13.0),
                     );

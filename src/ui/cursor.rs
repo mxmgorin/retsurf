@@ -2,7 +2,7 @@
 //! moves it, the render pass paints it (or the scroll-mode indicator) via
 //! [`paint_cursor`].
 
-use super::theme::{ACCENT, DEEP_TEAL};
+use super::theme::palette;
 use super::AppUi;
 use crate::platform::window::AppWindow;
 use egui_sdl2::egui;
@@ -138,8 +138,8 @@ pub(super) fn paint_cursor(
         // Same linger/auto-hide as the cursor: shown while scrolling, then fades.
         add_scroll_indicator(&painter, pos);
     } else {
-        painter.circle_filled(pos, CURSOR_RADIUS, DEEP_TEAL);
-        painter.circle_filled(pos, CURSOR_RADIUS - CURSOR_RIM, ACCENT);
+        painter.circle_filled(pos, CURSOR_RADIUS, palette().deep_teal);
+        painter.circle_filled(pos, CURSOR_RADIUS - CURSOR_RIM, palette().accent);
         painter.circle_filled(pos, CURSOR_DOT, CURSOR_DOT_FILL);
     }
 }
@@ -147,8 +147,8 @@ pub(super) fn paint_cursor(
 /// The D-pad scroll-mode indicator at the parked cursor position: a center dot
 /// with up/down arrowheads, like a browser's middle-click autoscroll marker.
 fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
-    let fill = ACCENT;
-    let stroke = egui::Stroke::new(CURSOR_RIM, DEEP_TEAL);
+    let fill = palette().accent;
+    let stroke = egui::Stroke::new(CURSOR_RIM, palette().deep_teal);
     painter.circle_filled(pos, 2.5, fill);
     painter.circle_stroke(pos, 2.5, stroke);
     for dir in [-1.0f32, 1.0] {
@@ -166,8 +166,8 @@ fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
 /// Edge-scroll arrows: one arrowhead per scrolling axis, pointing the way the
 /// page moves. Sized to the circle's extent, which the edge clamp keeps on screen.
 fn add_edge_arrows(painter: &egui::Painter, pos: egui::Pos2, (dx, dy): (i8, i8)) {
-    let fill = ACCENT;
-    let stroke = egui::Stroke::new(CURSOR_RIM, DEEP_TEAL);
+    let fill = palette().accent;
+    let stroke = egui::Stroke::new(CURSOR_RIM, palette().deep_teal);
     let reach = CURSOR_EXTENT - CURSOR_RIM;
     for dir in [egui::vec2(dx as f32, 0.0), egui::vec2(0.0, dy as f32)] {
         if dir == egui::Vec2::ZERO {

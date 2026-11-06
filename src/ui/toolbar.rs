@@ -66,7 +66,11 @@ fn new_text_edit<'a>(text: &'a mut String, id: &str) -> egui::TextEdit<'a> {
 
 /// A frameless button inside the address field, its glyph muted unless `lit`.
 fn add_field_button(ui: &mut egui::Ui, glyph: egui::RichText, lit: bool) -> egui::Response {
-    let color = if lit { theme::ACCENT } else { theme::MUTED };
+    let color = if lit {
+        theme::palette().accent
+    } else {
+        theme::palette().muted
+    };
     let button = egui::Button::new(glyph.size(FIELD_ICON).color(color))
         .frame(false)
         .min_size(Vec2 {
@@ -80,10 +84,12 @@ fn add_field_button(ui: &mut egui::Ui, glyph: egui::RichText, lit: bool) -> egui
 /// (whose field is a search), else what the loaded page is.
 fn site_glyph(page_url: &str, editing: bool) -> (&'static str, egui::Color32) {
     match page_url {
-        url if editing || url == crate::browser::HOME_URL => (bold::MAGNIFYING_GLASS, theme::MUTED),
-        url if url.starts_with("https:") => (bold::LOCK_SIMPLE, theme::MUTED),
-        url if url.starts_with("http:") => (bold::LOCK_SIMPLE_OPEN, theme::WARN),
-        _ => (bold::GLOBE_SIMPLE, theme::MUTED),
+        url if editing || url == crate::browser::HOME_URL => {
+            (bold::MAGNIFYING_GLASS, theme::palette().muted)
+        }
+        url if url.starts_with("https:") => (bold::LOCK_SIMPLE, theme::palette().muted),
+        url if url.starts_with("http:") => (bold::LOCK_SIMPLE_OPEN, theme::palette().warn),
+        _ => (bold::GLOBE_SIMPLE, theme::palette().muted),
     }
 }
 
@@ -129,12 +135,12 @@ fn paint_display_address(ui: &egui::Ui, rect: egui::Rect, location: &str) {
         ..Default::default()
     };
     let mut job = egui::text::LayoutJob::default();
-    job.append(&host, 0.0, format(theme::INK));
-    job.append(&rest, 0.0, format(theme::MUTED));
+    job.append(&host, 0.0, format(theme::palette().ink));
+    job.append(&rest, 0.0, format(theme::palette().muted));
     job.wrap = egui::text::TextWrapping::truncate_at_width(rect.width());
     let galley = ui.painter().layout_job(job);
     let at = egui::pos2(rect.left(), rect.center().y - galley.size().y / 2.0);
-    ui.painter().galley(at, galley, theme::INK);
+    ui.painter().galley(at, galley, theme::palette().ink);
 }
 
 /// The address field: a pill with the site glyph, the address, and its own
@@ -199,7 +205,7 @@ fn add_address_field(
                         super::park_caret(ui.ctx(), id, pos, state.location.chars().count());
                     }
                     let char_count = state.location.chars().count();
-                    let hint = egui::RichText::new(FIELD_HINT).color(theme::MUTED);
+                    let hint = egui::RichText::new(FIELD_HINT).color(theme::palette().muted);
                     let mut edit = new_text_edit(&mut state.location, super::ids::LOCATION)
                         .frame(egui::Frame::new())
                         .hint_text(hint);
@@ -401,7 +407,7 @@ fn paint_loading_edge(
         },
     );
     ctx.layer_painter(layer)
-        .rect_filled(edge, 0.0, theme::ACCENT);
+        .rect_filled(edge, 0.0, theme::palette().accent);
 }
 
 /// Draw the toolbar as a space-reserving panel anchored to `position`'s edge

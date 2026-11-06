@@ -65,6 +65,11 @@ use std::time::{Duration, Instant};
 /// How often a fading toast is redrawn.
 const FADE_FRAME: Duration = Duration::from_millis(33);
 
+/// Pick the palette before any context is styled with it.
+pub fn set_theme(ui_theme: crate::config::UiTheme) {
+    theme::set(ui_theme);
+}
+
 /// Style a freshly built [`egui::Context`]: the accent theme plus a launcher's
 /// pinned zoom. The fit to the panel needs a frame's measurements and arrives
 /// with `sync_scale` (see [`scale`]).
@@ -708,6 +713,12 @@ impl AppUi {
     /// `[interface] button_hints`, applied live.
     pub fn set_button_hints(&mut self, on: bool) {
         self.button_hints = on;
+    }
+
+    /// `[interface] theme`, applied live; the brand images redraw in it on their next use.
+    pub fn set_ui_theme(&mut self, ui_theme: crate::config::UiTheme) {
+        theme::set(ui_theme);
+        theme::apply_visuals(&self.egui_ctx);
     }
 
     /// `[interface] page_icons`, applied live; off frees every icon texture.

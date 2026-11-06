@@ -129,6 +129,8 @@ impl App {
         config: AppConfig,
         local_site: Option<LocalSite>,
     ) -> Result<Self, String> {
+        // Before the window: styling its first context reads the palette.
+        crate::ui::set_theme(config.interface.theme);
         log::info!("init: creating window");
         let mut window = AppWindow::new(
             sdl,

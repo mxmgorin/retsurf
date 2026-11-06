@@ -3,7 +3,7 @@
 //! are tagged with a marker colour, tessellated here, and recoloured by height.
 //! The start page and the splash draw it; the layout needs its size first.
 
-use super::theme::{lerp_color, ACCENT, INK, SURF_WARM};
+use super::theme::{lerp_color, palette};
 use egui_sdl2::egui;
 
 /// Wordmark type size (logical px); the wave band and the reserved height
@@ -36,10 +36,10 @@ fn wordmark_job(size: f32) -> egui::text::LayoutJob {
         extra_letter_spacing: size * WORDMARK_TRACKING,
         ..Default::default()
     };
-    job.append("ret", 0.0, fmt(INK));
+    job.append("ret", 0.0, fmt(palette().ink));
     // epaint skips extra_letter_spacing on a section's first glyph, so the
     // ret/surf joint needs it back. ACCENT is a marker recolored below.
-    job.append("surf", size * WORDMARK_TRACKING, fmt(ACCENT));
+    job.append("surf", size * WORDMARK_TRACKING, fmt(palette().accent));
     job
 }
 
@@ -71,7 +71,7 @@ pub(super) fn add_wordmark(ui: &mut egui::Ui) {
         .collect();
     ui.painter().add(egui::Shape::line(
         pts,
-        egui::Stroke::new(WAVE_STROKE, ACCENT),
+        egui::Stroke::new(WAVE_STROKE, palette().accent),
     ));
 }
 
@@ -91,8 +91,9 @@ pub(super) fn paint_wordmark_text(ui: &egui::Ui, pos: egui::Pos2, size: f32) {
     // part, warming to coral — the stops of `_surf_gradient` in the brand SVGs.
     let ppp = ui.ctx().pixels_per_point();
     let tex = ui.ctx().fonts(|f| f.font_image_size());
+    let p = palette();
     let mut mesh = egui::epaint::Mesh::default();
-    let shape = egui::epaint::TextShape::new(pos, galley, INK);
+    let shape = egui::epaint::TextShape::new(pos, galley, p.ink);
     let opts = egui::epaint::TessellationOptions::default();
     egui::epaint::Tessellator::new(ppp, opts, tex, Vec::new()).tessellate_text(&shape, &mut mesh);
 
@@ -101,7 +102,7 @@ pub(super) fn paint_wordmark_text(ui: &egui::Ui, pos: egui::Pos2, size: f32) {
     let ys: Vec<f32> = mesh
         .vertices
         .iter()
-        .filter(|v| v.color == ACCENT)
+        .filter(|v| v.color == p.accent)
         .map(|v| v.pos.y)
         .collect();
     let bot = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
@@ -112,10 +113,10 @@ pub(super) fn paint_wordmark_text(ui: &egui::Ui, pos: egui::Pos2, size: f32) {
         .map(|g| g.iter().copied().fold(f32::INFINITY, f32::min))
         .fold(f32::NEG_INFINITY, f32::max);
     let span = (bot - x_top).max(1.0);
-    for v in mesh.vertices.iter_mut().filter(|v| v.color == ACCENT) {
+    for v in mesh.vertices.iter_mut().filter(|v| v.color == p.accent) {
         let frac = ((bot - v.pos.y) / span).clamp(0.0, 1.0); // 0 baseline, 1 x-height+
         let t = ((frac - WARM_FROM) / (1.0 - WARM_FROM)).clamp(0.0, 1.0);
-        v.color = lerp_color(ACCENT, SURF_WARM, t);
+        v.color = lerp_color(p.accent, p.surf_warm, t);
     }
     ui.painter().add(egui::Shape::mesh(mesh));
 }

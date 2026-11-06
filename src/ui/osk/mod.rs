@@ -1,7 +1,7 @@
 //! Rendering of the on-screen keyboard (state and input handling live in
 //! [`crate::overlay::osk`]).
 
-use super::theme::{ACCENT, SCRIM};
+use super::theme::palette;
 use crate::command::{AppCommand, InputCommand};
 use crate::config::PadLayout;
 use crate::overlay::osk::{Key, Osk, OskCommand};
@@ -134,7 +134,7 @@ pub(super) fn add_osk(
     // A picker has to read as a question, not as a keyboard that happens to be up.
     if osk.picking() {
         ctx.layer_painter(osk_layer())
-            .rect_filled(ctx.content_rect(), 0.0, SCRIM);
+            .rect_filled(ctx.content_rect(), 0.0, palette().scrim);
     }
 
     let fit = fit_scale(ctx, grid_width(osk, &key_width, KEY_GAP));
@@ -156,11 +156,11 @@ pub(super) fn add_osk(
                             || (*key == Key::Shift && shift)
                             || (*key == Key::Caps && osk.caps);
                         let size = egui::vec2(key_width(row.len(), key), KEY_H * fit);
-                        let fill = if active { ACCENT } else { KEY_FILL };
+                        let fill = if active { palette().accent } else { KEY_FILL };
                         let button = egui::Button::new(
                             egui::RichText::new(osk.key_label(*key))
                                 .size(label_font)
-                                .color(egui::Color32::WHITE),
+                                .color(palette().text),
                         )
                         .fill(fill)
                         .corner_radius(KEY_RADIUS * fit)
@@ -211,7 +211,7 @@ pub(super) fn add_osk(
             egui::Align2::CENTER_BOTTOM,
             "Pick a key",
             egui::FontId::proportional(CAPTION_FONT),
-            ACCENT,
+            palette().accent,
         );
     }
     area.response.rect

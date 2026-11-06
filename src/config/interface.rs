@@ -9,6 +9,8 @@ pub struct InterfaceConfig {
     /// UI zoom over the scale the panel's own size asks for, so one setting means
     /// the same thing on a handheld and on a desktop window. The page follows it.
     pub scale: f32,
+    /// The chrome's colors: the start page, the toolbar and every overlay.
+    pub theme: UiTheme,
     /// How long the virtual cursor stays visible after the last movement, in ms.
     /// It hides when idle (nothing to hover) but lingers so you can see where it
     /// landed before clicking.
@@ -31,11 +33,31 @@ impl Default for InterfaceConfig {
     fn default() -> Self {
         Self {
             scale: 1.0,
+            theme: UiTheme::Night,
             cursor_linger_ms: 1500,
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
             page_icons: true,
             button_hints: true,
+        }
+    }
+}
+
+pub use ui_theme::UiTheme;
+
+// Own modules: a file holds one `token_enum!`, whose tests take a fixed name.
+mod ui_theme {
+    use crate::config::token_enum::token_enum;
+
+    token_enum! {
+        /// The chrome's palette. Serializes to `"night"` / `"oled"` in TOML; an unknown
+        /// value falls back to `Night`.
+        pub enum UiTheme {
+            default Night;
+            /// The brand's dark slate (the default).
+            Night => "night", "Night",
+            /// Black under everything, for OLED screens.
+            Oled => "oled", "OLED",
         }
     }
 }

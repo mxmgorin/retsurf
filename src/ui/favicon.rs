@@ -4,7 +4,7 @@
 //! A dark icon also gets a copy baked onto a light plate, for surfaces that
 //! cannot paint one behind it.
 
-use super::theme::INK;
+use super::theme::palette;
 use crate::browser::Favicon;
 use crate::data::page_icons;
 use egui_sdl2::egui;
@@ -148,7 +148,7 @@ fn on_plate(icon: &Favicon) -> egui::ColorImage {
             }
             let inside = (ox..ox + icon.width).contains(&x) && (oy..oy + icon.height).contains(&y);
             if !inside {
-                return INK;
+                return palette().ink;
             }
             let at = ((y - oy) * icon.width + (x - ox)) * 4;
             let p = &icon.rgba[at..at + 4];
@@ -157,9 +157,9 @@ fn on_plate(icon: &Favicon) -> egui::ColorImage {
                 ((u16::from(c) * a + u16::from(under) * (255 - a) + 127) / 255) as u8
             };
             egui::Color32::from_rgb(
-                blend(p[0], INK.r()),
-                blend(p[1], INK.g()),
-                blend(p[2], INK.b()),
+                blend(p[0], palette().ink.r()),
+                blend(p[1], palette().ink.g()),
+                blend(p[2], palette().ink.b()),
             )
         })
         .collect();

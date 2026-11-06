@@ -3,7 +3,7 @@
 //! `Ui` rather than an area, whose first show is an invisible sizing pass.
 
 use super::brand::{self, Horizon};
-use super::theme::BG;
+use super::theme::palette;
 use super::wordmark;
 use egui_sdl2::egui;
 
@@ -23,7 +23,7 @@ pub fn add_splash(ctx: &egui::Context) {
         egui::Id::new("splash"),
         egui::UiBuilder::new().max_rect(screen),
     );
-    ui.painter().rect_filled(screen, 0.0, BG);
+    ui.painter().rect_filled(screen, 0.0, palette().bg);
     let sun = Horizon {
         radius: screen.width().min(screen.height()) * SUN_SHARE,
         sink: 0.3,
