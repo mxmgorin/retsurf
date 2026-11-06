@@ -214,7 +214,7 @@ url = "https://en.wikipedia.org"
 order = 1                                # position; lower first, unset after the rest
 tags = ["reference"]                     # groups for the start page's filter
 launch = "browser"                       # "browser", "app" (no toolbar) or "game" (Game Mode too)
-reader = false                           # open in reader view; not for a game
+reader = false                           # open the site's articles in reader view; not for a game
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
 
 [browser]                                # the site's own settings, see below
@@ -250,8 +250,9 @@ While they apply, Quick Access lists the site's rows first under the bookmark's 
 | Row | Effect |
 |---|---|
 | **Launch as** | site, app or game; the open page switches at once |
+| **Reader view** | the site's articles open in reader view, the open page included |
 | these settings | a change here or in Settings is written to the bookmark, not to `config.toml` |
-| **Reset site settings** | drops the overrides |
+| **Reset site settings** | drops the overrides and turns Reader view off |
 
 On the start page L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.

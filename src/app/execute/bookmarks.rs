@@ -1,7 +1,8 @@
 //! Bookmarks in the app: opening one the way it asks, its options (the rows
-//! Quick Access leads with over the start page, and how it launches over its
-//! site's pages, see [`crate::overlay::quick_access`]), and the setting
-//! overrides of the one whose site the active tab is on.
+//! Quick Access leads with over the start page, and how it launches and its
+//! reader view over its site's pages, see [`crate::overlay::quick_access`]),
+//! and the setting overrides of the one whose site the active tab is on. A
+//! site with reader view on enters it on each page that reads as an article.
 //!
 //! A launched bookmark is tab state ([`crate::browser::AppBrowser::launched`])
 //! and is that tab's site wherever it navigates; any other tab takes the
@@ -53,7 +54,6 @@ impl App {
             }
             false => self.open_url(url, out),
         }
-        self.arm_bookmark_reader(at);
     }
 
     /// Reopen the shown page in a fresh webview, so it runs the JS preset of
@@ -93,15 +93,12 @@ impl App {
         Some(url)
     }
 
-    /// Arm reader view on the active tab's load, when the bookmark at `at`
-    /// opens in it.
-    pub(in crate::app) fn arm_bookmark_reader(&mut self, at: usize) {
-        let Some(bookmark) = self.ui.menu.bookmarks.all().get(at) else {
-            return;
-        };
-        if bookmark.reader && bookmark.launch != Launch::Game {
-            self.browser.arm_reader_on_load();
-        }
+    /// Whether the site shown opens its articles in reader view.
+    pub(in crate::app) fn site_reader(&self) -> bool {
+        self.applied_site
+            .as_deref()
+            .and_then(|id| self.ui.menu.bookmarks.get(id))
+            .is_some_and(|b| b.reader)
     }
 
     /// The bookmark whose settings apply to the active tab at `url`: the one
@@ -179,8 +176,15 @@ impl App {
             return;
         };
         self.ui.menu.bookmarks.set_settings(&id, toml::Table::new());
+        if let Some(at) = self.ui.menu.bookmarks.position(&id) {
+            self.ui.menu.bookmarks.set_reader(at, false);
+        }
         self.applied_site = None;
         self.switch_site(Some(id), true, out);
+        // A reload for the settings already leaves reader view.
+        if !self.browser.state().is_loading() {
+            self.browser.set_reader(false);
+        }
         self.ui.toast(Notice::new(
             bold::ARROW_COUNTER_CLOCKWISE,
             "Site settings reset",
@@ -335,6 +339,9 @@ impl App {
             OptionsRow::Reader => {
                 let reader = !bookmark.reader;
                 self.ui.menu.bookmarks.set_reader(at, reader);
+                if !on_home {
+                    self.browser.set_reader(reader);
+                }
                 self.refresh_options();
             }
             OptionsRow::Open

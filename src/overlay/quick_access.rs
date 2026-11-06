@@ -3,9 +3,9 @@
 //! over (a page, a game, the start page), so what one hides from another is
 //! data rather than branches. Over the start page Quick Access leads with the
 //! focused bookmark's rows, headed by its name, before the page's own; over a
-//! page whose site has a bookmark, how it launches and the rows that set its
-//! site settings lead the same way, headed by the bookmark's name, before the
-//! page's own.
+//! page whose site has a bookmark, how it launches, its reader view and the
+//! rows that set its site settings lead the same way, headed by the
+//! bookmark's name, before the page's own.
 //! Quick rows are [`crate::overlay::settings`] rows flagged `quick`: the same
 //! label, values and config field, stepped live here instead of on close. The
 //! central router ([`crate::app`]) drives it; [`crate::ui`] renders it.
@@ -40,7 +40,7 @@ pub enum OptionsRow {
     Open,
     /// Step how it opens.
     LaunchAs,
-    /// Whether it opens in reader view; not for a game.
+    /// Whether its site's articles open in reader view; not for a game.
     Reader,
     Rename,
     Tags,
@@ -210,8 +210,8 @@ const MENU_BROWSER: &[Slot] = &[
 /// Quick Menu over a game: only what leaves the game where it is.
 const MENU_GAME: &[Slot] = &[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)];
 
-/// The options that lead a tab's site rows.
-const SITE_OPTIONS: &[OptionsRow] = &[OptionsRow::LaunchAs];
+/// The options that lead a tab's site rows; a game has no reader view.
+const SITE_OPTIONS: &[OptionsRow] = &[OptionsRow::LaunchAs, OptionsRow::Reader];
 
 /// A bookmark's options; the moves show only where the order is the manual one.
 const OPTIONS: &[Slot] = &[
@@ -414,10 +414,16 @@ impl QuickAccess {
                     rows.into_iter().partition(|row| row.sets_site());
                 let mut lead: Vec<Entry> = SITE_OPTIONS
                     .iter()
+                    .filter(|row| mode != TabMode::Game || **row != OptionsRow::Reader)
                     .map(|row| Entry::Options(*row))
                     .collect();
                 lead.extend(settings);
                 lead.push(Entry::ResetSite);
+                // The site's reader row stands in for the tab's.
+                let rest: Vec<Entry> = rest
+                    .into_iter()
+                    .filter(|row| *row != Entry::Run(Action::Reader))
+                    .collect();
                 heads.push((0, site.name.to_string()));
                 let head = match mode {
                     TabMode::Game => GAME_HEAD,
@@ -836,6 +842,7 @@ mod tests {
             "{rows:?}"
         );
         assert!(!rows[reset + 1..].iter().any(|r| r.sets_site()), "{rows:?}");
+        assert!(!rows.contains(&Entry::Run(Action::Reader)), "{rows:?}");
         assert_eq!(
             panel.heads(),
             [
@@ -847,12 +854,13 @@ mod tests {
         panel.open(Strip::QuickAccess, over, None, false, &AppConfig::default());
         assert!(panel.heads().is_empty());
         assert!(!panel.rows().contains(&Entry::ResetSite));
+        assert!(panel.rows().contains(&Entry::Run(Action::Reader)));
         assert_eq!(panel.bookmark_id(), None);
     }
 
-    /// A game's site leads with how it launches, in Quick Access alone.
+    /// A game's site steps how it launches, with no reader view.
     #[test]
-    fn a_games_site_leads_with_how_it_launches() {
+    fn a_games_site_launches_without_reader_view() {
         let mut panel = QuickAccess::new();
         let over = Over::Tab(TabMode::Game);
         panel.open(
@@ -863,6 +871,7 @@ mod tests {
             &AppConfig::default(),
         );
         assert_eq!(panel.row(), Entry::Options(OptionsRow::LaunchAs));
+        assert!(!panel.rows().contains(&Entry::Options(OptionsRow::Reader)));
         panel.open(
             Strip::QuickMenu,
             over,

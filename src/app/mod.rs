@@ -270,7 +270,6 @@ impl App {
         self.open_first_tabs(first.as_deref());
         if let Some(at) = bookmark {
             self.start_bookmark(at, &mut commands);
-            self.arm_bookmark_reader(at);
         }
         // Before the page loads: a game sizes its canvas once.
         if game_mode && !self.browser.in_game_mode() {
@@ -355,8 +354,8 @@ impl App {
                 self.ui.set_home_pad(self.event_handler.has_pad());
             }
             self.sync_site(&mut commands);
-            if self.browser.take_reader_due() {
-                self.browser.toggle_reader();
+            if self.site_reader() && self.browser.reader_due() {
+                self.browser.enter_reader_if_article();
             }
 
             let waited = self.event_handler.wait(

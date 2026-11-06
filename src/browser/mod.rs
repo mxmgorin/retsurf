@@ -115,8 +115,8 @@ pub struct BrowserState {
     /// The bookmark the tab runs as an app or a game, by id. Outlives
     /// navigation, and a tab the page opens inherits it.
     launched: Option<String>,
-    /// Enter reader view once the current load completes.
-    reader_on_load: bool,
+    /// The page URL reader view last acted on or looked at.
+    reader_checked: String,
 }
 
 /// What a tab shows over its page. One field, so the views exclude each other.
@@ -168,7 +168,7 @@ impl Default for BrowserState {
             fullscreen: false,
             mode: TabMode::Page,
             launched: None,
-            reader_on_load: false,
+            reader_checked: String::new(),
         }
     }
 }
@@ -578,24 +578,11 @@ impl AppBrowser {
         }
     }
 
-    /// Enter reader view on the active tab once its current load completes.
-    pub fn arm_reader_on_load(&self) {
-        let active = self.inner.active.get();
-        if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
-            tab.state.reader_on_load = true;
-        }
-    }
-
-    /// Whether the active tab's armed reader view is due, disarming it.
-    pub fn take_reader_due(&self) -> bool {
-        let active = self.inner.active.get();
-        let mut tabs = self.inner.tabs.borrow_mut();
-        let Some(state) = tabs.get_mut(active).map(|t| &mut t.state) else {
-            return false;
-        };
-        let due = state.reader_on_load && !state.loading;
-        state.reader_on_load &= !due;
-        due
+    /// Whether the active tab's page is due a look for reader view: loaded,
+    /// shown as the page, and not looked at yet.
+    pub fn reader_due(&self) -> bool {
+        let state = self.state();
+        !state.loading && state.mode == TabMode::Page && state.reader_checked != state.page_url
     }
 
     #[inline]

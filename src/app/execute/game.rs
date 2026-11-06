@@ -263,6 +263,7 @@ impl App {
                 if self.ui.quick_access.confirm(Entry::ResetSite) {
                     self.reset_site(out);
                     self.ui.quick_access.refresh(&self.config);
+                    self.refresh_options();
                 }
             }
             Entry::Options(row) => self.options_row(row, out),

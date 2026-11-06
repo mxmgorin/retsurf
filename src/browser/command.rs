@@ -69,6 +69,8 @@ impl AppBrowser {
             // Not left to Servo's notify: a page that never sends it would hide
             // the chrome for the rest of the session.
             tab.state.fullscreen = false;
+            // Ours, a reload of the same URL included, is looked at afresh.
+            tab.state.reader_checked.clear();
         }
     }
 

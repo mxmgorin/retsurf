@@ -81,6 +81,7 @@ impl AppBrowser {
         state.loading = true;
         state.heading = Some(url.to_string());
         state.js_preset = preset;
+        state.reader_checked.clear();
         if state.mode == super::TabMode::Reader {
             state.mode = super::TabMode::Page;
         }
