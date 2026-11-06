@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tap or click in fields of sites built with web components, such as Reddit's login, places the caret
 - Pop-up menus that showed open on pages, such as the ... menus in GitHub's feed (`[experimental] adopted_stylesheets`)
 - Quit hanging after sites that use a shared worker, such as GitHub while signed in; on Android the next launch stayed black
+- Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
 
 ## [0.10.0] - 2026-10-08
 

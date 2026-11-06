@@ -1,0 +1,85 @@
+android: press modifiers a key reports but was never sent
+
+A key-filtering accessibility service (TitanPad on the Titan 2) holds Shift
+back, passes the next key on with META_SHIFT_ON, and re-sends Shift only once
+it is released. SDL tracks modifiers from key events alone, so Shift+A reached
+the app as a bare A. Press the modifier the meta state reports around such a
+key; the same covers IME key events that carry their modifier only as meta.
+
+--- a/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
++++ b/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
+@@ -1303,6 +1303,52 @@
+         return event.isPrintingKey() || event.getKeyCode() == KeyEvent.KEYCODE_SPACE;
+     }
+ 
++    /** Each modifier SDL tracks: its meta state bit and the key that presses it. */
++    private static final int[][] MODIFIER_KEYS = {
++        { KeyEvent.META_SHIFT_ON, KeyEvent.KEYCODE_SHIFT_LEFT },
++        { KeyEvent.META_CTRL_ON, KeyEvent.KEYCODE_CTRL_LEFT },
++        { KeyEvent.META_ALT_ON, KeyEvent.KEYCODE_ALT_LEFT },
++    };
++
++    /** Side-specific meta bits of the modifier keys sent to SDL as held. */
++    private static int sHeldModifierMeta;
++
++    /** The side-specific meta bit `keyCode` holds while down; 0 for a non-modifier. */
++    private static int modifierMeta(int keyCode) {
++        switch (keyCode) {
++            case KeyEvent.KEYCODE_SHIFT_LEFT: return KeyEvent.META_SHIFT_LEFT_ON;
++            case KeyEvent.KEYCODE_SHIFT_RIGHT: return KeyEvent.META_SHIFT_RIGHT_ON;
++            case KeyEvent.KEYCODE_CTRL_LEFT: return KeyEvent.META_CTRL_LEFT_ON;
++            case KeyEvent.KEYCODE_CTRL_RIGHT: return KeyEvent.META_CTRL_RIGHT_ON;
++            case KeyEvent.KEYCODE_ALT_LEFT: return KeyEvent.META_ALT_LEFT_ON;
++            case KeyEvent.KEYCODE_ALT_RIGHT: return KeyEvent.META_ALT_RIGHT_ON;
++            default: return 0;
++        }
++    }
++
++    /**
++     * The modifiers `metaState` reports that no held modifier key accounts for: a
++     * key-filtering accessibility service can hold a modifier back and pass on only
++     * the keys it modifies.
++     */
++    private static int unheldModifiers(int metaState) {
++        return metaState & ~KeyEvent.normalizeMetaState(sHeldModifierMeta);
++    }
++
++    /** Press or release the key of each modifier in `meta`. */
++    private static void sendModifierKeys(int meta, boolean down) {
++        for (int[] modifier : MODIFIER_KEYS) {
++            if ((meta & modifier[0]) == 0) {
++                continue;
++            }
++            if (down) {
++                onNativeKeyDown(modifier[1]);
++            } else {
++                onNativeKeyUp(modifier[1]);
++            }
++        }
++    }
++
+     public static boolean handleKeyEvent(View v, int keyCode, KeyEvent event, InputConnection ic) {
+         int deviceId = event.getDeviceId();
+         int source = event.getSource();
+@@ -1342,6 +1388,7 @@
+ 
+         if ((source & InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD) {
+             if (event.getAction() == KeyEvent.ACTION_DOWN) {
++                sHeldModifierMeta |= modifierMeta(keyCode);
+                 if (isTextInputEvent(event)) {
+                     if (ic != null) {
+                         ic.commitText(String.valueOf((char) event.getUnicodeChar()), 1);
+@@ -1349,9 +1396,13 @@
+                         SDLInputConnection.nativeCommitText(String.valueOf((char) event.getUnicodeChar()), 1);
+                     }
+                 }
++                int unheld = unheldModifiers(event.getMetaState());
++                sendModifierKeys(unheld, true);
+                 onNativeKeyDown(keyCode);
++                sendModifierKeys(unheld, false);
+                 return true;
+             } else if (event.getAction() == KeyEvent.ACTION_UP) {
++                sHeldModifierMeta &= ~modifierMeta(keyCode);
+                 onNativeKeyUp(keyCode);
+                 return true;
+             }
