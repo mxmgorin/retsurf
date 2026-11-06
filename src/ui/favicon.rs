@@ -135,7 +135,7 @@ impl Entry {
     }
 }
 
-/// `icon` centred on a rounded [`INK`] square, [`PLATE_PAD`] wider than its
+/// `icon` centred on a rounded square of the palette's `ink`, [`PLATE_PAD`] wider than its
 /// longest side.
 fn on_plate(icon: &Favicon) -> egui::ColorImage {
     let side = icon.width.max(icon.height) + 2 * PLATE_PAD;

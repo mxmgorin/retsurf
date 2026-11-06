@@ -31,12 +31,15 @@ fn font(size: f32) -> egui::FontId {
 
 /// The banner scene without its plate; the start page supplies the background.
 static BANNER_SVG: &[u8] = include_bytes!("../../resources/retsurf-banner-bare.svg");
+/// The banner's sun diameter in its SVG's units: the icon's 256-unit sun at the
+/// scale the banner draws it.
+const BANNER_SUN: f32 = 256.0 * 0.17188;
 /// The banner's drawn height (logical px); its width follows the SVG's aspect.
 const BANNER_H: f32 = 72.0;
 
 /// The banner, rasterized on first use.
 pub(super) fn banner() -> SvgTexture {
-    SvgTexture::new("home-banner", BANNER_SVG, BANNER_H)
+    SvgTexture::new("home-banner", BANNER_SVG, BANNER_H, Some(BANNER_SUN))
 }
 
 /// Banner bottom to the search field; the scene's own sea is its margin.
@@ -888,7 +891,7 @@ fn tile_grid(
 
 /// The glyph square's inset from the tile's top.
 const GLYPH_TOP: f32 = 2.0;
-/// How much of an icon's tint colours its glyph square over [`SURFACE`].
+/// How much of an icon's tint colours its glyph square over the palette's `surface`.
 const TINT_MIX: f32 = 0.35;
 /// Saturation and value of an iconless tile's fill; its hue comes from the label.
 const LETTER_SAT: f32 = 0.6;

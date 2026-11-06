@@ -216,7 +216,7 @@ pub(super) struct AboutView<'a> {
 
 /// The app icon heading the About tab, rasterized on first use.
 pub(super) fn about_icon() -> SvgTexture {
-    SvgTexture::new("about-icon", ICON_SVG, ABOUT_ICON)
+    SvgTexture::new("about-icon", ICON_SVG, ABOUT_ICON, None)
 }
 
 /// Render the read-only About tab (pulls its facts from

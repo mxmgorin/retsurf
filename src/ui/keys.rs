@@ -19,8 +19,6 @@ const CAP_HEIGHT: f32 = 1.15;
 const PILL_MARGIN: f32 = 0.35;
 /// A badge label's size, as a share of the size asked for.
 const CAP_FONT: f32 = 0.78;
-/// A badge's fill: dimmer than the words beside it, the label in the chrome's dark.
-const CAP_FILL: egui::Color32 = egui::Color32::from_gray(0x5c);
 
 /// The shoulders that step a section or a filter.
 pub(super) const SHOULDERS: [&str; 2] = ["L1", "R1"];
@@ -31,8 +29,8 @@ pub(super) fn key_cap(ui: &mut egui::Ui, key: &str, size: f32) {
     let painter = ui.painter();
     let radius = rect.height() / 2.0;
     match is_round(key) {
-        true => painter.circle_filled(rect.center(), radius, CAP_FILL),
-        false => painter.rect_filled(rect, radius, CAP_FILL),
+        true => painter.circle_filled(rect.center(), radius, palette().cap),
+        false => painter.rect_filled(rect, radius, palette().cap),
     };
     painter.text(
         rect.center(),

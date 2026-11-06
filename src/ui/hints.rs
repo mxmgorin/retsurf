@@ -26,11 +26,6 @@ const CELL_W: f32 = 12.0;
 const CELL_W_WIDE: f32 = 18.0;
 /// Outer-corner rounding of a code's pill row (cells abut with no gap).
 const CELL_RADIUS: u8 = 2;
-/// Dark ink for glyphs drawn over the bright accent pill.
-const PILL_INK: egui::Color32 = egui::Color32::from_rgb(0x10, 0x16, 0x14);
-/// Muted pill + ink for an already-pressed (leading) cell.
-const DONE_PILL: egui::Color32 = egui::Color32::from_gray(0x3a);
-const DONE_INK: egui::Color32 = egui::Color32::from_gray(0xc0);
 
 /// Draw the hint frames, and with `badges` their codes in those face labels.
 pub(super) fn add_hints(
@@ -112,9 +107,9 @@ fn draw_badge(
         let w = cell_width(label);
         let cell = egui::Rect::from_min_size(egui::pos2(x, top), egui::vec2(w, CELL_H));
         let (pill, ink) = if j < done {
-            (DONE_PILL, DONE_INK)
+            (palette().spent, palette().spent_ink)
         } else {
-            (palette().accent, PILL_INK)
+            (palette().accent, palette().on_accent)
         };
         // Cells abut with no gap; round only the row's outer corners so a code
         // reads as one pill.

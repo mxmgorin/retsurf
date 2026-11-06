@@ -48,18 +48,7 @@ const HUB_ICON: f32 = 14.0;
 const SPACE_MARK_W: f32 = 12.0;
 const SPACE_MARK_H: f32 = 4.0;
 const SPACE_MARK_STROKE: f32 = 1.5;
-const RIM_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(0x1c, 0x1c, 0x1e, 0xe0);
-const HUB_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(0x34, 0x34, 0x36, 0xa0);
-const GROUP_FILL: egui::Color32 = egui::Color32::from_gray(0x48);
-const AIMED_FILL: egui::Color32 = egui::Color32::from_gray(0x62);
-/// A face button outside the aimed group: dark, so only the aimed one reads.
-const FACE_IDLE: egui::Color32 = egui::Color32::from_gray(0x2c);
-const TAB_FILL: egui::Color32 = egui::Color32::from_gray(0x36);
-/// A tab's action, dimmer than its button so the two read as a pair.
-const TAB_ACTION: egui::Color32 = egui::Color32::from_gray(0xa8);
 const TAB_LABEL_GAP: f32 = 5.0;
-/// Hub marks while a group is aimed.
-const HUB_DIM: egui::Color32 = egui::Color32::from_gray(0x80);
 
 /// Which way from a group's centre `face`'s character sits.
 fn face_dir(face: Face) -> egui::Vec2 {
@@ -146,11 +135,11 @@ fn paint_tab(
         ..Default::default()
     };
     let mut job = egui::text::LayoutJob::default();
-    job.append(button, 0.0, format(egui::Color32::WHITE));
-    job.append(action, TAB_LABEL_GAP, format(TAB_ACTION));
+    job.append(button, 0.0, format(palette().text));
+    job.append(action, TAB_LABEL_GAP, format(palette().wheel.tab_action));
     let galley = painter.layout_job(job);
     let at = centre + clock(angle) * TAB_RADIUS - galley.size() / 2.0;
-    let shape = egui::epaint::TextShape::new(at, galley, egui::Color32::WHITE)
+    let shape = egui::epaint::TextShape::new(at, galley, palette().text)
         .with_angle_and_anchor(upright, egui::Align2::CENTER_CENTER);
     painter.add(shape);
 }
@@ -177,16 +166,16 @@ pub(super) fn add_wheel(
             );
         };
 
-        painter.circle_filled(centre, RIM_RADIUS, RIM_FILL);
-        painter.circle_filled(centre, HUB_RADIUS, HUB_FILL);
+        painter.circle_filled(centre, RIM_RADIUS, palette().wheel.rim);
+        painter.circle_filled(centre, HUB_RADIUS, palette().wheel.hub);
 
         let sector_angle = |sector: usize| sector as f32 / WHEEL_SECTORS as f32 * TAU;
         for sector in 0..WHEEL_SECTORS {
             let at = centre + clock(sector_angle(sector)) * WHEEL_RADIUS;
             let aimed = osk.sector() == Some(sector);
             let (fill, size) = match aimed {
-                true => (AIMED_FILL, AIMED_FONT),
-                false => (GROUP_FILL, GROUP_FONT),
+                true => (palette().wheel.aimed, AIMED_FONT),
+                false => (palette().wheel.group, GROUP_FONT),
             };
             painter.circle_filled(at, GROUP_RADIUS, fill);
             for face in FACES {
@@ -196,7 +185,7 @@ pub(super) fn add_wheel(
                         let color = face_color(layout, face);
                         (color, face_ink(color))
                     }
-                    false => (FACE_IDLE, egui::Color32::WHITE),
+                    false => (palette().wheel.face_idle, palette().text),
                 };
                 painter.circle_filled(button, FACE_RADIUS, fill);
                 let c = osk.wheel_char(sector, face).to_string();
@@ -211,7 +200,7 @@ pub(super) fn add_wheel(
             let base = tip - dir * POINTER_LENGTH;
             painter.add(egui::Shape::convex_polygon(
                 vec![tip, base + side, base - side],
-                egui::Color32::WHITE,
+                palette().text,
                 egui::Stroke::NONE,
             ));
         }
@@ -221,7 +210,7 @@ pub(super) fn add_wheel(
         let at = |face| centre + face_dir(face) * HUB_MARK_OFFSET;
         let color = |face| match osk.sector() {
             None => face_color(layout, face),
-            Some(_) => HUB_DIM,
+            Some(_) => palette().wheel.hub_dim,
         };
         text(at(places.b), bold::X, HUB_ICON, color(places.b));
         if osk.shift() {
@@ -242,20 +231,44 @@ pub(super) fn add_wheel(
         // Triggers outside, shoulders inside, each on its own side of the pad.
         let shift = match osk.shift() || osk.caps {
             true => palette().accent,
-            false => TAB_FILL,
+            false => palette().wheel.tab,
         };
         paint_tab(painter, centre, -TRIGGER_TAB, ("L2", "SHIFT"), shift);
-        paint_tab(painter, centre, -SHOULDER_TAB, ("L1", "DEL"), TAB_FILL);
-        paint_tab(painter, centre, SHOULDER_TAB, ("R1", "SPACE"), TAB_FILL);
+        paint_tab(
+            painter,
+            centre,
+            -SHOULDER_TAB,
+            ("L1", "DEL"),
+            palette().wheel.tab,
+        );
+        paint_tab(
+            painter,
+            centre,
+            SHOULDER_TAB,
+            ("R1", "SPACE"),
+            palette().wheel.tab,
+        );
         let digits = match osk.digits() {
             true => palette().accent,
-            false => TAB_FILL,
+            false => palette().wheel.tab,
         };
         paint_tab(painter, centre, TRIGGER_TAB, ("R2", "NUM"), digits);
         let lang = osk.layout().name.to_uppercase();
         let (select, start) = (TAU / 2.0 + BOTTOM_TAB, TAU / 2.0 - BOTTOM_TAB);
-        paint_tab(painter, centre, select, ("SELECT", &lang), TAB_FILL);
-        paint_tab(painter, centre, start, ("START", "TAB"), TAB_FILL);
+        paint_tab(
+            painter,
+            centre,
+            select,
+            ("SELECT", &lang),
+            palette().wheel.tab,
+        );
+        paint_tab(
+            painter,
+            centre,
+            start,
+            ("START", "TAB"),
+            palette().wheel.tab,
+        );
     });
     area.response.rect
 }

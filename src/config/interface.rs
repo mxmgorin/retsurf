@@ -33,7 +33,7 @@ impl Default for InterfaceConfig {
     fn default() -> Self {
         Self {
             scale: 1.0,
-            theme: UiTheme::Night,
+            theme: UiTheme::Dusk,
             cursor_linger_ms: 1500,
             toolbar_position: ToolbarPosition::Top,
             toolbar_autohide: false,
@@ -50,14 +50,20 @@ mod ui_theme {
     use crate::config::token_enum::token_enum;
 
     token_enum! {
-        /// The chrome's palette. Serializes to `"night"` / `"oled"` in TOML; an unknown
-        /// value falls back to `Night`.
+        /// The chrome's palette. Serializes to its lowercase name in TOML; an unknown
+        /// value falls back to `Dusk`.
         pub enum UiTheme {
-            default Night;
-            /// The brand's dark slate (the default).
+            default Dusk;
+            /// The brand's dark slate.
             Night => "night", "Night",
             /// Black under everything, for OLED screens.
             Oled => "oled", "OLED",
+            /// Night warmed toward plum (the default).
+            Dusk => "dusk", "Dusk",
+            /// Dark ink on sand, for daylight.
+            Sand => "sand", "Sand",
+            /// The original Game Boy's four greens.
+            Dmg => "dmg", "DMG",
         }
     }
 }

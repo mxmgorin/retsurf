@@ -7,17 +7,8 @@
 use super::theme::{lerp_color, palette};
 use egui_sdl2::egui;
 
-/// The icon gradient's top stop, warmer than [`SURF_WARM`].
-const SUN_TOP: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb8, 0x70);
-
-/// Where the gradient reaches [`SURF_WARM`], as a fraction of the diameter.
+/// Where the gradient reaches the palette's `surf_warm`, as a fraction of the diameter.
 const WARM_STOP: f32 = 0.3;
-
-/// The icon's middle wave; the far one is [`DEEP_TEAL`].
-const WAVE_MID: egui::Color32 = egui::Color32::from_rgb(0x33, 0x88, 0x78);
-
-/// The sea under the horizon wave, a shade of the far wave over the panel.
-const SEA: egui::Color32 = egui::Color32::from_rgb(0x1a, 0x2a, 0x2a);
 
 /// The halo's reach as a multiple of the sun's radius, and its alpha at the
 /// sun's edge; it fades to nothing at the reach.
@@ -66,19 +57,24 @@ impl Horizon {
         (WAVE_SPACING + WAVE_AMP + WAVE_STROKE / 2.0) * self.wave_scale()
     }
 
+    /// How much of the diameter has set, the palette's drop included.
+    fn sunk(&self) -> f32 {
+        self.sink + palette().sun_drop
+    }
+
     fn wave_scale(&self) -> f32 {
         self.radius / WAVE_REF_RADIUS
     }
 
     /// From the horizon line down to the lower of the near wave and the halo.
     pub fn glow_depth(&self) -> f32 {
-        let halo = self.radius * (HALO_SCALE - 1.0) + self.sink * self.radius * 2.0;
+        let halo = self.radius * (HALO_SCALE - 1.0) + self.sunk() * self.radius * 2.0;
         self.depth().max(halo)
     }
 
     /// From the halo's top down to the horizon line.
     pub fn rise(&self) -> f32 {
-        self.radius * (1.0 + HALO_SCALE) - self.sink * self.radius * 2.0
+        self.radius * (1.0 + HALO_SCALE) - self.sunk() * self.radius * 2.0
     }
 
     /// The mark's full height, halo top to near wave bottom.
@@ -87,7 +83,10 @@ impl Horizon {
     }
 
     fn center(&self, horizon: f32, sun_x: f32) -> egui::Pos2 {
-        egui::pos2(sun_x, horizon - self.radius + self.sink * self.radius * 2.0)
+        egui::pos2(
+            sun_x,
+            horizon - self.radius + self.sunk() * self.radius * 2.0,
+        )
     }
 
     fn tint(&self, color: egui::Color32) -> egui::Color32 {
@@ -115,7 +114,7 @@ pub(super) fn paint_horizon(
     painter.add(egui::Shape::mesh(sea_mesh(&far, bottom)));
     painter.add(egui::Shape::line(far, stroke(palette().deep_teal)));
     let near = wave_points(x_range, horizon + WAVE_SPACING * k, WAVE_AMP * k, 0.25);
-    painter.add(egui::Shape::line(near, stroke(WAVE_MID)));
+    painter.add(egui::Shape::line(near, stroke(palette().wave_mid)));
 }
 
 fn wave_points(x_range: egui::Rangef, y: f32, amp: f32, phase: f32) -> Vec<egui::Pos2> {
@@ -132,8 +131,8 @@ fn wave_points(x_range: egui::Rangef, y: f32, amp: f32, phase: f32) -> Vec<egui:
 fn sea_mesh(wave: &[egui::Pos2], bottom: f32) -> egui::Mesh {
     let mut mesh = egui::Mesh::default();
     for p in wave {
-        mesh.colored_vertex(*p, SEA);
-        mesh.colored_vertex(egui::pos2(p.x, bottom), SEA);
+        mesh.colored_vertex(*p, palette().sea);
+        mesh.colored_vertex(egui::pos2(p.x, bottom), palette().sea);
     }
     for i in 0..wave.len() as u32 - 1 {
         let (t, b) = (2 * i, 2 * i + 1);
@@ -171,7 +170,7 @@ fn sun_mesh(ppp: f32, center: egui::Pos2, sun: &Horizon) -> egui::Mesh {
     let radius = sun.radius;
     let d = radius * 2.0;
     let top = center.y - radius;
-    let cut = 1.0 - sun.sink;
+    let cut = (1.0 - sun.sunk()).clamp(0.0, 1.0);
     let step = (BAND_PX / ppp) / d;
     let feather = FEATHER_PX / ppp;
     let half_width = |f: f32| {
@@ -215,7 +214,7 @@ fn sun_mesh(ppp: f32, center: egui::Pos2, sun: &Horizon) -> egui::Mesh {
 /// The icon gradient at `f` of the way down the disk.
 fn gradient(f: f32) -> egui::Color32 {
     match f < WARM_STOP {
-        true => lerp_color(SUN_TOP, palette().surf_warm, f / WARM_STOP),
+        true => lerp_color(palette().sun_top, palette().surf_warm, f / WARM_STOP),
         false => lerp_color(
             palette().surf_warm,
             palette().accent,
@@ -246,7 +245,7 @@ mod tests {
             dim: 0.0,
         };
         let center = egui::pos2(100.0, 100.0);
-        let cut_y = center.y - sun.radius + (1.0 - sun.sink) * sun.radius * 2.0;
+        let cut_y = center.y - sun.radius + (1.0 - sun.sunk()).min(1.0) * sun.radius * 2.0;
         for ppp in [1.0, 2.0] {
             let feather = FEATHER_PX / ppp;
             let mesh = sun_mesh(ppp, center, &sun);
@@ -266,7 +265,8 @@ mod tests {
             sink: 0.0,
             dim: 0.0,
         };
-        assert_eq!(sun.rise(), 10.0 * (1.0 + HALO_SCALE));
+        let rise = 10.0 * (1.0 + HALO_SCALE) - sun.sunk() * 10.0 * 2.0;
+        assert!((sun.rise() - rise).abs() < 1e-4, "{} {rise}", sun.rise());
         assert_eq!(sun.height(), sun.rise() + sun.depth());
     }
 }

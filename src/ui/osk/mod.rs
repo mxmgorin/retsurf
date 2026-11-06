@@ -31,8 +31,8 @@ const SCREEN_MARGIN: f32 = 8.0;
 const BADGE_FONT: f32 = 10.0;
 const BADGE_INSET: egui::Vec2 = egui::vec2(4.0, 2.0);
 
-const KEY_FILL: egui::Color32 = egui::Color32::from_rgb(0x3a, 0x3a, 0x40);
-const HINT: egui::Color32 = egui::Color32::from_gray(150);
+/// The grid panel's opacity over the page.
+const PANEL_ALPHA: u8 = 245;
 
 /// The picker's caption, and the air under it.
 const CAPTION_FONT: f32 = 18.0;
@@ -67,7 +67,10 @@ fn grid_width(osk: &Osk, key_width: &impl Fn(usize, &Key) -> f32, gap: f32) -> f
 /// The dark rounded panel the grid sits on, scaled by `fit`.
 fn panel(fit: f32) -> egui::Frame {
     egui::Frame::default()
-        .fill(egui::Color32::from_rgba_unmultiplied(0x18, 0x18, 0x1c, 245))
+        .fill({
+            let fill = palette().panel_fill;
+            egui::Color32::from_rgba_unmultiplied(fill.r(), fill.g(), fill.b(), PANEL_ALPHA)
+        })
         .corner_radius(PANEL_RADIUS * fit)
         .inner_margin(PANEL_MARGIN * fit)
 }
@@ -156,7 +159,11 @@ pub(super) fn add_osk(
                             || (*key == Key::Shift && shift)
                             || (*key == Key::Caps && osk.caps);
                         let size = egui::vec2(key_width(row.len(), key), KEY_H * fit);
-                        let fill = if active { palette().accent } else { KEY_FILL };
+                        let fill = if active {
+                            palette().accent
+                        } else {
+                            palette().key
+                        };
                         let button = egui::Button::new(
                             egui::RichText::new(osk.key_label(*key))
                                 .size(label_font)
@@ -183,7 +190,7 @@ pub(super) fn add_osk(
                                     egui::Align2::RIGHT_TOP,
                                     alt,
                                     egui::FontId::proportional(BADGE_FONT * fit),
-                                    HINT,
+                                    palette().dim,
                                 );
                             }
                         }
@@ -195,7 +202,7 @@ pub(super) fn add_osk(
                                 egui::Align2::LEFT_TOP,
                                 btn,
                                 egui::FontId::proportional(BADGE_FONT * fit),
-                                HINT,
+                                palette().dim,
                             );
                         }
                     }

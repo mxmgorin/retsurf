@@ -12,6 +12,9 @@ pub(super) struct SvgTexture {
     svg: &'static [u8],
     /// Drawn height (logical px); the width follows the SVG's aspect.
     height: f32,
+    /// The diameter of its `id="sun"` group in the SVG's units, for the palette to
+    /// move; `None` keeps the sun where it is drawn.
+    sun_diameter: Option<f32>,
     /// The texture, and the pixel density and palette it was drawn for.
     texture: Option<(f32, &'static Palette, egui::TextureHandle)>,
     /// The SVG would not rasterize; not retried every frame.
@@ -19,11 +22,17 @@ pub(super) struct SvgTexture {
 }
 
 impl SvgTexture {
-    pub const fn new(name: &'static str, svg: &'static [u8], height: f32) -> Self {
+    pub const fn new(
+        name: &'static str,
+        svg: &'static [u8],
+        height: f32,
+        sun_diameter: Option<f32>,
+    ) -> Self {
         Self {
             name,
             svg,
             height,
+            sun_diameter,
             texture: None,
             failed: false,
         }
@@ -39,7 +48,7 @@ impl SvgTexture {
         let stale =
             |(at, drawn, _): &(f32, &Palette, _)| *at != ppp || !std::ptr::eq(*drawn, palette);
         if self.texture.as_ref().is_none_or(stale) {
-            let svg = theme::recolor_svg(self.svg);
+            let svg = theme::recolor_svg(self.svg, self.sun_diameter);
             let Some(image) = rasterize(&svg, (self.height * ppp).round() as u32) else {
                 log::warn!("{}: the SVG did not rasterize", self.name);
                 self.failed = true;
