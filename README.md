@@ -32,7 +32,7 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
   </tr>
   <tr>
     <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="The built-in start page: the retsurf banner over filter tabs, a grid of bookmarks marked as sites, apps or games, and the search field at the bottom"></td>
-    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News: enter game mode, bookmark, user agent, ad blocker and reader view switches, page theme"></td>
+    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News: reload, enter game mode, bookmark, user agent, the ad blocker switch, JS engine, the reader view switch, page theme"></td>
   </tr>
 </table>
 
