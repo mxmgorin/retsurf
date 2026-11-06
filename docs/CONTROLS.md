@@ -41,7 +41,9 @@ is on Ctrl, so pages get all plain keys:
 **Actions**: `confirm`, `cancel`, `menu` (Quick Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`
 (menu section or history), `home`, `address`, `hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
-(a step in the open overlay, else the key goes to the page), `reload`, `reader`,
+(a step in the open overlay, else the key goes to the page), `cursor_up` / `cursor_down` /
+`cursor_left` / `cursor_right` and `scroll_up` / `scroll_down` / `scroll_left` /
+`scroll_right` (move the cursor or scroll the page while held; unbound by default), `reload`, `reader`,
 `bookmark`, `zoom_in` / `zoom_out` / `zoom_reset`, `tab_next` / `tab_prev` / `new_tab` /
 `close_tab`, `none`.
 

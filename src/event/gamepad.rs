@@ -28,6 +28,8 @@ pub struct Gamepad {
     right_trigger: Trigger,
     /// Scratch for resolved actions, reused so the input path never allocates.
     actions: Vec<(Action, Edge)>,
+    /// The cursor and scroll actions held down, one entry per source holding one.
+    held: Vec<Action>,
 }
 
 impl Gamepad {
@@ -40,6 +42,7 @@ impl Gamepad {
             left_trigger: Trigger::new(Pad::L2, cfg.trigger_threshold),
             right_trigger: Trigger::new(Pad::R2, cfg.trigger_threshold),
             actions: Vec::with_capacity(Pad::COUNT),
+            held: Vec::new(),
             cfg,
         }
     }
@@ -92,7 +95,17 @@ impl Gamepad {
     pub fn is_active(&self) -> bool {
         self.aim() != (0.0, 0.0)
             || self.right.vector() != (0.0, 0.0)
+            || !self.held.is_empty()
             || self.pads.next_deadline(Instant::now()).is_some()
+    }
+
+    /// Hold or let go of a cursor or scroll action, for one source.
+    pub fn hold(&mut self, action: Action, pressed: bool) {
+        if pressed {
+            self.held.push(action);
+        } else if let Some(at) = self.held.iter().position(|held| *held == action) {
+            self.held.swap_remove(at);
+        }
     }
 
     /// The gesture machine pairs a held action's edges; this carries them through.
@@ -100,6 +113,10 @@ impl Gamepad {
         let mut actions = std::mem::take(&mut self.actions);
         for &(action, edge) in &actions {
             let pressed = edge == Edge::Press;
+            if action.motion().is_some() {
+                self.hold(action, pressed);
+                continue;
+            }
             commands.extend(action.command(pressed));
         }
         actions.clear();
@@ -189,19 +206,28 @@ impl Gamepad {
         })));
     }
 
-    /// What drives `role` on a page: the sticks given it and `extra`, summed and
-    /// clamped to -1..=1. `across`: whether the sticks count sideways too.
+    /// What drives `role` on a page: the sticks given it, the actions held for
+    /// it and `extra`, summed and clamped to -1..=1. `across`: whether the
+    /// sticks count sideways too.
     fn driving(&self, role: StickRole, across: bool, extra: (f32, f32)) -> (f32, f32) {
-        let (x, y) = [
+        let sticks = [
             (&self.left, self.cfg.left_stick),
             (&self.right, self.cfg.right_stick),
         ]
         .into_iter()
         .filter(|(_, given)| *given == role)
         .map(|(stick, _)| stick.vector())
-        .map(|(x, y)| (if across { x } else { 0.0 }, y))
-        .chain([extra])
-        .fold((0.0, 0.0), |(x, y), (dx, dy)| (x + dx, y + dy));
+        .map(|(x, y)| (if across { x } else { 0.0 }, y));
+        let held = self
+            .held
+            .iter()
+            .filter_map(|action| action.motion())
+            .filter(|(held, _)| *held == role)
+            .map(|(_, dir)| dir);
+        let (x, y) = sticks
+            .chain(held)
+            .chain([extra])
+            .fold((0.0, 0.0), |(x, y), (dx, dy)| (x + dx, y + dy));
         (x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0))
     }
 
@@ -354,5 +380,28 @@ mod tests {
                 "{role:?}"
             );
         }
+    }
+
+    /// Held actions push at full deflection, each source on its own: one let go
+    /// keeps the other, and held scrolling goes sideways where a stick does not.
+    #[test]
+    fn held_actions_drive_the_cursor_and_scroll() {
+        let mut pad = Gamepad::new(ControlsConfig::default());
+        pad.hold(Action::CursorLeft, true);
+        pad.hold(Action::CursorLeft, true);
+        pad.hold(Action::ScrollRight, true);
+        assert!(pad.is_active());
+        let held = analog(&mut pad);
+        assert_eq!(held.cursor, (-1.0, 0.0));
+        assert_eq!(held.scroll, (1.0, 0.0));
+        pad.hold(Action::CursorLeft, false);
+        assert_eq!(analog(&mut pad).cursor, (-1.0, 0.0));
+        pad.hold(Action::CursorLeft, false);
+        pad.hold(Action::ScrollRight, false);
+        let released = analog(&mut pad);
+        assert_eq!((released.cursor, released.scroll), ((0.0, 0.0), (0.0, 0.0)));
+        assert!(!pad.is_active());
+        pad.on_axis(Axis::RightX, i16::MAX);
+        assert_eq!(analog(&mut pad).scroll, (0.0, 0.0));
     }
 }

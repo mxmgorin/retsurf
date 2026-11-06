@@ -18,7 +18,7 @@
 
 use crate::browser::BrowserCommand;
 use crate::command::{AppCommand, InputCommand, MenuAction, QuickAccessAction, SettingsAction};
-use crate::config;
+use crate::config::{self, StickRole};
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::Strip;
 use inputbind::editor::{Groups, Requirement};
@@ -110,6 +110,18 @@ action_table! {
         /// Overlay navigation one step right; see [`Action::NavUp`].
         NavRight => "nav_right", "Nav right",
     }
+    "Cursor & scroll" => {
+        /// Move the page cursor up while held; see [`Action::motion`].
+        CursorUp => "cursor_up", "Cursor up",
+        CursorDown => "cursor_down", "Cursor down",
+        CursorLeft => "cursor_left", "Cursor left",
+        CursorRight => "cursor_right", "Cursor right",
+        /// Scroll the page up while held; see [`Action::motion`].
+        ScrollUp => "scroll_up", "Scroll up",
+        ScrollDown => "scroll_down", "Scroll down",
+        ScrollLeft => "scroll_left", "Scroll left",
+        ScrollRight => "scroll_right", "Scroll right",
+    }
     "Page" => {
         /// Reload the page (space while the on-screen keyboard is open).
         Reload => "reload", "Reload",
@@ -189,7 +201,7 @@ impl Bindable for Action {
     }
 
     fn is_held(&self) -> bool {
-        *self == Action::Confirm
+        *self == Action::Confirm || self.motion().is_some()
     }
 
     fn needs_press_edge(&self) -> bool {
@@ -206,6 +218,23 @@ impl Action {
             self,
             Action::NavUp | Action::NavDown | Action::NavLeft | Action::NavRight
         )
+    }
+
+    /// The role a cursor or scroll action plays on a page and the direction it
+    /// pushes, `y` positive downward; `None` for any other action.
+    pub fn motion(self) -> Option<(StickRole, (f32, f32))> {
+        let (cursor, scroll) = (StickRole::Cursor, StickRole::Scroll);
+        Some(match self {
+            Action::CursorUp => (cursor, (0.0, -1.0)),
+            Action::CursorDown => (cursor, (0.0, 1.0)),
+            Action::CursorLeft => (cursor, (-1.0, 0.0)),
+            Action::CursorRight => (cursor, (1.0, 0.0)),
+            Action::ScrollUp => (scroll, (0.0, -1.0)),
+            Action::ScrollDown => (scroll, (0.0, 1.0)),
+            Action::ScrollLeft => (scroll, (-1.0, 0.0)),
+            Action::ScrollRight => (scroll, (1.0, 0.0)),
+            _ => return None,
+        })
     }
 
     /// For the key path, which has no gesture machine to pair the edges: a held
@@ -251,6 +280,15 @@ impl Action {
             Action::NavDown => AppCommand::Input(InputCommand::Nav(0, 1)),
             Action::NavLeft => AppCommand::Input(InputCommand::Nav(-1, 0)),
             Action::NavRight => AppCommand::Input(InputCommand::Nav(1, 0)),
+            // Held in the gamepad's analog state, never routed.
+            Action::CursorUp
+            | Action::CursorDown
+            | Action::CursorLeft
+            | Action::CursorRight
+            | Action::ScrollUp
+            | Action::ScrollDown
+            | Action::ScrollLeft
+            | Action::ScrollRight => return None,
         })
     }
 }
@@ -464,6 +502,26 @@ mod tests {
         assert_eq!(Action::parse("fly"), None);
         // `none` is the store's unbound sentinel, never an action.
         assert_eq!(Action::parse(inputbind::UNBOUND), None);
+    }
+
+    /// The cursor and scroll actions pair their edges, route nowhere and ship
+    /// unbound.
+    #[test]
+    fn the_motion_actions_are_held_and_unbound() {
+        let motions: Vec<Action> = ALL.into_iter().filter(|a| a.motion().is_some()).collect();
+        assert_eq!(motions.len(), 8);
+        let store = default_store();
+        for action in motions {
+            assert!(
+                action.is_held() && action.command(true).is_none(),
+                "{action:?}"
+            );
+            let bound = store.gamepad.values().chain(store.keyboard.values());
+            assert!(
+                !bound.into_iter().any(|name| name == action.name()),
+                "{action:?}"
+            );
+        }
     }
 
     /// A gesture the tables would drop at load must fail here, not on-device.

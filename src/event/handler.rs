@@ -130,6 +130,9 @@ pub struct AppEventHandler {
     /// Game Mode, for as long as the mode or one of its screens is up (see
     /// [`Self::wait`]).
     game: Option<GameMode>,
+    /// The keys holding a cursor or scroll action, each with the action it
+    /// holds: the release ends that action whatever is bound or focused by then.
+    motion_keys: Vec<(Keycode, Action)>,
     /// The first finger's tap or drag over the web view.
     touch: super::touch::TouchState,
     page_touches: super::touch::PageTouches,
@@ -193,6 +196,7 @@ impl AppEventHandler {
             menu_quits,
             listening: None,
             game: None,
+            motion_keys: Vec::new(),
             touch: super::touch::TouchState::new(),
             page_touches: super::touch::PageTouches::default(),
             touch_outside_osk: false,
@@ -600,11 +604,44 @@ impl AppEventHandler {
         if key.pressed {
             ui.note_input_keyboard(true);
         }
+        if self.motion_key(&key, ui, browser) {
+            return;
+        }
         if self.routing() {
             self.game_key(&key, browser, commands);
             return;
         }
         super::keyboard::on_key(&key, &self.bindings, ui, browser, commands);
+    }
+
+    /// A key holding a cursor or scroll action: its press on the page starts
+    /// it, and its repeats and release stay off the page. Returns whether it
+    /// took the edge.
+    fn motion_key(&mut self, key: &KeyEvent, ui: &AppUi, browser: &AppBrowser) -> bool {
+        if let Some(at) = self.motion_keys.iter().position(|(kc, _)| *kc == key.kc) {
+            if !key.pressed {
+                let (_, action) = self.motion_keys.swap_remove(at);
+                self.gamepad.hold(action, false);
+            }
+            return true;
+        }
+        if !key.pressed || self.routing() || ui.focus() != Focus::Page {
+            return false;
+        }
+        let Some(action) = super::keyboard::motion_of(key, &self.bindings, ui, browser) else {
+            return false;
+        };
+        self.motion_keys.push((key.kc, action));
+        self.gamepad.hold(action, true);
+        true
+    }
+
+    /// Let go of every key-held cursor and scroll action, for a window whose
+    /// key releases will not arrive.
+    fn release_motion_keys(&mut self) {
+        for (_, action) in std::mem::take(&mut self.motion_keys) {
+            self.gamepad.hold(action, false);
+        }
     }
 
     /// One pad-button edge, either direction — the controller twin of
@@ -856,6 +893,9 @@ impl AppEventHandler {
             // event started runs the per-frame drains, which is the delivery.
             Event::User { .. } => {}
             Event::Window { win_event, .. } => {
+                if matches!(win_event, sdl2::event::WindowEvent::FocusLost) {
+                    self.release_motion_keys();
+                }
                 if let Some(cmd) = handle_window(win_event) {
                     commands.push(cmd);
                 }

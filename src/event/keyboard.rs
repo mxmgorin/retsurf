@@ -311,6 +311,19 @@ fn on_key_down(
     browser.handle_input(servo::InputEvent::Keyboard(into_servo(key)));
 }
 
+/// The cursor or scroll action a key press holds on the page, if it is bound
+/// to one and nothing editable mutes it.
+pub fn motion_of(
+    key: &KeyEvent,
+    bindings: &Bindings<Action>,
+    ui: &AppUi,
+    browser: &AppBrowser,
+) -> Option<Action> {
+    let typing =
+        browser.text_input_focused() || ui.address_bar_focused() || ui.home_field_editing();
+    lookup(key, bindings, false, typing).filter(|action| action.motion().is_some())
+}
+
 /// Resolve a key event against the `[keyboard]` bindings: `nav_*` steps need an
 /// open overlay and auto-repeat while held; a plain binding (no Ctrl/Alt) is
 /// muted while anything editable has focus, so it can't hijack typing.

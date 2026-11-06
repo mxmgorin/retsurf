@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reader view per site: a bookmark's articles open in it, set from Quick Access on the site
 - Reload row in Quick Access on a page
 - Stick and D-pad roles on a page (`[controls] left_stick` / `right_stick` / `dpad`): cursor, scroll or none
+- Cursor and scroll actions (`cursor_up` ... `scroll_right`) for any button or key, moving while held; unbound by default
 - Bookmark row in Game Mode's Quick Access
 - `retsurf --open ID` opens a bookmark as it asks
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
