@@ -99,9 +99,6 @@ action_table! {
         Address => "address", "Address bar",
         /// Toggle link-hint navigation.
         Hints => "hints", "Link hints",
-        /// Toggle the D-pad / left stick between cursor and page scroll, for devices
-        /// with no right stick. Latched inside the gamepad, never a command.
-        Scroll => "scroll", "Scroll toggle",
         /// Overlay navigation by one step: menu rows /
         /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
         /// through to the page when none is.
@@ -254,8 +251,6 @@ impl Action {
             Action::NavDown => AppCommand::Input(InputCommand::Nav(0, 1)),
             Action::NavLeft => AppCommand::Input(InputCommand::Nav(-1, 0)),
             Action::NavRight => AppCommand::Input(InputCommand::Nav(1, 0)),
-            // Scroll is resolved inside the gamepad, not routed.
-            Action::Scroll => return None,
         })
     }
 }

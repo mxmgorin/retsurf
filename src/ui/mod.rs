@@ -334,8 +334,6 @@ pub struct AppUi {
     pub hints: Hints,
     /// Modal page prompts: queued `<select>` pickers and JS dialogs.
     pub prompt: Prompt,
-    /// The gamepad's latched D-pad scroll mode, drawn in place of the cursor.
-    scroll_mode: bool,
     /// Per-axis direction the cursor is edge-scrolling, `(0, 0)` when not.
     edge_scroll: (i8, i8),
     /// Whether hint mode draws combo badges; off = plain spatial hops.
@@ -423,7 +421,6 @@ impl AppUi {
             about_icon: settings::about_icon(),
             hints: Hints::new(),
             prompt: Prompt::new(),
-            scroll_mode: false,
             edge_scroll: (0, 0),
             hint_badges: controls.hint_badges,
             button_hints: interface.button_hints,
@@ -1045,7 +1042,7 @@ impl AppUi {
                 {
                     self.transients_built.cursor = true;
                     let pos = egui::pos2(self.cursor.0, self.cursor.1);
-                    cursor::paint_cursor(ctx, pos, self.scroll_mode, self.edge_scroll);
+                    cursor::paint_cursor(ctx, pos, self.edge_scroll);
                 }
 
                 self.transients_built.toast = self.add_toast(ctx);

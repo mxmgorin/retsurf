@@ -7,7 +7,7 @@
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
-use crate::command::{AppCommand, InputCommand, QuickAccessAction};
+use crate::command::{Analog, AppCommand, InputCommand, QuickAccessAction};
 use crate::config::ControlsConfig;
 use crate::event::gamepad::cursor_curve;
 use crate::event::gamepad_api;
@@ -627,13 +627,12 @@ impl GameInput {
             mirror.tick(self.hold, commands);
         }
         let (aim, scroll) = self.analog();
-        commands.push(AppCommand::Input(InputCommand::Analog {
+        commands.push(AppCommand::Input(InputCommand::Analog(Analog {
             aim,
-            stick: (0.0, 0.0),
+            cursor_uncurved: aim,
             scroll,
-            right: (0.0, 0.0),
-            scroll_mode: false,
-        }));
+            ..Analog::default()
+        })));
     }
 
     /// The cursor vector and the scroll amount the sticks ask for this frame,

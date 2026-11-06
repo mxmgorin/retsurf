@@ -19,8 +19,9 @@ f = "hints"                # plain keys fire only while no text field has focus
 k = "nav_up"
 ```
 
-**Gamepad buttons**: `a b x y l1 r1 l2 r2 l3 r3 start select`. The D-pad aims the cursor and
-is not bindable. While the on-screen keyboard is open, L2/R2 act as Shift and Enter. A button
+**Gamepad buttons**: `a b x y l1 r1 l2 r2 l3 r3 start select`. The D-pad is not bindable.
+What the D-pad and each stick do on a page is set by `[controls] dpad` / `left_stick` /
+`right_stick` ([configuration](CONFIGURATION.md)). While the on-screen keyboard is open, L2/R2 act as Shift and Enter. A button
 with a hold or chord fires its tap on release, and `confirm` takes no hold or chord, since
 clicks and drags need its press.
 
@@ -39,8 +40,7 @@ is on Ctrl, so pages get all plain keys:
 
 **Actions**: `confirm`, `cancel`, `menu` (Quick Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`
-(menu section or history), `home`, `address`, `hints`, `scroll` (toggle the stick between
-cursor and scrolling; unbound by default), `nav_up` / `nav_down` / `nav_left` / `nav_right`
+(menu section or history), `home`, `address`, `hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
 (a step in the open overlay, else the key goes to the page), `reload`, `reader`,
 `bookmark`, `zoom_in` / `zoom_out` / `zoom_reset`, `tab_next` / `tab_prev` / `new_tab` /
 `close_tab`, `none`.

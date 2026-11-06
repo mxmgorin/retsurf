@@ -1,6 +1,6 @@
 //! A small declarative macro for the config's string-keyed enums.
 //!
-//! [`ToolbarPosition`], [`CursorMode`], and [`MemoryProfile`] are all the same
+//! [`ToolbarPosition`], [`StickRole`], and [`MemoryProfile`] are all the same
 //! shape: a handful of unit variants, each with a stable lowercase TOML token and
 //! a human label for the settings GUI, parsed leniently — an unknown token falls
 //! back to a default rather than failing the whole config parse, so a typo in a
@@ -10,7 +10,7 @@
 //! `Enum::CHOICES` instead of re-listing them).
 //!
 //! [`ToolbarPosition`]: crate::config::ToolbarPosition
-//! [`CursorMode`]: crate::config::CursorMode
+//! [`StickRole`]: crate::config::StickRole
 //! [`MemoryProfile`]: crate::config::MemoryProfile
 
 /// Generate a string-keyed config enum from a `Variant => "token", "Label"`

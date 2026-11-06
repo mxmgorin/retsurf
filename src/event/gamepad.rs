@@ -5,12 +5,9 @@
 //!
 //! The D-pad and L2/R2 keep their analog and contextual roles *and* feed the pad
 //! machine, so they are bindable without losing what they already do.
-//!
-//! [`Action::Scroll`] is handled here rather than routed: it latches
-//! `scroll_mode`, which turns the aim vector into page scrolling.
 
-use crate::command::{AppCommand, InputCommand};
-use crate::config::ControlsConfig;
+use crate::command::{Analog, AppCommand, InputCommand};
+use crate::config::{ControlsConfig, StickRole};
 use crate::event::bindings::Action;
 use inputbind::sdl::{axis_value, pad_of, trigger_of};
 use inputbind::{Bindings, Cadence, Edge, Pad, PadState, Stick, Trigger};
@@ -29,9 +26,6 @@ pub struct Gamepad {
     pads: PadState<Action>,
     left_trigger: Trigger,
     right_trigger: Trigger,
-    /// While latched (the `scroll` action toggles it), the aim vector scrolls
-    /// the page instead of moving the cursor.
-    scroll_mode: bool,
     /// Scratch for resolved actions, reused so the input path never allocates.
     actions: Vec<(Action, Edge)>,
 }
@@ -45,7 +39,6 @@ impl Gamepad {
             pads: PadState::new(hold_of(&cfg), cadence_of(&cfg)),
             left_trigger: Trigger::new(Pad::L2, cfg.trigger_threshold),
             right_trigger: Trigger::new(Pad::R2, cfg.trigger_threshold),
-            scroll_mode: cfg.starts_in_scroll_mode(),
             actions: Vec::with_capacity(Pad::COUNT),
             cfg,
         }
@@ -107,11 +100,6 @@ impl Gamepad {
         let mut actions = std::mem::take(&mut self.actions);
         for &(action, edge) in &actions {
             let pressed = edge == Edge::Press;
-            if action == Action::Scroll {
-                // Not a held action, so only its press ever arrives.
-                self.scroll_mode = !self.scroll_mode;
-                continue;
-            }
             commands.extend(action.command(pressed));
         }
         actions.clear();
@@ -185,19 +173,44 @@ impl Gamepad {
     }
 
     /// Emit this frame's analog state for the router to apply, and fire any hold
-    /// or repeat that just came due. The aim vector is sent raw along with the
-    /// latched scroll-mode flag — what it means is the router's decision.
+    /// or repeat that just came due. The aim vector goes raw, for overlays; the
+    /// page's vectors follow the roles in the config.
     pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
         self.pads.tick(Instant::now(), &mut self.actions);
         self.dispatch(commands);
 
-        commands.push(AppCommand::Input(InputCommand::Analog {
+        commands.push(AppCommand::Input(InputCommand::Analog(Analog {
             aim: self.aim(),
             stick: self.left.vector(),
-            scroll: (0.0, self.right.vector().1),
+            cursor: self.driving(StickRole::Cursor, true, (0.0, 0.0)),
+            cursor_uncurved: self.dpad_as(StickRole::Cursor),
+            scroll: self.driving(StickRole::Scroll, false, self.dpad_as(StickRole::Scroll)),
             right: self.right.vector(),
-            scroll_mode: self.scroll_mode,
-        }));
+        })));
+    }
+
+    /// What drives `role` on a page: the sticks given it and `extra`, summed and
+    /// clamped to -1..=1. `across`: whether the sticks count sideways too.
+    fn driving(&self, role: StickRole, across: bool, extra: (f32, f32)) -> (f32, f32) {
+        let (x, y) = [
+            (&self.left, self.cfg.left_stick),
+            (&self.right, self.cfg.right_stick),
+        ]
+        .into_iter()
+        .filter(|(_, given)| *given == role)
+        .map(|(stick, _)| stick.vector())
+        .map(|(x, y)| (if across { x } else { 0.0 }, y))
+        .chain([extra])
+        .fold((0.0, 0.0), |(x, y), (dx, dy)| (x + dx, y + dy));
+        (x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0))
+    }
+
+    /// The D-pad's vector while `role` is what it does on a page, else zero.
+    fn dpad_as(&self, role: StickRole) -> (f32, f32) {
+        match self.cfg.dpad == role {
+            true => self.dpad,
+            false => (0.0, 0.0),
+        }
     }
 }
 
@@ -274,5 +287,72 @@ mod tests {
     fn unswapped_stays_positional() {
         assert_eq!(labelled_pad(Button::A, false), Some(Pad::A));
         assert_eq!(labelled_pad(Button::Y, false), Some(Pad::Y));
+    }
+
+    fn analog(pad: &mut Gamepad) -> Analog {
+        let mut out = Vec::new();
+        pad.tick(&mut out);
+        out.into_iter()
+            .find_map(|command| match command {
+                AppCommand::Input(InputCommand::Analog(analog)) => Some(analog),
+                _ => None,
+            })
+            .expect("every tick sends the analog state")
+    }
+
+    /// The page reads the sticks by their roles; overlays keep the physical
+    /// left stick, and a stick set to none drives neither.
+    #[test]
+    fn the_sticks_drive_what_their_roles_say() {
+        let cfg = ControlsConfig {
+            left_stick: StickRole::Scroll,
+            right_stick: StickRole::Cursor,
+            ..ControlsConfig::default()
+        };
+        let mut pad = Gamepad::new(cfg.clone());
+        pad.on_axis(Axis::LeftY, i16::MAX);
+        pad.on_axis(Axis::RightX, i16::MAX);
+        let swapped = analog(&mut pad);
+        assert_eq!(swapped.cursor, (1.0, 0.0));
+        assert_eq!(swapped.scroll, (0.0, 1.0));
+        assert_eq!(swapped.stick, (0.0, 1.0));
+        pad.set_config(ControlsConfig {
+            left_stick: StickRole::None,
+            ..cfg
+        });
+        let none = analog(&mut pad);
+        assert_eq!(none.scroll, (0.0, 0.0));
+        assert_eq!(none.cursor, (1.0, 0.0));
+        pad.set_config(ControlsConfig {
+            left_stick: StickRole::Cursor,
+            right_stick: StickRole::Cursor,
+            ..ControlsConfig::default()
+        });
+        assert_eq!(analog(&mut pad).cursor, (1.0, 1.0));
+    }
+
+    /// The page takes the D-pad by its role: uncurved as the cursor, both ways
+    /// as scroll; overlays keep it whatever the role.
+    #[test]
+    fn the_dpad_drives_what_its_role_says() {
+        let store = crate::event::bindings::default_store();
+        let bindings = crate::event::bindings::build(&store, crate::event::test_key_names());
+        for (role, uncurved, scroll) in [
+            (StickRole::Cursor, (1.0, 0.0), (0.0, 0.0)),
+            (StickRole::Scroll, (0.0, 0.0), (1.0, 0.0)),
+            (StickRole::None, (0.0, 0.0), (0.0, 0.0)),
+        ] {
+            let mut pad = Gamepad::new(ControlsConfig {
+                dpad: role,
+                ..ControlsConfig::default()
+            });
+            pad.on_pad(Pad::Right, true, &bindings, &mut Vec::new());
+            let page = analog(&mut pad);
+            assert_eq!(
+                (page.cursor_uncurved, page.scroll, page.aim),
+                (uncurved, scroll, (1.0, 0.0)),
+                "{role:?}"
+            );
+        }
     }
 }

@@ -87,7 +87,9 @@ osk_nav_threshold = 0.5    # stick deflection that moves the on-screen keyboard
 osk_nav_initial_delay_ms = 350   # delay before held navigation repeats
 osk_nav_repeat_ms = 140          # repeat interval
 hold_ms = 400              # press length for a "hold:" gesture
-cursor_mode = "mouse"      # stick at startup: "mouse" (cursor) or "scroll"
+dpad = "cursor"            # on a page: "cursor", "scroll" or "none"
+left_stick = "cursor"      # on a page: "cursor", "scroll" or "none"
+right_stick = "scroll"     # on a page: "cursor", "scroll" or "none"
 hint_badges = true         # link hints show button combos; off = move between them
 edge_scroll = true         # cursor at a window edge scrolls (not in Game Mode)
 pad_layout = "nintendo"    # button labels shown: "nintendo", "xbox" or "playstation"

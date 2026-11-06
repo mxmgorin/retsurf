@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings); Quick Access gets Close while one runs and switches the open page between site, app and game
 - Reader view per site: a bookmark's articles open in it, set from Quick Access on the site
 - Reload row in Quick Access on a page
+- Stick and D-pad roles on a page (`[controls] left_stick` / `right_stick` / `dpad`): cursor, scroll or none
 - Bookmark row in Game Mode's Quick Access
 - `retsurf --open ID` opens a bookmark as it asks
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `[controls] dpad` replaces `cursor_mode`, which is no longer read
 - Interface font: IBM Plex Sans
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
 - The start page banner and wordmark are smaller
@@ -41,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The `scroll` action (cursor / scroll toggle); a binding to it is dropped
 - Speed-dial editor and the start page's settings tile
 
 ### Fixed

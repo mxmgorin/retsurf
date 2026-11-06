@@ -158,9 +158,7 @@ impl Draft {
     /// Why this binding cannot be made, if it cannot.
     fn refuse(&self, gesture: &str, action: Action, keyboard: bool) -> Option<String> {
         if keyboard {
-            // `scroll` latches inside the pad, so a key bound to it would do nothing.
-            return (action == Action::Scroll)
-                .then(|| format!("{} is gamepad-only", action.display()));
+            return None;
         }
         validate(&self.bindings.gamepad, gesture, Some(action), REQUIRED)
             .err()

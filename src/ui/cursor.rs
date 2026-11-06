@@ -1,6 +1,5 @@
 //! The gamepad cursor: [`AppUi`] owns its position and linger timer; the router
-//! moves it, the render pass paints it (or the scroll-mode indicator) via
-//! [`paint_cursor`].
+//! moves it, the render pass paints it via [`paint_cursor`].
 
 use super::theme::palette;
 use super::AppUi;
@@ -99,67 +98,22 @@ impl AppUi {
     pub fn set_cursor_linger(&mut self, ms: u64) {
         self.cursor_linger = Duration::from_millis(ms);
     }
-
-    /// Mirror the gamepad's latched D-pad scroll mode (router, every analog
-    /// frame). Entering pings the linger timer so the indicator shows like the
-    /// cursor, then auto-hides unless [`Self::mark_cursor_active`] keeps it alive.
-    #[inline]
-    pub fn set_scroll_mode(&mut self, on: bool) {
-        if on && !self.scroll_mode {
-            self.cursor_last_move = Some(Instant::now());
-        }
-        self.scroll_mode = on;
-    }
-
-    /// Refresh the linger timer without moving the cursor: active page scroll
-    /// keeps the scroll-mode indicator visible, then it hides like the cursor.
-    #[inline]
-    pub fn mark_cursor_active(&mut self) {
-        self.cursor_last_move = Some(Instant::now());
-    }
 }
 
-/// Gamepad cursor overlay, always on top: the disc, the scroll-mode indicator
-/// while D-pad scroll is latched, or edge-scroll arrows toward `edge_scroll`.
+/// Gamepad cursor overlay, always on top: the disc, or edge-scroll arrows
+/// toward `edge_scroll`.
 /// `pos` is in logical px, which equals egui points at the handheld's 1.0 scale.
-pub(super) fn paint_cursor(
-    ctx: &egui::Context,
-    pos: egui::Pos2,
-    scroll_mode: bool,
-    edge_scroll: (i8, i8),
-) {
+pub(super) fn paint_cursor(ctx: &egui::Context, pos: egui::Pos2, edge_scroll: (i8, i8)) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("gamepad_cursor"),
     ));
     if edge_scroll != (0, 0) {
         add_edge_arrows(&painter, pos, edge_scroll);
-    } else if scroll_mode {
-        // Same linger/auto-hide as the cursor: shown while scrolling, then fades.
-        add_scroll_indicator(&painter, pos);
     } else {
         painter.circle_filled(pos, CURSOR_RADIUS, palette().deep_teal);
         painter.circle_filled(pos, CURSOR_RADIUS - CURSOR_RIM, palette().accent);
         painter.circle_filled(pos, CURSOR_DOT, CURSOR_DOT_FILL);
-    }
-}
-
-/// The D-pad scroll-mode indicator at the parked cursor position: a center dot
-/// with up/down arrowheads, like a browser's middle-click autoscroll marker.
-fn add_scroll_indicator(painter: &egui::Painter, pos: egui::Pos2) {
-    let fill = palette().accent;
-    let stroke = egui::Stroke::new(CURSOR_RIM, palette().deep_teal);
-    painter.circle_filled(pos, 2.5, fill);
-    painter.circle_stroke(pos, 2.5, stroke);
-    for dir in [-1.0f32, 1.0] {
-        let tip = egui::pos2(pos.x, pos.y + dir * 12.0);
-        let base = pos.y + dir * 5.5;
-        let points = vec![
-            tip,
-            egui::pos2(pos.x - 4.5, base),
-            egui::pos2(pos.x + 4.5, base),
-        ];
-        painter.add(egui::Shape::convex_polygon(points, fill, stroke));
     }
 }
 

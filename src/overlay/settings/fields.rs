@@ -6,9 +6,9 @@
 
 use super::SettingsSection;
 use crate::config::{
-    bounds, js_preset, AppConfig, Brand, Channel, CursorMode, ExperimentalPreset, HomeLayout,
-    HomeSearch, HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling,
-    ShaderResolution, TextureFilter, TextureLimit, ToolbarPosition, UiTheme,
+    bounds, js_preset, AppConfig, Brand, Channel, ExperimentalPreset, HomeLayout, HomeSearch,
+    HomeSize, HomeSort, MemoryProfile, OskStyle, PadLayout, PageTheme, Scaling, ShaderResolution,
+    StickRole, TextureFilter, TextureLimit, ToolbarPosition, UiTheme,
 };
 use crate::overlay::quick_access::Modes;
 use crate::platform::render::shaders;
@@ -505,7 +505,9 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Controls, "Gamepad",     "Hold gesture (ms)",      int!(controls.hold_ms as u64, bounds::HOLD_MS, 50), false),
     f(S::Controls, "Gamepad",     "Gamepad rumble",         flag!(controls.haptics), false),
 
-    f(S::Controls, "Cursor & scroll", "Cursor mode",        choice!(controls.cursor_mode: CursorMode), true),
+    f(S::Controls, "Cursor & scroll", "D-pad",              choice!(controls.dpad: StickRole), false),
+    f(S::Controls, "Cursor & scroll", "Left stick",         choice!(controls.left_stick: StickRole), false),
+    f(S::Controls, "Cursor & scroll", "Right stick",        choice!(controls.right_stick: StickRole), false),
     f(S::Controls, "Cursor & scroll", "Cursor speed",       float!(controls.cursor_speed as f32, bounds::CURSOR_SPEED, 50.0, 0), false),
     f(S::Controls, "Cursor & scroll", "Cursor curve",       float!(controls.cursor_curve as f32, bounds::CURSOR_CURVE, 0.25, 2, Some(cursor_curve_label)), false),
     f(S::Controls, "Cursor & scroll", "Scroll speed",       float!(controls.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),

@@ -8,6 +8,7 @@ use super::{
     PromptAction, QuickAccessAction, UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
+use crate::command::Analog;
 use crate::event::game::input_map::ClickButton;
 use crate::event::gamepad::cursor_curve;
 use crate::overlay::hints::{HintInput, Sym};
@@ -350,13 +351,7 @@ impl App {
             InputCommand::OskButton(input) => {
                 self.osk_input(*input, out);
             }
-            InputCommand::Analog {
-                aim,
-                stick,
-                scroll,
-                right,
-                scroll_mode,
-            } => self.route_analog(*aim, *stick, *scroll, *right, *scroll_mode, out),
+            InputCommand::Analog(analog) => self.route_analog(*analog, out),
         }
     }
 
@@ -451,20 +446,17 @@ impl App {
     }
 
     /// Apply per-frame analog state: grid navigation while the keyboard is open,
-    /// otherwise cursor movement and page scroll. `scroll_mode` changes only the
-    /// bare-page meaning of the aim vector; an overlay gets the raw aim.
-    fn route_analog(
-        &mut self,
-        aim: (f32, f32),
-        stick: (f32, f32),
-        scroll: (f32, f32),
-        right: (f32, f32),
-        scroll_mode: bool,
-        out: &mut Vec<AppCommand>,
-    ) {
-        // Keep the UI's scroll-mode indicator in sync (drawn in place of the
-        // cursor while the mode is latched).
-        self.ui.set_scroll_mode(scroll_mode);
+    /// otherwise cursor movement and page scroll. The roles of the D-pad and the
+    /// sticks apply to the bare page only; an overlay gets the raw aim.
+    fn route_analog(&mut self, analog: Analog, out: &mut Vec<AppCommand>) {
+        let Analog {
+            aim,
+            stick,
+            cursor,
+            cursor_uncurved,
+            scroll,
+            right,
+        } = analog;
         self.ui.set_edge_scroll((0, 0));
         let now = Instant::now();
         let dt = (now - self.last_tick).as_secs_f32();
@@ -526,30 +518,17 @@ impl App {
             return;
         }
 
-        // Scroll mode: the aim vector scrolls the page (combined with the right
-        // stick) and the cursor stays parked.
-        if scroll_mode {
-            let dx = scroll.0 * scroll_speed * dt;
-            let dy = (scroll.1 + aim.1).clamp(-1.0, 1.0) * scroll_speed * dt;
-            if (dx, dy) != (0.0, 0.0) {
-                // The parked cursor may sit over the toolbar; scroll the page
-                // from its top edge in that case.
-                let (x, y) = self.ui.cursor_browser_rel();
-                self.ui.scroll_page(&self.browser, dx, dy, x, y.max(1.0));
-                // Keep the scroll-mode indicator alive while actively scrolling;
-                // it lingers and auto-hides like the cursor once scrolling stops.
-                self.ui.mark_cursor_active();
-            }
-            return;
-        }
-
-        if aim != (0.0, 0.0) {
+        let page_aim = (
+            (cursor_uncurved.0 + cursor.0).clamp(-1.0, 1.0),
+            (cursor_uncurved.1 + cursor.1).clamp(-1.0, 1.0),
+        );
+        if page_aim != (0.0, 0.0) {
             // Only the stick's share of the aim takes the curve: the D-pad is
             // already full deflection, and Game Mode curves its own sticks.
-            let curved = cursor_curve(stick, deadzone, curve);
+            let curved = cursor_curve(cursor, deadzone, curve);
             let aim = (
-                (aim.0 - stick.0 + curved.0).clamp(-1.0, 1.0),
-                (aim.1 - stick.1 + curved.1).clamp(-1.0, 1.0),
+                (cursor_uncurved.0 + curved.0).clamp(-1.0, 1.0),
+                (cursor_uncurved.1 + curved.1).clamp(-1.0, 1.0),
             );
             let clipped = self.ui.move_cursor(
                 aim.0 * cursor_speed * dt,

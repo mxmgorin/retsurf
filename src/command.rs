@@ -283,18 +283,24 @@ pub enum InputCommand {
     },
     /// A pad button the keyboard claimed ahead of its binding.
     OskButton(PadInput),
-    /// Per-frame analog state, all normalized to -1..=1. `aim` merges the left
-    /// stick and D-pad, `stick` is the stick alone (hint mode hops on it while
-    /// the D-pad types combos), `scroll` is the page-scroll vector, and
-    /// `scroll_mode` makes the aim scroll the page.
-    Analog {
-        aim: (f32, f32),
-        stick: (f32, f32),
-        scroll: (f32, f32),
-        /// The right stick's full vector.
-        right: (f32, f32),
-        scroll_mode: bool,
-    },
+    /// Per-frame analog state (see [`Analog`]).
+    Analog(Analog),
+}
+
+/// Per-frame analog state, all normalized to -1..=1. `aim` merges the left
+/// stick and D-pad, `stick` is the stick alone (hint mode hops on it while
+/// the D-pad types combos), and `scroll` is the page-scroll vector.
+#[derive(Clone, Copy, Default)]
+pub struct Analog {
+    pub aim: (f32, f32),
+    pub stick: (f32, f32),
+    /// The sticks with the cursor's role, standing in for `stick` on a page.
+    pub cursor: (f32, f32),
+    /// Page cursor motion applied as is, without the curve `cursor` takes.
+    pub cursor_uncurved: (f32, f32),
+    pub scroll: (f32, f32),
+    /// The right stick's full vector.
+    pub right: (f32, f32),
 }
 
 #[cfg(test)]

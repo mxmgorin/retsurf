@@ -30,9 +30,12 @@ pub struct ControlsConfig {
     /// bindings themselves live in `bindings.toml` — see
     /// [`crate::event::bindings`].
     pub hold_ms: u64,
-    /// Default D-pad/stick mode at startup ([`CursorMode`]). Toggle live with the
-    /// `scroll` action; this only sets the initial mode.
-    pub cursor_mode: CursorMode,
+    /// What the D-pad does on a page; overlays keep it as their own.
+    pub dpad: StickRole,
+    /// What the left stick does on a page; overlays keep it as their own.
+    pub left_stick: StickRole,
+    /// What the right stick does on a page; the on-screen keyboard keeps it.
+    pub right_stick: StickRole,
     /// Whether link-hint mode shows typed combo badges and routes the gamepad
     /// buttons as combo symbols. Off restores plain spatial hopping: the D-pad
     /// (and stick) hop the selection again and the buttons keep their normal
@@ -66,7 +69,9 @@ impl Default for ControlsConfig {
             osk_nav_initial_delay_ms: 350,
             osk_nav_repeat_ms: 140,
             hold_ms: 400,
-            cursor_mode: CursorMode::Mouse,
+            dpad: StickRole::Cursor,
+            left_stick: StickRole::Cursor,
+            right_stick: StickRole::Scroll,
             hint_badges: true,
             edge_scroll: true,
             haptics: true,
@@ -77,23 +82,14 @@ impl Default for ControlsConfig {
     }
 }
 
-impl ControlsConfig {
-    /// Whether the gamepad should start in scroll mode (vs the default cursor),
-    /// per [`cursor_mode`](Self::cursor_mode).
-    pub fn starts_in_scroll_mode(&self) -> bool {
-        self.cursor_mode == CursorMode::Scroll
-    }
-}
-
 token_enum! {
-    /// The default behavior of the D-pad / left stick before any runtime toggle
-    /// (see the `scroll` action). Serializes to `"mouse"` / `"scroll"` in TOML;
-    /// an unknown value falls back to `Mouse`.
-    pub enum CursorMode {
-        default Mouse;
-        /// Move a clickable on-screen cursor (the default).
-        Mouse => "mouse", "Mouse",
+    /// What a stick or the D-pad does on a page.
+    pub enum StickRole {
+        default Cursor;
+        /// Move the cursor.
+        Cursor => "cursor", "Cursor",
         /// Scroll the page.
         Scroll => "scroll", "Scroll",
+        None => "none", "None",
     }
 }

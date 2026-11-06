@@ -79,7 +79,7 @@ impl App {
         // a follow-up one. The analog tick's would spin the idle loop.
         if !matches!(
             command,
-            AppCommand::Input(InputCommand::Analog { .. })
+            AppCommand::Input(InputCommand::Analog(_))
                 | AppCommand::Resize
                 | AppCommand::Shutdown
                 | AppCommand::Persist

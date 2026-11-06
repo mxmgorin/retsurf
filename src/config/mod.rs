@@ -42,7 +42,7 @@ pub use adblock::AdblockConfig;
 pub use audio::AudioConfig;
 pub use brand::Brand;
 pub use browser::{BrowserConfig, PageTheme};
-pub use controls::{ControlsConfig, CursorMode};
+pub use controls::{ControlsConfig, StickRole};
 pub use data_saving::DataSavingConfig;
 pub use debug::DebugConfig;
 pub use display::DisplayConfig;
@@ -313,14 +313,14 @@ fn fix_usize(name: &str, v: &mut usize, b: bounds::IntBounds) {
 
 #[cfg(test)]
 mod tests {
-    use super::{shaders, AppConfig, Channel, CursorMode, MemoryProfile, Scaling, ToolbarPosition};
+    use super::{shaders, AppConfig, Channel, MemoryProfile, Scaling, StickRole, ToolbarPosition};
 
     // Per-variant round-trips live in each `token_enum!` invocation's own
     // generated test; this only covers what the macro cannot know.
     #[test]
     fn from_value_is_lenient() {
         // Case- and whitespace-insensitive, unified across all the enums.
-        assert_eq!(CursorMode::from_value("  SCROLL "), CursorMode::Scroll);
+        assert_eq!(StickRole::from_value("  SCROLL "), StickRole::Scroll);
         assert_eq!(
             ToolbarPosition::from_value("Bottom"),
             ToolbarPosition::Bottom

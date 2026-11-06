@@ -100,9 +100,9 @@ token_enum! {
     /// trade speed for a smaller footprint; `Auto` picks one from the build target
     /// and detected RAM. See [`crate::browser::memory`] for what each tier sets.
     /// Serializes to a lowercase token in TOML; an unknown value falls back to
-    /// `Auto`, like [`CursorMode`].
+    /// `Auto`, like [`StickRole`].
     ///
-    /// [`CursorMode`]: crate::config::CursorMode
+    /// [`StickRole`]: crate::config::StickRole
     pub enum MemoryProfile {
         default Auto;
         /// Pick a tier from the build target and detected RAM (the default).
