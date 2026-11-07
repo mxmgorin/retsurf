@@ -31,26 +31,69 @@ pub(super) fn pick_filename(
 fn filename_from_disposition(value: &str) -> Option<String> {
     let mut plain = None;
     let mut extended = None;
-    for param in value.split(';') {
-        let Some((key, val)) = param.split_once('=') else {
-            continue;
-        };
-        let val = val.trim();
-        match key.trim().to_ascii_lowercase().as_str() {
-            // charset'language'percent-encoded; everything past the last quote.
-            "filename*" => {
-                let encoded = val.rsplit_once('\'').map_or(val, |(_, e)| e);
-                extended = Some(
-                    percent_encoding::percent_decode_str(encoded)
-                        .decode_utf8_lossy()
-                        .into_owned(),
-                );
-            }
-            "filename" => plain = Some(val.trim_matches('"').to_string()),
+    for (key, val) in header_params(value) {
+        match key.as_str() {
+            "filename*" => extended = Some(decode_ext_value(&val)),
+            "filename" => plain = Some(val),
             _ => {}
         }
     }
     extended.or(plain).and_then(|name| sanitize(&name))
+}
+
+/// The `key=value` parameters of a header value, keys lowercased. A quoted
+/// value may hold `;` and backslash-escaped characters.
+fn header_params(value: &str) -> Vec<(String, String)> {
+    let mut params = Vec::new();
+    let mut rest = value;
+    while !rest.is_empty() {
+        let end = rest.find([';', '=']).unwrap_or(rest.len());
+        let key = rest[..end].trim().to_ascii_lowercase();
+        if !rest[end..].starts_with('=') {
+            rest = rest.get(end + 1..).unwrap_or("");
+            continue;
+        }
+        let after = rest[end + 1..].trim_start();
+        let (val, tail) = match after.strip_prefix('"') {
+            Some(quoted) => unquote(quoted),
+            None => {
+                let stop = after.find(';').unwrap_or(after.len());
+                (after[..stop].trim().to_string(), &after[stop..])
+            }
+        };
+        params.push((key, val));
+        rest = tail.find(';').map_or("", |at| &tail[at + 1..]);
+    }
+    params
+}
+
+/// A quoted string's contents up to its closing quote, escapes resolved, and
+/// what follows that quote.
+fn unquote(quoted: &str) -> (String, &str) {
+    let mut out = String::new();
+    let mut chars = quoted.char_indices();
+    while let Some((at, c)) = chars.next() {
+        match c {
+            '"' => return (out, &quoted[at + 1..]),
+            '\\' => out.extend(chars.next().map(|(_, escaped)| escaped)),
+            c => out.push(c),
+        }
+    }
+    (out, "")
+}
+
+/// An RFC 5987 `charset'language'percent-encoded` value, in UTF-8 or
+/// ISO-8859-1; one without the prefix decodes as UTF-8.
+fn decode_ext_value(value: &str) -> String {
+    let (charset, encoded) = match value.splitn(3, '\'').collect::<Vec<_>>()[..] {
+        [charset, _, encoded] => (charset, encoded),
+        _ => ("utf-8", value),
+    };
+    let bytes: Vec<u8> = percent_encoding::percent_decode_str(encoded).collect();
+    match charset.eq_ignore_ascii_case("iso-8859-1") {
+        true => bytes.into_iter().map(char::from).collect(),
+        false => String::from_utf8_lossy(&bytes).into_owned(),
+    }
 }
 
 /// Save name from the URL's last path segment, falling back to `download`.
@@ -230,6 +273,23 @@ mod tests {
     fn disposition_without_filename() {
         assert_eq!(filename_from_disposition("inline"), None);
         assert_eq!(filename_from_disposition("attachment; size=42"), None);
+    }
+
+    /// Quotes guard a `;` and an escaped quote or backslash.
+    #[test]
+    fn disposition_quoted_string_is_parsed_whole() {
+        let name = filename_from_disposition(r#"attachment; filename="a;b.zip"; size=3"#);
+        assert_eq!(name.as_deref(), Some("a;b.zip"));
+        let name = filename_from_disposition(r#"attachment; filename="say \"hi\".txt""#);
+        assert_eq!(name.as_deref(), Some("say _hi_.txt"));
+    }
+
+    #[test]
+    fn disposition_extended_value_charsets() {
+        let latin = filename_from_disposition("attachment; filename*=iso-8859-1'en'%E9t%E9.txt");
+        assert_eq!(latin.as_deref(), Some("été.txt"));
+        let quoted = filename_from_disposition(r#"attachment; filename*="UTF-8''na%C3%AFve.zip""#);
+        assert_eq!(quoted.as_deref(), Some("naïve.zip"));
     }
 
     /// Server names are untrusted: no traversal, no hidden files.
