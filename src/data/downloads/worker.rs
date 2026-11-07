@@ -1,8 +1,9 @@
 //! One background thread per file (ureq is blocking): stream to `<path>.part`,
 //! rename into place. Requests present as the browser (User-Agent, Referer) and
 //! the save name is picked from the response (Content-Disposition, `download`
-//! attribute, redirect target). A watchdog fails stalled transfers (ureq has
-//! no idle timeout).
+//! attribute, redirect target). A peer that stops sending fails the read itself
+//! (see [`crate::net::agent`]); a watchdog resolves a cancel the worker, blocked
+//! in that read, cannot answer in time.
 
 use super::naming::{create_unique, pick_filename};
 use super::DownloadRequest;
@@ -11,10 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// No received bytes for this long fails the transfer as stalled.
-const STALL_TIMEOUT: Duration = Duration::from_secs(60);
-
-/// How often the watchdog checks progress and the cancel flag.
+/// How often the watchdog checks the cancel flag.
 const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Cancel grace before the watchdog resolves the entry for a blocked worker.
@@ -25,8 +23,8 @@ pub(super) struct Shared {
     pub received: AtomicU64,
     pub total: AtomicU64,
     pub cancel: AtomicBool,
-    /// The transfer is complete and only the hand-off remains, which no stall
-    /// or cancel can cut short.
+    /// The transfer is complete and only the hand-off remains, which no cancel
+    /// can cut short.
     saved: AtomicBool,
     /// Destination path, set once the response headers picked the final name.
     pub path: Mutex<Option<String>>,
@@ -103,33 +101,18 @@ fn finish(shared: &Shared, result: Result<(), String>, sender: &UserEventSender)
     sender.send(UserEvent::DownloadUpdate);
 }
 
-/// Resolve what the worker can't: an unacknowledged cancel or a stalled socket.
+/// Resolve what the worker can't: a cancel it does not acknowledge in time.
 fn watch(shared: Arc<Shared>, sender: UserEventSender) {
-    let mut last_received = 0;
-    let mut last_change = Instant::now();
     let mut cancelled_at: Option<Instant> = None;
     loop {
         std::thread::sleep(WATCH_INTERVAL);
         if shared.done.load(Ordering::Relaxed) || shared.saved.load(Ordering::Relaxed) {
             return;
         }
-        let received = shared.received.load(Ordering::Relaxed);
-        if received != last_received {
-            last_received = received;
-            last_change = Instant::now();
-        }
-        if shared.cancel.load(Ordering::Relaxed) {
-            if cancelled_at.get_or_insert_with(Instant::now).elapsed() >= CANCEL_GRACE {
-                finish(&shared, Err("cancelled".to_string()), &sender);
-                return;
-            }
-        } else if last_change.elapsed() >= STALL_TIMEOUT {
-            shared.cancel.store(true, Ordering::Relaxed);
-            finish(
-                &shared,
-                Err(format!("stalled: no data for {}s", STALL_TIMEOUT.as_secs())),
-                &sender,
-            );
+        if shared.cancel.load(Ordering::Relaxed)
+            && cancelled_at.get_or_insert_with(Instant::now).elapsed() >= CANCEL_GRACE
+        {
+            finish(&shared, Err("cancelled".to_string()), &sender);
             return;
         }
     }

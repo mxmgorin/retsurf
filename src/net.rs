@@ -12,19 +12,23 @@ use std::time::{Duration, Instant};
 /// Deadline for each pre-body phase of a request (DNS, connect, headers).
 const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Longest a single read may wait for data, the body's included.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// How the app identifies itself when fetching for itself rather than for a
 /// page (the GitHub API 403s a request without one). Fetches on a page's
 /// behalf send the browser's own User-Agent instead.
 pub const USER_AGENT: &str = concat!("retsurf/", env!("CARGO_PKG_VERSION"));
 
-/// The shared agent, with per-phase deadlines so no fetch can hang before its
-/// body; mid-body stalls are each caller's own watchdog's job.
+/// The shared agent, with per-phase deadlines and a per-read one, so no fetch
+/// hangs on a peer that stops sending, before its body or within it.
 pub fn agent() -> &'static ureq::Agent {
     static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
         ureq::Agent::config_builder()
             .timeout_resolve(Some(PHASE_TIMEOUT))
             .timeout_connect(Some(PHASE_TIMEOUT))
             .timeout_recv_response(Some(PHASE_TIMEOUT))
+            .timeout_per_read(Some(READ_TIMEOUT))
             .build()
             .new_agent()
     });

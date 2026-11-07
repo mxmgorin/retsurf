@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
 - Links to files typed in the address bar or opened from bookmarks and history showing as a page instead of downloading
 - Opening a finished download whose name has `#`, `?` or `%`
+- Downloads hanging when the server stops sending, and slow servers failing them as stalled
 
 ## [0.10.0] - 2026-10-08
 
