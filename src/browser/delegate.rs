@@ -14,7 +14,7 @@ use url::Url;
 impl AppBrowserInner {
     /// Whether navigating to `url` should download it instead: an `http(s)` URL
     /// whose path's last segment carries one of the configured file extensions.
-    fn is_download_url(&self, url: &Url) -> bool {
+    pub(super) fn is_download_url(&self, url: &Url) -> bool {
         if url.scheme() != "http" && url.scheme() != "https" {
             return false;
         }
@@ -29,6 +29,19 @@ impl AppBrowserInner {
                 .download_exts
                 .iter()
                 .any(|e| e.eq_ignore_ascii_case(ext))
+    }
+}
+
+impl AppBrowserInner {
+    /// Queue `url` for our own fetch (see [`crate::data::downloads`]), sent with
+    /// `referer` when a page linked to it.
+    pub(super) fn queue_download(&self, url: &Url, referer: Option<String>) {
+        log::info!("intercepting download navigation: {url}");
+        self.download_requests.push(super::DownloadRequest {
+            url: url.to_string(),
+            referer,
+            suggested_name: None,
+        });
     }
 }
 
@@ -137,17 +150,12 @@ impl servo::WebViewDelegate for AppBrowserInner {
             request.allow();
             return;
         }
-        let url = request.url.to_string();
-        log::info!("intercepting download navigation: {url}");
+        let url = request.url.clone();
         request.deny();
         let referer = self
             .tab_index(webview.id())
             .and_then(|i| referer_for(&self.tabs.borrow()[i].state.page_url));
-        self.download_requests.push(super::DownloadRequest {
-            url,
-            referer,
-            suggested_name: None,
-        });
+        self.queue_download(&url, referer);
     }
 
     /// An IME request marks "the user is typing", which mutes plain-key

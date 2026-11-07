@@ -105,6 +105,16 @@ impl AppBrowser {
     /// and unfocused so the current tab stays in view (the link-hints "open in
     /// new tab" gesture). Loading is independent of `show()`.
     pub fn open_tab_background(&mut self, url: &str) {
+        // A link to a file downloads instead: a new webview's load skips the
+        // navigation check that would catch it.
+        if let Some(file) = Url::parse(url)
+            .ok()
+            .filter(|u| self.inner.is_download_url(u))
+        {
+            let referer = super::delegate::referer_for(self.state().page_url());
+            self.inner.queue_download(&file, referer);
+            return;
+        }
         let Some(webview) = self.build_tab(url) else {
             return;
         };

@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Quit hanging after sites that use a shared worker, such as GitHub while signed in; on Android the next launch stayed black
 - Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
 - Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
+- Links to files typed in the address bar or opened from bookmarks and history showing as a page instead of downloading
 
 ## [0.10.0] - 2026-10-08
 

@@ -49,6 +49,13 @@ impl AppBrowser {
                     log::warn!("failed to parse the address to load");
                     return;
                 };
+                // The embedder's own loads skip the navigation check a page's go through.
+                if self.inner.is_download_url(&url) {
+                    self.inner.queue_download(&url, None);
+                    let mut state = self.get_state_mut();
+                    state.location = state.page_url().to_string();
+                    return;
+                }
                 let Some(webview) = self.inner.active_webview() else {
                     return;
                 };
