@@ -5,7 +5,7 @@
 //! (`blob:`/`data:`) arrive whole, `a[download]` http(s) links as URLs to fetch.
 
 use super::{delegate, AppBrowser};
-use crate::data::downloads::{BlobDownload, DownloadRequest};
+use crate::data::downloads::{sanitize_filename, BlobDownload, DownloadRequest};
 use base64::Engine;
 use serde::Deserialize;
 use std::sync::LazyLock;
@@ -58,7 +58,7 @@ pub(super) fn parse_taken(value: &str) -> Option<Captured> {
     }
     Some(match serde_json::from_str(value) {
         Ok(Taken::File { name, data }) => Captured::File(BlobDownload {
-            filename: sanitize(&name).unwrap_or_else(|| FALLBACK_NAME.to_string()),
+            filename: sanitize_filename(&name).unwrap_or_else(|| FALLBACK_NAME.to_string()),
             bytes: base64::engine::general_purpose::STANDARD
                 .decode(data)
                 .map_err(|e| format!("decode: {e}")),
@@ -68,10 +68,10 @@ pub(super) fn parse_taken(value: &str) -> Option<Captured> {
             match url::Url::parse(&url).map(|u| u.scheme().to_string()) {
                 Ok(scheme) if scheme == "http" || scheme == "https" => Captured::Link {
                     url,
-                    name: sanitize(&name),
+                    name: sanitize_filename(&name),
                 },
                 _ => Captured::File(BlobDownload {
-                    filename: sanitize(&name).unwrap_or_else(|| FALLBACK_NAME.to_string()),
+                    filename: sanitize_filename(&name).unwrap_or_else(|| FALLBACK_NAME.to_string()),
                     bytes: Err(format!("blocked download url: {url}")),
                 }),
             }
@@ -85,17 +85,6 @@ pub(super) fn parse_taken(value: &str) -> Option<Captured> {
             bytes: Err(format!("unexpected capture payload: {e}")),
         }),
     })
-}
-
-/// The name is page-controlled: strip separators, traversal, and control
-/// characters. `None` when nothing usable remains.
-fn sanitize(name: &str) -> Option<String> {
-    let name: String = name
-        .chars()
-        .filter(|c| !matches!(c, '/' | '\\') && !c.is_control())
-        .collect();
-    let name = name.trim().trim_start_matches('.').trim();
-    (!name.is_empty()).then(|| name.to_string())
 }
 
 impl AppBrowser {

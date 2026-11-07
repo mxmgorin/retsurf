@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opening a finished download whose name has `#`, `?` or `%`
 - Downloads hanging when the server stops sending, and slow servers failing them as stalled
 - Unfinished `.part` files left in the download folder after quitting
+- Downloads failing on FAT and exFAT SD cards for names with `:`, `?`, `*` and the like
 
 ## [0.10.0] - 2026-10-08
 

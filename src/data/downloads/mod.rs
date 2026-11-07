@@ -10,6 +10,7 @@ mod store;
 mod worker;
 
 use crate::config::DownloadsConfig;
+pub use naming::sanitize as sanitize_filename;
 
 /// A denied download navigation or an `a[download]` link, handed over by
 /// [`crate::browser`] for the workers here to fetch.

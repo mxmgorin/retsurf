@@ -69,14 +69,51 @@ fn filename_from_path(path: &str) -> Option<String> {
 }
 
 /// Make an untrusted name safe as a bare file name: no separators, control
-/// characters, or leading dots. `None` when nothing usable remains.
-fn sanitize(name: &str) -> Option<String> {
+/// characters, or leading and trailing dots, `_` for what SD cards refuse, and
+/// short enough for its partial file. `None` when nothing usable remains.
+pub fn sanitize(name: &str) -> Option<String> {
     let name: String = name
         .chars()
         .filter(|c| !matches!(c, '/' | '\\') && !c.is_control())
+        .map(|c| if UNPORTABLE.contains(&c) { '_' } else { c })
         .collect();
-    let name = name.trim().trim_start_matches('.').trim();
-    (!name.is_empty()).then(|| name.to_string())
+    let name = name
+        .trim()
+        .trim_start_matches('.')
+        .trim_end_matches(['.', ' '])
+        .trim();
+    (!name.is_empty()).then(|| fit(name))
+}
+
+/// Characters FAT and exFAT, the SD card file systems, refuse in a name.
+const UNPORTABLE: [char; 7] = ['<', '>', ':', '"', '|', '?', '*'];
+
+/// Longest file name, in bytes, the common file systems take.
+const NAME_MAX: usize = 255;
+
+/// Room a name keeps for the `-N` a clash appends (see [`candidates`]).
+const CLASH_ROOM: usize = "-99".len();
+
+/// Longest extension kept whole when a name is cut; a longer one is cut as name.
+const EXT_MAX: usize = 16;
+
+/// `name` cut to fit [`NAME_MAX`] with its partial suffix and a clash's number,
+/// the extension kept.
+fn fit(name: &str) -> String {
+    let max = NAME_MAX - PART_SUFFIX.len() - CLASH_ROOM;
+    if name.len() <= max {
+        return name.to_string();
+    }
+    let ext = name
+        .rfind('.')
+        .map(|at| &name[at..])
+        .filter(|ext| ext.len() <= EXT_MAX)
+        .unwrap_or("");
+    let mut end = max - ext.len();
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{ext}", &name[..end])
 }
 
 fn has_extension(name: &str) -> bool {
@@ -270,6 +307,24 @@ mod tests {
         assert_eq!(sanitize("a/b\\c"), Some("abc".to_string()));
         assert_eq!(sanitize("re\nport.pdf"), Some("report.pdf".to_string()));
         assert_eq!(sanitize("  .. "), None);
+    }
+
+    /// FAT and exFAT refuse these, and Windows drops a trailing dot.
+    #[test]
+    fn sanitize_makes_names_portable() {
+        assert_eq!(sanitize("a: b?*.zip"), Some("a_ b__.zip".to_string()));
+        assert_eq!(sanitize(r#""x"|<y>"#), Some("_x___y_".to_string()));
+        assert_eq!(sanitize("name. . "), Some("name".to_string()));
+    }
+
+    #[test]
+    fn a_long_name_is_cut_to_fit_keeping_its_extension() {
+        let max = NAME_MAX - PART_SUFFIX.len() - CLASH_ROOM;
+        let name = sanitize(&format!("{}.zip", "a".repeat(400))).unwrap();
+        assert_eq!(name.len(), max);
+        assert!(name.ends_with("a.zip"));
+        let wide = sanitize(&format!("{}.7z", "ж".repeat(300))).unwrap();
+        assert!(wide.len() <= max && wide.ends_with(".7z"));
     }
 
     #[test]
