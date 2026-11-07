@@ -321,7 +321,9 @@ impl Downloads {
     /// `file://` URL of the entry at `index` if it finished; `None` otherwise.
     pub fn open_url(&self, index: usize) -> Option<String> {
         let d = self.items.get(index)?;
-        matches!(d.state, State::Done).then(|| format!("file://{}", d.path))
+        matches!(d.state, State::Done)
+            .then(|| file_url(&d.path))
+            .flatten()
     }
 
     pub fn selected_open_url(&self) -> Option<String> {
@@ -384,6 +386,12 @@ fn hand_off(path: String) -> String {
     path
 }
 
+/// `path` as a `file://` URL, its name escaped so `#`, `?` and `%` stay part of
+/// it; `None` for a relative path.
+fn file_url(path: &str) -> Option<String> {
+    url::Url::from_file_path(path).ok().map(String::from)
+}
+
 fn file_name_of(path: &str) -> String {
     path.rsplit('/').next().unwrap_or(path).to_string()
 }
@@ -414,5 +422,27 @@ pub fn format_size(bytes: u64) -> String {
         format!("{bytes} B")
     } else {
         format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::file_url;
+
+    #[test]
+    fn a_file_url_keeps_the_whole_name() {
+        let url = file_url("/dl/Track #01?.mp3").unwrap();
+        let parsed = url::Url::parse(&url).unwrap();
+        assert_eq!(parsed.fragment(), None);
+        assert_eq!(parsed.query(), None);
+        let path = parsed.to_file_path().unwrap();
+        assert_eq!(path.to_str(), Some("/dl/Track #01?.mp3"));
+    }
+
+    #[test]
+    fn a_literal_percent_is_not_decoded() {
+        let url = file_url("/dl/100%41.zip").unwrap();
+        let path = url::Url::parse(&url).unwrap().to_file_path().unwrap();
+        assert_eq!(path.to_str(), Some("/dl/100%41.zip"));
     }
 }

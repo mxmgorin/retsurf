@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
 - Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
 - Links to files typed in the address bar or opened from bookmarks and history showing as a page instead of downloading
+- Opening a finished download whose name has `#`, `?` or `%`
 
 ## [0.10.0] - 2026-10-08
 
