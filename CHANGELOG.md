@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pop-up menus that showed open on pages, such as the ... menus in GitHub's feed (`[experimental] adopted_stylesheets`)
 - Quit hanging after sites that use a shared worker, such as GitHub while signed in; on Android the next launch stayed black
 - Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
+- Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
 
 ## [0.10.0] - 2026-10-08
 

@@ -220,6 +220,49 @@ impl Action {
         )
     }
 
+    /// Whether this still fires while the settings overlay holds focus: its own
+    /// navigation and the ways out, not what acts on the screen it covers.
+    /// Exhaustive, so a new action must place itself.
+    pub fn fires_in_settings(self) -> bool {
+        match self {
+            Action::Confirm
+            | Action::Cancel
+            | Action::Settings
+            | Action::Osk
+            | Action::Quit
+            | Action::Prev
+            | Action::Next
+            | Action::NavUp
+            | Action::NavDown
+            | Action::NavLeft
+            | Action::NavRight => true,
+            // Held inside the gamepad, never a command.
+            Action::CursorUp
+            | Action::CursorDown
+            | Action::CursorLeft
+            | Action::CursorRight
+            | Action::ScrollUp
+            | Action::ScrollDown
+            | Action::ScrollLeft
+            | Action::ScrollRight => true,
+            Action::Menu
+            | Action::QuickAccess
+            | Action::Home
+            | Action::Address
+            | Action::Hints
+            | Action::Reload
+            | Action::Reader
+            | Action::Bookmark
+            | Action::ZoomIn
+            | Action::ZoomOut
+            | Action::ZoomReset
+            | Action::TabNext
+            | Action::TabPrev
+            | Action::NewTab
+            | Action::CloseTab => false,
+        }
+    }
+
     /// The role a cursor or scroll action plays on a page and the direction it
     /// pushes, `y` positive downward; `None` for any other action.
     pub fn motion(self) -> Option<(StickRole, (f32, f32))> {

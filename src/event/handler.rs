@@ -356,7 +356,7 @@ impl AppEventHandler {
         // and fire any hold or repeat whose deadline just passed.
         match self.routing_input() {
             Some(input) => input.tick(browser, commands),
-            None => self.gamepad.tick(commands),
+            None => self.gamepad.tick(ui.focus() == Focus::Settings, commands),
         }
         waited
     }
@@ -659,7 +659,9 @@ impl AppEventHandler {
         if !owed && osk_claims(pad, pressed, ui, commands) {
             return;
         }
-        self.gamepad.on_pad(pad, pressed, &self.bindings, commands);
+        let settings_up = ui.focus() == Focus::Settings;
+        self.gamepad
+            .on_pad(pad, pressed, &self.bindings, settings_up, commands);
     }
 
     fn on_pad_button(

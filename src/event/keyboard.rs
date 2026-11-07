@@ -304,7 +304,9 @@ fn on_key_down(
         }
     }
     if let Some(action) = lookup(key, bindings, overlay, typing) {
-        action.push_tap(commands);
+        if ui.focus() != Focus::Settings || action.fires_in_settings() {
+            action.push_tap(commands);
+        }
         return;
     }
 

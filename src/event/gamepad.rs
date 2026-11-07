@@ -62,7 +62,7 @@ impl Gamepad {
     /// sticks stay, as an axis only reports on change.
     pub fn reset(&mut self, commands: &mut Vec<AppCommand>) {
         self.pads.reset(&mut self.actions);
-        self.dispatch(commands);
+        self.dispatch(false, commands);
         self.dpad = (0.0, 0.0);
     }
 
@@ -109,12 +109,17 @@ impl Gamepad {
     }
 
     /// The gesture machine pairs a held action's edges; this carries them through.
-    fn dispatch(&mut self, commands: &mut Vec<AppCommand>) {
+    /// `settings_up`: whether the settings overlay holds focus, muting the actions
+    /// that do not fire there.
+    fn dispatch(&mut self, settings_up: bool, commands: &mut Vec<AppCommand>) {
         let mut actions = std::mem::take(&mut self.actions);
         for &(action, edge) in &actions {
             let pressed = edge == Edge::Press;
             if action.motion().is_some() {
                 self.hold(action, pressed);
+                continue;
+            }
+            if settings_up && !action.fires_in_settings() {
                 continue;
             }
             commands.extend(action.command(pressed));
@@ -144,6 +149,7 @@ impl Gamepad {
         pad: Pad,
         pressed: bool,
         bindings: &Bindings<Action>,
+        settings_up: bool,
         commands: &mut Vec<AppCommand>,
     ) {
         // The D-pad feeds the aim vector on both edges, per axis so a held
@@ -168,7 +174,7 @@ impl Gamepad {
             }));
         }
 
-        self.press(pad, pressed, bindings, commands);
+        self.press(pad, pressed, bindings, settings_up, commands);
     }
 
     /// One pad edge through the gesture machine.
@@ -177,6 +183,7 @@ impl Gamepad {
         pad: Pad,
         pressed: bool,
         bindings: &Bindings<Action>,
+        settings_up: bool,
         commands: &mut Vec<AppCommand>,
     ) {
         let now = Instant::now();
@@ -186,15 +193,15 @@ impl Gamepad {
         } else {
             self.pads.on_release(pad, now, &mut self.actions);
         }
-        self.dispatch(commands);
+        self.dispatch(settings_up, commands);
     }
 
     /// Emit this frame's analog state for the router to apply, and fire any hold
     /// or repeat that just came due. The aim vector goes raw, for overlays; the
     /// page's vectors follow the roles in the config.
-    pub fn tick(&mut self, commands: &mut Vec<AppCommand>) {
+    pub fn tick(&mut self, settings_up: bool, commands: &mut Vec<AppCommand>) {
         self.pads.tick(Instant::now(), &mut self.actions);
-        self.dispatch(commands);
+        self.dispatch(settings_up, commands);
 
         commands.push(AppCommand::Input(InputCommand::Analog(Analog {
             aim: self.aim(),
@@ -317,7 +324,7 @@ mod tests {
 
     fn analog(pad: &mut Gamepad) -> Analog {
         let mut out = Vec::new();
-        pad.tick(&mut out);
+        pad.tick(false, &mut out);
         out.into_iter()
             .find_map(|command| match command {
                 AppCommand::Input(InputCommand::Analog(analog)) => Some(analog),
@@ -372,7 +379,7 @@ mod tests {
                 dpad: role,
                 ..ControlsConfig::default()
             });
-            pad.on_pad(Pad::Right, true, &bindings, &mut Vec::new());
+            pad.on_pad(Pad::Right, true, &bindings, false, &mut Vec::new());
             let page = analog(&mut pad);
             assert_eq!(
                 (page.cursor_uncurved, page.scroll, page.aim),
@@ -380,6 +387,31 @@ mod tests {
                 "{role:?}"
             );
         }
+    }
+
+    /// The stock bindings' commands for one tap of `pad`.
+    fn tap(pad: Pad, settings_up: bool) -> Vec<AppCommand> {
+        let store = crate::event::bindings::default_store();
+        let bindings = crate::event::bindings::build(&store, crate::event::test_key_names());
+        let mut gamepad = Gamepad::new(ControlsConfig::default());
+        let mut out = Vec::new();
+        gamepad.on_pad(pad, true, &bindings, settings_up, &mut out);
+        gamepad.on_pad(pad, false, &bindings, settings_up, &mut out);
+        out
+    }
+
+    #[test]
+    fn settings_keeps_its_way_out_and_mutes_what_it_covers() {
+        let opens_access = |out: Vec<AppCommand>| {
+            out.iter()
+                .any(|command| matches!(command, AppCommand::QuickAccess(_)))
+        };
+        assert!(opens_access(tap(Pad::Start, false)));
+        assert!(!opens_access(tap(Pad::Start, true)));
+        let cancels = tap(Pad::B, true)
+            .iter()
+            .any(|command| matches!(command, AppCommand::Input(InputCommand::Cancel)));
+        assert!(cancels);
     }
 
     /// Held actions push at full deflection, each source on its own: one let go
