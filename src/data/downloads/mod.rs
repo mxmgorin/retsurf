@@ -56,6 +56,24 @@ pub struct Download {
     pub state: State,
     /// Progress shared with the worker thread; dropped once it finishes.
     shared: Option<Arc<worker::Shared>>,
+    /// The user cancelled it, so its end goes unannounced.
+    cancelled: bool,
+}
+
+/// A download that just ended, for the user to be told.
+pub struct Finished {
+    pub filename: String,
+    /// Why it failed; `None` once saved.
+    pub error: Option<String>,
+}
+
+/// The downloads in flight, summed with those saved while any of them still ran.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Progress {
+    pub active: usize,
+    pub received: u64,
+    /// `None` while any size in flight is unknown.
+    pub total: Option<u64>,
 }
 
 impl Download {
@@ -89,6 +107,9 @@ pub struct Downloads {
     pub user_agent: String,
     /// Highlighted row in the menu's Downloads section.
     cursor: crate::data::ListCursor,
+    /// Bytes saved by downloads that ended while others still ran; [`Progress`]
+    /// counts them until the last one ends.
+    batch_saved: u64,
 }
 
 impl Downloads {
@@ -101,28 +122,40 @@ impl Downloads {
             // Row 0 is the "Clear finished" action (like History's "Clear all"),
             // so it stays reachable without a mouse; entries follow it.
             cursor: crate::data::ListCursor::new(1),
+            batch_saved: 0,
         }
     }
 
     /// Begin fetching a denied navigation, adding an Active entry on top.
-    pub fn start(&mut self, request: DownloadRequest, sender: &UserEventSender) {
+    /// Returns its end when it failed before any fetch.
+    pub fn start(
+        &mut self,
+        request: DownloadRequest,
+        sender: &UserEventSender,
+    ) -> Option<Finished> {
         if let Err(e) = std::fs::create_dir_all(&self.dir) {
             log::warn!("could not create download dir `{}`: {e}", self.dir);
+            let error = format!("create dir: {e}");
+            let filename = naming::filename_from_url(&request.url);
             self.items.insert(
                 0,
                 Download {
-                    filename: naming::filename_from_url(&request.url),
+                    filename: filename.clone(),
                     url: request.url,
                     path: String::new(),
                     received: 0,
                     total: 0,
                     time: crate::clock::now_unix(),
-                    state: State::Failed(format!("create dir: {e}")),
+                    state: State::Failed(error.clone()),
                     shared: None,
+                    cancelled: false,
                 },
             );
             store::save(&self.items);
-            return;
+            return Some(Finished {
+                filename,
+                error: Some(error),
+            });
         }
 
         let shared = worker::spawn(&request, &self.user_agent, &self.dir, sender);
@@ -139,16 +172,23 @@ impl Downloads {
                 time: 0,
                 state: State::Active,
                 shared: Some(shared),
+                cancelled: false,
             },
         );
+        None
     }
 
     /// Record a file the page built in JavaScript and handed us whole (see
     /// [`crate::browser::BlobDownload`]). No fetch to run, so the entry is born finished.
-    pub fn save_captured(&mut self, item: BlobDownload) {
-        let (filename, path, size, state) = match self.write_captured(&item.filename, item.bytes) {
-            Ok((path, size)) => (file_name_of(&path), path, size, State::Done),
-            Err(e) => (item.filename, String::new(), 0, State::Failed(e)),
+    /// Returns that end.
+    pub fn save_captured(&mut self, item: BlobDownload) -> Finished {
+        let (filename, path, size, error) = match self.write_captured(&item.filename, item.bytes) {
+            Ok((path, size)) => (file_name_of(&path), path, size, None),
+            Err(e) => (item.filename, String::new(), 0, Some(e)),
+        };
+        let finished = Finished {
+            filename: filename.clone(),
+            error: error.clone(),
         };
         self.items.insert(
             0,
@@ -160,11 +200,13 @@ impl Downloads {
                 received: size,
                 total: size,
                 time: crate::clock::now_unix(),
-                state,
+                state: error.map_or(State::Done, State::Failed),
                 shared: None,
+                cancelled: false,
             },
         );
         store::save(&self.items);
+        finished
     }
 
     /// Write captured bytes into the download dir under a free name.
@@ -182,30 +224,45 @@ impl Downloads {
 
     /// Pull progress from the worker threads into the entries and record finishes
     /// (which also persists). Called once per frame; cheap when nothing is active.
-    pub fn poll(&mut self) {
-        let mut finished = false;
+    /// Returns the downloads that ended, less those the user cancelled.
+    pub fn poll(&mut self) -> Vec<Finished> {
+        let mut finished = Vec::new();
         for d in &mut self.items {
             let Some(shared) = &d.shared else { continue };
+            // Result first: the worker stores its last count before it, so a
+            // finished entry reads the final size.
+            let result = shared.result.lock().unwrap().take();
             d.received = shared.received.load(Ordering::Relaxed);
             d.total = shared.total.load(Ordering::Relaxed);
             if let Some(path) = shared.path.lock().unwrap().take() {
                 d.filename = file_name_of(&path);
                 d.path = path;
             }
-            let result = shared.result.lock().unwrap().take();
             if let Some(result) = result {
+                if result.is_ok() {
+                    self.batch_saved += d.received;
+                }
+                if !d.cancelled {
+                    finished.push(Finished {
+                        filename: d.filename.clone(),
+                        error: result.clone().err(),
+                    });
+                }
                 d.state = match result {
                     Ok(()) => State::Done,
                     Err(e) => State::Failed(e),
                 };
                 d.time = crate::clock::now_unix();
                 d.shared = None;
-                finished = true;
             }
         }
-        if finished {
+        if !finished.is_empty() {
             store::save(&self.items);
         }
+        if !self.items.iter().any(Download::is_active) {
+            self.batch_saved = 0;
+        }
+        finished
     }
 
     pub fn items(&self) -> &[Download] {
@@ -216,9 +273,22 @@ impl Downloads {
         self.cursor.selected()
     }
 
-    /// Number of downloads still in flight (drives the toolbar ⬇ indicator).
-    pub fn active_count(&self) -> usize {
-        self.items.iter().filter(|d| d.is_active()).count()
+    /// The downloads in flight, or `None` without any.
+    pub fn progress(&self) -> Option<Progress> {
+        let mut progress = Progress {
+            active: 0,
+            received: self.batch_saved,
+            total: Some(self.batch_saved),
+        };
+        for d in self.items.iter().filter(|d| d.is_active()) {
+            progress.active += 1;
+            progress.received += d.received;
+            progress.total = progress
+                .total
+                .zip((d.total > 0).then_some(d.total))
+                .map(|(a, b)| a + b);
+        }
+        (progress.active > 0).then_some(progress)
     }
 
     pub fn has_finished(&self) -> bool {
@@ -254,11 +324,12 @@ impl Downloads {
     /// Cancel the entry if still active (it stays, turning Failed once the worker
     /// stops), otherwise drop it from the list. The file on disk is kept either way.
     pub fn remove(&mut self, index: usize) {
-        let Some(d) = self.items.get(index) else {
+        let Some(d) = self.items.get_mut(index) else {
             return;
         };
         if let Some(shared) = &d.shared {
             shared.cancel.store(true, Ordering::Relaxed);
+            d.cancelled = true;
             return;
         }
         self.items.remove(index);

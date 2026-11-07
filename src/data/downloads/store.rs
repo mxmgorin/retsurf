@@ -70,6 +70,7 @@ fn into_download(entry: DiskEntry) -> Download {
         },
         path: entry.path,
         shared: None,
+        cancelled: false,
     }
 }
 

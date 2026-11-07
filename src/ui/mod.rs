@@ -5,6 +5,7 @@
 mod brand;
 mod chrome;
 mod cursor;
+mod download_chip;
 mod favicon;
 mod game;
 mod game_mode;
@@ -272,6 +273,12 @@ pub struct AppUi {
     browser_viewport: (u32, u32),
     /// The notice on screen, if any (see [`toast`]).
     toast: Option<toast::Toast>,
+    /// The toolbar's downloads button (see [`download_chip`]).
+    download_chip: download_chip::DownloadChip,
+    /// The button as the frame last built it, and as last drawn: its progress
+    /// arrives on wakes that mark nothing else dirty.
+    chip_built: download_chip::Chip,
+    chip_drawn: download_chip::Chip,
     /// The edge strips, Quick Access and Quick Menu.
     pub quick_access: QuickAccess,
     /// Game Mode's map list and one map's rows.
@@ -387,6 +394,9 @@ impl AppUi {
             shader_resolution: crate::config::ShaderResolution::default(),
             browser_viewport: (0, 0),
             toast: None,
+            download_chip: download_chip::DownloadChip::new(),
+            chip_built: download_chip::Chip::Hidden,
+            chip_drawn: download_chip::Chip::Hidden,
             quick_access: QuickAccess::new(),
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
@@ -501,6 +511,7 @@ impl AppUi {
             || self.cursor_visible_for().is_some()
             || self.transients_built != self.transients_drawn
             || self.toast_visible_for().is_some()
+            || self.chip_built != self.chip_drawn
     }
 
     /// Height of the browser viewport (logical px) — for screen-relative scrolls.
@@ -580,6 +591,10 @@ impl AppUi {
         }
         if self.take_fresh_toast() {
             self.request_repaint();
+        }
+        // The downloads button's ending mark wakes once more to be erased.
+        if let Some(left) = self.download_chip.ended_for(Instant::now()) {
+            self.repaint_delay = Some(self.repaint_delay.map_or(left, |d| d.min(left)));
         }
     }
 
@@ -737,6 +752,9 @@ impl AppUi {
         }
         // Before the layout: every rect below is measured in the zoom in force.
         self.sync_scale(browser);
+        // Before the idle wakes are scheduled: an ending mark adds one.
+        self.download_chip
+            .refresh(self.menu.downloads.progress(), Instant::now());
 
         // The cursor draws only while it lingers; wake at the end of the linger
         // so it gets erased without another event.
@@ -801,7 +819,7 @@ impl AppUi {
 
                 let inputs = toolbar::ToolbarInputs {
                     tab_count,
-                    active_downloads: self.menu.downloads.active_count(),
+                    downloads: self.download_chip.shown(),
                     zoom_pct,
                     osk_caret: caret_for(OskField::AddressBar),
                     position,
@@ -1057,6 +1075,11 @@ impl AppUi {
             });
         }
 
+        self.chip_built = match self.toolbar_rect.is_positive() {
+            true => self.download_chip.shown(),
+            false => download_chip::Chip::Hidden,
+        };
+
         if let Some(size) = desired_px {
             if size != self.browser_viewport {
                 self.browser_viewport = size;
@@ -1095,6 +1118,7 @@ impl AppUi {
         let timing = window.paint(page_at, page_painted);
         self.repaint_pending = false;
         self.transients_drawn = self.transients_built;
+        self.chip_drawn = self.chip_built;
         timing
     }
 }

@@ -1,6 +1,7 @@
 //! The toolbar (top or bottom, per the display config): navigation buttons, the
 //! address bar, bookmark toggle, and the chips that jump into menu sections.
 
+use super::download_chip::Chip;
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
@@ -10,6 +11,7 @@ use crate::overlay::menu::Section;
 use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui::{self, Vec2};
+use std::f32::consts::{FRAC_1_SQRT_2, TAU};
 
 /// Side of a toolbar icon slot (logical px), sized for a fingertip.
 const SLOT: f32 = 36.0;
@@ -34,6 +36,27 @@ const ZOOM_PILL_H: f32 = 20.0;
 
 /// What the empty address field offers.
 const FIELD_HINT: &str = "Search or enter address";
+
+/// The downloads ring's radius and stroke, inside a [`SLOT`].
+const RING_R: f32 = 13.0;
+const RING_W: f32 = 2.0;
+
+/// The ring's empty track: the muted ink, faded.
+const RING_TRACK_ALPHA: f32 = 0.35;
+
+/// Points on a full turn of the ring's arc.
+const RING_POINTS: f32 = 48.0;
+
+/// The arc standing in for an unknown size, and its turn per step.
+const UNKNOWN_SWEEP: f32 = TAU / 4.0;
+const UNKNOWN_STEP: f32 = TAU / 8.0;
+
+/// The downloads count badge on the ring's upper right, cut out of it by a
+/// rim in the toolbar's fill; counts past the cap read as the cap plus `+`.
+const BADGE_R: f32 = 6.25;
+const BADGE_RIM: f32 = 1.5;
+const BADGE_FONT: f32 = 9.0;
+const BADGE_CAP: usize = 9;
 
 fn icon(glyph: &str) -> egui::RichText {
     theme::icon(glyph).size(ICON)
@@ -285,6 +308,72 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
     resp
 }
 
+/// A frameless button painting the downloads as a ring around the download
+/// glyph, filled by the share done or stepping an arc while a size is unknown,
+/// then a check or a cross once they ended. A badge counts more than one.
+fn add_downloads_button(ui: &mut egui::Ui, chip: Chip) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(SLOT), egui::Sense::click());
+    let palette = theme::palette();
+    let painter = ui.painter();
+    let c = rect.center();
+    let (glyph, color, arc) = match chip {
+        Chip::Hidden => return resp,
+        Chip::Running { share, step, .. } => {
+            let arc = match share {
+                Some(share) => (0.0, TAU * f32::from(share) / f32::from(Chip::SHARE_FULL)),
+                None => (step as f32 * UNKNOWN_STEP, UNKNOWN_SWEEP),
+            };
+            (bold::DOWNLOAD_SIMPLE, palette.accent, arc)
+        }
+        Chip::Ended { failed: false } => (bold::CHECK, palette.accent, (0.0, TAU)),
+        Chip::Ended { failed: true } => (bold::X, palette.warn, (0.0, TAU)),
+    };
+    let track = palette.muted.gamma_multiply(RING_TRACK_ALPHA);
+    painter.circle_stroke(c, RING_R, egui::Stroke::new(RING_W, track));
+    let (start, sweep) = arc;
+    if sweep > 0.0 {
+        // Clockwise from twelve o'clock.
+        let n = (sweep / TAU * RING_POINTS).ceil().max(1.0) as usize;
+        let points = (0..=n)
+            .map(|i| {
+                let a = start + sweep * i as f32 / n as f32;
+                c + RING_R * egui::vec2(a.sin(), -a.cos())
+            })
+            .collect();
+        painter.add(egui::Shape::line(points, egui::Stroke::new(RING_W, color)));
+    }
+    painter.text(
+        c,
+        egui::Align2::CENTER_CENTER,
+        glyph,
+        egui::FontId::proportional(theme::ICON_SIZE),
+        color,
+    );
+    if let Chip::Running { count, .. } = chip {
+        if count > 1 {
+            let at = c + RING_R * FRAC_1_SQRT_2 * egui::vec2(1.0, -1.0);
+            painter.circle(
+                at,
+                BADGE_R,
+                palette.accent,
+                egui::Stroke::new(BADGE_RIM, palette.window),
+            );
+            let label = match count {
+                n if n > BADGE_CAP => format!("{BADGE_CAP}+"),
+                n => n.to_string(),
+            };
+            painter.text(
+                at,
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::proportional(BADGE_FONT),
+                palette.on_accent,
+            );
+        }
+    }
+    resp
+}
+
 /// The page zoom as a pill inside the address field.
 fn add_zoom_pill(ui: &mut egui::Ui, pct: u16) -> egui::Response {
     let label = egui::RichText::new(format!("{pct}%")).size(ZOOM_FONT);
@@ -307,8 +396,8 @@ fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -
 /// the panel and overlay spellings can't drift argument by argument.
 pub(super) struct ToolbarInputs {
     pub tab_count: usize,
-    /// Downloads still in flight; a count chip that jumps to the section.
-    pub active_downloads: usize,
+    /// The downloads button, which jumps to the section; absent while hidden.
+    pub downloads: Chip,
     /// Page zoom percent; `None` at the config default, where no chip shows.
     pub zoom_pct: Option<u16>,
     /// The OSK's caret, when it types here; egui's caret is parked on it.
@@ -363,13 +452,11 @@ fn toolbar_contents(
                             Strip::QuickAccess,
                         )));
                     }
-                    if inputs.active_downloads > 0 {
-                        let label = format!("{}{}", bold::DOWNLOAD_SIMPLE, inputs.active_downloads);
-                        if ui.add(new_toolbar_button(icon(&label))).clicked() {
-                            commands.push(AppCommand::Menu(MenuAction::Open));
-                            commands
-                                .push(AppCommand::Menu(MenuAction::SetSection(Section::Downloads)));
-                        }
+                    if inputs.downloads != Chip::Hidden
+                        && add_downloads_button(ui, inputs.downloads).clicked()
+                    {
+                        commands.push(AppCommand::Menu(MenuAction::Open));
+                        commands.push(AppCommand::Menu(MenuAction::SetSection(Section::Downloads)));
                     }
                     // Shown even at one tab, so the slot never moves.
                     if add_tabs_button(ui, inputs.tab_count).clicked() {

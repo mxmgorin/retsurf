@@ -37,7 +37,7 @@ pub fn get(url: &str) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
 }
 
 /// Throttle for [`stream`]'s progress notifications.
-const NOTIFY_EVERY: Duration = Duration::from_millis(250);
+pub const NOTIFY_EVERY: Duration = Duration::from_millis(250);
 
 /// Read buffer size for response streaming.
 const CHUNK: usize = 64 * 1024;

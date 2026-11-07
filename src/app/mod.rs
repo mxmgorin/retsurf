@@ -371,11 +371,16 @@ impl App {
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
-            self.ui.menu.downloads.poll();
+            for finished in self.ui.menu.downloads.poll() {
+                self.ui.download_finished(&finished);
+            }
             for request in self.browser.take_download_requests() {
-                self.ui.menu.downloads.start(request, &self.event_sender);
-                self.ui
-                    .toast(Notice::new(bold::DOWNLOAD_SIMPLE, "Download started"));
+                match self.ui.menu.downloads.start(request, &self.event_sender) {
+                    Some(failed) => self.ui.download_finished(&failed),
+                    None => self
+                        .ui
+                        .toast(Notice::new(bold::DOWNLOAD_SIMPLE, "Download started")),
+                }
             }
             // Rumble a page asked for, played here because the main loop owns
             // the SDL controllers.
@@ -387,7 +392,8 @@ impl App {
             // pages for them, then save whatever earlier reads returned.
             self.browser.poll_blob_downloads();
             for item in self.browser.take_blob_downloads() {
-                self.ui.menu.downloads.save_captured(item);
+                let finished = self.ui.menu.downloads.save_captured(item);
+                self.ui.download_finished(&finished);
             }
 
             // Modal page controls (select pickers, JS dialogs): queue fresh
