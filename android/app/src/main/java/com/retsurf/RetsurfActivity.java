@@ -2,17 +2,26 @@ package com.retsurf;
 
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.ProxyInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.FileUtils;
+import android.provider.MediaStore;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 
 import org.libsdl.app.SDLActivity;
@@ -157,6 +166,65 @@ public class RetsurfActivity extends SDLActivity {
         } catch (ActivityNotFoundException e) {
             Log.w("retsurf", "no app to share the logs with");
         }
+    }
+
+    /**
+     * Moves a finished download into the shared Downloads, where the system's file
+     * apps list it. Returns its path there, or null when it stays where it was.
+     * Blocks for the copy; must be called off the UI thread.
+     */
+    public String publishDownload(String path) {
+        File file = new File(path);
+        ContentResolver resolver = getContentResolver();
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, file.getName());
+        // Hidden from other apps until the copy is complete.
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        Uri uri;
+        try {
+            uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        } catch (RuntimeException e) {
+            Log.w("retsurf", "no Downloads entry for " + file.getName() + ": " + e.getMessage());
+            return null;
+        }
+        if (uri == null) {
+            Log.w("retsurf", "no Downloads entry for " + file.getName());
+            return null;
+        }
+        try (InputStream in = new FileInputStream(file);
+                OutputStream out = resolver.openOutputStream(uri)) {
+            if (out == null) {
+                throw new IOException("no stream to write to");
+            }
+            FileUtils.copy(in, out);
+        } catch (IOException | RuntimeException e) {
+            Log.w("retsurf", "could not move " + file.getName() + " to Downloads: " + e.getMessage());
+            resolver.delete(uri, null, null);
+            return null;
+        }
+        values.clear();
+        values.put(MediaStore.Downloads.IS_PENDING, 0);
+        resolver.update(uri, values, null, null);
+        // Read once published: a name already taken gets a numbered one only then.
+        String name = displayName(resolver, uri, file.getName());
+        if (!file.delete()) {
+            Log.w("retsurf", "could not remove the staged " + file.getName());
+        }
+        File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        return new File(downloads, name).getAbsolutePath();
+    }
+
+    /** The name MediaStore keeps `uri` under; `fallback` when it cannot be read. */
+    private static String displayName(ContentResolver resolver, Uri uri, String fallback) {
+        String[] columns = { MediaStore.Downloads.DISPLAY_NAME };
+        try (Cursor cursor = resolver.query(uri, columns, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && cursor.getString(0) != null) {
+                return cursor.getString(0);
+            }
+        } catch (RuntimeException e) {
+            Log.w("retsurf", "could not read the Downloads name: " + e.getMessage());
+        }
+        return fallback;
     }
 
     private void setEnv(String key, String value) {

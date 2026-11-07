@@ -42,6 +42,12 @@ impl Default for DownloadsConfig {
 }
 
 impl DownloadsConfig {
+    /// Whether finished files move on into the system's shared Downloads: on
+    /// Android, unless `dir` names a folder of its own.
+    pub fn publishes(&self) -> bool {
+        cfg!(target_os = "android") && self.dir.is_empty()
+    }
+
     /// Resolve the save directory (with a trailing `/`): the configured one, else
     /// the system download folder, else `downloads/` in the user data dir.
     pub fn resolve_dir(&self) -> String {
@@ -94,8 +100,8 @@ fn system_download_dir() -> Option<String> {
 /// `getExternalFilesDir(DIRECTORY_DOWNLOADS)`) via `RETSURF_DOWNLOAD_DIR` — using
 /// the Java API avoids `SDL_AndroidGetExternalStoragePath`, which isn't in
 /// sdl2-sys's pregenerated bindings. `None` falls back to `downloads/` in the
-/// internal data dir. (Files here are uninstall-scoped and not in the system
-/// Downloads app; MediaStore/SAF visibility is a future enhancement.)
+/// internal data dir. Finished files move on from here into the shared Downloads
+/// (see [`DownloadsConfig::publishes`]).
 #[cfg(target_os = "android")]
 fn system_download_dir() -> Option<String> {
     let dir = std::env::var("RETSURF_DOWNLOAD_DIR")

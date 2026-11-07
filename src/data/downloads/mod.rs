@@ -103,6 +103,8 @@ pub struct Downloads {
     items: Vec<Download>,
     /// Save directory, with a trailing separator (see [`DownloadsConfig`]).
     dir: String,
+    /// Saved files move on into the system's shared Downloads (see [`hand_off`]).
+    publish: bool,
     /// The browser's UA string, sent by the workers' fetches.
     pub user_agent: String,
     /// Highlighted row in the menu's Downloads section.
@@ -118,6 +120,7 @@ impl Downloads {
         Self {
             items: store::load(),
             dir: cfg.resolve_dir(),
+            publish: cfg.publishes(),
             user_agent,
             // Row 0 is the "Clear finished" action (like History's "Clear all"),
             // so it stays reachable without a mouse; entries follow it.
@@ -158,7 +161,7 @@ impl Downloads {
             });
         }
 
-        let shared = worker::spawn(&request, &self.user_agent, &self.dir, sender);
+        let shared = worker::spawn(&request, &self.user_agent, &self.dir, self.publish, sender);
         self.items.insert(
             0,
             Download {
@@ -219,6 +222,10 @@ impl Downloads {
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("create dir: {e}"))?;
         let path = naming::unique_path(&self.dir, filename);
         std::fs::write(&path, &bytes).map_err(|e| format!("write: {e}"))?;
+        let path = match self.publish {
+            true => hand_off(path),
+            false => path,
+        };
         Ok((path, bytes.len() as u64))
     }
 
@@ -356,6 +363,25 @@ impl Downloads {
     fn clamp_selected(&mut self) {
         self.cursor.clamp(self.items.len());
     }
+}
+
+/// Move the saved file at `path` on into the system's shared Downloads; returns
+/// where it is now, `path` itself when it could not move.
+#[cfg(target_os = "android")]
+fn hand_off(path: String) -> String {
+    match crate::platform::android::publish_download(&path) {
+        Ok(moved) => moved,
+        Err(e) => {
+            log::warn!("could not move `{path}` into Downloads: {e}");
+            path
+        }
+    }
+}
+
+/// Only Android keeps a shared Downloads apart from the save folder.
+#[cfg(not(target_os = "android"))]
+fn hand_off(path: String) -> String {
+    path
 }
 
 fn file_name_of(path: &str) -> String {

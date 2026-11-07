@@ -23,8 +23,9 @@ gets no composition events.
   `RetsurfActivity.getLibraries()` names `SDL2` and `retsurf`.
 - **Environment**: `RetsurfActivity` sets `RETSURF_DATA_DIR` (internal storage),
   `RETSURF_DOWNLOAD_DIR` (the app's external Downloads dir, no permission needed),
-  `RETSURF_PANIC_FILE` and `RETSURF_SCALE` (display density). Downloads do not show in the
-  system Downloads app.
+  `RETSURF_PANIC_FILE` and `RETSURF_SCALE` (display density).
+- **Downloads**: saved first in `RETSURF_DOWNLOAD_DIR`, then moved to the system Downloads
+  (no permission needed). A `[downloads] dir` of your own keeps them there instead.
 - **GLES**: always on (`src/platform/startup.rs`), and the Wayland alignment is skipped.
 - **Input**: `SDL_TOUCH_MOUSE_EVENTS=0`, so a scroll does not end in a click. Touches start a
   page gesture only over the web view; the chrome's belong to egui. The system keyboard

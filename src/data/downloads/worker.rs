@@ -25,6 +25,9 @@ pub(super) struct Shared {
     pub received: AtomicU64,
     pub total: AtomicU64,
     pub cancel: AtomicBool,
+    /// The transfer is complete and only the hand-off remains, which no stall
+    /// or cancel can cut short.
+    saved: AtomicBool,
     /// Destination path, set once the response headers picked the final name.
     pub path: Mutex<Option<String>>,
     /// Claimed (exactly once) by whoever stores `result`.
@@ -39,6 +42,8 @@ struct Job {
     suggested_name: Option<String>,
     user_agent: String,
     dir: String,
+    /// Hand the saved file on (see [`super::hand_off`]).
+    publish: bool,
 }
 
 /// Spawn the worker and its watchdog; the destination path arrives through the
@@ -47,12 +52,14 @@ pub(super) fn spawn(
     request: &DownloadRequest,
     user_agent: &str,
     dir: &str,
+    publish: bool,
     sender: &UserEventSender,
 ) -> Arc<Shared> {
     let shared = Arc::new(Shared {
         received: AtomicU64::new(0),
         total: AtomicU64::new(0),
         cancel: AtomicBool::new(false),
+        saved: AtomicBool::new(false),
         path: Mutex::new(None),
         done: AtomicBool::new(false),
         result: Mutex::new(None),
@@ -64,6 +71,7 @@ pub(super) fn spawn(
             suggested_name: request.suggested_name.clone(),
             user_agent: user_agent.to_string(),
             dir: dir.to_string(),
+            publish,
         };
         let shared = shared.clone();
         let sender = sender.clone();
@@ -102,7 +110,7 @@ fn watch(shared: Arc<Shared>, sender: UserEventSender) {
     let mut cancelled_at: Option<Instant> = None;
     loop {
         std::thread::sleep(WATCH_INTERVAL);
-        if shared.done.load(Ordering::Relaxed) {
+        if shared.done.load(Ordering::Relaxed) || shared.saved.load(Ordering::Relaxed) {
             return;
         }
         let received = shared.received.load(Ordering::Relaxed);
@@ -163,10 +171,15 @@ fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), Str
         !shared.cancel.load(Ordering::Relaxed)
     })
     .and_then(|()| std::fs::rename(&part, &path).map_err(|e| format!("rename: {e}")));
-    if result.is_err() {
+    if let Err(e) = result {
         let _ = std::fs::remove_file(&part);
+        return Err(e);
     }
-    result
+    if job.publish {
+        shared.saved.store(true, Ordering::Relaxed);
+        *shared.path.lock().unwrap() = Some(super::hand_off(path));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -241,7 +254,7 @@ mod tests {
             referer: Some("https://example.test/page".to_string()),
             suggested_name: None,
         };
-        let shared = spawn(&request, "retsurf-test-ua", &dir, &sender);
+        let shared = spawn(&request, "retsurf-test-ua", &dir, false, &sender);
 
         assert_eq!(wait_result(&shared), Ok(()));
         let path = shared.path.lock().unwrap().take().expect("published path");
@@ -281,7 +294,7 @@ mod tests {
             referer: None,
             suggested_name: None,
         };
-        let shared = spawn(&request, "retsurf-test-ua", &dir, &sender);
+        let shared = spawn(&request, "retsurf-test-ua", &dir, false, &sender);
 
         for _ in 0..1000 {
             if shared.received.load(Ordering::Relaxed) > 0 {

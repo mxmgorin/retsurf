@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release files carry build provenance attestations, checked with `gh attestation verify`
 - Toolbar downloads button: a progress ring, a count badge for more than one download, a check or a cross for a moment when they end
 - A toast when a download finishes or fails
+- Android: finished downloads land in the system Downloads folder
 - About tab: the app icon and author, the data folder, links to the website, a bug report with the version filled in, Discussions and Ko-fi; License and credits opens `retsurf:about`, which shows the license, the credits and the component versions offline
 
 ### Removed

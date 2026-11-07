@@ -155,6 +155,7 @@ libc = "0.2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
+jni = "0.22"
 
 # The engine is our Servo fork: upstream `main` plus our commits, on a new branch per
 # sync (`retsurf-main-<minor>-<upstream>`), pinned by tag. Our diff against upstream:

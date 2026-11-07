@@ -9,8 +9,8 @@
 
     <!-- It's a browser. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Downloads use the app-specific external dir (getExternalFilesDir), which
-         needs no storage permission on any API level. -->
+    <!-- Downloads stage in the app-specific external dir (getExternalFilesDir), then
+         move into MediaStore's Downloads; at our minSdk neither needs a storage permission. -->
 
     <!-- allowNativeHeapPointerTagging: SpiderMonkey packs native pointers into a
          JSVal and asserts the top 16 bits are clear; Android's tagged heap
