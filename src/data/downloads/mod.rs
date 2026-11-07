@@ -117,7 +117,7 @@ pub struct Downloads {
 impl Downloads {
     /// Load the saved list (empty if the file is missing or invalid).
     pub fn load(cfg: &DownloadsConfig, user_agent: String) -> Self {
-        Self {
+        let downloads = Self {
             items: store::load(),
             dir: cfg.resolve_dir(),
             publish: cfg.publishes(),
@@ -126,6 +126,24 @@ impl Downloads {
             // so it stays reachable without a mouse; entries follow it.
             cursor: crate::data::ListCursor::new(1),
             batch_saved: 0,
+        };
+        // A folder only staging files is ours alone: what a killed run left there
+        // can go.
+        if downloads.publish {
+            naming::remove_partials(&downloads.dir);
+        }
+        downloads
+    }
+
+    /// Remove the partial files of the downloads still in flight, whose workers
+    /// end with the process.
+    pub fn discard_partials(&self) {
+        for d in self
+            .items
+            .iter()
+            .filter(|d| d.is_active() && !d.path.is_empty())
+        {
+            let _ = std::fs::remove_file(naming::part_of(&d.path));
         }
     }
 

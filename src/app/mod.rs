@@ -472,6 +472,7 @@ impl App {
         // run (we `process::exit` below), so this must be explicit.
         self.save_window_size();
         self.flush_user_data();
+        self.ui.menu.downloads.discard_partials();
         // `process::exit` below skips every `Drop`, and the governor is
         // machine-wide.
         crate::platform::cpufreq::restore();

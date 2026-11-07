@@ -96,6 +96,26 @@ fn candidates<'a>(dir: &'a str, filename: &'a str) -> impl Iterator<Item = Strin
     })
 }
 
+/// What marks a download's partial file.
+const PART_SUFFIX: &str = ".part";
+
+/// Where a download to `path` is written until it completes.
+pub(super) fn part_of(path: &str) -> String {
+    format!("{path}{PART_SUFFIX}")
+}
+
+/// Remove every partial file in `dir`, which only this app writes into.
+pub(super) fn remove_partials(dir: &str) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().ends_with(PART_SUFFIX) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Reserve a free destination: creating the `.part` exclusively is the
 /// reservation, so parallel workers can't collide.
 pub(super) fn create_unique(
@@ -106,7 +126,7 @@ pub(super) fn create_unique(
         if std::path::Path::new(&path).exists() {
             continue;
         }
-        let part = format!("{path}.part");
+        let part = part_of(&path);
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -125,8 +145,7 @@ pub(super) fn create_unique(
 pub(super) fn unique_path(dir: &str, filename: &str) -> String {
     candidates(dir, filename)
         .find(|path| {
-            !std::path::Path::new(path).exists()
-                && !std::path::Path::new(&format!("{path}.part")).exists()
+            !std::path::Path::new(path).exists() && !std::path::Path::new(&part_of(path)).exists()
         })
         .expect("candidates never ends")
 }
@@ -251,5 +270,22 @@ mod tests {
         assert_eq!(sanitize("a/b\\c"), Some("abc".to_string()));
         assert_eq!(sanitize("re\nport.pdf"), Some("report.pdf".to_string()));
         assert_eq!(sanitize("  .. "), None);
+    }
+
+    #[test]
+    fn remove_partials_keeps_finished_files() {
+        let dir = std::env::temp_dir().join(format!("retsurf-partials-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = format!("{}/", dir.display());
+        let done = format!("{dir}a.zip");
+        std::fs::write(&done, b"x").expect("write");
+        std::fs::write(part_of(&format!("{dir}b.zip")), b"x").expect("write");
+        remove_partials(&dir);
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name())
+            .collect();
+        assert_eq!(left, ["a.zip"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
