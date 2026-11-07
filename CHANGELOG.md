@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `[controls] dpad` replaces `cursor_mode`, which is no longer read
+- `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped
 - Interface font: IBM Plex Sans
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
 - The start page banner and wordmark are smaller

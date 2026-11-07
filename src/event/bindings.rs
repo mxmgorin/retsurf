@@ -439,25 +439,8 @@ fn bindings_path() -> String {
 /// merging in the ones an older file predates (see [`merge_missing_defaults`]).
 pub fn load_store() -> Store {
     let mut store = Store::load(bindings_path(), default_store);
-    rename_retired(&mut store);
     merge_missing_defaults(&mut store);
     store
-}
-
-/// Action names a file may still carry, each with the name it goes by now.
-const RETIRED: &[(&str, &str)] = &[("game_mode", "quick_access")];
-
-/// Carry a retired name over before the defaults merge: that merge never takes
-/// back a gesture the file spells, so the renamed action would end up unbound.
-fn rename_retired(store: &mut Store) {
-    for table in [&mut store.gamepad, &mut store.keyboard] {
-        for name in table.values_mut() {
-            if let Some((_, now)) = RETIRED.iter().find(|(old, _)| old == name) {
-                log::info!("bindings: `{name}` is now `{now}`");
-                *name = now.to_string();
-            }
-        }
-    }
 }
 
 /// Give back the default gestures of an action with no binding at all in that
@@ -675,16 +658,6 @@ mod tests {
             store.gamepad.get("start").map(String::as_str),
             Some("reader")
         );
-    }
-
-    /// A file bound under a retired name keeps its gestures under the new one.
-    #[test]
-    fn a_retired_name_keeps_its_gestures() {
-        let mut store = default_store();
-        store.gamepad.insert("start".into(), "game_mode".into());
-        rename_retired(&mut store);
-        merge_missing_defaults(&mut store);
-        assert_eq!(store, default_store());
     }
 
     /// Merging the stock file changes nothing, so it cannot churn on launch.
