@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Searches containing `+`, `&` or `#` reach the search engine whole
 - Sites stay logged in after retsurf is closed from Android's recent apps or killed
 - Android: Ctrl+C, Ctrl+V and other editing shortcuts from hardware-keyboard input methods such as Pastiera
 - Thin white line along the right edge of pages on some high-DPI screens

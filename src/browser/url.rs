@@ -2,7 +2,16 @@
 //! domain or absolute file path, and finally fall back to the configured search
 //! page.
 
+use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use url::Url;
+
+/// Everything but RFC 3986's unreserved characters, so `%s` may sit in a path
+/// segment as well as a query value.
+const QUERY: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// Interpret an input URL.
 ///
@@ -43,5 +52,30 @@ fn try_as_search_page(request: &str, searchpage: &str) -> Option<Url> {
         return None;
     }
 
-    Url::parse(&searchpage.replace("%s", request)).ok()
+    let query = utf8_percent_encode(request, QUERY).to_string();
+    Url::parse(&searchpage.replace("%s", &query)).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SEARCH: &str = "https://search.example/?q=%s";
+
+    #[test]
+    fn a_query_reaches_the_engine_whole() {
+        let url = try_into_url("c++ & #1", SEARCH).expect("a search URL");
+        assert_eq!(
+            url.as_str(),
+            "https://search.example/?q=c%2B%2B%20%26%20%231"
+        );
+        assert_eq!(url.fragment(), None);
+    }
+
+    #[test]
+    fn a_query_keeps_non_ascii_text() {
+        let url = try_into_url("caf\u{e9} au lait", SEARCH).expect("a search URL");
+        let (_, q) = url.query_pairs().next().expect("the q pair");
+        assert_eq!(q, "caf\u{e9} au lait");
+    }
 }
