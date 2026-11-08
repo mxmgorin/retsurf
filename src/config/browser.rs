@@ -55,7 +55,7 @@ token_enum! {
         Light => "light", "Light",
         /// Sites with a dark stylesheet serve it; sites without one are unchanged.
         Dark => "dark", "Dark",
-        /// Invert every page (see [`crate::browser::forced_dark`]).
+        /// Invert every page (see [`crate::browser::page_theme`]).
         ForcedDark => "forced-dark", "Forced dark",
     }
 }

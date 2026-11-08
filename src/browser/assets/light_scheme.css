@@ -1,0 +1,5 @@
+/* Dark page theme: a page that declares no color scheme stays light, as it
+   would anywhere else. User origin, so a page's own `color-scheme` wins. */
+:root {
+  color-scheme: light;
+}

@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pop-up menus that showed open on pages, such as the ... menus in GitHub's feed (`[experimental] adopted_stylesheets`)
 - Quit hanging after sites that use a shared worker, such as GitHub while signed in; on Android the next launch stayed black
 - Page icons drawn black instead of in the text color, such as GitHub's in the dark and forced-dark page themes
+- Pale text on a white page in the dark page theme, on sites without a dark theme of their own or with one that sets no background
 - Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
 - Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
 - Links to files typed in the address bar or opened from bookmarks and history showing as a page instead of downloading

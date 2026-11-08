@@ -7,7 +7,7 @@
 //! profile), [`pads`] (what the page knows of the gamepads), [`home`] /
 //! [`reader`] (the built-in pages), [`game_scaling`] (a game sized to the screen),
 //! [`game_textures`] (a game's textures shrunk to a limit),
-//! [`blob_download`] and [`forced_dark`] (user-content scripts), [`adblock`] and
+//! [`blob_download`] and [`page_theme`] (user-content scripts), [`adblock`] and
 //! [`content_filter`] (load filtering).
 
 mod about;
@@ -20,7 +20,6 @@ mod compositing;
 mod delegate;
 mod engine;
 mod favicon;
-mod forced_dark;
 mod game_patches;
 mod game_scaling;
 mod game_textures;
@@ -29,6 +28,7 @@ mod input;
 mod junk_surfer;
 mod local_site;
 pub mod memory;
+mod page_theme;
 mod reader;
 mod tabs;
 mod url;
@@ -281,9 +281,9 @@ struct AppBrowserInner {
     js_applied: RefCell<Option<(String, JsPreset)>>,
     /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
-    /// The forced-dark sheet, attached to `user_content` while the theme asks
-    /// for it. Kept so it can be detached again.
-    forced_dark: Rc<servo::user_contents::UserStyleSheet>,
+    /// The page theme's stylesheets, attached to `user_content` while the theme
+    /// asks for them. Kept so they can be detached again.
+    theme_sheets: page_theme::ThemeSheets,
     /// Pads the page has been told about, by the slot it sees them under. Held
     /// here rather than in the event handler because every fresh document has to
     /// be told again: a `Connected` only reaches the document that is loaded.
@@ -359,10 +359,8 @@ impl AppBrowserInner {
         for script in &patch_scripts {
             user_content.add_script(script.clone());
         }
-        let forced_dark = forced_dark::stylesheet();
-        if browser.page_theme.is_forced_dark() {
-            user_content.add_stylesheet(forced_dark.clone());
-        }
+        let theme_sheets = page_theme::ThemeSheets::new();
+        theme_sheets.attach(&user_content, browser.page_theme);
         Self {
             tabs: RefCell::new(vec![]),
             active: Cell::new(0),
@@ -401,7 +399,7 @@ impl AppBrowserInner {
             user_agent: RefCell::new(effective_user_agent(browser)),
             js_applied: RefCell::new(None),
             page_icons: Cell::new(config.interface.page_icons),
-            forced_dark,
+            theme_sheets,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
             haptic_requests: FrameQueue::new(UserEvent::HapticPending, event_sender.clone()),
@@ -413,15 +411,10 @@ impl AppBrowserInner {
         }
     }
 
-    /// Attach or detach the forced-dark sheet. Only ever called on a real theme
-    /// change: `add_stylesheet` pushes, so attaching twice would double it.
-    fn sync_forced_dark(&self, theme: PageTheme) {
-        if theme.is_forced_dark() {
-            self.user_content.add_stylesheet(self.forced_dark.clone());
-        } else {
-            self.user_content
-                .remove_stylesheet(self.forced_dark.clone());
-        }
+    /// Move the engine from page theme `old` to `new`: its stylesheets. Returns
+    /// whether they changed.
+    fn retheme(&self, old: PageTheme, new: PageTheme) -> bool {
+        self.theme_sheets.swap(&self.user_content, old, new)
     }
 
     /// Finish `builder` with the setup every webview gets, however it is
@@ -720,10 +713,11 @@ impl AppBrowser {
     /// `matchMedia` without restyling it. Guarded on an actual change, so an
     /// unrelated settings save cannot discard scroll and form state.
     pub fn set_page_theme(&self, theme: PageTheme) {
-        if self.inner.page_theme.replace(theme) == theme {
+        let old = self.inner.page_theme.replace(theme);
+        if old == theme {
             return;
         }
-        self.inner.sync_forced_dark(theme);
+        self.inner.retheme(old, theme);
         for tab in self.inner.tabs.borrow_mut().iter_mut() {
             tab.webview.notify_theme_change(engine::theme(theme));
             tab.state.loading = true;
@@ -738,8 +732,7 @@ impl AppBrowser {
         let old_theme = self.inner.page_theme.replace(theme);
         let mut stale = false;
         if old_theme != theme {
-            self.inner.sync_forced_dark(theme);
-            stale |= old_theme.is_forced_dark() != theme.is_forced_dark();
+            stale |= self.inner.retheme(old_theme, theme);
             if let Some(webview) = self.inner.active_webview() {
                 webview.notify_theme_change(engine::theme(theme));
             }
