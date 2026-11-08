@@ -185,15 +185,16 @@ impl History {
     }
 }
 
-/// Format a unix timestamp as a compact `YYYY-MM-DD HH:MM` in UTC, dependency-free
-/// (Howard Hinnant's civil-from-days). Returns `—` for an unknown (`0`) time so a
+/// Format a unix timestamp as a compact `YYYY-MM-DD HH:MM` in the system's time
+/// zone, UTC where none is set. Returns `—` for an unknown (`0`) time so a
 /// device with no working clock doesn't show a misleading `1970` date.
 pub fn format_time(secs: u64) -> String {
     if secs == 0 {
         return "—".to_string();
     }
-    let days = (secs / 86_400) as i64;
-    let tod = secs % 86_400;
+    let local = secs as i64 + crate::clock::utc_offset(secs);
+    let days = local.div_euclid(86_400);
+    let tod = local.rem_euclid(86_400);
     let (year, month, day) = crate::clock::civil_from_days(days);
     let hour = tod / 3_600;
     let min = (tod % 3_600) / 60;

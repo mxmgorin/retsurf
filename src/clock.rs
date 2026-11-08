@@ -11,6 +11,35 @@ pub fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
+/// Seconds east of UTC in the system's time zone at unix time `secs`; `0` where
+/// no zone is set.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn utc_offset(secs: u64) -> i64 {
+    let Ok(at) = libc::time_t::try_from(secs) else {
+        return 0;
+    };
+    let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
+    // SAFETY: both pointers are valid for the call, which fills `tm` when it
+    // returns non-null.
+    match unsafe { libc::localtime_r(&at, tm.as_mut_ptr()) }.is_null() {
+        true => 0,
+        // SAFETY: localtime_r filled `tm`.
+        false => long_to_i64(unsafe { tm.assume_init() }.tm_gmtoff),
+    }
+}
+
+/// A C `long` as `i64`: the same type on 64-bit targets, a narrower one on 32-bit.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn long_to_i64(value: impl Into<i64>) -> i64 {
+    value.into()
+}
+
+/// Seconds east of UTC; this platform's time zone is not read.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn utc_offset(_secs: u64) -> i64 {
+    0
+}
+
 /// Days since the unix epoch as a `(year, month, day)` civil date (UTC), by
 /// Howard Hinnant's civil-from-days.
 pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
@@ -41,7 +70,18 @@ pub fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, days_from_civil};
+    use super::{civil_from_days, days_from_civil, now_unix, utc_offset};
+
+    /// Real zones sit within a day of UTC, on quarter hours.
+    #[test]
+    fn utc_offset_is_a_zone() {
+        const QUARTER_HOUR: i64 = 15 * 60;
+        const MAX_OFFSET: i64 = 14 * 60 * 60;
+        let offset = utc_offset(now_unix());
+        println!("utc offset here: {offset}s");
+        assert!(offset.abs() <= MAX_OFFSET);
+        assert_eq!(offset % QUARTER_HOUR, 0);
+    }
 
     #[test]
     fn civil_dates_round_trip() {
