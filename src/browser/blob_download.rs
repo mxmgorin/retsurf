@@ -18,6 +18,11 @@ pub(super) const PING_URL: &str = "https://retsurf.invalid/blob-download";
 /// a video must fail fast instead of exhausting a handheld's memory.
 const MAX_BYTES: usize = 32 * 1024 * 1024;
 
+/// The base64 text [`MAX_BYTES`] encodes to. The page script checks the cap,
+/// but a page can queue an entry past it, so it is checked here again.
+const MAX_ENCODED: usize =
+    base64::encoded_len(MAX_BYTES, true).expect("the cap encodes within usize");
+
 /// File name used when the page suggests none.
 const FALLBACK_NAME: &str = "download";
 
@@ -59,9 +64,12 @@ pub(super) fn parse_taken(value: &str) -> Option<Captured> {
     Some(match serde_json::from_str(value) {
         Ok(Taken::File { name, data }) => Captured::File(BlobDownload {
             filename: sanitize_filename(&name).unwrap_or_else(|| FALLBACK_NAME.to_string()),
-            bytes: base64::engine::general_purpose::STANDARD
-                .decode(data)
-                .map_err(|e| format!("decode: {e}")),
+            bytes: match data.len() > MAX_ENCODED {
+                true => Err(format!("over the capture limit of {MAX_BYTES} bytes")),
+                false => base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|e| format!("decode: {e}")),
+            },
         }),
         // The page controls the URL; only http(s) may reach the fetch worker.
         Ok(Taken::Link { url, name }) => {
@@ -144,6 +152,14 @@ mod tests {
         let taken = file(r#"{"name":"report.pdf","data":"aGVsbG8="}"#);
         assert_eq!(taken.filename, "report.pdf");
         assert_eq!(taken.bytes.expect("valid base64"), b"hello");
+    }
+
+    /// A page can queue past its own script's check; the cap holds here too.
+    #[test]
+    fn a_file_over_the_cap_is_refused() {
+        let data = "A".repeat(MAX_ENCODED + 4);
+        let taken = file(&format!(r#"{{"name":"big.bin","data":"{data}"}}"#));
+        assert!(taken.bytes.unwrap_err().contains("capture limit"));
     }
 
     /// A page-side failure arrives as a message, not as a corrupt file.
