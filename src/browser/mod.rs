@@ -75,6 +75,8 @@ const IDB_INDEX_COMPAT_JS: &str = include_str!("assets/idb_index_compat.js");
 const WASM_STREAMING_COMPAT_JS: &str = include_str!("assets/wasm_streaming_compat.js");
 /// `gamepadconnected` for late listeners; Servo fires it only at the first gesture.
 const GAMEPAD_COMPAT_JS: &str = include_str!("assets/gamepad_compat.js");
+/// The focused field scrolled back into view when the viewport shrinks under it.
+const FOCUS_IN_VIEW_JS: &str = include_str!("assets/focus_in_view.js");
 /// Caps WebGL's texture units; `WEBGL_TEXTURE_UNITS` is the cap.
 const WEBGL_TEXTURE_UNITS_JS: &str = include_str!("assets/webgl_texture_units.js");
 
@@ -350,6 +352,10 @@ impl AppBrowserInner {
         )));
         user_content.add_script(Rc::new(servo::UserScript::new(
             GAMEPAD_COMPAT_JS.to_string(),
+            None,
+        )));
+        user_content.add_script(Rc::new(servo::UserScript::new(
+            FOCUS_IN_VIEW_JS.to_string(),
             None,
         )));
         let patch_scripts = match config.game_mode.patches {

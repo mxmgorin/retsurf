@@ -9,6 +9,7 @@ import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.ProxyInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.FileUtils;
@@ -16,6 +17,7 @@ import android.provider.MediaStore;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
+import android.view.WindowInsets;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -66,6 +68,25 @@ public class RetsurfActivity extends SDLActivity {
         exportSystemProxy();
 
         super.onCreate(savedInstanceState);
+        followKeyboard();
+    }
+
+    /**
+     * Keeps the app above the on-screen keyboard by shrinking SDL's layout to the
+     * space it leaves, which SDL reports as a resize; a fullscreen window is not
+     * resized for it. Needs Android 11's keyboard insets.
+     */
+    private void followKeyboard() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || mLayout == null) {
+            return;
+        }
+        getWindow().getDecorView().setOnApplyWindowInsetsListener((view, insets) -> {
+            int keyboard = insets.getInsets(WindowInsets.Type.ime()).bottom;
+            if (mLayout != null && mLayout.getPaddingBottom() != keyboard) {
+                mLayout.setPadding(0, 0, 0, keyboard);
+            }
+            return view.onApplyWindowInsets(insets);
+        });
     }
 
     /**
