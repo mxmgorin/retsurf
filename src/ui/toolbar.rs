@@ -486,10 +486,28 @@ fn paint_loading_edge(
         ToolbarPosition::Top => bar.bottom() - LOADING_EDGE,
         ToolbarPosition::Bottom => bar.top(),
     };
+    paint_edge_line(ctx, layer, bar, top);
+}
+
+/// The loading edge while the toolbar is hidden: along the screen's edge on the
+/// toolbar's side, in a layer above the page and the start page. The caller
+/// keeps it off while an overlay is up, which that layer would cover.
+pub(super) fn paint_screen_loading_edge(ctx: &egui::Context, position: ToolbarPosition) {
+    let screen = ctx.content_rect();
+    let top = match position {
+        ToolbarPosition::Top => screen.top(),
+        ToolbarPosition::Bottom => screen.bottom() - LOADING_EDGE,
+    };
+    let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("loading_edge"));
+    paint_edge_line(ctx, layer, screen, top);
+}
+
+/// The loading edge's accent line across `span`, its top at `top`.
+fn paint_edge_line(ctx: &egui::Context, layer: egui::LayerId, span: egui::Rect, top: f32) {
     let edge = egui::Rect::from_min_size(
-        egui::pos2(bar.left(), top),
+        egui::pos2(span.left(), top),
         Vec2 {
-            x: bar.width(),
+            x: span.width(),
             y: LOADING_EDGE,
         },
     );

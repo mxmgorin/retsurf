@@ -232,6 +232,14 @@ struct Transients {
     toast: bool,
 }
 
+/// The chrome's indicators, which change on wakes that mark nothing else dirty.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct Indicators {
+    downloads: download_chip::Chip,
+    /// A loading edge is on screen, on the toolbar or along the screen's edge.
+    loading: bool,
+}
+
 pub struct AppUi {
     /// Cached so focus/scale queries don't each need the window; refreshed every
     /// frame, because a software resize builds a fresh context.
@@ -275,10 +283,9 @@ pub struct AppUi {
     toast: Option<toast::Toast>,
     /// The toolbar's downloads button (see [`download_chip`]).
     download_chip: download_chip::DownloadChip,
-    /// The button as the frame last built it, and as last drawn: its progress
-    /// arrives on wakes that mark nothing else dirty.
-    chip_built: download_chip::Chip,
-    chip_drawn: download_chip::Chip,
+    /// What the frame last built, and the one last drawn, show of the indicators.
+    indicators_built: Indicators,
+    indicators_drawn: Indicators,
     /// The edge strips, Quick Access and Quick Menu.
     pub quick_access: QuickAccess,
     /// Game Mode's map list and one map's rows.
@@ -395,8 +402,8 @@ impl AppUi {
             browser_viewport: (0, 0),
             toast: None,
             download_chip: download_chip::DownloadChip::new(),
-            chip_built: download_chip::Chip::Hidden,
-            chip_drawn: download_chip::Chip::Hidden,
+            indicators_built: Indicators::default(),
+            indicators_drawn: Indicators::default(),
             quick_access: QuickAccess::new(),
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
@@ -511,7 +518,7 @@ impl AppUi {
             || self.cursor_visible_for().is_some()
             || self.transients_built != self.transients_drawn
             || self.toast_visible_for().is_some()
-            || self.chip_built != self.chip_drawn
+            || self.indicators_built != self.indicators_drawn
     }
 
     /// Height of the browser viewport (logical px) — for screen-relative scrolls.
@@ -788,6 +795,7 @@ impl AppUi {
             }
         }
 
+        let mut loading_shown = false;
         {
             let mut state = browser.get_state_mut();
             // `caret_for` parks a `TextEdit`'s cursor at the OSK caret, for the
@@ -894,6 +902,15 @@ impl AppUi {
                         self.toolbar_rect = egui::Rect::NOTHING;
                     }
                 }
+
+                let edge_alone = state.is_loading()
+                    && !self.toolbar_rect.is_positive()
+                    && matches!(self.focus(), Focus::Page | Focus::Home);
+                if edge_alone {
+                    toolbar::paint_screen_loading_edge(ctx, position);
+                }
+                loading_shown =
+                    state.is_loading() && (self.toolbar_rect.is_positive() || edge_alone);
 
                 let wanted = page_icon_wants(&self.menu, self.home_active, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
@@ -1075,9 +1092,12 @@ impl AppUi {
             });
         }
 
-        self.chip_built = match self.toolbar_rect.is_positive() {
-            true => self.download_chip.shown(),
-            false => download_chip::Chip::Hidden,
+        self.indicators_built = Indicators {
+            downloads: match self.toolbar_rect.is_positive() {
+                true => self.download_chip.shown(),
+                false => download_chip::Chip::Hidden,
+            },
+            loading: loading_shown,
         };
 
         if let Some(size) = desired_px {
@@ -1118,7 +1138,7 @@ impl AppUi {
         let timing = window.paint(page_at, page_painted);
         self.repaint_pending = false;
         self.transients_drawn = self.transients_built;
-        self.chip_drawn = self.chip_built;
+        self.indicators_drawn = self.indicators_built;
         timing
     }
 }
