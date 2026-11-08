@@ -189,8 +189,7 @@ impl Menu {
                 .selected_index()
                 .map(|i| self.bookmarks.all()[i].url.clone()),
             Section::History => self.history.selected_url(),
-            Section::Downloads => self.downloads.selected_open_url(),
-            Section::Tabs => None,
+            Section::Downloads | Section::Tabs => None,
         }
     }
 

@@ -3,6 +3,7 @@ package com.retsurf;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
@@ -233,6 +234,51 @@ public class RetsurfActivity extends SDLActivity {
         }
         File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
         return new File(downloads, name).getAbsolutePath();
+    }
+
+    /** Must match `OPENED` in src/platform/android.rs. */
+    private static final int OPENED = 1;
+    /** Must match `NO_APP` in src/platform/android.rs. */
+    private static final int NO_APP = 0;
+    /** Must match `NOT_SHARED` in src/platform/android.rs. */
+    private static final int NOT_SHARED = -1;
+
+    /**
+     * Opens a file in the shared Downloads with the app Android picks for its
+     * type. Returns OPENED, NO_APP when none takes it, or NOT_SHARED when the
+     * file is not one of this app's entries there.
+     */
+    public int openFile(String path) {
+        Uri uri = downloadEntry(new File(path).getName());
+        if (uri == null) {
+            return NOT_SHARED;
+        }
+        Intent view = new Intent(Intent.ACTION_VIEW);
+        view.setDataAndType(uri, getContentResolver().getType(uri));
+        view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(view);
+            return OPENED;
+        } catch (ActivityNotFoundException e) {
+            return NO_APP;
+        }
+    }
+
+    /** This app's newest entry in the shared Downloads named `name`; null without one. */
+    private Uri downloadEntry(String name) {
+        String[] columns = { MediaStore.Downloads._ID };
+        String[] args = { name };
+        String newest = MediaStore.Downloads.DATE_ADDED + " DESC";
+        try (Cursor cursor = getContentResolver().query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                columns, MediaStore.Downloads.DISPLAY_NAME + " = ?", args, newest)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        cursor.getLong(0));
+            }
+        } catch (RuntimeException e) {
+            Log.w("retsurf", "could not look up " + name + " in Downloads: " + e.getMessage());
+        }
+        return null;
     }
 
     /** The name MediaStore keeps `uri` under; `fallback` when it cannot be read. */

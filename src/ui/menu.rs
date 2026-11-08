@@ -436,10 +436,8 @@ fn add_downloads_section(
                 if selected {
                     center_selected(&resp);
                 }
-                if resp.clicked() {
-                    if let Some(url) = downloads.open_url(i) {
-                        commands.push(AppCommand::Menu(MenuAction::OpenUrl(url)));
-                    }
+                if resp.clicked() && downloads.saved_path(i).is_some() {
+                    commands.push(AppCommand::Menu(MenuAction::OpenDownload(i)));
                 }
                 ui.add_sized(
                     [status_w, ROW_H],

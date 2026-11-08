@@ -345,16 +345,15 @@ impl Downloads {
         self.cursor.move_sel(dy, self.items.len());
     }
 
-    /// `file://` URL of the entry at `index` if it finished; `None` otherwise.
-    pub fn open_url(&self, index: usize) -> Option<String> {
+    /// Where the entry at `index` was saved, once it finished; `None` otherwise.
+    pub fn saved_path(&self, index: usize) -> Option<&str> {
         let d = self.items.get(index)?;
-        matches!(d.state, State::Done)
-            .then(|| file_url(&d.path))
-            .flatten()
+        matches!(d.state, State::Done).then_some(d.path.as_str())
     }
 
-    pub fn selected_open_url(&self) -> Option<String> {
-        self.cursor.entry_index().and_then(|i| self.open_url(i))
+    /// The highlighted entry's index, `None` on the "Clear finished" row.
+    pub fn selected_entry(&self) -> Option<usize> {
+        self.cursor.entry_index()
     }
 
     /// Cancel the entry if still active (it stays, turning Failed once the worker
@@ -415,7 +414,7 @@ fn hand_off(path: String) -> String {
 
 /// `path` as a `file://` URL, its name escaped so `#`, `?` and `%` stay part of
 /// it; `None` for a relative path.
-fn file_url(path: &str) -> Option<String> {
+pub fn file_url(path: &str) -> Option<String> {
     url::Url::from_file_path(path).ok().map(String::from)
 }
 

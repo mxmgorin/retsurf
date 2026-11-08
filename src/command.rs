@@ -225,6 +225,8 @@ pub enum MenuAction {
     /// Clear all entries in the active section.
     Clear,
     OpenUrl(String),
+    /// Open the finished download at this index of the list.
+    OpenDownload(usize),
     /// Open the bookmark at this index of the store.
     OpenBookmark(usize),
     ToggleBookmark(String),

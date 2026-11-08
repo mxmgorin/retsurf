@@ -106,6 +106,7 @@ impl App {
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu.clear_or_arm(),
             MenuAction::OpenUrl(url) => self.open_url(url.clone(), out),
+            MenuAction::OpenDownload(at) => self.open_download(*at, out),
             MenuAction::OpenBookmark(at) => self.open_bookmark(*at, out),
             MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
             MenuAction::RemoveAt(index) => match self.ui.menu.section() {
@@ -228,11 +229,15 @@ impl App {
             .filter(|_| self.ui.menu.section() == Section::Bookmarks)
         {
             self.open_bookmark(at, out);
-        } else if let Some(url) = self.ui.menu.selected_url() {
-            self.open_url(url, out);
-        } else if self.ui.menu.section() != Section::Downloads {
+        } else if self.ui.menu.section() == Section::Downloads {
             // A on an active/failed download has nothing to open — keep the menu
             // up so the user can watch the progress; other sections close.
+            if let Some(at) = self.ui.menu.downloads.selected_entry() {
+                self.open_download(at, out);
+            }
+        } else if let Some(url) = self.ui.menu.selected_url() {
+            self.open_url(url, out);
+        } else {
             self.ui.menu.close();
         }
     }
@@ -568,6 +573,26 @@ impl App {
         change(&mut self.config.home.bookmarks);
         self.config_dirty = true;
         self.ui.set_home(&self.config.home);
+    }
+
+    /// Open the finished download at `at` of the list: with the app the system
+    /// picks for its kind where there is one, else in the focused tab.
+    fn open_download(&mut self, at: usize, out: &mut Vec<AppCommand>) {
+        let Some(path) = self.ui.menu.downloads.saved_path(at).map(str::to_string) else {
+            return;
+        };
+        match crate::platform::open_with_system(&path) {
+            Some(true) => self.ui.menu.close(),
+            Some(false) => {
+                let name = path.rsplit('/').next().unwrap_or(&path);
+                self.ui.toast(Notice::warn(format!("No app opens {name}")));
+            }
+            None => {
+                if let Some(url) = crate::data::downloads::file_url(&path) {
+                    self.open_url(url, out);
+                }
+            }
+        }
     }
 
     /// Load `url` in the focused tab and close the menu.

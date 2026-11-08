@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About tab: the app icon and author, the data folder, links to the website, a bug report with the version filled in, Discussions and Ko-fi; License and credits opens `retsurf:about`, which shows the license, the credits and the component versions offline
 - History and download times in the device's time zone instead of UTC
 - A page a site sends instead of the file, such as a sign-in, opens in the tab instead of being saved as the file
+- Android: a finished download opens with the app the system picks for its type
 
 ### Removed
 

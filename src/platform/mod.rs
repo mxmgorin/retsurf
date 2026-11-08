@@ -6,6 +6,19 @@
 
 #[cfg(target_os = "android")]
 pub mod android;
+
+/// Open the file at `path` with the app the system picks for its kind: whether
+/// one took it, or `None` where the system offers no such app for it.
+#[cfg(target_os = "android")]
+pub fn open_with_system(path: &str) -> Option<bool> {
+    android::open_file(path)
+}
+
+/// No system app opens files for retsurf here.
+#[cfg(not(target_os = "android"))]
+pub fn open_with_system(_path: &str) -> Option<bool> {
+    None
+}
 pub mod clipboard;
 pub mod cpufreq;
 #[cfg(feature = "eink")]
