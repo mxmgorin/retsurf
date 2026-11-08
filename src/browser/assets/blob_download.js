@@ -19,6 +19,16 @@
   var revokeUrl = URL.revokeObjectURL.bind(URL);
   window.__retsurfDl = { pending: pending };
 
+  // Servo has no `download` IDL attribute; libraries test for it to choose the
+  // anchor route over a popup, then assign through it.
+  if (!("download" in HTMLAnchorElement.prototype)) {
+    Object.defineProperty(HTMLAnchorElement.prototype, "download", {
+      get: function () { return this.getAttribute("download") || ""; },
+      set: function (value) { this.setAttribute("download", value); },
+      configurable: true,
+    });
+  }
+
   URL.createObjectURL = function (obj) {
     var url = createUrl(obj);
     if (obj instanceof Blob) live.set(url, obj);
@@ -78,36 +88,59 @@
     return m ? m[1] : "";
   }
 
-  // Servo lacks the `download` IDL attribute, so `a.download = "x"` stays a
-  // plain JS property invisible to getAttribute: read both.
   function askedName(a) {
-    return String(a.download || a.getAttribute("download") || "");
+    return a.getAttribute("download") || "";
   }
   function wantsDownload(a) {
-    return !!askedName(a) || a.hasAttribute("download");
+    return a.hasAttribute("download");
   }
 
-  document.addEventListener("click", function (event) {
-    var a = event.target && event.target.closest && event.target.closest("a[href]");
-    if (!a) return;
+  // Take over a link's activation when it downloads; returns whether it did.
+  function takeAnchor(a) {
     var href = a.getAttribute("href") || "";
     var name = askedName(a) || "download";
     if (href.slice(0, 5) === "blob:") {
       var blob = live.get(href);
-      if (!blob) return;
-      if (!wantsDownload(a) && displayable(blob.type)) return;
-      event.preventDefault();
+      if (!blob) return false;
+      if (!wantsDownload(a) && displayable(blob.type)) return false;
       captureBlob(blob, name);
-    } else if (href.slice(0, 5) === "data:") {
-      if (!wantsDownload(a) && displayable(dataType(href))) return;
-      event.preventDefault();
-      captureData(href, name);
-    } else if (wantsDownload(a) && /^https?:/i.test(a.href)) {
-      // Hand the resolved URL to the embedder's own fetch.
-      event.preventDefault();
-      queue({ url: a.href, name: askedName(a) });
+      return true;
     }
+    if (href.slice(0, 5) === "data:") {
+      if (!wantsDownload(a) && displayable(dataType(href))) return false;
+      captureData(href, name);
+      return true;
+    }
+    if (wantsDownload(a) && /^https?:/i.test(a.href)) {
+      // Hand the resolved URL to the embedder's own fetch.
+      queue({ url: a.href, name: askedName(a) });
+      return true;
+    }
+    return false;
+  }
+
+  document.addEventListener("click", function (event) {
+    var a = event.target && event.target.closest && event.target.closest("a[href]");
+    if (a && takeAnchor(a)) event.preventDefault();
   }, true);
+
+  // A click on a link outside the document never reaches the listener above.
+  function detachedLink(target) {
+    return target instanceof HTMLAnchorElement && !target.isConnected &&
+      target.hasAttribute("href");
+  }
+  var click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (detachedLink(this) && takeAnchor(this)) return;
+    return click.apply(this, arguments);
+  };
+  var dispatch = EventTarget.prototype.dispatchEvent;
+  EventTarget.prototype.dispatchEvent = function (event) {
+    if (event && event.type === "click" && detachedLink(this) && takeAnchor(this)) {
+      return false;
+    }
+    return dispatch.apply(this, arguments);
+  };
 
   var open = window.open.bind(window);
   window.open = function (url) {

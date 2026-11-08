@@ -426,12 +426,12 @@ CASES = [
         name="blob-download",
         url="blob-download.html",
         select=lambda b: b.get("tag") == "blob",
-        enough=lambda bs: len({b.get("case") for b in bs}) >= 7,
+        enough=lambda bs: len({b.get("case") for b in bs}) >= 9,
         verdict=lambda bs: None,
         timeout=90,
         drive=Script(press_every_button, scroll_down, press_every_button),
         config='[downloads]\ndir = "{profile}/downloads"\n',
-        downloads=7,
+        downloads=9,
     ),
     # A click is a transient activation, which the request needs; the on-load
     # attempt in the page only records that it is refused without one.

@@ -24,6 +24,8 @@
 <button id="data">6. data: anchor + download attribute</button>
 <button id="data-plain">7. data: anchor, octet-stream, no attribute</button>
 <button id="data-open">8. window.open(data:)</button>
+<button id="detached">9. blob anchor + download, clicked without joining the page</button>
+<button id="filesaver">10. FileSaver.js: dispatched click on a detached anchor</button>
 <div id="log">ready</div>
 
 <script>
@@ -97,5 +99,24 @@
   document.getElementById("data-open").onclick = () => {
     say("case=data-open");
     window.open(DATA_URL);
+  };
+
+  document.getElementById("detached").onclick = () => {
+    say("case=detached");
+    const a = document.createElement("a");
+    a.href = blobUrl();
+    a.download = "detached-file.bin";
+    a.click();
+  };
+
+  // FileSaver.js picks its anchor route by this test, else a popup.
+  document.getElementById("filesaver").onclick = () => {
+    const anchors = "download" in HTMLAnchorElement.prototype;
+    say("case=filesaver anchors=" + anchors);
+    const a = document.createElement("a");
+    a.download = "filesaver-file.bin";
+    a.rel = "noopener";
+    a.href = blobUrl();
+    a.dispatchEvent(new MouseEvent("click"));
   };
 </script>

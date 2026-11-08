@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unfinished `.part` files left in the download folder after quitting
 - Downloads failing on FAT and exFAT SD cards for names with `:`, `?`, `*` and the like
 - Download names cut at a `;` or garbled when the server sends them quoted or in Latin-1
+- Save buttons that build the file in the page and click a link outside it, such as FileSaver.js
 
 ## [0.10.0] - 2026-10-08
 
