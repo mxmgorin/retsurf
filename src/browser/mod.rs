@@ -411,9 +411,13 @@ impl AppBrowserInner {
         }
     }
 
-    /// Move the engine from page theme `old` to `new`: its stylesheets. Returns
-    /// whether they changed.
+    /// Move the engine from page theme `old` to `new`: its stylesheets and the
+    /// color shown before a page paints. Returns whether the stylesheets changed.
     fn retheme(&self, old: PageTheme, new: PageTheme) -> bool {
+        self.servo.set_preference(
+            "shell_background_color_rgba",
+            engine::shell_background(new).into(),
+        );
         self.theme_sheets.swap(&self.user_content, old, new)
     }
 

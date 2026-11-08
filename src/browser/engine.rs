@@ -69,6 +69,7 @@ pub(super) fn build_preferences(
 
     // A steady caret, as in the chrome: every blink costs a frame.
     prefs.editing_caret_blink_time = 0;
+    prefs.shell_background_color_rgba = shell_background(config.page_theme);
 
     if let Some(ua) = resolve_user_agent(&config.user_agent) {
         log::info!("user agent: {ua}");
@@ -213,6 +214,20 @@ pub(super) fn theme(page_theme: PageTheme) -> servo::Theme {
         servo::Theme::Dark
     } else {
         servo::Theme::Light
+    }
+}
+
+/// Gray of the shell under a dark page theme: the dark `Canvas` system color,
+/// so a load gap matches a dark page's empty canvas.
+const DARK_SHELL_GRAY: f64 = 30.0 / 255.0;
+
+/// The color Servo shows where a page has painted nothing yet, such as mid-load.
+pub(super) fn shell_background(page_theme: PageTheme) -> [f64; 4] {
+    match page_theme {
+        PageTheme::Light => servo::Preferences::default().shell_background_color_rgba,
+        PageTheme::Dark | PageTheme::ForcedDark => {
+            [DARK_SHELL_GRAY, DARK_SHELL_GRAY, DARK_SHELL_GRAY, 1.0]
+        }
     }
 }
 
