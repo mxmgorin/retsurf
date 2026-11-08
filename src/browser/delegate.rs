@@ -33,6 +33,22 @@ impl AppBrowserInner {
 }
 
 impl AppBrowserInner {
+    /// The cookies the browser holds for `url`, as a `Cookie` header value;
+    /// `None` without any.
+    pub(super) fn cookie_header(&self, url: &str) -> Option<String> {
+        let url = Url::parse(url).ok()?;
+        let cookies = self
+            .servo
+            .site_data_manager()
+            .cookies_for_url(url, servo::CookieSource::HTTP);
+        let header = cookies
+            .iter()
+            .map(|c| format!("{}={}", c.name(), c.value()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        (!header.is_empty()).then_some(header)
+    }
+
     /// Queue `url` for our own fetch (see [`crate::data::downloads`]), sent with
     /// `referer` when a page linked to it.
     pub(super) fn queue_download(&self, url: &Url, referer: Option<String>) {
@@ -41,6 +57,7 @@ impl AppBrowserInner {
             url: url.to_string(),
             referer,
             suggested_name: None,
+            cookie: None,
         });
     }
 }

@@ -118,6 +118,7 @@ impl AppBrowser {
                             url,
                             referer,
                             suggested_name: name,
+                            cookie: None,
                         });
                     }
                     None => {}

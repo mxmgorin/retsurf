@@ -38,6 +38,7 @@ struct Job {
     url: String,
     referer: Option<String>,
     suggested_name: Option<String>,
+    cookie: Option<String>,
     user_agent: String,
     dir: String,
     /// Hand the saved file on (see [`super::hand_off`]).
@@ -67,6 +68,7 @@ pub(super) fn spawn(
             url: request.url.clone(),
             referer: request.referer.clone(),
             suggested_name: request.suggested_name.clone(),
+            cookie: request.cookie.clone(),
             user_agent: user_agent.to_string(),
             dir: dir.to_string(),
             publish,
@@ -128,6 +130,9 @@ fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), Str
         .header("User-Agent", &job.user_agent);
     if let Some(referer) = &job.referer {
         request = request.header("Referer", referer);
+    }
+    if let Some(cookie) = &job.cookie {
+        request = request.header("Cookie", cookie);
     }
     let response = request.call().map_err(|e| e.to_string())?;
     if let Some(total) = crate::net::content_length(response.headers()) {
@@ -236,6 +241,7 @@ mod tests {
             url: format!("http://127.0.0.1:{port}/linked.zip"),
             referer: Some("https://example.test/page".to_string()),
             suggested_name: None,
+            cookie: None,
         };
         let shared = spawn(&request, "retsurf-test-ua", &dir, false, &sender);
 
@@ -276,6 +282,7 @@ mod tests {
             url: format!("http://127.0.0.1:{port}/big.iso"),
             referer: None,
             suggested_name: None,
+            cookie: None,
         };
         let shared = spawn(&request, "retsurf-test-ua", &dir, false, &sender);
 

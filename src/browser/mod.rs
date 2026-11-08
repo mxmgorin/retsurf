@@ -674,10 +674,14 @@ impl AppBrowser {
         self.inner.new_icons.take()
     }
 
-    /// Take and clear the download navigations denied since the last call.
-    #[inline]
+    /// Take and clear the download navigations denied since the last call, each
+    /// with the browser's cookies for its URL.
     pub fn take_download_requests(&self) -> Vec<DownloadRequest> {
-        self.inner.download_requests.take()
+        let mut requests = self.inner.download_requests.take();
+        for request in &mut requests {
+            request.cookie = self.inner.cookie_header(&request.url);
+        }
+        requests
     }
 
     /// Ask Servo for a memory report, delivered asynchronously on an IPC router

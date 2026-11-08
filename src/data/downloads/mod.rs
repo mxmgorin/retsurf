@@ -20,6 +20,9 @@ pub struct DownloadRequest {
     pub referer: Option<String>,
     /// Name the page's `download` attribute asked for (already sanitized).
     pub suggested_name: Option<String>,
+    /// The browser's cookies for `url`, sent along so a signed-in session
+    /// reaches the file.
+    pub cookie: Option<String>,
 }
 
 /// One file captured whole from a page (see the browser's blob shim) — no fetch
