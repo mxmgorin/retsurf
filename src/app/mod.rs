@@ -43,6 +43,8 @@ pub struct App {
     /// waiting out [`OSK_TAP_SETTLE`].
     osk_field_focused: bool,
     osk_tap_at: Option<Instant>,
+    /// The page a site last sent in a download's place, and when it opened.
+    last_download_page: Option<(String, Instant)>,
     /// Whether the last frame asked for the system keyboard.
     #[cfg(target_os = "android")]
     system_keyboard_up: bool,
@@ -118,6 +120,9 @@ const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
 /// How long a page tap waits before raising the keyboard: the page reports a
 /// blur only after the click reaches it.
 const OSK_TAP_SETTLE: Duration = Duration::from_millis(300);
+
+/// How soon the same page coming back in a download's place counts as a loop.
+const DOWNLOAD_PAGE_LOOP: Duration = Duration::from_secs(60);
 
 /// How long a pass that neither presented nor waited on the queue sleeps, where
 /// the backend has no frame cap of its own — nothing else is left to pace it.
@@ -203,6 +208,7 @@ impl App {
             osk_nav_next: Instant::now(),
             osk_field_focused: false,
             osk_tap_at: None,
+            last_download_page: None,
             #[cfg(target_os = "android")]
             system_keyboard_up: false,
             hint_press_at: None,
@@ -372,6 +378,9 @@ impl App {
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
             for finished in self.ui.menu.downloads.poll() {
+                if let Some(page) = &finished.page {
+                    self.open_download_page(page);
+                }
                 self.ui.download_finished(&finished);
             }
             for request in self.browser.take_download_requests() {
@@ -542,6 +551,28 @@ impl App {
             && (self.ui.wants_keyboard() || self.browser.text_input_focused());
         window::set_text_input(want);
         self.system_keyboard_up = want;
+    }
+
+    /// Open in the tab the page a site sent where a file was expected, such as a
+    /// sign-in. Not the same page twice in a row: one leading straight back to
+    /// the download would loop.
+    fn open_download_page(&mut self, url: &str) {
+        let looping = self
+            .last_download_page
+            .as_ref()
+            .is_some_and(|(last, at)| last == url && at.elapsed() < DOWNLOAD_PAGE_LOOP);
+        if looping {
+            self.ui.toast(Notice::warn(
+                "The site sent a page again instead of the file",
+            ));
+            return;
+        }
+        self.last_download_page = Some((url.to_string(), Instant::now()));
+        self.browser.load_page(url);
+        self.ui.toast(Notice::new(
+            bold::GLOBE_SIMPLE,
+            "The site sent a page instead of the file",
+        ));
     }
 
     fn shutdown(&mut self) {

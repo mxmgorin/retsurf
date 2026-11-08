@@ -1,6 +1,35 @@
 //! Save names for downloads: header/attribute/URL precedence, sanitizing,
 //! and the on-disk uniqueness walk both reservation strategies share.
 
+/// Whether a response is a web page sent where a file was expected, such as a
+/// sign-in or an interstitial: HTML that neither the server marks an attachment
+/// nor the save name calls a page.
+pub(super) fn sent_a_page(headers: &ureq::http::HeaderMap, name: &str) -> bool {
+    let header = |key| {
+        headers
+            .get(key)
+            .map(|v| {
+                String::from_utf8_lossy(v.as_bytes())
+                    .trim()
+                    .to_ascii_lowercase()
+            })
+            .unwrap_or_default()
+    };
+    let html = header("Content-Type");
+    let html = PAGE_TYPES.iter().any(|t| html.starts_with(t));
+    let attachment = header("Content-Disposition").starts_with("attachment");
+    let named_page = name
+        .rsplit_once('.')
+        .is_some_and(|(_, ext)| PAGE_EXTENSIONS.iter().any(|e| e.eq_ignore_ascii_case(ext)));
+    html && !attachment && !named_page
+}
+
+/// Content types a browser renders as a page.
+const PAGE_TYPES: [&str; 2] = ["text/html", "application/xhtml+xml"];
+
+/// Save-name extensions that ask for a page to be kept as a file.
+const PAGE_EXTENSIONS: [&str; 3] = ["html", "htm", "xhtml"];
+
 /// Save-name precedence (per the HTML spec): Content-Disposition, the page's
 /// `download` attribute, a file-naming redirect target, the link URL.
 pub(super) fn pick_filename(

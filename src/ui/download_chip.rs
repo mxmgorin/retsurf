@@ -72,10 +72,12 @@ impl DownloadChip {
     }
 
     /// Record a download that ended, for the mark shown once the last one has.
+    /// One that turned out a web page is neither saved nor failed.
     pub fn note(&mut self, finished: &Finished) {
-        match finished.error {
-            None => self.saved = true,
-            Some(_) => self.failed = true,
+        match (&finished.page, &finished.error) {
+            (Some(_), _) => {}
+            (None, None) => self.saved = true,
+            (None, Some(_)) => self.failed = true,
         }
     }
 
@@ -132,12 +134,13 @@ impl DownloadChip {
 
 impl AppUi {
     /// Tell the user a download ended: a toast now, and the button's mark once
-    /// the last one has.
+    /// the last one has. One that turned out a web page is the caller's to tell.
     pub fn download_finished(&mut self, finished: &Finished) {
         self.download_chip.note(finished);
-        let notice = match &finished.error {
-            None => Notice::new(bold::CHECK, format!("Downloaded {}", finished.filename)),
-            Some(e) => Notice::warn(format!("Download failed: {e}")),
+        let notice = match (&finished.page, &finished.error) {
+            (Some(_), _) => return,
+            (None, None) => Notice::new(bold::CHECK, format!("Downloaded {}", finished.filename)),
+            (None, Some(e)) => Notice::warn(format!("Download failed: {e}")),
         };
         self.toast(notice);
     }
@@ -161,6 +164,7 @@ mod tests {
         Finished {
             filename: "a.zip".into(),
             error: None,
+            page: None,
         }
     }
 
@@ -168,6 +172,7 @@ mod tests {
         Finished {
             filename: "a.zip".into(),
             error: Some("stalled".into()),
+            page: None,
         }
     }
 

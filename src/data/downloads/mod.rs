@@ -69,6 +69,8 @@ pub struct Finished {
     pub filename: String,
     /// Why it failed; `None` once saved.
     pub error: Option<String>,
+    /// A web page the site sent in the file's place, for the tab to open.
+    pub page: Option<String>,
 }
 
 /// The downloads in flight, summed with those saved while any of them still ran.
@@ -180,6 +182,7 @@ impl Downloads {
             return Some(Finished {
                 filename,
                 error: Some(error),
+                page: None,
             });
         }
 
@@ -214,6 +217,7 @@ impl Downloads {
         let finished = Finished {
             filename: filename.clone(),
             error: error.clone(),
+            page: None,
         };
         self.items.insert(
             0,
@@ -275,6 +279,7 @@ impl Downloads {
                     finished.push(Finished {
                         filename: d.filename.clone(),
                         error: result.clone().err(),
+                        page: shared.page.lock().unwrap().take(),
                     });
                 }
                 d.state = match result {

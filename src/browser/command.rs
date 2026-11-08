@@ -66,6 +66,20 @@ impl AppBrowser {
         }
     }
 
+    /// Load `url` in the active tab as a page, past the download check its name
+    /// would trip.
+    pub fn load_page(&self, url: &str) {
+        let Ok(url) = ::url::Url::parse(url) else {
+            return;
+        };
+        let Some(webview) = self.inner.active_webview() else {
+            return;
+        };
+        self.get_state_mut().heading = Some(url.to_string());
+        self.mark_loading();
+        webview.load(url);
+    }
+
     /// Arm the active tab's loading flag; `Complete` clears it. Servo sends
     /// `LoadStatus::Started` only for page-initiated navigations, and back /
     /// forward reuse the session-history document with no load at all.

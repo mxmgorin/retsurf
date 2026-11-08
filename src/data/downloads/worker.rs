@@ -5,7 +5,7 @@
 //! (see [`crate::net::agent`]); a watchdog resolves a cancel the worker, blocked
 //! in that read, cannot answer in time.
 
-use super::naming::{create_unique, pick_filename};
+use super::naming::{create_unique, pick_filename, sent_a_page};
 use super::DownloadRequest;
 use crate::event::user::{UserEvent, UserEventSender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -28,6 +28,9 @@ pub(super) struct Shared {
     saved: AtomicBool,
     /// Destination path, set once the response headers picked the final name.
     pub path: Mutex<Option<String>>,
+    /// A web page the site sent where the file was expected: its URL, set
+    /// before the failed `result`.
+    pub page: Mutex<Option<String>>,
     /// Claimed (exactly once) by whoever stores `result`.
     done: AtomicBool,
     pub result: Mutex<Option<Result<(), String>>>,
@@ -60,6 +63,7 @@ pub(super) fn spawn(
         cancel: AtomicBool::new(false),
         saved: AtomicBool::new(false),
         path: Mutex::new(None),
+        page: Mutex::new(None),
         done: AtomicBool::new(false),
         result: Mutex::new(None),
     });
@@ -145,6 +149,11 @@ fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), Str
         job.suggested_name.as_deref(),
         &job.url,
     );
+    // A `download` attribute asks for the file whatever it is.
+    if job.suggested_name.is_none() && sent_a_page(response.headers(), &name) {
+        *shared.page.lock().unwrap() = Some(response.get_uri().to_string());
+        return Err("the site sent a web page instead".to_string());
+    }
     let (path, part, file) = create_unique(&job.dir, &name)?;
     log::info!("downloading `{}` -> `{path}`", job.url);
     *shared.path.lock().unwrap() = Some(path.clone());
