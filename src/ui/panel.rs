@@ -109,7 +109,19 @@ pub(super) fn named_row(
     label: &str,
     value: &str,
 ) -> egui::Response {
-    let (label, value) = row_texts(label, value);
+    toned_named_row(ui, width, selected, label, value, Tone::Plain)
+}
+
+/// A [`named_row`] whose label takes `tone`'s colour.
+pub(super) fn toned_named_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    value: &str,
+    tone: Tone,
+) -> egui::Response {
+    let (label, value) = toned_texts(label, value, tone);
     let value = value.atom_shrink(true);
     ui.add_sized(
         [width, ROW_H],
@@ -117,10 +129,6 @@ pub(super) fn named_row(
             .corner_radius(ROW_RADIUS)
             .truncate(),
     )
-}
-
-fn row_texts(label: &str, value: &str) -> (egui::RichText, egui::RichText) {
-    toned_texts(label, value, Tone::Plain)
 }
 
 fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
@@ -252,7 +260,7 @@ fn toned_row(
 }
 
 /// A hairline across the list, with a row gap's air on either side.
-fn divider(ui: &mut egui::Ui, width: f32) {
+pub(super) fn divider(ui: &mut egui::Ui, width: f32) {
     ui.add_space(ROW_GAP);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 1.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, 0.0, palette().hairline);

@@ -13,16 +13,19 @@
 //! [`crate::ui::settings`] renders it.
 //!
 //! The pieces live in submodules: [`fields`] (the static config-field table and
-//! its typed get/set), [`controls`] (the dynamic rebinding list), and [`about`]
-//! (the read-only About tab).
+//! its typed get/set), [`controls`] (the dynamic rebinding list),
+//! [`search_engines`] (the Browser tab's engine list) and [`about`] (the
+//! read-only About tab).
 
 mod about;
 mod controls;
 mod fields;
+mod search_engines;
 
 pub use about::{about_info, data_folder, AboutLink, NOTICE};
 pub use controls::RESET_ROWS;
 pub use fields::{step, value_of, Door, Field, Kind, Task, JS_ENGINE};
+pub use search_engines::{EngineAction, EngineRow, EngineTitle};
 
 use crate::config::AppConfig;
 use crate::event::bindings::{self, Action, GROUPS, SURFACES};
@@ -120,12 +123,14 @@ struct Draft {
     controls: Controls<Action>,
     /// Why the last binding edit was refused; cleared by the next one.
     controls_note: Option<String>,
+    /// The Browser tab's engine list, while it is up in place of its fields.
+    engines: Option<search_engines::Engines>,
 }
 
 impl Draft {
     /// Whether a config field list is up (not the binding list or About).
     fn is_field_section(&self) -> bool {
-        !self.bindings_open && self.section != SettingsSection::About
+        !self.bindings_open && self.engines.is_none() && self.section != SettingsSection::About
     }
 
     fn is_info_section(&self) -> bool {
@@ -137,6 +142,7 @@ impl Draft {
         self.section = section;
         self.armed = None;
         self.bindings_open = false;
+        self.engines = None;
         if section == SettingsSection::About {
             self.selected = Sel::About(0);
             return;
@@ -211,6 +217,7 @@ impl Settings {
             armed: None,
             controls: Controls::new(GROUPS, SURFACES, RESET_ROWS),
             controls_note: None,
+            engines: None,
         });
         draft.show_controls();
         self.draft = Some(draft);
@@ -243,6 +250,9 @@ impl Settings {
         if draft.bindings_open {
             return draft.controls.cursor();
         }
+        if let Some(engines) = &draft.engines {
+            return engines.cursor();
+        }
         match draft.selected {
             Sel::Field(i) | Sel::About(i) => i,
         }
@@ -273,9 +283,13 @@ impl Settings {
         let Kind::Door { door } = fields::FIELDS[i].kind else {
             return None;
         };
-        if door == Door::Bindings {
-            draft.bindings_open = true;
-            draft.controls.focus_first();
+        match door {
+            Door::Bindings => {
+                draft.bindings_open = true;
+                draft.controls.focus_first();
+            }
+            Door::SearchEngines => draft.engines = Some(Default::default()),
+            Door::InputMaps => {}
         }
         Some(door)
     }
@@ -288,11 +302,18 @@ impl Settings {
         }
     }
 
-    /// B inside a door's screen goes back to its row; `false` when none is up.
+    /// B inside a door's screen goes back a level, from its top to its row;
+    /// `false` when none is up.
     pub fn close_door(&mut self) -> bool {
         let Some(draft) = self.draft_mut() else {
             return false;
         };
+        if let Some(engines) = &mut draft.engines {
+            if !engines.back() {
+                draft.engines = None;
+            }
+            return true;
+        }
         if !draft.bindings_open {
             return false;
         }
@@ -318,6 +339,8 @@ impl Settings {
         }
         if draft.bindings_open {
             draft.controls.set_cursor(i);
+        } else if let Some(engines) = &mut draft.engines {
+            engines.select(i, &draft.config.browser);
         } else if let Some(field) = fields::FIELDS.get(i) {
             draft.section = field.section;
             draft.selected = Sel::Field(i);
@@ -361,6 +384,10 @@ impl Settings {
         }
         if draft.bindings_open {
             draft.controls.move_cursor(dy);
+            return;
+        }
+        if let Some(engines) = &mut draft.engines {
+            engines.move_sel(dy, &draft.config.browser);
             return;
         }
         let Sel::Field(cur) = draft.selected else {

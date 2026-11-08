@@ -310,6 +310,11 @@ impl App {
                 self.ui.settings.apply_capture(gesture.clone(), *keyboard);
             }
             SettingsAction::CaptureCancel => self.ui.settings.cancel_capture(),
+            SettingsAction::EngineText(text) => {
+                if self.ui.settings.engine_text(text) {
+                    self.ui.osk(OskCommand::Show, &self.browser, out);
+                }
+            }
             // Self-update: a graceful shutdown, so the launcher's pm_finish runs
             // and re-execs the freshly swapped binary.
             SettingsAction::CheckUpdate => {
@@ -339,6 +344,10 @@ impl App {
             }
         } else if self.ui.settings.bindings_open() {
             self.ui.settings.controls_activate();
+        } else if self.ui.settings.engines_open() {
+            if self.ui.settings.engines_activate() {
+                self.ui.osk(OskCommand::Show, &self.browser, out);
+            }
         } else if let Some(door) = self.ui.settings.open_door() {
             if door == Door::InputMaps {
                 self.open_input_maps();

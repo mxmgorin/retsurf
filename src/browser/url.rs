@@ -2,6 +2,7 @@
 //! domain or absolute file path, and finally fall back to the configured search
 //! page.
 
+use crate::config::QUERY_MARK;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use url::Url;
 
@@ -53,7 +54,7 @@ fn try_as_search_page(request: &str, searchpage: &str) -> Option<Url> {
     }
 
     let query = utf8_percent_encode(request, QUERY).to_string();
-    Url::parse(&searchpage.replace("%s", &query)).ok()
+    Url::parse(&searchpage.replace(QUERY_MARK, &query)).ok()
 }
 
 #[cfg(test)]

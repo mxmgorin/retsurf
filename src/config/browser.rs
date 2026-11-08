@@ -1,10 +1,14 @@
+use super::search::{self, SearchEngine};
 use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserConfig {
-    pub search_page: String,
+    /// The name of the engine searches go to (see [`search`]).
+    pub search_engine: String,
+    /// The engines to pick from, in the order they are offered.
+    pub search_engines: Vec<SearchEngine>,
     /// The User-Agent header sites see. Empty keeps Servo's platform default;
     /// the keywords `desktop`, `mobile` (or `android`), and `ios` pick the
     /// matching stock UA — `mobile` makes sites serve their phone layouts,
@@ -34,9 +38,8 @@ pub struct BrowserConfig {
 impl Default for BrowserConfig {
     fn default() -> Self {
         Self {
-            // DuckDuckGo's no-JS endpoint: results come rendered in the HTML,
-            // where the main site builds them with a script.
-            search_page: "https://lite.duckduckgo.com/lite/?q=%s".to_string(),
+            search_engine: search::default_name(),
+            search_engines: search::defaults(),
             user_agent: String::new(),
             persist_site_data: true,
             restore_tabs: true,

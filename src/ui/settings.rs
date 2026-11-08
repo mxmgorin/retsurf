@@ -4,13 +4,16 @@
 //! A edit, B save & close — all of it without an analog stick.
 
 use super::keys;
-use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use super::panel::{self, center_selected, section_scroll, Tone, ROW_GAP, ROW_RADIUS, SIDES};
 use super::svg::SvgTexture;
 use super::theme::{self, palette};
 use crate::command::{AppCommand, SettingsAction};
 use crate::config::FaceLabels;
 use crate::data::downloads::format_size;
-use crate::overlay::settings::{AboutLink, Door, Kind, Settings, SettingsSection, RESET_ROWS};
+use crate::overlay::settings::{
+    AboutLink, Door, EngineAction, EngineRow, EngineTitle, Kind, Settings, SettingsSection,
+    RESET_ROWS,
+};
 use crate::update::{Offer, UpdateState};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -416,6 +419,75 @@ fn add_controls(
     });
 }
 
+/// The search-engine list or one engine's rows, under a title naming the
+/// level. State lives in [`crate::overlay::settings::Settings`].
+fn add_engines(
+    ui: &mut egui::Ui,
+    settings: &Settings,
+    screen: egui::Rect,
+    commands: &mut Vec<AppCommand>,
+) {
+    let Some((title, rows)) = settings.engine_screen() else {
+        return;
+    };
+    let title = match title {
+        EngineTitle::List => "Search engines".to_string(),
+        EngineTitle::Engine(name) => name,
+        EngineTitle::Confirm(name) => format!("Delete {name}?"),
+    };
+    ui.label(
+        egui::RichText::new(title)
+            .color(palette().accent)
+            .strong()
+            .size(13.0),
+    );
+    let sel = settings.selected();
+    let full_w = screen.width() - SIDES;
+    section_scroll(ui, screen).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = ROW_GAP;
+        for (i, row) in rows.into_iter().enumerate() {
+            let new = matches!(row, EngineRow::New { .. });
+            let (label, value, tone) = match row {
+                EngineRow::New { url_for, typed } => {
+                    let label = match url_for {
+                        Some(name) => format!("URL of {name}"),
+                        None => "New engine".to_string(),
+                    };
+                    (format!("{}  {label}", bold::PLUS), typed, Tone::Action)
+                }
+                EngineRow::Engine { name, in_use } => {
+                    let value = if in_use { "in use" } else { "" };
+                    (name, value.to_string(), Tone::Plain)
+                }
+                EngineRow::Take(action, value) => {
+                    let tone = match action {
+                        EngineAction::Delete => Tone::Danger,
+                        _ => Tone::Plain,
+                    };
+                    (action.label().to_string(), value, tone)
+                }
+                EngineRow::Answer(true) => {
+                    let label = EngineAction::Delete.label().to_string();
+                    (label, String::new(), Tone::Danger)
+                }
+                EngineRow::Answer(false) => ("Cancel".to_string(), String::new(), Tone::Plain),
+            };
+            let focused = i == sel;
+            let resp = panel::toned_named_row(ui, full_w, focused, &label, &value, tone);
+            if focused {
+                center_selected(&resp);
+            }
+            if resp.clicked() {
+                commands.push(AppCommand::Settings(SettingsAction::Select(i)));
+                commands.push(AppCommand::Settings(SettingsAction::Activate));
+            }
+            if new {
+                panel::divider(ui, full_w);
+            }
+        }
+    });
+}
+
 /// A settings tab's icon.
 fn section_icon(section: SettingsSection) -> &'static str {
     match section {
@@ -467,6 +539,8 @@ pub(super) fn add_settings(
             vec![section, mv, (&ok, "select"), (&back, "back")]
         } else if settings.bindings_open() {
             vec![section, mv, (&ok, "open / bind / remove"), (&back, "back")]
+        } else if settings.engines_open() {
+            vec![section, mv, (&ok, "select"), (&back, "back")]
         } else {
             vec![
                 section,
@@ -495,6 +569,10 @@ pub(super) fn add_settings(
         // The binding list is dynamic, not FIELDS.
         if settings.bindings_open() {
             add_controls(ui, settings, screen, commands);
+            return;
+        }
+        if settings.engines_open() {
+            add_engines(ui, settings, screen, commands);
             return;
         }
 
@@ -537,7 +615,7 @@ pub(super) fn add_settings(
                     (
                         None,
                         Kind::Door {
-                            door: Door::Bindings,
+                            door: Door::Bindings | Door::SearchEngines,
                         },
                     ) => bold::CARET_RIGHT.to_string(),
                     (

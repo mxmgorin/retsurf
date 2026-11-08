@@ -23,7 +23,7 @@ Both take two presses. Rows marked `*` need a restart.
 
 ```toml
 [browser]
-search_page = "https://lite.duckduckgo.com/lite/?q=%s"   # %s = the query
+search_engine = "DuckDuckGo Lite"   # the name of an engine below
 # Empty = the default; "desktop", "mobile" (or "android") or "ios" pretend to be that
 # browser. "mobile" gets phone layouts, which suit a small screen.
 user_agent = ""
@@ -36,6 +36,11 @@ page_zoom = 1.0                # default page zoom
 # "light", "dark" (sites with a dark theme use it) or "forced-dark" (every page inverted,
 # photos kept; slower). Reloads the open tabs.
 page_theme = "light"
+
+# One table per search engine, in the order Settings lists them
+[[browser.search_engines]]
+name = "DuckDuckGo Lite"
+url = "https://lite.duckduckgo.com/lite/?q=%s"   # %s = the query
 
 [experimental]
 # Web features Servo ships off. The settings overlay's "Web features" row sets them as a
@@ -193,6 +198,29 @@ memory_log = false         # log it every ten seconds
 frame_timing = false       # log the time per frame
 thread_cpu = false         # log CPU time per thread
 ```
+
+## Search engines
+
+Text typed in the address bar or the start page's search field that is not an address is
+searched with `search_engine`. **Settings > Browser > Search engine** picks one, **Search
+engines** adds, renames, edits and deletes them.
+
+| Engine | URL |
+|---|---|
+| DuckDuckGo Lite (the default) | `https://lite.duckduckgo.com/lite/?q=%s` |
+| DuckDuckGo | `https://duckduckgo.com/?q=%s` |
+| Google | `https://www.google.com/search?q=%s` |
+| Bing | `https://www.bing.com/search?q=%s` |
+| Brave | `https://search.brave.com/search?q=%s` |
+| Startpage | `https://www.startpage.com/do/search?q=%s` |
+| Ecosia | `https://www.ecosia.org/search?q=%s` |
+| Qwant | `https://lite.qwant.com/?q=%s` |
+| Mojeek | `https://www.mojeek.com/search?q=%s` |
+| Wikipedia | `https://en.m.wikipedia.org/w/index.php?search=%s` |
+
+- `%s` marks where the query goes; a URL without it gets the query at the end.
+- `[[browser.search_engines]]` in `config.toml` is the whole list: an engine left out is gone.
+- The last engine cannot be deleted.
 
 ## Interface scale
 

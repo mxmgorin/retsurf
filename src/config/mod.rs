@@ -31,6 +31,7 @@ pub mod overlay;
 mod pad_layout;
 mod paths;
 mod performance;
+mod search;
 mod shader_resolution;
 mod texture_filter;
 mod texture_limit;
@@ -56,6 +57,7 @@ pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};
 pub use performance::{MemoryProfile, PerformanceConfig};
+pub use search::QUERY_MARK;
 pub use shader_resolution::ShaderResolution;
 pub use texture_filter::TextureFilter;
 pub use texture_limit::TextureLimit;
@@ -255,6 +257,8 @@ impl AppConfig {
             &mut self.performance.http_disk_cache_mb,
             b::HTTP_DISK_CACHE_MB,
         );
+
+        self.browser.sanitize_search();
 
         let preset = &mut self.performance.js_preset;
         if !js_preset::exists(&self.js_presets, preset) {

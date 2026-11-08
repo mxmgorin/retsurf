@@ -176,6 +176,8 @@ pub enum SettingsAction {
     CaptureBinding { gesture: String, keyboard: bool },
     /// Cancel binding capture without changing anything.
     CaptureCancel,
+    /// The keyboard submitted a search engine's name or URL.
+    EngineText(String),
     /// About tab: query GitHub for a newer release.
     CheckUpdate,
     /// About tab: download + verify + swap the available release in place.

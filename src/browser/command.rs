@@ -97,7 +97,7 @@ impl AppBrowser {
 
     /// The URL `command` loads in the active tab, for a command that loads one.
     pub fn load_target(&self, command: &BrowserCommand, config: &AppConfig) -> Option<::url::Url> {
-        let search = &config.browser.search_page;
+        let search = config.browser.search_url();
         match command {
             BrowserCommand::Load => try_into_url(&self.state().location, search),
             BrowserCommand::Home => try_into_url(&config.home.page, search),

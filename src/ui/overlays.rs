@@ -86,6 +86,7 @@ enum OskDest {
     GameName,
     OptionsText,
     LayerName,
+    SearchEngine,
     Home,
     AddressBar,
     Page,
@@ -142,6 +143,7 @@ impl AppUi {
             Focus::QuickAccess if self.quick_access.naming().is_some() => OskDest::OptionsText,
             // A layer being added or renamed in the map editor.
             Focus::GameMapEdit if self.map_edit.naming().is_some() => OskDest::LayerName,
+            Focus::Settings if self.settings.engine_typing() => OskDest::SearchEngine,
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
             // On the start page, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
@@ -177,6 +179,11 @@ impl AppUi {
                     .naming_text_mut()
                     .expect("LayerName is routed only while the editor names a layer"),
             ),
+            OskDest::SearchEngine => OskTarget::SearchEngine(
+                self.settings
+                    .engine_text_mut()
+                    .expect("SearchEngine is routed only while the engine list types"),
+            ),
             OskDest::Home => OskTarget::Home(self.home.input_mut()),
             OskDest::AddressBar => OskTarget::AddressBar,
             OskDest::Page => OskTarget::Page,
@@ -196,6 +203,7 @@ impl AppUi {
         if matches!(cmd, OskCommand::Hide) {
             self.input_maps.take_naming();
             self.map_edit.take_naming();
+            self.settings.drop_engine_typing();
         }
     }
 
@@ -258,6 +266,7 @@ impl AppUi {
             | OskDest::GameName
             | OskDest::OptionsText
             | OskDest::LayerName
+            | OskDest::SearchEngine
             | OskDest::Page => OskField::None,
         }
     }

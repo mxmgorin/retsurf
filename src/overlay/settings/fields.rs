@@ -178,6 +178,8 @@ fn cursor_curve_label(exponent: f64) -> String {
 pub enum Door {
     /// The binding list (see [`super::controls`]).
     Bindings,
+    /// The search-engine list (see [`super::search_engines`]).
+    SearchEngines,
     /// Game Mode's input-map screens, which [`super::Settings::open_door`]
     /// leaves to its caller.
     InputMaps,
@@ -318,6 +320,9 @@ pub fn step(kind: &Kind, config: &mut AppConfig, dx: i32) {
             let cur = get(config);
             let opts = opts.list(config);
             let n = opts.len() as i32;
+            if n == 0 {
+                return;
+            }
             let idx = opts.iter().position(|(_, v)| *v == cur).unwrap_or(0) as i32;
             let next = (idx + dx).rem_euclid(n) as usize;
             set(config, &opts[next].1);
@@ -366,6 +371,22 @@ const fn ua_kind() -> Kind {
         set: |c, v| c.browser.user_agent = v.to_string(),
     }
 }
+
+/// The engine searches go to, picked by name from the user's list.
+const SEARCH_ENGINE: Kind = Kind::Choice {
+    opts: Opts::Listed {
+        list: |c| {
+            c.browser
+                .search_engines
+                .iter()
+                .map(|e| (e.name.clone(), e.name.clone()))
+                .collect()
+        },
+        label: str::to_string,
+    },
+    get: |c| c.browser.search_engine.clone(),
+    set: |c, v| c.browser.search_engine = v.to_string(),
+};
 
 /// The JS engine preset row's label, which Quick Access finds it by.
 pub const JS_ENGINE: &str = "JS engine";
@@ -445,7 +466,8 @@ use SettingsSection as S;
 /// The binding list is not here: it is built dynamically behind a door row.
 #[rustfmt::skip]
 pub(super) static FIELDS: &[Field] = &[
-    f(S::Browser,  "Browser",     "Search URL",             text!(browser.search_page), false),
+    f(S::Browser,  "Browser",     "Search engine",          SEARCH_ENGINE, false),
+    f(S::Browser,  "Browser",     "Search engines",         Kind::Door { door: Door::SearchEngines }, false),
     f(S::Browser,  "Browser",     "User agent",             ua_kind(), false).quick(Modes::Browser),
     f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
     f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false).quick(Modes::Browser),

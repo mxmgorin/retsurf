@@ -18,7 +18,8 @@
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, MenuAction, PromptAction, QuickAccessAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, MenuAction, PromptAction,
+    QuickAccessAction, SettingsAction,
 };
 use crate::config::{Face, OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
@@ -61,6 +62,8 @@ pub enum OskTarget<'a> {
     /// A layer name in the map editor (see [`crate::overlay::game::map_edit`]);
     /// Enter commits it, like a map's.
     LayerName(&'a mut String),
+    /// A search engine's name or URL in the settings; Enter commits it.
+    SearchEngine(&'a mut String),
     Page,
 }
 
@@ -525,7 +528,8 @@ impl Osk {
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::OptionsText(buf)
-            | OskTarget::LayerName(buf) => buf.clear(),
+            | OskTarget::LayerName(buf)
+            | OskTarget::SearchEngine(buf) => buf.clear(),
             // Picking has no buffer to clear; the row keeps what it had.
             OskTarget::Capture(_) => {}
             OskTarget::Page => browser.clear_focused_field(),
@@ -565,7 +569,8 @@ impl Osk {
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::OptionsText(buf)
-            | OskTarget::LayerName(buf) => self.remove_before(buf),
+            | OskTarget::LayerName(buf)
+            | OskTarget::SearchEngine(buf) => self.remove_before(buf),
             OskTarget::Capture(slot) => *slot = Some("Backspace".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Backspace, Code::Backspace),
         }
@@ -594,7 +599,8 @@ impl Osk {
             | OskTarget::Settings(buf)
             | OskTarget::GameName(buf)
             | OskTarget::OptionsText(buf)
-            | OskTarget::LayerName(buf) => self.insert(buf, c),
+            | OskTarget::LayerName(buf)
+            | OskTarget::SearchEngine(buf) => self.insert(buf, c),
             OskTarget::Capture(slot) => *slot = Some(c.to_string()),
             OskTarget::Page => {
                 browser.handle_input(servo::InputEvent::Keyboard(char_keyboard_event(
@@ -645,6 +651,9 @@ impl Osk {
                     )));
                 }
             }
+            OskTarget::SearchEngine(buf) => commands.push(AppCommand::Settings(
+                SettingsAction::EngineText(buf.trim().to_string()),
+            )),
             // The one key the grid cannot otherwise name for a row.
             OskTarget::Capture(slot) => *slot = Some("Enter".to_string()),
             OskTarget::Page => send_named(browser, NamedKey::Enter, Code::Enter),
@@ -694,7 +703,8 @@ fn target_char_len(target: &OskTarget, browser: &AppBrowser) -> usize {
         | OskTarget::Settings(buf)
         | OskTarget::GameName(buf)
         | OskTarget::OptionsText(buf)
-        | OskTarget::LayerName(buf) => buf.chars().count(),
+        | OskTarget::LayerName(buf)
+        | OskTarget::SearchEngine(buf) => buf.chars().count(),
         OskTarget::Capture(_) | OskTarget::Page => 0,
     }
 }
