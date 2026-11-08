@@ -16,10 +16,10 @@ html {
    don't survive the round trip exactly (#cc0000 came back as #893232): the
    root pass clamps what it pushes out of gamut, and no child filter undoes
    that. Reordering the inverse changes nothing — measured. */
+/* No inline `svg`: icons paint in the text color and must invert with it. */
 img,
 video,
 canvas,
-svg,
 iframe,
 embed,
 object,
