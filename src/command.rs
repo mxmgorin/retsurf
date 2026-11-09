@@ -41,6 +41,8 @@ pub enum AppCommand {
     Settings(SettingsAction),
     /// A change to the start page's view.
     Home(HomeAction),
+    /// Search with the engine at this index of `[browser] search_engines`.
+    UseSearchEngine(usize),
 }
 
 impl AppCommand {
@@ -63,7 +65,8 @@ impl AppCommand {
             | AppCommand::FocusAddressBar
             | AppCommand::CloseTab
             | AppCommand::Settings(_)
-            | AppCommand::Home(_) => false,
+            | AppCommand::Home(_)
+            | AppCommand::UseSearchEngine(_) => false,
         }
     }
 

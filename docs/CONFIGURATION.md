@@ -202,8 +202,9 @@ thread_cpu = false         # log CPU time per thread
 ## Search engines
 
 Text typed in the address bar or the start page's search field that is not an address is
-searched with `search_engine`. **Settings > Browser > Search engine** picks one, **Search
-engines** adds, renames, edits and deletes them.
+searched with `search_engine`. **Settings > Browser > Search engine** or the search icon in
+the address bar and the start page's field picks one, **Search engines** adds, renames, edits
+and deletes them.
 
 | Engine | URL |
 |---|---|

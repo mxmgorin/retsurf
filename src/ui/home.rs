@@ -10,6 +10,7 @@ use super::favicon::{Icon, PageIcons};
 use super::keys;
 use super::labels::{bookmark_label, site_label};
 use super::panel::{fade, scroll_offset, scrolls_on, settle, EPSILON, FADE};
+use super::search_menu::{search_button, SearchEngines};
 use super::svg::SvgTexture;
 use super::theme::{palette, ROW_FONT};
 use super::wordmark;
@@ -74,8 +75,8 @@ pub(super) struct HomeView<'a> {
     pub mark: Mark<'a>,
     /// Where the search field sits, if anywhere.
     pub search: HomeSearch,
-    /// What the field shows while empty.
-    pub field_hint: &'a str,
+    /// What the search glyph offers and the empty field names.
+    pub search_engines: &'a SearchEngines,
     /// The keyboard's top edge while it types into the field: a field pinned
     /// at the bottom rises above it.
     pub keys_top: Option<f32>,
@@ -427,7 +428,7 @@ pub(super) fn add_home(
                                     add_search_bar(
                                         ui,
                                         home,
-                                        view.field_hint,
+                                        view.search_engines,
                                         block_w,
                                         osk_caret,
                                         buttons,
@@ -465,7 +466,7 @@ pub(super) fn add_home(
                             add_search_bar(
                                 ui,
                                 home,
-                                view.field_hint,
+                                view.search_engines,
                                 block_w,
                                 osk_caret,
                                 buttons,
@@ -553,7 +554,7 @@ const TABS_SALT: &str = "home_tabs";
 fn add_search_bar(
     ui: &mut egui::Ui,
     home: &mut Home,
-    hint: &str,
+    engines: &SearchEngines,
     width: f32,
     osk_caret: Option<OskCaret>,
     buttons: bool,
@@ -581,16 +582,14 @@ fn add_search_bar(
                 strip_button(ui, Strip::QuickMenu, commands);
                 divider(ui);
             }
-            let glass = egui::RichText::new(bold::MAGNIFYING_GLASS)
-                .font(font(FIELD_FONT * GLASS_SHARE))
-                .color(palette().muted);
-            ui.label(glass);
+            let glass = font(FIELD_FONT * GLASS_SHARE);
+            search_button(ui, bold::MAGNIFYING_GLASS, glass, engines, commands);
             let tail = match buttons {
                 true => STRIP_BUTTON + LINE_W + 2.0 * ui.spacing().item_spacing.x,
                 false => 0.0,
             };
             let field_w = (ui.available_width() - tail).max(0.0);
-            add_search(ui, home, hint, field_w, osk_caret);
+            add_search(ui, home, &engines.hint, field_w, osk_caret);
             if buttons {
                 divider(ui);
                 strip_button(ui, Strip::QuickAccess, commands);

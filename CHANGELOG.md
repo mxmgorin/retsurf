@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JS engine presets (auto, fast, lean, safe and your own `[js_presets]`) for the JIT and JS heap, global or per site; Quick Access reopens the page to apply one
 - Android: flick scrolling, pinch zoom, and touch for sites and web games
 - Interface themes (`[interface] theme`): Dusk (the default), Night, OLED, Sand and DMG
-- Search engine choice (`[browser] search_engine`) from a list of ten that can be added to, renamed, edited and deleted (Settings > Browser > Search engines, `[[browser.search_engines]]`); the empty address and search fields name it
+- Search engine choice (`[browser] search_engine`) from a list of ten that can be added to, renamed, edited and deleted (Settings > Browser > Search engines, `[[browser.search_engines]]`); the search icon in the address bar picks one, and the empty address and search fields name it
 
 ### Changed
 

@@ -2,6 +2,7 @@
 //! address bar, bookmark toggle, and the chips that jump into menu sections.
 
 use super::download_chip::Chip;
+use super::search_menu::{search_button, SearchEngines};
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
@@ -33,11 +34,6 @@ const FIELD_FONT: f32 = 14.0;
 /// The zoom pill's text and height, sized to sit inside the address field.
 const ZOOM_FONT: f32 = 12.0;
 const ZOOM_PILL_H: f32 = 20.0;
-
-/// What an empty address field offers, naming the search engine.
-pub(super) fn field_hint(engine: &str) -> String {
-    format!("Search {engine} or enter address")
-}
 
 /// The downloads ring's radius and stroke, inside a [`SLOT`].
 const RING_R: f32 = 13.0;
@@ -225,12 +221,22 @@ fn add_address_field(
                 }
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     let (glyph, color) = site_glyph(state.page_url(), editing);
-                    ui.label(icon(glyph).size(FIELD_ICON).color(color));
+                    if glyph == bold::MAGNIFYING_GLASS {
+                        let font = egui::FontId::proportional(FIELD_ICON);
+                        let engines = inputs.search_engines;
+                        // A click took focus off the edit; hand it back.
+                        if search_button(ui, glyph, font, engines, commands) && editing {
+                            refocus = true;
+                        }
+                    } else {
+                        ui.label(icon(glyph).size(FIELD_ICON).color(color));
+                    }
                     if let Some(pos) = inputs.osk_caret {
                         super::park_caret(ui.ctx(), id, pos, state.location.chars().count());
                     }
                     let char_count = state.location.chars().count();
-                    let hint = egui::RichText::new(inputs.field_hint).color(theme::palette().muted);
+                    let hint = &inputs.search_engines.hint;
+                    let hint = egui::RichText::new(hint).color(theme::palette().muted);
                     let mut edit = new_text_edit(&mut state.location, super::ids::LOCATION)
                         .frame(egui::Frame::new())
                         .hint_text(hint);
@@ -244,7 +250,7 @@ fn add_address_field(
                             ui,
                             location.rect,
                             &state.location,
-                            inputs.field_hint,
+                            &inputs.search_engines.hint,
                         );
                     }
                     // Focus selects the URL, so typing replaces it; skipped when
@@ -410,8 +416,8 @@ pub(super) struct ToolbarInputs<'a> {
     /// The OSK's caret, when it types here; egui's caret is parked on it.
     pub osk_caret: Option<OskCaret>,
     pub position: ToolbarPosition,
-    /// What the field shows while empty.
-    pub field_hint: &'a str,
+    /// What the search glyph offers and the empty field names.
+    pub search_engines: &'a SearchEngines,
 }
 
 /// The toolbar row — nav buttons, address-bar field, and the menu/tab/download

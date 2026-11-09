@@ -73,6 +73,7 @@ impl App {
             AppCommand::Settings(action) => self.settings_action(action, out),
             AppCommand::UpdateNotice(action) => self.update_notice_action(action, out),
             AppCommand::Home(action) => self.home_action(action, out),
+            AppCommand::UseSearchEngine(i) => self.use_search_engine(*i),
         };
 
         // Commands drain after `ui.update` built the frame, so a UI change needs
@@ -493,8 +494,7 @@ impl App {
         self.ui.set_button_hints(self.config.interface.button_hints);
         self.ui.set_ui_theme(self.config.interface.theme);
         self.ui.set_home(&self.config.home);
-        self.ui
-            .set_search_engine(&self.config.browser.search_engine);
+        self.ui.set_search_engines(&self.config.browser);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.controls.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);
@@ -576,6 +576,14 @@ impl App {
                 self.ui.toast(notice);
             }
         }
+    }
+
+    /// Search with engine `i` from now on: applied live, and written with the
+    /// next flush.
+    fn use_search_engine(&mut self, i: usize) {
+        self.config.browser.use_search_engine(i);
+        self.config_dirty = true;
+        self.ui.set_search_engines(&self.config.browser);
     }
 
     /// Change how the start page shows its bookmarks: applied live, and kept

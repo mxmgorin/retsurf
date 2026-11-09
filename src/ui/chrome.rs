@@ -10,9 +10,9 @@ use crate::ui::Focus;
 use egui_sdl2::egui;
 
 impl AppUi {
-    /// The engine the empty address and search fields name.
-    pub fn set_search_engine(&mut self, name: &str) {
-        self.field_hint = super::toolbar::field_hint(name);
+    /// The engines the search glyphs offer, and the one the empty fields name.
+    pub fn set_search_engines(&mut self, browser: &crate::config::BrowserConfig) {
+        self.search_engines = super::search_menu::SearchEngines::new(browser);
     }
 
     /// The filter Game Mode draws the page through (live config change).
