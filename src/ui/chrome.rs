@@ -10,6 +10,11 @@ use crate::ui::Focus;
 use egui_sdl2::egui;
 
 impl AppUi {
+    /// The engine the empty address and search fields name.
+    pub fn set_search_engine(&mut self, name: &str) {
+        self.field_hint = super::toolbar::field_hint(name);
+    }
+
     /// The filter Game Mode draws the page through (live config change).
     pub fn set_shader(&mut self, shader: &str) {
         self.shader = shader.to_string();

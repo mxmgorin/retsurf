@@ -34,8 +34,10 @@ const FIELD_FONT: f32 = 14.0;
 const ZOOM_FONT: f32 = 12.0;
 const ZOOM_PILL_H: f32 = 20.0;
 
-/// What the empty address field offers.
-const FIELD_HINT: &str = "Search or enter address";
+/// What an empty address field offers, naming the search engine.
+pub(super) fn field_hint(engine: &str) -> String {
+    format!("Search {engine} or enter address")
+}
 
 /// The downloads ring's radius and stroke, inside a [`SLOT`].
 const RING_R: f32 = 13.0;
@@ -146,10 +148,10 @@ fn display_address(location: &str) -> (String, String) {
 /// Paint the at-rest address over the field's own (invisible) text: the host in
 /// ink, the rest muted, cut to one line. An address that reads as nothing gets
 /// the hint, which egui draws only for an empty buffer.
-fn paint_display_address(ui: &egui::Ui, rect: egui::Rect, location: &str) {
+fn paint_display_address(ui: &egui::Ui, rect: egui::Rect, location: &str, hint: &str) {
     let (host, rest) = match display_address(location) {
         (host, _) if host.is_empty() && location.is_empty() => return,
-        (host, _) if host.is_empty() => (String::new(), FIELD_HINT.to_string()),
+        (host, _) if host.is_empty() => (String::new(), hint.to_string()),
         parts => parts,
     };
     let format = |color| egui::TextFormat {
@@ -173,7 +175,7 @@ fn add_address_field(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
-    inputs: &ToolbarInputs,
+    inputs: &ToolbarInputs<'_>,
 ) {
     let id = egui::Id::new(super::ids::LOCATION);
     let editing = ui.memory(|m| m.has_focus(id)) || inputs.osk_caret.is_some();
@@ -228,7 +230,7 @@ fn add_address_field(
                         super::park_caret(ui.ctx(), id, pos, state.location.chars().count());
                     }
                     let char_count = state.location.chars().count();
-                    let hint = egui::RichText::new(FIELD_HINT).color(theme::palette().muted);
+                    let hint = egui::RichText::new(inputs.field_hint).color(theme::palette().muted);
                     let mut edit = new_text_edit(&mut state.location, super::ids::LOCATION)
                         .frame(egui::Frame::new())
                         .hint_text(hint);
@@ -238,7 +240,12 @@ fn add_address_field(
                     }
                     let location = ui.add_sized(ui.available_size(), edit);
                     if !editing {
-                        paint_display_address(ui, location.rect, &state.location);
+                        paint_display_address(
+                            ui,
+                            location.rect,
+                            &state.location,
+                            inputs.field_hint,
+                        );
                     }
                     // Focus selects the URL, so typing replaces it; skipped when
                     // the OSK owns the caret.
@@ -394,7 +401,7 @@ fn is_key_pressed(ui: &mut egui::Ui, response: egui::Response, key: egui::Key) -
 
 /// What one toolbar frame shows, snapshotted by the caller — one bundle, so
 /// the panel and overlay spellings can't drift argument by argument.
-pub(super) struct ToolbarInputs {
+pub(super) struct ToolbarInputs<'a> {
     pub tab_count: usize,
     /// The downloads button, which jumps to the section; absent while hidden.
     pub downloads: Chip,
@@ -403,6 +410,8 @@ pub(super) struct ToolbarInputs {
     /// The OSK's caret, when it types here; egui's caret is parked on it.
     pub osk_caret: Option<OskCaret>,
     pub position: ToolbarPosition,
+    /// What the field shows while empty.
+    pub field_hint: &'a str,
 }
 
 /// The toolbar row — nav buttons, address-bar field, and the menu/tab/download
@@ -412,7 +421,7 @@ fn toolbar_contents(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
-    inputs: &ToolbarInputs,
+    inputs: &ToolbarInputs<'_>,
 ) {
     // Height 0 so the row sizes to its content — the panel measures it,
     // and the overlay's `Area` has no bounded height to center within.
@@ -521,7 +530,7 @@ pub(super) fn add_toolbar(
     ui: &mut egui::Ui,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
-    inputs: &ToolbarInputs,
+    inputs: &ToolbarInputs<'_>,
 ) -> egui::Rect {
     let frame = egui::Frame::default()
         .fill(ui.style().visuals.window_fill)
@@ -549,7 +558,7 @@ pub(super) fn add_toolbar_overlay(
     width: f32,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
-    inputs: &ToolbarInputs,
+    inputs: &ToolbarInputs<'_>,
 ) -> egui::Rect {
     let frame = egui::Frame::default()
         .fill(ctx.global_style().visuals.window_fill)

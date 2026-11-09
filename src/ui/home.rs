@@ -74,6 +74,8 @@ pub(super) struct HomeView<'a> {
     pub mark: Mark<'a>,
     /// Where the search field sits, if anywhere.
     pub search: HomeSearch,
+    /// What the field shows while empty.
+    pub field_hint: &'a str,
     /// The keyboard's top edge while it types into the field: a field pinned
     /// at the bottom rises above it.
     pub keys_top: Option<f32>,
@@ -422,7 +424,15 @@ pub(super) fn add_home(
                                 ui.add_space(gap_top);
                                 let buttons = view.strip_buttons;
                                 if view.search == HomeSearch::Top {
-                                    add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
+                                    add_search_bar(
+                                        ui,
+                                        home,
+                                        view.field_hint,
+                                        block_w,
+                                        osk_caret,
+                                        buttons,
+                                        commands,
+                                    );
                                     ui.add_space(ROW_GAP);
                                 }
                                 let tab_buttons = buttons && !view.search.shown();
@@ -452,7 +462,15 @@ pub(super) fn add_home(
                             .layout(egui::Layout::top_down(egui::Align::Center));
                         let buttons = view.strip_buttons;
                         ui.scope_builder(builder, |ui| {
-                            add_search_bar(ui, home, block_w, osk_caret, buttons, commands);
+                            add_search_bar(
+                                ui,
+                                home,
+                                view.field_hint,
+                                block_w,
+                                osk_caret,
+                                buttons,
+                                commands,
+                            );
                         });
                     }
                     if !view.footer.is_empty() {
@@ -535,6 +553,7 @@ const TABS_SALT: &str = "home_tabs";
 fn add_search_bar(
     ui: &mut egui::Ui,
     home: &mut Home,
+    hint: &str,
     width: f32,
     osk_caret: Option<OskCaret>,
     buttons: bool,
@@ -571,7 +590,7 @@ fn add_search_bar(
                 false => 0.0,
             };
             let field_w = (ui.available_width() - tail).max(0.0);
-            add_search(ui, home, field_w, osk_caret);
+            add_search(ui, home, hint, field_w, osk_caret);
             if buttons {
                 divider(ui);
                 strip_button(ui, Strip::QuickAccess, commands);
@@ -613,7 +632,13 @@ fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>)
 /// The search / URL field, frameless inside the bar, `width` wide. Editable
 /// directly (desktop keyboard); on the handheld the OSK writes into the same
 /// buffer. Enter submits it (handled in the keyboard/router layer).
-fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<OskCaret>) {
+fn add_search(
+    ui: &mut egui::Ui,
+    home: &mut Home,
+    hint: &str,
+    width: f32,
+    osk_caret: Option<OskCaret>,
+) {
     let edit_id = egui::Id::new(super::ids::HOME_SEARCH);
     // While the OSK types here, mirror its caret (egui won't follow the external
     // edit on its own); desktop editing is left untouched.
@@ -624,7 +649,7 @@ fn add_search(ui: &mut egui::Ui, home: &mut Home, width: f32, osk_caret: Option<
     let field_font = font(FIELD_FONT);
     let edit = egui::TextEdit::singleline(home.input_mut())
         .id(edit_id)
-        .hint_text(egui::RichText::new("Search or enter address").font(field_font.clone()))
+        .hint_text(egui::RichText::new(hint).font(field_font.clone()))
         .frame(egui::Frame::NONE)
         .background_color(egui::Color32::TRANSPARENT)
         .desired_width(width)

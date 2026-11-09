@@ -295,6 +295,8 @@ pub struct AppUi {
     /// The live map's name, for the Gaming tab's row. Empty until Settings opens:
     /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
+    /// What an empty address or search field shows.
+    field_hint: String,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -408,6 +410,7 @@ impl AppUi {
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
             input_map_name: String::new(),
+            field_hint: String::new(),
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
@@ -831,6 +834,7 @@ impl AppUi {
                     zoom_pct,
                     osk_caret: caret_for(OskField::AddressBar),
                     position,
+                    field_hint: &self.field_hint,
                 };
 
                 // 1) Reserved-space toolbar (auto-hide off): the panel reserves
@@ -946,6 +950,7 @@ impl AppUi {
                         size: self.home_config.bookmarks.size,
                         mark,
                         search: self.home_config.search,
+                        field_hint: &self.field_hint,
                         keys_top: home_caret.map(|_| ctx.content_rect().bottom() - self.osk_height),
                         tabs,
                         strip_buttons: !self.home_config.toolbar,

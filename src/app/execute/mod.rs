@@ -493,6 +493,8 @@ impl App {
         self.ui.set_button_hints(self.config.interface.button_hints);
         self.ui.set_ui_theme(self.config.interface.theme);
         self.ui.set_home(&self.config.home);
+        self.ui
+            .set_search_engine(&self.config.browser.search_engine);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.controls.pad_layout);
         self.ui.menu.history_mut().set_config(&self.config.history);
