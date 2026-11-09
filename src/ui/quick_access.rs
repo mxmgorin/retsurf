@@ -83,7 +83,7 @@ pub(in crate::ui) fn add_quick_access(
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 let rows = panel.rows().len() as f32;
-                let list_h = rows * ROW_H + (rows - 1.0).max(0.0) * ROW_GAP;
+                let list_h = rows * ROW_H + (rows - 1.0).max(0.0) * ROW_GAP + heads_h(ui, panel);
                 let horizon_h = HORIZON_GAP + SUN.height();
                 let horizon = list_h + horizon_h <= room;
                 let footer_h = if horizon { horizon_h } else { 0.0 };
@@ -182,13 +182,33 @@ fn add_header(ui: &mut egui::Ui, title: &str) {
 /// A section's head over its rows, muted and cut to the strip; set off from
 /// the rows above unless it is the `first`.
 fn add_head(ui: &mut egui::Ui, head: &str, first: bool) {
-    if !first {
-        ui.add_space(ROW_GAP);
-    }
+    ui.add_space(head_lead(first));
     let text = egui::RichText::new(head.to_uppercase())
         .color(palette().dim)
-        .size(HINT_FONT);
+        .font(HEAD_FONT);
     ui.add(egui::Label::new(text).truncate());
+}
+
+/// Section heads draw and measure in this font.
+const HEAD_FONT: egui::FontId = egui::FontId::proportional(HINT_FONT);
+
+/// The space a section head leaves above itself.
+fn head_lead(first: bool) -> f32 {
+    if first {
+        0.0
+    } else {
+        ROW_GAP
+    }
+}
+
+/// The height the section heads add to the list, each with its gaps.
+fn heads_h(ui: &egui::Ui, panel: &QuickAccess) -> f32 {
+    let text_h = ui.fonts_mut(|fonts| fonts.row_height(&HEAD_FONT));
+    panel
+        .heads()
+        .iter()
+        .map(|&(at, _)| head_lead(at == 0) + text_h + ROW_GAP)
+        .sum()
 }
 
 /// What a row with no icon of its own shows; the tests keep every row off it.
