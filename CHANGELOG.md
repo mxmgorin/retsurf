@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Android: the on-screen keyboard covering the page and the field being typed in
 - No loading indicator on the start page, in apps and while the toolbar is hidden
 - Downloads from sites you are signed in to saving the sign-in page instead of the file
+- Android: the screen turning with the phone while auto-rotate is off
 
 ## [0.10.0] - 2026-10-08
 

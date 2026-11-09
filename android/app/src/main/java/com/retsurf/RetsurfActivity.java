@@ -6,6 +6,7 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.ProxyInfo;
@@ -151,6 +152,29 @@ public class RetsurfActivity extends SDLActivity {
             Log.w("retsurf", "could not keep the previous log");
         }
         return log;
+    }
+
+    /**
+     * Requests `requested` with each sensor orientation swapped for its user
+     * variant, which honors the system rotation lock.
+     */
+    @Override
+    public void setRequestedOrientation(int requested) {
+        super.setRequestedOrientation(honoringRotationLock(requested));
+    }
+
+    /** The variant of `requested` that honors the rotation lock; `requested` when it has none. */
+    private static int honoringRotationLock(int requested) {
+        switch (requested) {
+            case ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR:
+                return ActivityInfo.SCREEN_ORIENTATION_FULL_USER;
+            case ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE:
+                return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+            case ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT:
+                return ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
+            default:
+                return requested;
+        }
     }
 
     @Override
