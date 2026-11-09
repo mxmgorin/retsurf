@@ -7,12 +7,12 @@
 
 use super::input_map::{ClickButton, Dir, InputMap, KeyTarget, Side, StickRole, Target};
 use crate::browser::AppBrowser;
-use crate::command::{Analog, AppCommand, InputCommand, QuickAccessAction};
+use crate::command::{Analog, AppCommand, InputCommand};
 use crate::config::ControlsConfig;
+use crate::event::bindings::Action;
 use crate::event::gamepad::cursor_curve;
 use crate::event::gamepad_api;
 use crate::event::sdl2_servo::key_event;
-use crate::overlay::quick_access::Strip;
 use inputbind::sdl::{axis_value, trigger_of};
 use inputbind::{Pad, PadGesture, Trigger};
 use keyboard_types::{Code, Key, Modifiers, NamedKey};
@@ -100,7 +100,7 @@ pub struct GameInput {
     /// Gamepad buttons the page holds through this map, counted the same way.
     buttons: Vec<(Pad, u32)>,
     triggers: [Trigger; 2],
-    /// The browser gestures still answered inside the mode, each opening a strip.
+    /// The browser gestures still answered inside the mode, each firing its action.
     reserved: Vec<Mirror>,
     /// The release owed for a tap handed over late, and when it falls due: a
     /// game polling once a frame would miss the two in one.
@@ -115,7 +115,7 @@ pub struct GameInput {
 }
 
 impl GameInput {
-    pub fn new(map: InputMap, cfg: &ControlsConfig, reserved: &[(PadGesture, Strip)]) -> Self {
+    pub fn new(map: InputMap, cfg: &ControlsConfig, reserved: &[(PadGesture, Action)]) -> Self {
         Self {
             map,
             held: Vec::new(),
@@ -134,7 +134,7 @@ impl GameInput {
                 Trigger::new(Pad::L2, cfg.trigger_threshold),
                 Trigger::new(Pad::R2, cfg.trigger_threshold),
             ],
-            reserved: reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect(),
+            reserved: reserved.iter().map(|&(g, a)| Mirror::new(g, a)).collect(),
             deferred: None,
             scheduled: Vec::new(),
             deadzone: cfg.deadzone,
@@ -146,8 +146,8 @@ impl GameInput {
     /// Replace the reserved gestures. Whatever the old ones had part-way down is
     /// forgotten, so a press begun under one cannot complete against the new.
     /// A tap already handed over keeps its release.
-    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Strip)]) {
-        self.reserved = reserved.iter().map(|&(g, s)| Mirror::new(g, s)).collect();
+    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Action)]) {
+        self.reserved = reserved.iter().map(|&(g, a)| Mirror::new(g, a)).collect();
     }
 
     /// Retuned in place, like [`super::gamepad::Gamepad::set_config`].
@@ -181,20 +181,35 @@ impl GameInput {
         browser: &AppBrowser,
         commands: &mut Vec<AppCommand>,
     ) -> bool {
-        for i in 0..self.reserved.len() {
-            let mut mirror = self.reserved[i];
-            let owned = mirror.on_pad(pad, pressed, commands);
-            // The gesture did not happen: the game gets the press it held.
-            let handed = owned && !pressed && mirror.leads(pad) && !mirror.take_fired();
-            self.reserved[i] = mirror;
-            if handed {
-                self.defer_tap(pad, browser, commands);
+        let (owned, hand_over) = self.offer_reserved(pad, pressed, commands);
+        if hand_over {
+            self.defer_tap(pad, browser, commands);
+        }
+        owned
+    }
+
+    /// One pad edge offered to every reserved gesture, since two may share a
+    /// pad; returns whether one owns the pad, and whether the game is owed the
+    /// press they held.
+    fn offer_reserved(
+        &mut self,
+        pad: Pad,
+        pressed: bool,
+        commands: &mut Vec<AppCommand>,
+    ) -> (bool, bool) {
+        let (mut owned, mut led, mut fired) = (false, false, false);
+        for mirror in &mut self.reserved {
+            if !mirror.on_pad(pad, pressed, commands) {
+                continue;
             }
-            if owned {
-                return true;
+            owned = true;
+            if !pressed && mirror.leads(pad) {
+                led = true;
+                fired |= mirror.take_fired();
             }
         }
-        false
+        // The gesture did not happen: the game gets the press it held.
+        (owned, led && !fired)
     }
 
     /// Hand over the press the gesture was holding, the gesture having not
@@ -711,7 +726,7 @@ impl GameInput {
             }
         }
         for mirror in &mut self.reserved {
-            *mirror = Mirror::new(mirror.gesture, mirror.opens);
+            *mirror = Mirror::new(mirror.gesture, mirror.fires);
         }
         // The drains above already ended whatever it was holding.
         self.deferred = None;
@@ -732,8 +747,7 @@ fn send_click(button: ClickButton, pressed: bool, commands: &mut Vec<AppCommand>
 #[derive(Clone, Copy)]
 struct Mirror {
     gesture: PadGesture,
-    /// The strip the gesture opens.
-    opens: Strip,
+    fires: Action,
     /// When a hold's pad went down.
     at: Option<Instant>,
     /// Set when the gesture fires, so its release does not also hand over a tap.
@@ -745,10 +759,10 @@ struct Mirror {
 }
 
 impl Mirror {
-    fn new(gesture: PadGesture, opens: Strip) -> Self {
+    fn new(gesture: PadGesture, fires: Action) -> Self {
         Self {
             gesture,
-            opens,
+            fires,
             at: None,
             fired: false,
             leader: false,
@@ -758,9 +772,7 @@ impl Mirror {
 
     fn fire(&mut self, commands: &mut Vec<AppCommand>) {
         self.fired = true;
-        commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
-            self.opens,
-        )));
+        commands.extend(self.fires.command(true));
     }
 
     /// Whether `pad` is the one a hold or a chord waits on, whose tap is handed
@@ -931,6 +943,44 @@ mod tests {
     fn a_diagonal_holds_both_directions() {
         assert_eq!(dirs(1, -1), [true, false, false, true]);
         assert_eq!(dirs(0, 0), [false; 4]);
+    }
+
+    /// Select is both a hold and a chord's leader: Start fires the chord, and a
+    /// tap alone is still handed to the game, once.
+    #[test]
+    fn a_pad_shared_by_two_gestures_fires_each() {
+        let map = InputMap::none(crate::event::test_key_names());
+        let reserved = [
+            (PadGesture::Hold(Pad::Select), Action::Menu),
+            (PadGesture::Chord(Pad::Select, Pad::Start), Action::Quit),
+        ];
+        let mut input = GameInput::new(map, &ControlsConfig::default(), &reserved);
+        let mut commands = Vec::new();
+        assert_eq!(
+            input.offer_reserved(Pad::Select, true, &mut commands),
+            (true, false)
+        );
+        assert_eq!(
+            input.offer_reserved(Pad::Start, true, &mut commands),
+            (true, false)
+        );
+        assert!(matches!(commands[..], [AppCommand::Shutdown]));
+        assert_eq!(
+            input.offer_reserved(Pad::Start, false, &mut commands),
+            (true, false)
+        );
+        assert_eq!(
+            input.offer_reserved(Pad::Select, false, &mut commands),
+            (true, false)
+        );
+
+        commands.clear();
+        input.offer_reserved(Pad::Select, true, &mut commands);
+        assert_eq!(
+            input.offer_reserved(Pad::Select, false, &mut commands),
+            (true, true)
+        );
+        assert!(commands.is_empty());
     }
 
     /// Two sources on one button: the page sees one press and one release.

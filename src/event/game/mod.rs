@@ -10,8 +10,8 @@ pub mod mode;
 use crate::browser::AppBrowser;
 use crate::command::AppCommand;
 use crate::config::ControlsConfig;
+use crate::event::bindings::Action;
 use crate::event::key_names;
-use crate::overlay::quick_access::Strip;
 use inputbind::{Pad, PadGesture};
 use map_library::MapLibrary;
 use mode::GameInput;
@@ -32,8 +32,8 @@ pub struct GameMode {
     /// being `Some` *is* the mode routing, and dropping it is what guarantees
     /// the page is left holding nothing.
     input: Option<GameInput>,
-    /// The gestures a running translator reserves, each with the strip it opens.
-    reserved: Vec<(PadGesture, Strip)>,
+    /// The gestures a running translator reserves, each with the action it fires.
+    reserved: Vec<(PadGesture, Action)>,
 }
 
 impl GameMode {
@@ -49,13 +49,13 @@ impl GameMode {
             maps,
             live,
             input: None,
-            reserved: vec![(DEFAULT_EXIT, Strip::QuickAccess)],
+            reserved: vec![(DEFAULT_EXIT, Action::QuickAccess)],
         }
     }
 
     /// Set the gestures a translator reserves. One already running takes them
     /// at once, so the way out can change mid-session.
-    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Strip)]) {
+    pub fn set_reserved(&mut self, reserved: &[(PadGesture, Action)]) {
         self.reserved = reserved.to_vec();
         if let Some(input) = &mut self.input {
             input.set_reserved(reserved);

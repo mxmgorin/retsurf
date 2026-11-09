@@ -82,8 +82,7 @@ action_table! {
         /// Open / close Quick Access. Mirrored inside the mode, where the tables
         /// are bypassed, so the way in and the way out are one gesture.
         QuickAccess => "quick_access", "Quick Access",
-        /// Quit immediately. Unbound by default; [`default_store`] carries the
-        /// stock exit.
+        /// Quit immediately.
         Quit => "quit", "Quit",
     }
     "Navigation" => {
@@ -382,6 +381,9 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("select+r1", Action::TabNext),
         ("start+l1", Action::CloseTab),
         ("start+r1", Action::NewTab),
+        // A two-button squeeze is not ordered, so both orders are bound.
+        ("select+start", Action::Quit),
+        ("start+select", Action::Quit),
     ]
     .into_iter()
     .map(|(gesture, action)| (gesture.to_string(), action.name().to_string()))
@@ -492,11 +494,17 @@ pub fn key_gestures(action: Action) -> Vec<String> {
 /// nothing binds it; the first wins where two do, and a spelling the pad machine
 /// cannot parse is skipped rather than taken as the answer.
 pub fn pad_gesture(store: &Store, action: Action) -> Option<PadGesture> {
+    pad_gestures(store, action).next()
+}
+
+/// Every pad gesture `action` answers to, parsed from the file; a spelling the
+/// pad machine cannot parse is skipped.
+pub fn pad_gestures(store: &Store, action: Action) -> impl Iterator<Item = PadGesture> + '_ {
     store
         .gamepad
         .iter()
-        .filter(|(_, name)| name.as_str() == action.name())
-        .find_map(|(gesture, _)| PadGesture::parse(gesture))
+        .filter(move |(_, name)| name.as_str() == action.name())
+        .filter_map(|(gesture, _)| PadGesture::parse(gesture))
 }
 
 #[cfg(test)]

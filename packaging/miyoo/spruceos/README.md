@@ -24,6 +24,7 @@ lands in `App/RetsurfMini/`. It shows up under Apps.
 | Start + L1 / R1 | Close the tab / open a new one | |
 | Select | Quick Menu — home, tabs, bookmarks, history, downloads, settings, quit | Address bar |
 | Select + L1 / R1 | Previous / next tab | |
+| Select + Start | Quit | |
 | MENU | Quit | |
 
 The full table is in Settings → Controls → Button bindings, where every one of

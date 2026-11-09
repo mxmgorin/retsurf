@@ -8,7 +8,7 @@ use super::keyboard::KeyEvent;
 use crate::event::bindings::{self, Action};
 use crate::{
     browser::AppBrowser,
-    command::{AppCommand, GameMapEditAction, InputCommand, QuickAccessAction, SettingsAction},
+    command::{AppCommand, GameMapEditAction, InputCommand, SettingsAction},
     config::ControlsConfig,
     event::gamepad::labelled_pad,
     event::window::handle_window,
@@ -24,25 +24,30 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::{Duration, Instant};
 
-/// `action`'s pad gesture as Game Mode reserves it: a tap held instead, since a
-/// tap would take its button from the game outright and a hold hands the press
-/// over on release.
-fn held_gesture(store: &Store, action: Action) -> Option<PadGesture> {
-    match bindings::pad_gesture(store, action)? {
-        PadGesture::Tap(pad) => Some(PadGesture::Hold(pad)),
-        gesture => Some(gesture),
+/// `gesture` as Game Mode reserves it: a tap held instead, since a tap would
+/// take its button from the game outright and a hold hands the press over on
+/// release.
+fn held(gesture: PadGesture) -> PadGesture {
+    match gesture {
+        PadGesture::Tap(pad) => PadGesture::Hold(pad),
+        gesture => gesture,
     }
 }
 
 /// The gestures Game Mode reserves against every map: Quick Access's, falling
-/// back so a session has a way out, then Quick Menu's unless it shares that pad.
-fn game_reserved(store: &Store) -> Vec<(PadGesture, Strip)> {
-    let access = held_gesture(store, Action::QuickAccess).unwrap_or(DEFAULT_EXIT);
-    let mut reserved = vec![(access, Strip::QuickAccess)];
-    match held_gesture(store, Action::Menu) {
-        Some(menu) if lead_pad(menu) != lead_pad(access) => reserved.push((menu, Strip::QuickMenu)),
+/// back so a session has a way out, then Quick Menu's unless it shares that pad,
+/// then Quit's.
+fn game_reserved(store: &Store) -> Vec<(PadGesture, Action)> {
+    let held_gesture = |action| bindings::pad_gesture(store, action).map(held);
+    let access = held_gesture(Action::QuickAccess).unwrap_or(DEFAULT_EXIT);
+    let mut reserved = vec![(access, Action::QuickAccess)];
+    match held_gesture(Action::Menu) {
+        Some(menu) if lead_pad(menu) != lead_pad(access) => reserved.push((menu, Action::Menu)),
         _ => {}
     }
+    reserved.extend(
+        bindings::pad_gestures(store, Action::Quit).map(|gesture| (held(gesture), Action::Quit)),
+    );
     reserved
 }
 
@@ -111,9 +116,9 @@ pub struct AppEventHandler {
     game_controller_subsystem: sdl2::GameControllerSubsystem,
     /// Gesture-to-action tables for both devices, from `bindings.toml`.
     bindings: Bindings<Action>,
-    /// The pad gestures Game Mode still answers, each with the strip it opens.
+    /// The pad gestures Game Mode still answers, each with the action it fires.
     /// Held apart from the tables because the mode bypasses them.
-    game_reserved: Vec<(PadGesture, Strip)>,
+    game_reserved: Vec<(PadGesture, Action)>,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
     /// Whether the keys arriving from this device *are* the pad. The Miyoo's
@@ -255,10 +260,17 @@ impl AppEventHandler {
     /// How the pad reaches each strip in Game Mode; none where this device has
     /// no pad to name.
     pub fn game_strip_gestures(&self) -> Vec<(PadGesture, Strip)> {
-        match self.has_pad() {
-            true => self.game_reserved.clone(),
-            false => vec![],
+        if !self.has_pad() {
+            return vec![];
         }
+        self.game_reserved
+            .iter()
+            .filter_map(|&(gesture, action)| match action {
+                Action::QuickAccess => Some((gesture, Strip::QuickAccess)),
+                Action::Menu => Some((gesture, Strip::QuickMenu)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Whether this device has a pad at all — a controller, or a panel that
@@ -551,20 +563,20 @@ impl AppEventHandler {
         }
     }
 
-    /// A key while Game Mode has the page: the strips' own gestures first, then
-    /// the map's own table, then the game — which is where the rest go.
+    /// A key while Game Mode has the page: the keys of the actions the mode
+    /// reserves first, then the map's own table, then the game — which is where
+    /// the rest go.
     fn game_key(&mut self, key: &KeyEvent, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let code = key_code(key.kc);
-        let strip = match self.bindings.key(code, mods_for(key.kc, key.keymod)) {
-            Some(Action::QuickAccess) => Some(Strip::QuickAccess),
-            Some(Action::Menu) => Some(Strip::QuickMenu),
+        let reserved = match self.bindings.key(code, mods_for(key.kc, key.keymod)) {
+            Some(action @ (Action::Quit | Action::QuickAccess | Action::Menu)) => Some(action),
             _ => None,
         };
-        if let Some(strip) = strip {
+        if let Some(action) = reserved {
             // Both edges while the chord holds. An up after the modifiers drop
             // leaks, as every consumed binding's up already does (measured: no-op).
             if key.pressed && !key.repeat {
-                commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(strip)));
+                commands.extend(action.command(true));
             }
             return;
         }
@@ -1026,10 +1038,10 @@ mod tests {
     fn a_tapped_gesture_is_held_inside_the_mode() {
         let store = bindings::default_store();
         assert_eq!(
-            game_reserved(&store),
-            vec![
-                (PadGesture::Hold(Pad::Start), Strip::QuickAccess),
-                (PadGesture::Hold(Pad::Select), Strip::QuickMenu),
+            game_reserved(&store)[..2],
+            [
+                (PadGesture::Hold(Pad::Start), Action::QuickAccess),
+                (PadGesture::Hold(Pad::Select), Action::Menu),
             ]
         );
         let mut chord = store.clone();
@@ -1037,7 +1049,7 @@ mod tests {
         chord.gamepad.insert("l3+r3".into(), "quick_access".into());
         assert_eq!(
             game_reserved(&chord)[0],
-            (PadGesture::Chord(Pad::L3, Pad::R3), Strip::QuickAccess)
+            (PadGesture::Chord(Pad::L3, Pad::R3), Action::QuickAccess)
         );
     }
 
@@ -1047,7 +1059,25 @@ mod tests {
         let mut store = bindings::default_store();
         store.gamepad.retain(|_, name| name != "menu");
         store.gamepad.insert("start+a".into(), "menu".into());
-        assert_eq!(game_reserved(&store).len(), 1);
+        let strips = game_reserved(&store);
+        assert_eq!(
+            strips
+                .iter()
+                .filter(|(_, action)| *action != Action::Quit)
+                .count(),
+            1
+        );
+    }
+
+    /// Start and Select together quit inside the mode, either one first.
+    #[test]
+    fn start_and_select_together_quit() {
+        let together = [
+            (PadGesture::Chord(Pad::Select, Pad::Start), Action::Quit),
+            (PadGesture::Chord(Pad::Start, Pad::Select), Action::Quit),
+        ];
+        let reserved = game_reserved(&bindings::default_store());
+        assert!(together.iter().all(|quit| reserved.contains(quit)));
     }
 
     /// A stick is captured only once pushed, and either axis names the whole

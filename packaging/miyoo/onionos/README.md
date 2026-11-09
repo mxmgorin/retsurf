@@ -30,6 +30,7 @@ Turn wifi on in Onion's settings first — the Plus keeps it off by default.
 | Start + L1 / R1 | Close the tab / open a new one | |
 | Select | Quick Menu — home, tabs, bookmarks, history, downloads, settings, quit | Address bar |
 | Select + L1 / R1 | Previous / next tab | |
+| Select + Start | Quit | |
 | MENU | Quit | (held with a pad it stays Onion's) |
 
 The full table is in Settings → Controls → Button bindings, where every one of
