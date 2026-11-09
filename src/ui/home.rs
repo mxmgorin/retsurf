@@ -15,7 +15,7 @@ use super::svg::SvgTexture;
 use super::theme::{palette, ROW_FONT};
 use super::wordmark;
 use super::OskCaret;
-use crate::command::{AppCommand, HomeAction, QuickAccessAction};
+use crate::command::{AppCommand, HomeAction, InputCommand, MenuAction, QuickAccessAction};
 use crate::config::{HomeLayout, HomeSearch, HomeSize};
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
@@ -589,7 +589,7 @@ fn add_search_bar(
                 false => 0.0,
             };
             let field_w = (ui.available_width() - tail).max(0.0);
-            add_search(ui, home, &engines.hint, field_w, osk_caret);
+            add_search(ui, home, &engines.hint, field_w, osk_caret, commands);
             if buttons {
                 divider(ui);
                 strip_button(ui, Strip::QuickAccess, commands);
@@ -630,13 +630,14 @@ fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>)
 
 /// The search / URL field, frameless inside the bar, `width` wide. Editable
 /// directly (desktop keyboard); on the handheld the OSK writes into the same
-/// buffer. Enter submits it (handled in the keyboard/router layer).
+/// buffer. Enter submits it, the arrow toward the grid leaves it.
 fn add_search(
     ui: &mut egui::Ui,
     home: &mut Home,
     hint: &str,
     width: f32,
     osk_caret: Option<OskCaret>,
+    commands: &mut Vec<AppCommand>,
 ) {
     let edit_id = egui::Id::new(super::ids::HOME_SEARCH);
     // While the OSK types here, mirror its caret (egui won't follow the external
@@ -656,6 +657,24 @@ fn add_search(
         .vertical_align(egui::Align::Center)
         .text_color(palette().ink);
     let resp = ui.add(edit);
+    // Answered here: a key a focused edit takes is dropped before the keyboard
+    // handler whenever the pointer is over the chrome.
+    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        let text = home.input().trim();
+        if !text.is_empty() {
+            commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
+        }
+    }
+    if resp.has_focus() {
+        let up = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
+        let down = ui.input(|i| i.key_pressed(egui::Key::ArrowDown));
+        if up != down {
+            commands.push(AppCommand::Input(InputCommand::Nav(
+                0,
+                if up { -1 } else { 1 },
+            )));
+        }
+    }
     // Clicking the field selects it (so the highlight follows the mouse).
     if resp.gained_focus() {
         home.focus_search();

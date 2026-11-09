@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Enter in the start page's search field, and the arrow key toward the bookmarks out of it
 - Searches containing `+`, `&` or `#` reach the search engine whole
 - Sites stay logged in after retsurf is closed from Android's recent apps or killed
 - Android: Ctrl+C, Ctrl+V and other editing shortcuts from hardware-keyboard input methods such as Pastiera

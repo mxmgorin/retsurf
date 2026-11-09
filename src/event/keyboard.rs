@@ -182,23 +182,6 @@ fn enter_confirms(key: &KeyEvent, commands: &mut Vec<AppCommand>) -> bool {
     true
 }
 
-/// A non-repeat Enter submitting a field's `text` as `make(text)`. Consumed
-/// even when blank — an empty submit is not a keypress for the page.
-fn enter_submits(
-    key: &KeyEvent,
-    text: &str,
-    make: impl FnOnce(String) -> AppCommand,
-    commands: &mut Vec<AppCommand>,
-) -> bool {
-    if key.repeat || !matches!(key.kc, Keycode::Return | Keycode::KpEnter) {
-        return false;
-    }
-    if !text.trim().is_empty() {
-        commands.push(make(text.to_string()));
-    }
-    true
-}
-
 fn on_key_down(
     key: &KeyEvent,
     bindings: &Bindings<Action>,
@@ -236,15 +219,14 @@ fn on_key_down(
     }
 
     // The start page routes the gamepad's own intents. While its search field
-    // holds focus the editor keeps them, and only Down leaves the field.
+    // holds focus the editor keeps them, and the arrow toward the grid leaves it.
     if ui.focus() == Focus::Home {
         if ui.home_field_editing() {
-            if matches!(key.kc, Keycode::Down) {
-                commands.push(AppCommand::Input(InputCommand::Nav(0, 1)));
-                return;
-            }
-            let open = |text| AppCommand::Menu(MenuAction::OpenUrl(text));
-            if enter_submits(key, ui.home.input(), open, commands) {
+            // The field answers these itself, so they only stay off the page.
+            if matches!(
+                key.kc,
+                Keycode::Up | Keycode::Down | Keycode::Return | Keycode::KpEnter
+            ) {
                 return;
             }
         } else {
