@@ -33,7 +33,7 @@ mod update_notice;
 mod wordmark;
 
 pub use self::game_mode::game_mode_hint;
-pub use self::labels::bookmark_label;
+pub use self::labels::{bookmark_label, site_label};
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
 pub use self::toast::{browser_notice, Notice, TOAST};
@@ -1052,7 +1052,13 @@ impl AppUi {
                     if self.quick_access.visible {
                         // Same as the menu's: a focused row would activate twice.
                         drop_egui_focus(ctx);
-                        quick_access::add_quick_access(ctx, &self.quick_access, commands);
+                        quick_access::add_quick_access(
+                            ctx,
+                            &self.quick_access,
+                            face,
+                            self.button_hints,
+                            commands,
+                        );
                     }
                     // Over the strip too, which names a bookmark through it.
                     if self.osk.visible {

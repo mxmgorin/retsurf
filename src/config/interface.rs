@@ -24,8 +24,8 @@ pub struct InterfaceConfig {
     /// Show site icons on tabs, bookmarks, history and the start page. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
-    /// Name what the buttons do at the foot of the menus, the settings and the
-    /// start page, and the shoulders beside its filter tabs.
+    /// Name what the buttons do at the foot of the menus, the settings, the
+    /// start page and the edge strips, and the shoulders beside its filter tabs.
     pub button_hints: bool,
 }
 

@@ -62,14 +62,15 @@ impl App {
             true => Over::Home,
             false => Over::Tab(self.browser.mode()),
         };
+        let url = self.browser.state().page_url().to_string();
+        let page = crate::ui::site_label(&url);
         self.ui
             .quick_access
-            .open(strip, over, site, launched, &self.config);
+            .open(strip, over, site, launched, &page, &self.config);
         self.refresh_options();
         let page_js = Some(self.browser.page_js_preset()).filter(|p| !p.is_empty());
         self.ui.quick_access.set_page_js(page_js);
         self.ui.quick_access.refresh(&self.config);
-        let url = self.browser.state().page_url().to_string();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",
             false => "",

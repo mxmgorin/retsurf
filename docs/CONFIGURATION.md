@@ -67,7 +67,7 @@ scale = 1.0                # UI size, 0.6 to 1.6
 toolbar_position = "top"   # "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, show on scroll up
 page_icons = true          # site icons in tabs, bookmarks, history and the start page
-button_hints = true        # name what the buttons do under the menus, settings and start page
+button_hints = true        # name what the buttons do in the menus, settings, start page, Quick Access and Quick Menu
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 
 [home]
@@ -276,7 +276,7 @@ They apply while the shown tab is on the bookmark's site: the bookmark it runs a
 a game, else the bookmark of the same host with the longest matching path, else the first
 bookmark of that host. Other keys in a bookmark file are ignored.
 
-While they apply, Quick Access lists the site's rows first under the bookmark's name:
+While they apply, Quick Access shows the bookmark's name at the top and these rows:
 
 | Row | Effect |
 |---|---|

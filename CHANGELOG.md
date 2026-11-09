@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped
 - Interface font: IBM Plex Sans
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
+- Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top, a footer of button hints (in Quick Menu too)
 - The start page banner and wordmark are smaller
 - Bookmarks and the speed dial are one list: the start page shows the bookmarks as tiles, one file per bookmark in `bookmarks/`; `dial.toml` and `bookmarks.toml` are no longer read
 - Removing a bookmark that has tags or settings takes a second press

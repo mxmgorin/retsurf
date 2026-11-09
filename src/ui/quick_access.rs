@@ -2,17 +2,19 @@
 //! Quick Access at the right edge and Quick Menu at the left, each full height
 //! with no backdrop dim, so the page or game beside it shows what a quick row
 //! just changed. Up/Down move, A / Left/Right act on the focused row, B or a tap
-//! beside the strip closes. The brand horizon sits at the strip's bottom
-//! wherever the rows leave it room.
+//! beside the strip closes. The header names what the rows act on; with button
+//! hints on, a footer names what the buttons do on the focused row. The brand
+//! horizon sits at the strip's bottom wherever the rows leave it room.
 
 use crate::command::{AppCommand, QuickAccessAction};
+use crate::config::FaceLabels;
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
-use crate::overlay::quick_access::{Entry, OptionsRow, QuickAccess, Strip};
+use crate::overlay::quick_access::{Break, Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
-use crate::ui::keys::HINT_FONT;
-use crate::ui::panel::{self, center_selected, ROW_GAP, ROW_H};
+use crate::ui::keys::{self, HINT_FONT};
+use crate::ui::panel::{self, center_selected, Tone, Trail, DIVIDER_H, EPSILON, ROW_GAP, ROW_H};
 use crate::ui::theme::{self, palette, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -50,6 +52,8 @@ const HORIZON_GAP: f32 = ROW_GAP * 3.0;
 pub(in crate::ui) fn add_quick_access(
     ctx: &egui::Context,
     panel: &QuickAccess,
+    face: FaceLabels,
+    button_hints: bool,
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
@@ -68,8 +72,8 @@ pub(in crate::ui) fn add_quick_access(
         Strip::QuickAccess => screen.right() - outer,
         Strip::QuickMenu => screen.left(),
     };
-    let title = panel.title().to_uppercase();
     add_backdrop(ctx, screen, commands);
+    let footer_id = egui::Id::new("quick_access_footer_h");
     egui::Area::new(egui::Id::new("quick_access"))
         .order(egui::Order::Foreground)
         .fixed_pos(egui::pos2(left, screen.top()))
@@ -79,19 +83,36 @@ pub(in crate::ui) fn add_quick_access(
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
-                add_header(ui, &title);
+                add_header(ui, panel.title());
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 let rows = panel.rows().len() as f32;
-                let list_h = rows * ROW_H + (rows - 1.0).max(0.0) * ROW_GAP + heads_h(ui, panel);
+                let list_h = rows * ROW_H + (rows - 1.0).max(0.0) * ROW_GAP + breaks_h(ui, panel);
+                // Last frame's height: the footer is laid out after the list.
+                let footer_h = match button_hints {
+                    true => ui
+                        .ctx()
+                        .data(|d| d.get_temp(footer_id))
+                        .unwrap_or_else(|| footer_guess(ui)),
+                    false => 0.0,
+                };
+                // What goes under the list, each part a row gap below the last.
+                let under = |h: f32| if h > 0.0 { ROW_GAP + h } else { 0.0 };
                 let horizon_h = HORIZON_GAP + SUN.height();
-                let horizon = list_h + horizon_h <= room;
-                let footer_h = if horizon { horizon_h } else { 0.0 };
+                let horizon = list_h + under(footer_h) + under(horizon_h) <= room;
+                let below = under(footer_h) + if horizon { under(horizon_h) } else { 0.0 };
                 // The area auto-sizes, so the list scrolls only under a set bound.
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
-                    .max_height((room - footer_h).max(0.0))
+                    .max_height((room - below).max(0.0))
                     .show(ui, |ui| add_rows(ui, width, panel, commands));
+                if button_hints {
+                    let h = add_footer(ui, width, panel, face);
+                    if (h - footer_h).abs() > EPSILON {
+                        ui.ctx().data_mut(|d| d.insert_temp(footer_id, h));
+                        ui.ctx().request_repaint();
+                    }
+                }
                 if horizon {
                     add_horizon(ui, width, frame.inner_margin);
                 }
@@ -101,23 +122,34 @@ pub(in crate::ui) fn add_quick_access(
 
 fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut Vec<AppCommand>) {
     for (index, &entry) in panel.rows().iter().enumerate() {
-        if let Some((_, head)) = panel.heads().iter().find(|(at, _)| *at == index) {
-            add_head(ui, head, index == 0);
+        match panel.breaks().iter().find(|(at, _)| *at == index) {
+            Some((_, Break::Rule)) => panel::divider(ui, width),
+            Some((_, Break::Head(head))) => add_head(ui, head),
+            None => {}
         }
         let selected = index == panel.selected();
         let label = format!("{}  {}", glyph(entry), panel.label(index));
         let flag = panel.flag(index);
-        let value = match (flag, selected && entry.steps()) {
-            (Some(_), _) => String::new(),
-            (None, true) => format!(
-                "{} {} {}",
-                bold::CARET_LEFT,
-                panel.value(index),
-                bold::CARET_RIGHT
-            ),
-            (None, false) => panel.value(index).to_string(),
+        let value = panel.value(index);
+        let trail = match (flag, selected && entry.steps()) {
+            (Some(_), _) => Trail::default(),
+            (None, true) => Trail {
+                before: Some(bold::CARET_LEFT),
+                value,
+                after: Some(bold::CARET_RIGHT),
+            },
+            // The caret says the row opens a screen rather than acting.
+            (None, false) => Trail {
+                before: None,
+                value,
+                after: entry.opens().then_some(bold::CARET_RIGHT),
+            },
         };
-        let resp = panel::named_row(ui, width, selected, &label, &value);
+        let tone = match entry.destructive() {
+            true => Tone::Danger,
+            false => Tone::Plain,
+        };
+        let resp = panel::marked_row(ui, width, selected, &label, trail, tone);
         if let Some(on) = flag {
             panel::paint_switch(ui, resp.rect, on);
         }
@@ -128,6 +160,34 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
             commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
         }
     }
+}
+
+/// The footer's height before it is first measured: one line of hints under
+/// its rule.
+fn footer_guess(ui: &egui::Ui) -> f32 {
+    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(HINT_FONT)));
+    DIVIDER_H + ROW_GAP + line
+}
+
+/// A rule, then what A does on the focused row, Left/Right where they step a
+/// value, and B; returns the height it took.
+fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabels) -> f32 {
+    let (_, sideways) = keys::dpad_caps();
+    let (a, b, sideways) = ([face.a], [face.b], [sideways.as_str()]);
+    let at = panel.selected();
+    let steps = panel.rows()[at].steps() && panel.flag(at).is_none();
+    let mut hints: Vec<keys::Hint> = vec![(&a, panel.press().verb())];
+    if steps {
+        hints.push((&sideways, "change"));
+    }
+    hints.push((&b, "back"));
+    ui.scope(|ui| {
+        panel::divider(ui, width);
+        keys::centered_hints(ui, &hints, width);
+    })
+    .response
+    .rect
+    .height()
 }
 
 /// The app icon's sun setting on its waves. The waves run under `margin` to
@@ -168,21 +228,20 @@ fn add_backdrop(ctx: &egui::Context, screen: egui::Rect, commands: &mut Vec<AppC
         });
 }
 
-/// The strip's title, one per strip in either mode: the rows say which is on.
+/// The strip's header: what its rows act on, cut to the strip.
 fn add_header(ui: &mut egui::Ui, title: &str) {
-    ui.label(
-        egui::RichText::new(title)
-            .color(palette().accent)
-            .size(ROW_FONT)
-            .strong(),
-    );
+    let text = egui::RichText::new(title)
+        .color(palette().accent)
+        .size(ROW_FONT)
+        .strong();
+    ui.add(egui::Label::new(text).truncate());
     ui.add_space(ROW_GAP * 2.0);
 }
 
-/// A section's head over its rows, muted and cut to the strip; set off from
-/// the rows above unless it is the `first`.
-fn add_head(ui: &mut egui::Ui, head: &str, first: bool) {
-    ui.add_space(head_lead(first));
+/// A section's head over its rows, muted, cut to the strip and set off from
+/// the rows above.
+fn add_head(ui: &mut egui::Ui, head: &str) {
+    ui.add_space(HEAD_LEAD);
     let text = egui::RichText::new(head.to_uppercase())
         .color(palette().dim)
         .font(HEAD_FONT);
@@ -193,21 +252,18 @@ fn add_head(ui: &mut egui::Ui, head: &str, first: bool) {
 const HEAD_FONT: egui::FontId = egui::FontId::proportional(HINT_FONT);
 
 /// The space a section head leaves above itself.
-fn head_lead(first: bool) -> f32 {
-    if first {
-        0.0
-    } else {
-        ROW_GAP
-    }
-}
+const HEAD_LEAD: f32 = ROW_GAP;
 
-/// The height the section heads add to the list, each with its gaps.
-fn heads_h(ui: &egui::Ui, panel: &QuickAccess) -> f32 {
+/// The height the breaks add to the list, each with its gaps.
+fn breaks_h(ui: &egui::Ui, panel: &QuickAccess) -> f32 {
     let text_h = ui.fonts_mut(|fonts| fonts.row_height(&HEAD_FONT));
     panel
-        .heads()
+        .breaks()
         .iter()
-        .map(|&(at, _)| head_lead(at == 0) + text_h + ROW_GAP)
+        .map(|(_, part)| match part {
+            Break::Rule => DIVIDER_H,
+            Break::Head(_) => HEAD_LEAD + text_h,
+        } + ROW_GAP)
         .sum()
 }
 
@@ -281,7 +337,7 @@ mod tests {
         for strip in [Strip::QuickAccess, Strip::QuickMenu] {
             for over in overs {
                 let site = SiteHead { id: "a", name: "A" };
-                panel.open(strip, over, Some(site), true, &AppConfig::default());
+                panel.open(strip, over, Some(site), true, "", &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");
                 }

@@ -15,7 +15,7 @@ thread_local! {
 
 /// A URL's site as a list row names it: its host without `www.`, else the
 /// URL itself.
-pub(super) fn site_label(url: &str) -> String {
+pub fn site_label(url: &str) -> String {
     SITE_LABELS.with(|cache| {
         if let Some(label) = cache.borrow().get(url) {
             return label.clone();

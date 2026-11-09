@@ -101,18 +101,7 @@ pub(super) fn paint_switch(ui: &egui::Ui, row: egui::Rect, on: bool) {
 }
 
 /// A [`row`] whose value gives way first, for a short label beside a value of
-/// any length (a name the user chose).
-pub(super) fn named_row(
-    ui: &mut egui::Ui,
-    width: f32,
-    selected: bool,
-    label: &str,
-    value: &str,
-) -> egui::Response {
-    toned_named_row(ui, width, selected, label, value, Tone::Plain)
-}
-
-/// A [`named_row`] whose label takes `tone`'s colour.
+/// any length (a name the user chose), its label in `tone`'s colour.
 pub(super) fn toned_named_row(
     ui: &mut egui::Ui,
     width: f32,
@@ -126,6 +115,69 @@ pub(super) fn toned_named_row(
     ui.add_sized(
         [width, ROW_H],
         egui::Button::selectable(selected, (label, egui::Atom::grow(), value))
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+/// The least of a row's width its label keeps beside a value shown whole.
+const LABEL_KEEP: f32 = 1.0 / 3.0;
+
+/// What a [`marked_row`] shows at its trailing edge: its value between glyphs
+/// that never give way, such as a stepper's carets.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Trail<'a> {
+    pub before: Option<&'a str>,
+    pub value: &'a str,
+    pub after: Option<&'a str>,
+}
+
+/// A [`toned_named_row`] with `trail` at its trailing edge. Selected, its
+/// label gives way first, so the trail shows whole while it leaves the label
+/// [`LABEL_KEEP`] of the row.
+pub(super) fn marked_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    label: &str,
+    trail: Trail,
+    tone: Tone,
+) -> egui::Response {
+    let font = egui::FontId::proportional(ROW_FONT);
+    let shown: String = [trail.before, Some(trail.value), trail.after]
+        .into_iter()
+        .flatten()
+        .collect();
+    let trail_w = ui
+        .fonts_mut(|f| f.layout_no_wrap(shown, font, egui::Color32::WHITE))
+        .size()
+        .x;
+    let label_gives = selected && trail_w <= width * (1.0 - LABEL_KEEP);
+    let (label, value) = toned_texts(label, trail.value, tone);
+    let mark = |glyph: &str| {
+        egui::RichText::new(glyph)
+            .color(palette().accent)
+            .size(ROW_FONT)
+    };
+    let mut atoms = egui::Atoms::default();
+    atoms.push_right(match label_gives {
+        true => label.atom_shrink(true),
+        false => label.into(),
+    });
+    atoms.push_right(egui::Atom::grow());
+    if let Some(glyph) = trail.before {
+        atoms.push_right(mark(glyph));
+    }
+    atoms.push_right(match label_gives {
+        true => value.into(),
+        false => value.atom_shrink(true),
+    });
+    if let Some(glyph) = trail.after {
+        atoms.push_right(mark(glyph));
+    }
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, atoms)
             .corner_radius(ROW_RADIUS)
             .truncate(),
     )
@@ -262,10 +314,15 @@ fn toned_row(
 /// A hairline across the list, with a row gap's air on either side.
 pub(super) fn divider(ui: &mut egui::Ui, width: f32) {
     ui.add_space(ROW_GAP);
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 1.0), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, DIVIDER_LINE), egui::Sense::hover());
     ui.painter().rect_filled(rect, 0.0, palette().hairline);
     ui.add_space(ROW_GAP);
 }
+
+/// A [`divider`]'s line.
+const DIVIDER_LINE: f32 = 1.0;
+/// The height a [`divider`] takes, the space around its line included.
+pub(super) const DIVIDER_H: f32 = ROW_GAP + DIVIDER_LINE + ROW_GAP;
 
 /// A heading over the rows that follow it: dim and small, and indented to the
 /// text of a row rather than to the panel's edge.
