@@ -340,8 +340,8 @@ impl Action {
 pub const REQUIRED: &[Requirement<Action>] = &[
     ("Confirm", &[Action::Confirm]),
     ("Cancel", &[Action::Cancel]),
-    // Quick Access carries a Settings row, so either way reaches it.
-    ("Opening settings", &[Action::Settings, Action::QuickAccess]),
+    // Quick Menu carries a Settings row, so either way reaches it.
+    ("Opening settings", &[Action::Settings, Action::Menu]),
 ];
 
 /// Per-surface override tables (`[surface.<name>]`). None: the router is what

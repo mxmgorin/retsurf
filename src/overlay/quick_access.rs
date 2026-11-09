@@ -1052,6 +1052,24 @@ mod tests {
         assert!(!panel.confirm(Entry::Reload));
     }
 
+    /// [`crate::event::bindings::REQUIRED`] counts on Quick Menu to reach the
+    /// settings wherever it opens.
+    #[test]
+    fn quick_menu_reaches_the_settings_everywhere() {
+        let overs = [
+            Over::Tab(TabMode::Page),
+            Over::Tab(TabMode::Reader),
+            Over::Tab(TabMode::Game),
+            Over::Home,
+        ];
+        for over in overs {
+            for launched in [false, true] {
+                let menu = entries(Strip::QuickMenu, over, launched);
+                assert!(menu.contains(&Entry::Settings), "{over:?}");
+            }
+        }
+    }
+
     /// Regression: stepping Scaling blanked the input map's value.
     #[test]
     fn a_refresh_keeps_the_values_set_beside_it() {
