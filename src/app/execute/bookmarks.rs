@@ -381,9 +381,7 @@ impl App {
                     return;
                 }
                 self.ui.quick_access.close();
-                self.ui.menu.bookmarks.remove(at);
-                self.ui
-                    .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));
+                self.drop_bookmark(at);
             }
         }
     }

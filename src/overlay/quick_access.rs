@@ -262,7 +262,9 @@ impl Entry {
             Entry::Quit => Some("press again to quit"),
             Entry::Reload => Some("press again to reload"),
             Entry::ResetSite => Some("press again to reset"),
-            Entry::Options(OptionsRow::Remove) => Some("press again to remove"),
+            Entry::Run(Action::Bookmark) | Entry::Options(OptionsRow::Remove) => {
+                Some("press again to remove")
+            }
             _ => None,
         }
     }
@@ -1050,6 +1052,18 @@ mod tests {
         // A row that stays up once confirmed drops its hint.
         assert_eq!(panel.value(panel.selected()), "");
         assert!(!panel.confirm(Entry::Reload));
+    }
+
+    /// Regression: removing the page's bookmark closed the panel before its
+    /// second press.
+    #[test]
+    fn the_bookmark_row_arms_its_removal() {
+        let mut panel = open(TabMode::Page);
+        let row = Entry::Run(Action::Bookmark);
+        panel.select_entry(row);
+        assert!(!panel.confirm(row));
+        assert_eq!(panel.value(panel.selected()), "press again to remove");
+        assert!(panel.confirm(row));
     }
 
     /// [`crate::event::bindings::REQUIRED`] counts on Quick Menu to reach the

@@ -165,6 +165,21 @@ impl App {
         self.toggle_bookmark(&url);
     }
 
+    /// The store index of the current page's bookmark, unless the tab runs it.
+    fn current_bookmark(&self) -> Option<usize> {
+        if self.browser.launched().is_some() {
+            return None;
+        }
+        let state = self.browser.state();
+        let url = state.page_url();
+        self.ui
+            .menu
+            .bookmarks
+            .all()
+            .iter()
+            .position(|b| b.url == url)
+    }
+
     /// Bookmark `url` under its open tab's title, or remove its bookmark.
     fn toggle_bookmark(&mut self, url: &str) {
         let bookmarks = &self.ui.menu.bookmarks;
@@ -208,6 +223,11 @@ impl App {
             ));
             return;
         }
+        self.drop_bookmark(index);
+    }
+
+    /// Remove the bookmark at `index` at once.
+    fn drop_bookmark(&mut self, index: usize) {
         self.ui.menu.bookmarks.remove(index);
         self.ui
             .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));

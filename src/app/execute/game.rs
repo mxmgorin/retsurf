@@ -219,8 +219,23 @@ impl App {
             }
             // Direct, not queued: the mode's command filter drops the browser's.
             Entry::Run(Action::Bookmark) => {
-                self.ui.quick_access.close();
-                self.toggle_current_bookmark();
+                let bookmarks = &self.ui.menu.bookmarks;
+                let guarded = self
+                    .current_bookmark()
+                    .filter(|&at| bookmarks.all()[at].has_settings());
+                match guarded {
+                    // A removal that loses settings arms the row, so the second press lands here.
+                    Some(at) => {
+                        if self.ui.quick_access.confirm(row) {
+                            self.ui.quick_access.close();
+                            self.drop_bookmark(at);
+                        }
+                    }
+                    None => {
+                        self.ui.quick_access.close();
+                        self.toggle_current_bookmark();
+                    }
+                }
             }
             // As its gesture would, once the panel is out of the way.
             Entry::Run(action) => {
