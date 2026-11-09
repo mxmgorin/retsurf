@@ -25,6 +25,10 @@ impl App {
         if let Some(trip) = self.memory_guard.as_ref().and_then(|w| w.take_trip()) {
             if !self.config.performance.memory_guard {
                 log::warn!("memory guard: {trip}; off, nothing closed");
+            } else if self.kiosk {
+                // Closing the game would leave a kiosk with nothing to run.
+                log::warn!("memory guard: {trip}; kiosk, quitting");
+                self.shutdown();
             } else if self.browser.tab_count() > 1 {
                 log::warn!("memory guard: {trip}; finding the heaviest tab");
                 // A stale report may name the wrong tab.

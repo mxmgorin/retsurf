@@ -47,7 +47,7 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
   Every browser action can be rebound in-app, with support for tap, hold, and chord.
 
 - **Game mode**<br>
-  Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input.
+  Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input. `--kiosk` runs a game with no browser UI at all ([Command line](docs/CLI.md)).
 
 - **Game scaling and shaders**<br>
   Cuts the game out of its page and fits it to the screen, in whole pixels or stretched, then draws it through CRT, LCD, or upscaling shaders. Takes RetroArch's single-pass GLSL shaders, ten built in. See [Shaders](docs/SHADERS.md).

@@ -4,12 +4,14 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 const USAGE: &str = "\
-Usage: retsurf [--game-mode] [PATH | --open ID]
+Usage: retsurf [--game-mode | --kiosk] [PATH | --open ID]
 
   PATH          a game folder (opens its index.html) or an HTML file in one,
                 served as http://<folder>.localhost/
   --open ID     open the bookmark bookmarks/ID.toml as it asks
   --game-mode   start in Game Mode
+  --kiosk       run PATH or the bookmark in Game Mode with no browser UI;
+                Start+Select quits
   -h, --help    print this help
   -V, --version print the version";
 
@@ -23,6 +25,8 @@ pub struct Args {
     /// A bookmark's id, opened instead of the usual first tabs.
     pub open: Option<String>,
     pub game_mode: bool,
+    /// Implies `game_mode`, and comes with PATH or `open`.
+    pub kiosk: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,6 +66,7 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<Parsed, String> {
             Some("-h" | "--help") if !only_paths => return Ok(Parsed::Help),
             Some("-V" | "--version") if !only_paths => return Ok(Parsed::Version),
             Some("--game-mode") if !only_paths => out.game_mode = true,
+            Some("--kiosk") if !only_paths => (out.kiosk, out.game_mode) = (true, true),
             Some("--open") if !only_paths => {
                 let id = args.next().ok_or("`--open` needs a bookmark id")?;
                 let id = id.into_string().map_err(|_| "a bookmark id is text")?;
@@ -76,6 +81,9 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<Parsed, String> {
     }
     if out.path.is_some() && out.open.is_some() {
         return Err("PATH and `--open` both name what to open".to_string());
+    }
+    if out.kiosk && out.path.is_none() && out.open.is_none() {
+        return Err("`--kiosk` needs PATH or `--open`".to_string());
     }
     Ok(Parsed::Run(out))
 }
@@ -116,6 +124,20 @@ mod tests {
         assert!(run(&["a", "b"]).is_err());
         assert!(run(&["--open"]).is_err());
         assert!(run(&["--open", "ftl", "games/digger"]).is_err());
+        assert!(run(&["--kiosk"]).is_err());
+    }
+
+    #[test]
+    fn kiosk_implies_game_mode() {
+        assert_eq!(
+            run(&["--kiosk", "--open", "ftl"]),
+            Ok(Parsed::Run(Args {
+                open: Some("ftl".to_string()),
+                game_mode: true,
+                kiosk: true,
+                ..Args::default()
+            }))
+        );
     }
 
     #[test]

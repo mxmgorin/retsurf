@@ -32,6 +32,12 @@ impl AppUi {
         self.game_cursor = on;
     }
 
+    /// Keep toasts and the loading edge off the page.
+    #[inline]
+    pub fn set_kiosk(&mut self, on: bool) {
+        self.kiosk = on;
+    }
+
     /// Move the toolbar to a window edge (live config change).
     #[inline]
     pub fn set_toolbar_position(&mut self, pos: ToolbarPosition) {

@@ -77,6 +77,9 @@ impl AppUi {
     }
 
     pub fn toast_for(&mut self, notice: Notice, shown: Duration) {
+        if self.kiosk {
+            return;
+        }
         self.toast = Some(Toast {
             notice,
             until: Instant::now() + shown,

@@ -26,6 +26,9 @@ use std::time::Instant;
 
 impl App {
     pub(super) fn execute_command(&mut self, command: &AppCommand, out: &mut Vec<AppCommand>) {
+        if self.kiosk && !command.in_kiosk() {
+            return;
+        }
         // Game Mode shrinks the vocabulary to its own, so a shortcut resolved
         // under one of its overlays cannot act on the browser behind it.
         let settings_up = self.ui.settings.visible() && command.keeps_the_page();

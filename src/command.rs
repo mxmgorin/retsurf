@@ -70,6 +70,30 @@ impl AppCommand {
         }
     }
 
+    /// Whether this still fires in a kiosk session: the page's own prompts, the
+    /// way out, the loop's upkeep. Exhaustive, so a new command must place itself.
+    pub fn in_kiosk(&self) -> bool {
+        match self {
+            AppCommand::Shutdown
+            | AppCommand::Persist
+            | AppCommand::Resize
+            | AppCommand::Input(_)
+            | AppCommand::Prompt(_) => true,
+            AppCommand::Browser(_)
+            | AppCommand::Menu(_)
+            | AppCommand::UpdateNotice(_)
+            | AppCommand::ToggleBookmark
+            | AppCommand::FocusAddressBar
+            | AppCommand::CloseTab
+            | AppCommand::QuickAccess(_)
+            | AppCommand::GameInputMaps(_)
+            | AppCommand::GameMapEdit(_)
+            | AppCommand::Settings(_)
+            | AppCommand::Home(_)
+            | AppCommand::UseSearchEngine(_) => false,
+        }
+    }
+
     /// Whether this is a settings action that keeps the page, so it may run
     /// over a game.
     pub fn keeps_the_page(&self) -> bool {

@@ -49,6 +49,32 @@ impl AppBrowserInner {
         (!header.is_empty()).then_some(header)
     }
 
+    /// Whether this is a kiosk session (see [`super::AppBrowser::set_kiosk`]).
+    fn kiosk(&self) -> bool {
+        self.kiosk_hosts.borrow().is_some()
+    }
+
+    /// Whether a page may navigate to `url`: always outside a kiosk session; in
+    /// one, only to a host that served a document, or to a scheme with no host.
+    fn kiosk_allows(&self, url: &Url) -> bool {
+        let hosts = self.kiosk_hosts.borrow();
+        let Some(hosts) = hosts.as_ref() else {
+            return true;
+        };
+        match url.scheme() {
+            "http" | "https" => url.host_str().is_some_and(|host| hosts.contains(host)),
+            _ => true,
+        }
+    }
+
+    /// Let a kiosk session's pages navigate to `url`'s host.
+    fn kiosk_admit(&self, url: &Url) {
+        if let (Some(hosts), Some(host)) = (self.kiosk_hosts.borrow_mut().as_mut(), url.host_str())
+        {
+            hosts.insert(host.to_string());
+        }
+    }
+
     /// Queue `url` for our own fetch (see [`crate::data::downloads`]), sent with
     /// `referer` when a page linked to it.
     pub(super) fn queue_download(&self, url: &Url, referer: Option<String>) {
@@ -69,6 +95,8 @@ impl servo::WebViewDelegate for AppBrowserInner {
     }
 
     fn notify_url_changed(&self, webview: WebView, url: Url) {
+        // A redirect may commit a host the first load did not name.
+        self.kiosk_admit(&url);
         // Update whichever tab navigated (so its address bar is right once shown);
         // only log to history when it's the tab the user is actually viewing.
         if let Some(i) = self.tab_index(webview.id()) {
@@ -163,12 +191,21 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// Deny those navigations and queue the URL for our own fetch instead (see
     /// [`crate::data::downloads`]). Everything else proceeds normally.
     fn request_navigation(&self, webview: WebView, request: servo::NavigationRequest) {
+        if !self.kiosk_allows(&request.url) {
+            log::info!("kiosk: refused a navigation to {}", request.url);
+            request.deny();
+            return;
+        }
         if !self.is_download_url(&request.url) {
             request.allow();
             return;
         }
         let url = request.url.clone();
         request.deny();
+        if self.kiosk() {
+            log::info!("kiosk: refused a download of {url}");
+            return;
+        }
         let referer = self
             .tab_index(webview.id())
             .and_then(|i| referer_for(&self.tabs.borrow()[i].state.page_url));
@@ -205,6 +242,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
     /// Servo destroys it immediately unless we keep a live handle, so it must go
     /// into `tabs`; it drives its own navigation, so no URL is set.
     fn request_create_new(&self, parent_webview: WebView, request: servo::CreateNewWebViewRequest) {
+        if self.kiosk() {
+            log::info!("kiosk: refused a page-opened tab");
+            return;
+        }
         // A page must not evict a tab of the user's, so the popup is declined
         // at the cap — except at one, where declining is a dead link.
         let replaces = self.max_tabs.get() == 1;
@@ -259,6 +300,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
         let req = load.request();
         let url = req.url.as_url().clone();
 
+        if req.is_for_main_frame {
+            self.kiosk_admit(&url);
+        }
+
         // Ahead of adblock and the image cap.
         if let Some(site) = self.local_site.as_ref().filter(|site| site.owns(&url)) {
             site.serve(load);
@@ -268,7 +313,9 @@ impl servo::WebViewDelegate for AppBrowserInner {
         // The injected capture script signals a waiting file by loading this URL,
         // which names no real host; the bytes come back over `evaluate_javascript`.
         if url.as_str().starts_with(super::blob_download::PING_URL) {
-            self.blob_pings.push(webview);
+            if !self.kiosk() {
+                self.blob_pings.push(webview);
+            }
             finish_intercepted(load, servo::WebResourceResponse::new(url), Vec::new());
             return;
         }

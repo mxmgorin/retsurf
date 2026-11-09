@@ -276,6 +276,8 @@ pub struct AppUi {
     shader: String,
     /// Whether the pad cursor is drawn over a game.
     game_cursor: bool,
+    /// A kiosk session: no toast or loading edge over the page.
+    kiosk: bool,
     /// The rows [`Self::shader`] sees the game in.
     shader_resolution: crate::config::ShaderResolution,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
@@ -401,6 +403,7 @@ impl AppUi {
             page_shader: window.page_gl_texture().map(page_shader::PageShader::new),
             shader: crate::platform::render::shaders::NONE.to_string(),
             game_cursor: true,
+            kiosk: false,
             shader_resolution: crate::config::ShaderResolution::default(),
             browser_viewport: (0, 0),
             toast: None,
@@ -909,6 +912,7 @@ impl AppUi {
                 }
 
                 let edge_alone = state.is_loading()
+                    && !self.kiosk
                     && !self.toolbar_rect.is_positive()
                     && matches!(self.focus(), Focus::Page | Focus::Home);
                 if edge_alone {

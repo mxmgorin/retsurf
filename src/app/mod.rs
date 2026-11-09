@@ -98,6 +98,9 @@ pub struct App {
     /// A local site's page, opened in place of the usual first tabs; the saved
     /// session is left alone while it runs.
     launch_url: Option<String>,
+    /// A kiosk session: the first page runs in Game Mode with no browser UI over
+    /// it, and the saved session is left alone.
+    kiosk: bool,
 }
 
 /// How often the main loop flushes the deferred stores — history and the tab
@@ -133,6 +136,7 @@ impl App {
         sdl: &mut Sdl,
         config: AppConfig,
         local_site: Option<LocalSite>,
+        kiosk: bool,
     ) -> Result<Self, String> {
         // Before the window: styling its first context reads the palette.
         crate::ui::set_theme(config.interface.theme);
@@ -163,11 +167,14 @@ impl App {
                 .webgl_texture_units(window.software_webgl()),
             &config,
         )?;
+        if kiosk {
+            browser.set_kiosk();
+        }
         log::info!("init: browser ready; creating event handler + ui");
         // After the engine's threads exist: a thread inherits its creator's
         // nice, so earlier would renice all 59 of them instead of one.
         crate::platform::priority::prioritize_main();
-        let event_handler = AppEventHandler::new(sdl, config.controls.clone())?;
+        let event_handler = AppEventHandler::new(sdl, config.controls.clone(), kiosk)?;
         let mut ui = AppUi::new(
             &window,
             &config.interface,
@@ -184,6 +191,7 @@ impl App {
         ui.set_shader(&config.game_mode.view.shader);
         ui.set_shader_resolution(config.game_mode.view.shader_resolution);
         ui.set_game_cursor(config.game_mode.view.cursor);
+        ui.set_kiosk(kiosk);
         log::info!("init: app constructed");
 
         // Read before `config` moves into the struct below.
@@ -232,6 +240,7 @@ impl App {
             last_pass: Instant::now(),
             _audio: audio,
             launch_url,
+            kiosk,
         })
     }
 
@@ -284,7 +293,9 @@ impl App {
         }
         // Throttled background check for a newer build (`[update] auto_check`); its
         // result surfaces via the toolbar update chip, never a blocking prompt.
-        self.ui.update.auto_check(&self.event_sender);
+        if !self.kiosk {
+            self.ui.update.auto_check(&self.event_sender);
+        }
         self.running = true;
 
         while self.running {
@@ -668,7 +679,7 @@ impl App {
     /// Snapshot the open tabs for the next launch. A no-op with `restore_tabs`
     /// off, and a tab list unchanged since the last snapshot writes nothing.
     fn save_session(&mut self) {
-        if self.config.browser.restore_tabs && self.launch_url.is_none() {
+        if self.config.browser.restore_tabs && self.launch_url.is_none() && !self.kiosk {
             self.session.record(&self.browser.tabs());
         }
     }

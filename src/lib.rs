@@ -61,7 +61,7 @@ pub fn run_app() {
     ));
 
     let mut sdl = sdl2::init().unwrap();
-    let app = App::new(&mut sdl, app_config, args.local_site).unwrap();
+    let app = App::new(&mut sdl, app_config, args.local_site, args.kiosk).unwrap();
 
     app.run(args.game_mode, args.open);
 }
@@ -73,6 +73,7 @@ struct StartupArgs {
     /// A bookmark's id, checked to name one.
     open: Option<String>,
     game_mode: bool,
+    kiosk: bool,
 }
 
 /// Exits on help, version, a bad PATH or an unknown bookmark, before a window
@@ -92,6 +93,7 @@ fn startup_args() -> StartupArgs {
         local_site,
         open: args.open,
         game_mode: args.game_mode,
+        kiosk: args.kiosk,
     }
 }
 

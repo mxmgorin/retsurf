@@ -1,7 +1,7 @@
 # Command line
 
 ```
-retsurf [--game-mode] [PATH | --open ID]
+retsurf [--game-mode | --kiosk] [PATH | --open ID]
 ```
 
 | Argument | Effect |
@@ -9,11 +9,16 @@ retsurf [--game-mode] [PATH | --open ID]
 | `PATH` | Open a local game folder (its `index.html`) or an HTML file. |
 | `--open ID` | Open the bookmark `bookmarks/ID.toml` as it asks: a site, an app or a game. |
 | `--game-mode` | Start in Game Mode, before the page loads. |
+| `--kiosk` | Run PATH or the bookmark as a game alone: Game Mode with no browser menus or notices. Needs PATH or `--open`. |
 | `-h`, `--help` / `-V`, `--version` | Print the usage or the version. |
 
 A folder is served as `http://<folder-name>.localhost/`, with its own saves (localStorage,
 IndexedDB); names differing only in case or punctuation share them. `.br` and `.gz` files
 are decompressed.
+
+In a kiosk the page cannot open new windows, download files or go to another site. Start +
+Select quits, as does a key bound to `quit`; the memory guard quits too, instead of closing
+the page. The saved tabs are left as they were.
 
 ## Examples
 
@@ -23,6 +28,7 @@ retsurf --game-mode ~/games/hexgl     # the same, straight into Game Mode
 retsurf ~/games/carts/cart.html       # an HTML file inside a folder
 retsurf --game-mode                   # Game Mode over the usual first tabs
 retsurf --open vampire-survivors      # a bookmark, as it opens from the start page
+retsurf --kiosk ~/games/hexgl         # the game alone; Start + Select quits
 ```
 
 A PATH starting with `-` goes after `--`: `retsurf -- -name/`. A bad PATH, a missing or

@@ -28,6 +28,10 @@ const ZOOM_LADDER: &[f32] = &[
 
 impl AppBrowser {
     pub fn execute_command(&mut self, command: &BrowserCommand, config: &AppConfig) {
+        let kiosk = self.inner.kiosk_hosts.borrow().is_some();
+        if kiosk && !matches!(command, BrowserCommand::ExitFullscreen) {
+            return;
+        }
         match command {
             BrowserCommand::Back => _ = self.inner.active_webview().map(|x| x.go_back(1)),
             BrowserCommand::Forward => _ = self.inner.active_webview().map(|x| x.go_forward(1)),

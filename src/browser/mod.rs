@@ -62,6 +62,7 @@ use servo::{EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
 use std::{
     cell::{Cell, Ref, RefCell, RefMut},
+    collections::HashSet,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -307,6 +308,9 @@ struct AppBrowserInner {
     clipboard: Rc<Clipboard>,
     /// A folder served under its own origin.
     local_site: Option<LocalServer>,
+    /// In a kiosk session, the hosts that served a document, frames included:
+    /// the only ones a page may navigate to.
+    kiosk_hosts: RefCell<Option<HashSet<String>>>,
 }
 
 impl AppBrowserInner {
@@ -413,6 +417,7 @@ impl AppBrowserInner {
             mem_report: Arc::new(Mutex::new(None)),
             clipboard: Rc::new(clipboard),
             local_site: local_site.map(|site| LocalServer::new(site, event_sender.clone())),
+            kiosk_hosts: RefCell::new(None),
             event_sender,
         }
     }
@@ -572,6 +577,13 @@ impl AppBrowser {
     /// The bookmark the active tab runs, by id.
     pub fn launched(&self) -> Option<String> {
         self.state().launched.clone()
+    }
+
+    /// Hold the session to its first page: no new tabs or downloads, no
+    /// navigation off the hosts that page loaded, no browser commands but
+    /// leaving fullscreen. Call before the first tab opens.
+    pub fn set_kiosk(&self) {
+        *self.inner.kiosk_hosts.borrow_mut() = Some(HashSet::new());
     }
 
     pub fn set_launched(&self, id: Option<String>) {

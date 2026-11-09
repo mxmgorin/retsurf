@@ -36,8 +36,20 @@ fn held(gesture: PadGesture) -> PadGesture {
 
 /// The gestures Game Mode reserves against every map: Quick Access's, falling
 /// back so a session has a way out, then Quick Menu's unless it shares that pad,
-/// then Quit's.
-fn game_reserved(store: &Store) -> Vec<(PadGesture, Action)> {
+/// then Quit's. A kiosk reserves Quit's alone, falling back to the stock ones.
+fn game_reserved(store: &Store, kiosk: bool) -> Vec<(PadGesture, Action)> {
+    let quit = |store: &Store| {
+        bindings::pad_gestures(store, Action::Quit)
+            .map(|gesture| (held(gesture), Action::Quit))
+            .collect::<Vec<_>>()
+    };
+    if kiosk {
+        let reserved = quit(store);
+        return match reserved.is_empty() {
+            true => quit(&bindings::default_store()),
+            false => reserved,
+        };
+    }
     let held_gesture = |action| bindings::pad_gesture(store, action).map(held);
     let access = held_gesture(Action::QuickAccess).unwrap_or(DEFAULT_EXIT);
     let mut reserved = vec![(access, Action::QuickAccess)];
@@ -45,9 +57,7 @@ fn game_reserved(store: &Store) -> Vec<(PadGesture, Action)> {
         Some(menu) if lead_pad(menu) != lead_pad(access) => reserved.push((menu, Action::Menu)),
         _ => {}
     }
-    reserved.extend(
-        bindings::pad_gestures(store, Action::Quit).map(|gesture| (held(gesture), Action::Quit)),
-    );
+    reserved.extend(quit(store));
     reserved
 }
 
@@ -119,6 +129,8 @@ pub struct AppEventHandler {
     /// The pad gestures Game Mode still answers, each with the action it fires.
     /// Held apart from the tables because the mode bypasses them.
     game_reserved: Vec<(PadGesture, Action)>,
+    /// A kiosk session: Game Mode answers Quit alone.
+    kiosk: bool,
     /// Controller state machine: sticks/triggers, tap/hold/chord gestures.
     gamepad: Gamepad,
     /// Whether the keys arriving from this device *are* the pad. The Miyoo's
@@ -170,7 +182,7 @@ impl AppEventHandler {
         };
     }
 
-    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: ControlsConfig) -> Result<Self, String> {
+    pub fn new(sdl: &sdl2::Sdl, gamepad_cfg: ControlsConfig, kiosk: bool) -> Result<Self, String> {
         let mut game_controllers = vec![];
         let game_controller_subsystem = sdl.game_controller()?;
         // `RETSURF_KEYMAP` wins over the driver name, and has to: the bundled
@@ -194,7 +206,8 @@ impl AppEventHandler {
             event_pump: sdl.event_pump()?,
             game_controllers,
             game_controller_subsystem,
-            game_reserved: game_reserved(&store),
+            game_reserved: game_reserved(&store, kiosk),
+            kiosk,
             bindings: bindings::build(&store, &key_names()),
             gamepad: Gamepad::new(gamepad_cfg),
             keymap,
@@ -250,7 +263,7 @@ impl AppEventHandler {
     /// holds, so a press begun under the old table cannot resolve against the new.
     pub fn set_bindings(&mut self, store: &Store, commands: &mut Vec<AppCommand>) {
         self.bindings = bindings::build(store, &key_names());
-        self.game_reserved = game_reserved(store);
+        self.game_reserved = game_reserved(store, self.kiosk);
         if let Some(game) = &mut self.game {
             game.set_reserved(&self.game_reserved);
         }
@@ -569,7 +582,8 @@ impl AppEventHandler {
     fn game_key(&mut self, key: &KeyEvent, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         let code = key_code(key.kc);
         let reserved = match self.bindings.key(code, mods_for(key.kc, key.keymod)) {
-            Some(action @ (Action::Quit | Action::QuickAccess | Action::Menu)) => Some(action),
+            Some(Action::Quit) => Some(Action::Quit),
+            Some(action @ (Action::QuickAccess | Action::Menu)) if !self.kiosk => Some(action),
             _ => None,
         };
         if let Some(action) = reserved {
@@ -1038,7 +1052,7 @@ mod tests {
     fn a_tapped_gesture_is_held_inside_the_mode() {
         let store = bindings::default_store();
         assert_eq!(
-            game_reserved(&store)[..2],
+            game_reserved(&store, false)[..2],
             [
                 (PadGesture::Hold(Pad::Start), Action::QuickAccess),
                 (PadGesture::Hold(Pad::Select), Action::Menu),
@@ -1048,7 +1062,7 @@ mod tests {
         chord.gamepad.retain(|_, name| name != "quick_access");
         chord.gamepad.insert("l3+r3".into(), "quick_access".into());
         assert_eq!(
-            game_reserved(&chord)[0],
+            game_reserved(&chord, false)[0],
             (PadGesture::Chord(Pad::L3, Pad::R3), Action::QuickAccess)
         );
     }
@@ -1059,7 +1073,7 @@ mod tests {
         let mut store = bindings::default_store();
         store.gamepad.retain(|_, name| name != "menu");
         store.gamepad.insert("start+a".into(), "menu".into());
-        let strips = game_reserved(&store);
+        let strips = game_reserved(&store, false);
         assert_eq!(
             strips
                 .iter()
@@ -1069,15 +1083,23 @@ mod tests {
         );
     }
 
-    /// Start and Select together quit inside the mode, either one first.
+    /// Start and Select together quit, in or out of a kiosk; a kiosk reserves
+    /// nothing else, and gets them back when the file binds Quit to nothing.
     #[test]
     fn start_and_select_together_quit() {
         let together = [
             (PadGesture::Chord(Pad::Select, Pad::Start), Action::Quit),
             (PadGesture::Chord(Pad::Start, Pad::Select), Action::Quit),
         ];
-        let reserved = game_reserved(&bindings::default_store());
+        let store = bindings::default_store();
+        let reserved = game_reserved(&store, false);
         assert!(together.iter().all(|quit| reserved.contains(quit)));
+        let mut kiosk = game_reserved(&store, true);
+        kiosk.sort_by_key(|(gesture, _)| format!("{gesture:?}"));
+        assert_eq!(kiosk, together);
+        let mut unbound = store.clone();
+        unbound.gamepad.retain(|_, name| name != "quit");
+        assert_eq!(game_reserved(&unbound, true).len(), together.len());
     }
 
     /// A stick is captured only once pushed, and either axis names the whole
