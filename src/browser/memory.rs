@@ -250,10 +250,10 @@ fn tight() -> Preferences {
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
-    // Drop the heavy optimizing JIT; keep baseline JIT. Also drop wasm Ion to
-    // cut compile-time CPU/memory.
+    // Drop the heavy optimizing JIT; keep baseline JIT.
     p.js_ion_enabled = false;
-    p.js_wasm_ion_enabled = false;
+    // Kept: asm.js compiles only through it, and only wasm and asm.js pay for it.
+    p.js_wasm_ion_enabled = true;
 
     // Back-forward cache: one step back. Three was priced on synthetic pages and
     // is far too generous on real ones — measured on a 960 MB A55 handheld, two
