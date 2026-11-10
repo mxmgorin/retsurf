@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped
 - Interface font: IBM Plex Sans
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
-- Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top, a footer of button hints (in Menu too)
+- Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top with its site icon, a footer of button hints (in Menu too)
 - Quick Access marks a site's own settings with a dot; X sets one back to the global value, and Reset site settings counts them
 - Menu: the latest tabs with their site icons (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
 - Tabs on the start page are named Start page in the tab lists

@@ -169,9 +169,9 @@ struct FrameInputs {
     chrome_hidden: ChromeHidden,
 }
 
-/// The sites whose icons this frame draws: the tabs Menu lists while `strip`
-/// is it, the menu's current section and the start page's bookmarks when
-/// `home_shown`, each tab with its live icon.
+/// The sites whose icons this frame draws: the tabs of the `strip` up, the
+/// menu's current section and the start page's bookmarks when `home_shown`,
+/// each tab with its live icon.
 fn page_icon_wants<'a>(
     menu: &'a Menu,
     home_shown: bool,
@@ -180,9 +180,11 @@ fn page_icon_wants<'a>(
 ) -> Vec<(&'a str, Option<&'a Favicon>)> {
     let mut wanted = Vec::new();
     let tab = |t: &'a TabInfo| (t.url.as_str(), t.favicon.as_ref());
-    // Menu lists the tabs.
-    if strip == Some(Strip::QuickMenu) {
-        wanted.extend(tabs.iter().map(tab));
+    // Menu lists the tabs; Quick Access heads with the shown one.
+    match strip {
+        Some(Strip::QuickMenu) => wanted.extend(tabs.iter().map(tab)),
+        Some(Strip::QuickAccess) => wanted.extend(tabs.iter().filter(|t| t.active).map(tab)),
+        None => {}
     }
     if menu.visible {
         match menu.section() {

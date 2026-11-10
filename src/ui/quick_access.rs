@@ -93,7 +93,18 @@ pub(in crate::ui) fn add_quick_access(
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
                 let clock = (panel.strip() == Strip::QuickMenu).then(|| clock_text(ui.ctx()));
-                add_header(ui, panel.title(), clock.as_deref());
+                // Over a page Quick Access heads with its site's icon.
+                let site = tabs
+                    .iter()
+                    .find(|tab| tab.active && tab.url != HOME_URL)
+                    .filter(|_| panel.strip() == Strip::QuickAccess)
+                    .and_then(|tab| icons.icon(&tab.url));
+                add_header(
+                    ui,
+                    site.map(|icon| icon.row),
+                    panel.title(),
+                    clock.as_deref(),
+                );
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 let rows = panel.rows().len() as f32;
@@ -267,14 +278,23 @@ fn add_backdrop(ctx: &egui::Context, screen: egui::Rect, commands: &mut Vec<AppC
         });
 }
 
-/// The strip's header: what its rows act on, cut to the strip, with `clock`
-/// at the far end.
-fn add_header(ui: &mut egui::Ui, title: &str, clock: Option<&str>) {
+/// The strip's header: what its rows act on, after `icon` and cut to the
+/// strip, with `clock` at the far end.
+fn add_header(
+    ui: &mut egui::Ui,
+    icon: Option<&egui::TextureHandle>,
+    title: &str,
+    clock: Option<&str>,
+) {
     let text = egui::RichText::new(title)
         .color(palette().accent)
         .size(ROW_FONT)
         .strong();
     ui.horizontal(|ui| {
+        if let Some(icon) = icon {
+            let side = egui::vec2(ROW_FONT, ROW_FONT);
+            ui.add(egui::Image::new(icon).fit_to_exact_size(side));
+        }
         ui.add(egui::Label::new(text).truncate());
         if let Some(clock) = clock {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
