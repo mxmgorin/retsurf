@@ -282,8 +282,8 @@ While they apply, Quick Access shows the bookmark's name at the top and these ro
 |---|---|
 | **Launch as** | site, app or game; the open page switches at once |
 | **Reader view** | the site's articles open in reader view, the open page included |
-| these settings | a change here or in Settings is written to the bookmark, not to `config.toml` |
-| **Reset site settings** | drops the overrides and turns Reader view off |
+| these settings | a change here or in Settings is written to the bookmark, not to `config.toml`; a dot marks the site's own value, X sets it back to the global one |
+| **Reset site settings** | drops the overrides and turns Reader view off; names how many, shown only when there are some |
 
 On the start page L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.

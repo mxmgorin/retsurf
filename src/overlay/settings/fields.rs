@@ -352,6 +352,30 @@ pub fn step(kind: &Kind, config: &mut AppConfig, dx: i32) {
     }
 }
 
+/// Whether `kind` holds different values in `a` and `b`; never for a row
+/// holding no value.
+pub fn differs(kind: &Kind, a: &AppConfig, b: &AppConfig) -> bool {
+    match kind {
+        Kind::Action { .. } | Kind::Door { .. } => false,
+        Kind::Bool { get, .. } => get(a) != get(b),
+        Kind::Text { get, .. } | Kind::Choice { get, .. } => get(a) != get(b),
+        Kind::Int { get, .. } => get(a) != get(b),
+        Kind::Float { get, .. } => get(a) != get(b),
+    }
+}
+
+/// Set `kind` in `to` to its value in `from`; a row holding no value is left.
+pub fn copy_value(kind: &Kind, from: &AppConfig, to: &mut AppConfig) {
+    match kind {
+        Kind::Action { .. } | Kind::Door { .. } => {}
+        Kind::Bool { get, set } => set(to, get(from)),
+        Kind::Text { get, get_mut } => *get_mut(to) = get(from),
+        Kind::Choice { get, set, .. } => set(to, &get(from)),
+        Kind::Int { get, set, .. } => set(to, get(from)),
+        Kind::Float { get, set, .. } => set(to, get(from)),
+    }
+}
+
 /// User-Agent presets: the keywords [`crate::config::BrowserConfig::user_agent`]
 /// understands (empty keeps Servo's platform default).
 const UA_CHOICES: &[(&str, &str)] = &[
@@ -593,6 +617,26 @@ mod tests {
         assert_eq!(cursor_curve_label(1.0), "Linear");
         assert_eq!(cursor_curve_label(2.0), "2.00, half push 25%");
         assert_eq!(cursor_curve_label(6.0), "6.00, half push 1.6%");
+    }
+
+    /// A step shows as a difference, and copying the value back takes it away.
+    #[test]
+    fn a_copied_value_differs_no_more() {
+        let base = AppConfig::default();
+        for field in FIELDS {
+            let mut stepped = base.clone();
+            step(&field.kind, &mut stepped, 1);
+            let shown = value_of(&field.kind, &stepped) != value_of(&field.kind, &base);
+            assert_eq!(
+                differs(&field.kind, &stepped, &base),
+                shown,
+                "{}",
+                field.label
+            );
+            let mut copy = base.clone();
+            copy_value(&field.kind, &stepped, &mut copy);
+            assert!(!differs(&field.kind, &copy, &stepped), "{}", field.label);
+        }
     }
 
     /// A label names one row per tab; a repeat is a row listed twice.

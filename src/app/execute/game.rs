@@ -18,7 +18,7 @@ use crate::overlay::game::map_edit::{
 };
 use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, Over, SiteHead, Strip};
+use crate::overlay::quick_access::{Entry, OptionsRow, Over, SiteHead, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -52,11 +52,19 @@ impl App {
             return;
         }
         let name = self.site_name();
+        let global = self.global_config();
+        let overrides = self.site_overrides();
         let site = self
             .applied_site
             .as_deref()
             .zip(name.as_deref())
-            .map(|(id, name)| SiteHead { id, name });
+            .zip(global.as_ref())
+            .map(|((id, name), global)| SiteHead {
+                id,
+                name,
+                global,
+                overrides,
+            });
         let launched = self.browser.launched().is_some();
         let over = match self.browser.on_home_page() {
             true => Over::Home,
@@ -67,10 +75,9 @@ impl App {
         self.ui
             .quick_access
             .open(strip, over, site, launched, &page, &self.config);
-        self.refresh_options();
         let page_js = Some(self.browser.page_js_preset()).filter(|p| !p.is_empty());
         self.ui.quick_access.set_page_js(page_js);
-        self.ui.quick_access.refresh(&self.config);
+        self.refresh_access();
         let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
             true => "Saved",
             false => "",
@@ -101,6 +108,7 @@ impl App {
         self.use_input_map(&next, out);
         let (_, name) = self.game_mode().live();
         self.ui.quick_access.set_value(Entry::InputMap, name);
+        self.refresh_access();
     }
 
     /// Open the settings screen, on `section` when given. Reads the live map's
@@ -195,8 +203,36 @@ impl App {
                 self.ui.quick_access.select(*index);
                 self.quick_access_activate(out);
             }
+            QuickAccessAction::ResetRow => self.reset_quick_row(out),
             QuickAccessAction::Text(text) => self.options_text(text),
         }
+    }
+
+    /// X on the focused row: what the shown site holds as its own, back to the
+    /// global value.
+    fn reset_quick_row(&mut self, out: &mut Vec<AppCommand>) {
+        let panel = &self.ui.quick_access;
+        let (row, own) = (panel.row(), panel.own(panel.selected()));
+        let Some(global) = self.global_config().filter(|_| own) else {
+            return;
+        };
+        match row {
+            Entry::Quick(field) => {
+                let mut config = self.config.clone();
+                settings::copy_value(&Settings::fields()[field].kind, &global, &mut config);
+                self.apply_config(config, out);
+            }
+            Entry::InputMap => {
+                self.use_input_map(&global.game_mode.input_map, out);
+                let (_, name) = self.game_mode().live();
+                self.ui.quick_access.set_value(Entry::InputMap, name);
+            }
+            Entry::Options(OptionsRow::Reader) => {
+                self.step_options_row(OptionsRow::Reader, 1, out);
+            }
+            _ => {}
+        }
+        self.refresh_access();
     }
 
     /// A / Enter on the focused Quick Access row.
@@ -278,8 +314,7 @@ impl App {
             Entry::ResetSite => {
                 if self.ui.quick_access.confirm(Entry::ResetSite) {
                     self.reset_site(out);
-                    self.ui.quick_access.refresh(&self.config);
-                    self.refresh_options();
+                    self.refresh_access();
                 }
             }
             Entry::Options(row) => self.options_row(row, out),
@@ -292,7 +327,7 @@ impl App {
         let mut config = self.config.clone();
         settings::step(&Settings::fields()[field].kind, &mut config, dx);
         self.apply_config(config, out);
-        self.ui.quick_access.refresh(&self.config);
+        self.refresh_access();
     }
 
     /// Apply an action on Game Mode's map screens (see

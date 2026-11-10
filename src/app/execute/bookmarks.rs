@@ -16,7 +16,7 @@
 //! forced dark changed under it; a tab switch switches it without a reload.
 
 use super::super::{App, AppCommand};
-use crate::config::{js_preset, overlay, HomeSort};
+use crate::config::{js_preset, overlay, AppConfig, HomeSort};
 use crate::data::bookmarks::{self, Launch};
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText, Strip};
@@ -191,6 +191,32 @@ impl App {
         ));
     }
 
+    /// The global values the shown site's own stand in for, while a site's
+    /// bookmark applies.
+    pub(super) fn global_config(&self) -> Option<AppConfig> {
+        let base = self.site_base.as_ref()?;
+        Some(overlay::apply(&self.config, base, SITE_PATH))
+    }
+
+    /// How many settings the shown site holds as its own, its reader view
+    /// included: what Reset drops.
+    pub(super) fn site_overrides(&self) -> usize {
+        let Some(base) = &self.site_base else {
+            return 0;
+        };
+        let own = overlay::changes(&overlay::site_part(&self.config), base);
+        overlay::leaves(&own) + usize::from(self.site_reader())
+    }
+
+    /// Re-read Quick Access's values, the bookmark's, and which the shown site
+    /// holds as its own.
+    pub(super) fn refresh_access(&mut self) {
+        let overrides = self.site_overrides();
+        self.ui.quick_access.set_overrides(overrides);
+        self.ui.quick_access.refresh(&self.config);
+        self.refresh_options();
+    }
+
     /// Persist the config. While a site's overrides stand in, the
     /// [`overlay::SITE_KEYS`] values that differ from the global ones go to its
     /// bookmark and `config.toml` keeps the global ones.
@@ -342,7 +368,7 @@ impl App {
                 if !on_home {
                     self.browser.set_reader(reader);
                 }
-                self.refresh_options();
+                self.refresh_access();
             }
             OptionsRow::Open
             | OptionsRow::Rename

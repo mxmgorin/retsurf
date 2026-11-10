@@ -1,7 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
-use super::theme::{close_button, palette, CLOSE_SIZE, ROW_FONT};
+use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
 
@@ -123,6 +123,9 @@ pub(super) fn toned_named_row(
 /// The least of a row's width its label keeps beside a value shown whole.
 const LABEL_KEEP: f32 = 1.0 / 3.0;
 
+/// A [`marked_row`]'s dot: small beside the label's type.
+const DOT_SIZE: f32 = ROW_FONT / 2.0;
+
 /// What a [`marked_row`] shows at its trailing edge: its value between glyphs
 /// that never give way, such as a stepper's carets.
 #[derive(Clone, Copy, Default)]
@@ -132,14 +135,15 @@ pub(super) struct Trail<'a> {
     pub after: Option<&'a str>,
 }
 
-/// A [`toned_named_row`] with `trail` at its trailing edge. Selected, its
-/// label gives way first, so the trail shows whole while it leaves the label
-/// [`LABEL_KEEP`] of the row.
+/// A [`toned_named_row`] with `trail` at its trailing edge, and with `dot` an
+/// accent dot after its label. Selected, its label gives way first, so the
+/// trail shows whole while it leaves the label [`LABEL_KEEP`] of the row.
 pub(super) fn marked_row(
     ui: &mut egui::Ui,
     width: f32,
     selected: bool,
     label: &str,
+    dot: bool,
     trail: Trail,
     tone: Tone,
 ) -> egui::Response {
@@ -164,6 +168,12 @@ pub(super) fn marked_row(
         true => label.atom_shrink(true),
         false => label.into(),
     });
+    if dot {
+        let dot = icon_fill(egui_phosphor::fill::CIRCLE)
+            .size(DOT_SIZE)
+            .color(palette().accent);
+        atoms.push_right(dot);
+    }
     atoms.push_right(egui::Atom::grow());
     if let Some(glyph) = trail.before {
         atoms.push_right(mark(glyph));

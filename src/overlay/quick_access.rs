@@ -88,6 +88,10 @@ pub struct SiteHead<'a> {
     pub id: &'a str,
     /// Its shown name; empty for one since removed.
     pub name: &'a str,
+    /// The global values its own stand in for.
+    pub global: &'a AppConfig,
+    /// How many settings it holds as its own: what Reset drops.
+    pub overrides: usize,
 }
 
 /// The bookmark the options rows act on.
@@ -455,6 +459,10 @@ pub struct QuickAccess {
     values: Vec<String>,
     /// Each on/off row's state, drawn as a switch in place of its value.
     flags: Vec<Option<bool>>,
+    /// Whether each row holds a value of the shown site's own.
+    own: Vec<bool>,
+    /// The global values a site's own stand in for, while one applies.
+    global: Option<AppConfig>,
     selected: usize,
     /// A two-press row pressed once; any move disarms it.
     armed: Option<Entry>,
@@ -466,6 +474,8 @@ pub struct QuickAccess {
     breaks: Vec<(usize, Break)>,
     /// [`Entry::Leave`]'s label, naming the bookmark it closes.
     leave: String,
+    /// [`Entry::ResetSite`]'s label, counting what it drops.
+    reset: String,
     /// The JS preset the page opened with, while one is known.
     page_js: Option<String>,
     /// The row whose A reopens the page, while one would.
@@ -480,12 +490,15 @@ impl QuickAccess {
             rows: Vec::new(),
             values: Vec::new(),
             flags: Vec::new(),
+            own: Vec::new(),
+            global: None,
             selected: 0,
             armed: None,
             bookmark: None,
             title: String::new(),
             breaks: Vec::new(),
             leave: String::new(),
+            reset: String::new(),
             page_js: None,
             reopen: None,
         }
@@ -504,16 +517,18 @@ impl QuickAccess {
         config: &AppConfig,
     ) {
         let mut groups = groups(strip, over);
-        if let (Strip::QuickAccess, Over::Tab(_), Some(_), Some(settings)) =
-            (strip, over, site, groups.last_mut())
-        {
+        let site = site.filter(|_| strip == Strip::QuickAccess && over != Over::Home);
+        if let (Some(site), Some(settings)) = (site, groups.last_mut()) {
             // The site's reader view stands in for the tab's, in its place.
             for row in settings.iter_mut() {
                 if *row == Entry::Run(Action::Reader) {
                     *row = Entry::Options(OptionsRow::Reader);
                 }
             }
-            settings.extend([Entry::Options(OptionsRow::LaunchAs), Entry::ResetSite]);
+            settings.push(Entry::Options(OptionsRow::LaunchAs));
+            if site.overrides > 0 {
+                settings.push(Entry::ResetSite);
+            }
         }
         if let Some(last) = groups.last_mut() {
             last.extend(way_out(strip, over, launched));
@@ -529,6 +544,8 @@ impl QuickAccess {
         self.show(strip, rows);
         self.breaks = breaks;
         self.title = header(strip, site, page);
+        self.global = site.map(|site| site.global.clone());
+        self.set_overrides(site.map_or(0, |site| site.overrides));
         self.leave = leave_label(site.filter(|_| launched).map(|site| site.name));
         if let Some(site) = site.filter(|_| strip == Strip::QuickAccess) {
             self.bookmark = Some(OptionsBookmark {
@@ -554,6 +571,8 @@ impl QuickAccess {
         self.armed = None;
         self.values = vec![String::new(); rows.len()];
         self.flags = vec![None; rows.len()];
+        self.own = vec![false; rows.len()];
+        self.global = None;
         self.rows = rows;
     }
 
@@ -625,6 +644,15 @@ impl QuickAccess {
     pub fn refresh(&mut self, config: &AppConfig) {
         self.reopen = None;
         for (at, row) in self.rows.iter().enumerate() {
+            let global = self.global.as_ref();
+            self.own[at] = match *row {
+                Entry::Quick(i) => global
+                    .is_some_and(|g| settings::differs(&Settings::fields()[i].kind, config, g)),
+                Entry::InputMap => {
+                    global.is_some_and(|g| g.game_mode.input_map != config.game_mode.input_map)
+                }
+                _ => false,
+            };
             if let Entry::Quick(i) = *row {
                 let kind = &Settings::fields()[i].kind;
                 self.values[at] = settings::value_of(kind, config);
@@ -636,6 +664,28 @@ impl QuickAccess {
                     self.reopen = Some(at);
                 }
             }
+        }
+    }
+
+    /// Count `n` settings the shown site holds as its own in the Reset row.
+    pub fn set_overrides(&mut self, n: usize) {
+        let reset = Entry::ResetSite.label();
+        self.reset = match n {
+            0 => reset.to_string(),
+            1 => "Reset 1 site setting".to_string(),
+            n => format!("Reset {n} site settings"),
+        };
+    }
+
+    /// Whether the row at `index` holds the shown site's own value, which X
+    /// sets back to the global one; the site's reader view counts while on.
+    pub fn own(&self, index: usize) -> bool {
+        match self.rows.get(index) {
+            Some(Entry::Options(OptionsRow::Reader)) => {
+                self.global.is_some() && self.flag(index) == Some(true)
+            }
+            Some(_) => self.own[index],
+            None => false,
         }
     }
 
@@ -744,6 +794,7 @@ impl QuickAccess {
     pub fn label(&self, index: usize) -> &str {
         match self.rows.get(index) {
             Some(Entry::Leave) => &self.leave,
+            Some(Entry::ResetSite) => &self.reset,
             Some(row) => row.label(),
             None => "",
         }
@@ -791,7 +842,7 @@ impl QuickAccess {
 
     #[cfg(test)]
     fn value_count(&self) -> usize {
-        self.values.len().min(self.flags.len())
+        self.values.len().min(self.flags.len()).min(self.own.len())
     }
 }
 
@@ -928,10 +979,54 @@ mod tests {
         assert!(!menu.contains(&Entry::Leave));
     }
 
-    const ITCH: SiteHead = SiteHead {
-        id: "itch",
-        name: "itch.io",
-    };
+    /// The global values the sites below stand in for.
+    static GLOBAL: std::sync::LazyLock<AppConfig> = std::sync::LazyLock::new(AppConfig::default);
+
+    fn itch() -> SiteHead<'static> {
+        SiteHead {
+            id: "itch",
+            name: "itch.io",
+            global: &GLOBAL,
+            overrides: 1,
+        }
+    }
+
+    /// A row holding the site's own value is marked; Reset counts what it
+    /// drops and shows only with something to drop.
+    #[test]
+    fn a_sites_own_values_are_marked_and_counted() {
+        let global = AppConfig::default();
+        let mut config = global.clone();
+        config.browser.user_agent = "mobile".to_string();
+        let over = Over::Tab(TabMode::Page);
+        let at = |panel: &QuickAccess, label: &str| {
+            (0..panel.rows().len())
+                .find(|&i| panel.label(i) == label)
+                .expect("a site's page row")
+        };
+        let mut panel = QuickAccess::new();
+        let site = SiteHead {
+            global: &global,
+            overrides: 2,
+            ..itch()
+        };
+        panel.open(Strip::QuickAccess, over, Some(site), false, "", &config);
+        assert!(panel.own(at(&panel, "User agent")));
+        assert!(!panel.own(at(&panel, "Ad blocker")));
+        let reset = at(&panel, "Reset 2 site settings");
+        panel.set_overrides(1);
+        assert_eq!(panel.label(reset), "Reset 1 site setting");
+        panel.refresh(&global);
+        assert!(!panel.own(at(&panel, "User agent")));
+        let clean = SiteHead {
+            overrides: 0,
+            ..site
+        };
+        panel.open(Strip::QuickAccess, over, Some(clean), false, "", &global);
+        assert!(!panel.rows().contains(&Entry::ResetSite));
+        panel.open(Strip::QuickAccess, over, None, false, "", &config);
+        assert!(!(0..panel.rows().len()).any(|i| panel.own(i)));
+    }
 
     /// A site leaves every row of the tab's where it was: its reader view takes
     /// the tab's place, launch and reset join the settings before the way out.
@@ -956,7 +1051,7 @@ mod tests {
             panel.open(
                 Strip::QuickAccess,
                 over,
-                Some(ITCH),
+                Some(itch()),
                 launched,
                 "example.com",
                 &config,
@@ -987,7 +1082,7 @@ mod tests {
         panel.open(
             Strip::QuickAccess,
             over,
-            Some(ITCH),
+            Some(itch()),
             true,
             "",
             &AppConfig::default(),
@@ -998,7 +1093,7 @@ mod tests {
         panel.open(
             Strip::QuickMenu,
             over,
-            Some(ITCH),
+            Some(itch()),
             true,
             "",
             &AppConfig::default(),
@@ -1042,6 +1137,7 @@ mod tests {
         let site = SiteHead {
             id: "hexgl",
             name: "HexGL",
+            ..itch()
         };
         panel.open(
             Strip::QuickAccess,
@@ -1252,7 +1348,11 @@ mod tests {
         assert_eq!(panel.title(), "example.com");
         panel.open(Strip::QuickAccess, over, None, false, "", &config);
         assert_eq!(panel.title(), Strip::QuickAccess.name());
-        let removed = SiteHead { id: "a", name: "" };
+        let removed = SiteHead {
+            id: "a",
+            name: "",
+            ..itch()
+        };
         panel.open(
             Strip::QuickAccess,
             over,

@@ -24,7 +24,7 @@ mod search_engines;
 
 pub use about::{about_info, data_folder, AboutLink, NOTICE};
 pub use controls::RESET_ROWS;
-pub use fields::{step, value_of, Door, Field, Kind, Task, JS_ENGINE};
+pub use fields::{copy_value, differs, step, value_of, Door, Field, Kind, Task, JS_ENGINE};
 pub use search_engines::{EngineAction, EngineRow, EngineTitle};
 
 use crate::config::AppConfig;

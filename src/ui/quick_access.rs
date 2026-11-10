@@ -149,7 +149,8 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
             true => Tone::Danger,
             false => Tone::Plain,
         };
-        let resp = panel::marked_row(ui, width, selected, &label, trail, tone);
+        let own = panel.own(index);
+        let resp = panel::marked_row(ui, width, selected, &label, own, trail, tone);
         if let Some(on) = flag {
             panel::paint_switch(ui, resp.rect, on);
         }
@@ -170,15 +171,18 @@ fn footer_guess(ui: &egui::Ui) -> f32 {
 }
 
 /// A rule, then what A does on the focused row, Left/Right where they step a
-/// value, and B; returns the height it took.
+/// value, X where it holds a site's own, and B; returns the height it took.
 fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabels) -> f32 {
     let (_, sideways) = keys::dpad_caps();
-    let (a, b, sideways) = ([face.a], [face.b], [sideways.as_str()]);
+    let (a, b, x, sideways) = ([face.a], [face.b], [face.x], [sideways.as_str()]);
     let at = panel.selected();
     let steps = panel.rows()[at].steps() && panel.flag(at).is_none();
     let mut hints: Vec<keys::Hint> = vec![(&a, panel.press().verb())];
     if steps {
         hints.push((&sideways, "change"));
+    }
+    if panel.own(at) {
+        hints.push((&x, "reset"));
     }
     hints.push((&b, "back"));
     ui.scope(|ui| {
@@ -336,7 +340,13 @@ mod tests {
         ];
         for strip in [Strip::QuickAccess, Strip::QuickMenu] {
             for over in overs {
-                let site = SiteHead { id: "a", name: "A" };
+                let global = AppConfig::default();
+                let site = SiteHead {
+                    id: "a",
+                    name: "A",
+                    global: &global,
+                    overrides: 1,
+                };
                 panel.open(strip, over, Some(site), true, "", &AppConfig::default());
                 for &row in panel.rows() {
                     assert_ne!(glyph(row), NO_ICON, "{row:?}");

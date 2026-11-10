@@ -159,9 +159,13 @@ impl App {
                 // X deletes the highlighted entry (closes a tab in the Tabs section).
                 Focus::Menu => self.delete_menu_selection(),
                 // X is unused in settings (rows edit with A and Left/Right) and
-                // on Quick Access and Game Mode's screens (the keyboard has a row of its own).
+                // on Game Mode's screens (the keyboard has a row of its own).
                 Focus::Settings | Focus::UpdateNotice => {}
-                Focus::QuickAccess | Focus::GameInputMaps => {}
+                Focus::GameInputMaps => {}
+                // X sets a site's own value back to the global one.
+                Focus::QuickAccess => {
+                    out.push(AppCommand::QuickAccess(QuickAccessAction::ResetRow))
+                }
                 // X unbinds the focused source, which is what takes its row away.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless

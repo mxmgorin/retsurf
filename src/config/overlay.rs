@@ -115,10 +115,31 @@ pub fn changes<T: serde::Serialize>(working: &T, base: &T) -> Table {
     }
 }
 
+/// How many settings `table` holds: its values, counted through nested tables.
+pub fn leaves(table: &Table) -> usize {
+    table
+        .values()
+        .map(|value| match value {
+            toml::Value::Table(inner) => leaves(inner),
+            _ => 1,
+        })
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{GameModeConfig, Scaling};
+
+    #[test]
+    fn leaves_count_values_through_nested_tables() {
+        let table: Table = toml::from_str(
+            "input_map = \"wasd\"\n[view]\nscaling = \"fit\"\ncursor = false\n[empty]\n",
+        )
+        .unwrap();
+        assert_eq!(leaves(&table), 3);
+        assert_eq!(leaves(&Table::new()), 0);
+    }
 
     #[test]
     fn an_override_lands_and_reads_back_as_its_diff() {
