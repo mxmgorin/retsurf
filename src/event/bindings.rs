@@ -74,7 +74,7 @@ action_table! {
         /// Cancel: close the open overlay, otherwise one step back.
         Cancel => "cancel", "Cancel",
         /// Open / close Quick Menu; also closes the lists menu it opened.
-        Menu => "menu", "Quick Menu",
+        Menu => "menu", "Menu",
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
         /// Toggle the on-screen keyboard / backspace while it's open.

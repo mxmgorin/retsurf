@@ -157,7 +157,7 @@ mod tests {
                 key("Start"),
                 text("for Quick Access,"),
                 key("Select"),
-                text("for Quick Menu"),
+                text("for Menu"),
             ])
         );
         assert_eq!(

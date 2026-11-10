@@ -34,13 +34,13 @@ is on Ctrl, so pages get all plain keys:
 | `ctrl+b` | bookmark | `ctrl+t` / `ctrl+w` | new / close tab |
 | `ctrl+h` | home | `ctrl+tab` / `ctrl+shift+tab` | next / previous tab |
 | `ctrl+e` | reader view | `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in / out / reset |
-| `ctrl+m` | Quick Menu | `ctrl+f` | link hints |
+| `ctrl+m` | Menu | `ctrl+f` | link hints |
 | `ctrl+l` | address bar | `ctrl+,` | settings |
 | `ctrl+alt+a` | Quick Access | arrows | overlay navigation |
 
-**Actions**: `confirm`, `cancel`, `menu` (Quick Menu), `quick_access` (Quick Access, the way
+**Actions**: `confirm`, `cancel`, `menu` (Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`
-(menu section or history), `home`, `address`, `hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
+(list section or history), `home`, `address`, `hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
 (a step in the open overlay, else the key goes to the page), `cursor_up` / `cursor_down` /
 `cursor_left` / `cursor_right` and `scroll_up` / `scroll_down` / `scroll_left` /
 `scroll_right` (move the cursor or scroll the page while held; unbound by default), `reload`, `reader`,
@@ -64,7 +64,7 @@ Move left / right shows only in the manual sort. Tags are typed comma-separated.
 Access on the start page lists the focused bookmark's rows, then the page's own settings
 (Sort, Layout, Size). Without the toolbar
 (`[home] toolbar = false`) the ends of the search bar (of the filter tabs, with no search
-field) open Quick Menu and Quick Access; with a pad, the footer names what the buttons do.
+field) open Menu and Quick Access; with a pad, the footer names what the buttons do.
 
 ## Game Mode input maps (`input_maps/*.toml`)
 
@@ -111,7 +111,7 @@ not offered a layer that remaps a stick.
 ### File format
 
 ```toml
-name = "Vampire Survivors"    # shown in the menu; the file name is the id
+name = "Vampire Survivors"    # shown in the map list; the file name is the id
 
 [pad]                         # buttons and D-pad, by the bindings.toml names
 up = "key.ArrowUp"
@@ -157,7 +157,7 @@ mapped pad", announced while such a map runs.
 
 - A bound source is withheld from the page; only `passthrough` reaches it as itself. A stick
   read as directions withholds its whole axis.
-- The button of the `quick_access` gesture: a bare tap opens the menu and never reaches the
+- The button of the `quick_access` gesture: a bare tap opens Quick Access and never reaches the
   game. Under a hold or chord it is the map's, sent on release.
 - Layers apply while held and do not nest. A stick a layer names (`[layer.<name>.stick.right]`)
   replaces the base one while it is held: a stick the game was reading drops to centre, and

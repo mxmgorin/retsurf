@@ -22,7 +22,7 @@ lands in `App/RetsurfMini/`. It shows up under Apps.
 | L2 + R2 | Reset the zoom | |
 | Start | Quick Access — reader view, Game Mode, bookmark, page theme | |
 | Start + L1 / R1 | Close the tab / open a new one | |
-| Select | Quick Menu — home, address, tabs, bookmarks, history, downloads, settings, quit | Address bar |
+| Select | Menu — home, address, tabs, bookmarks, history, downloads, settings, quit | Address bar |
 | Select + L1 / R1 | Previous / next tab | |
 | Select + Start | Quit | |
 | MENU | Quit | |

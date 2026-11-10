@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Start page filter tabs (sites, apps, games, tags) on L1 / R1 and a sort on Y: manual, recent or name
 - Start page layouts (`[home.bookmarks] layout`): a grid or a list with each bookmark's site and tags; three sizes (`size`); both in Quick Access
 - Start page search field pinned at the bottom (default), at the top or off (`[home] search`)
-- Start page without the toolbar (`[home] toolbar`, off by default): Quick Menu and Quick Access at the ends of its search bar, a footer of button hints
+- Start page without the toolbar (`[home] toolbar`, off by default): Menu and Quick Access at the ends of its search bar, a footer of button hints
 - Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
 - Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings); Quick Access gets Close while one runs and switches the open page between site, app and game
 - Reader view per site: a bookmark's articles open in it, set from Quick Access on the site
@@ -33,14 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Quick Menu is now Menu
 - `[controls] dpad` replaces `cursor_mode`, which is no longer read
 - `[browser] search_engine` replaces `search_page`, which is no longer read
 - `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped
 - Interface font: IBM Plex Sans
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
-- Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top, a footer of button hints (in Quick Menu too)
+- Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top, a footer of button hints (in Menu too)
 - Quick Access marks a site's own settings with a dot; X sets one back to the global value, and Reset site settings counts them
-- Quick Menu: the latest tabs (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
+- Menu: the latest tabs (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
 - Tabs on the start page are named Start page in the tab lists
 - The start page banner and wordmark are smaller
 - Bookmarks and the speed dial are one list: the start page shows the bookmarks as tiles, one file per bookmark in `bookmarks/`; `dial.toml` and `bookmarks.toml` are no longer read
@@ -77,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pale text on a white page in the dark page theme, on sites without a dark theme of their own or with one that sets no background
 - White flash while a page loads in the dark and forced-dark page themes
 - Android: Shift, Ctrl and Alt combos on keyboards whose modifier keys an accessibility service intercepts, such as the Titan 2 with TitanPad
-- Shortcuts for Quick Access, Quick Menu, tabs and the page firing while Settings is open
+- Shortcuts for Quick Access, Menu, tabs and the page firing while Settings is open
 - Links to files typed in the address bar or opened from bookmarks and history showing as a page instead of downloading
 - Opening a finished download whose name has `#`, `?` or `%`
 - Downloads hanging when the server stops sending, and slow servers failing them as stalled

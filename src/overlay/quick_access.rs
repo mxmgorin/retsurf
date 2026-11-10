@@ -31,7 +31,7 @@ impl Strip {
     pub fn name(self) -> &'static str {
         match self {
             Strip::QuickAccess => "Quick Access",
-            Strip::QuickMenu => "Quick Menu",
+            Strip::QuickMenu => "Menu",
         }
     }
 }

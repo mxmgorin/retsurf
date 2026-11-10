@@ -56,7 +56,7 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
   WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let Emscripten exports from itch.io run.
 
 - **Tabs, bookmarks, history, and downloads**<br>
-  Everything lives in one full-screen menu. Downloads run in the background with progress and cancellation and a progress ring in the toolbar.
+  Each is a list on one full-screen view. Downloads run in the background with progress and cancellation and a progress ring in the toolbar.
 
 - **Real page zoom**<br>
   Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
