@@ -53,6 +53,10 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.webrender_api]
 opt-level = 3
+# Video frames are converted to BGRA on the CPU every frame; at `s` it was the
+# slowest step of 1080p playback.
+[profile.release.package.yuv]
+opt-level = 3
 
 [dependencies]
 rust-embed="8.7.2"
@@ -93,7 +97,8 @@ rubato = { version = "5", default-features = false }
 openh264 = "0.9.8"
 # Decoded YUV 420 -> the BGRA8 WebRender wants. SIMD paths (NEON/SSE) are its default
 # features; the conversion runs once per displayed frame.
-yuv = "0.8"
+# rayon: one frame's conversion across the cores (1080p NV12 is 45 ms on one A53).
+yuv = { version = "0.8", features = ["rayon"] }
 euclid = "0.22"
 dpi = "0.1.2"
 url = "2.5.7"

@@ -365,15 +365,40 @@ impl Buffer for BgraBuffer {
 
 struct Presenter {
     shared: Arc<Shared>,
-    renderer: Arc<Mutex<dyn VideoFrameRenderer>>,
+    /// Frames due now, to the paint thread.
+    paint: SyncSender<Paint>,
     heap: BinaryHeap<Reverse<Frame>>,
     /// Post-seek: drop frames before this time.
     discard_until: Option<f64>,
     /// The first frame after start/seek shows immediately, clock regardless.
     presented_any: bool,
     last_position: f64,
-    bgra: Vec<u8>,
 }
+
+/// A frame for the paint thread, with the seek epoch it belongs to.
+struct Paint {
+    frame: Frame,
+    epoch: u64,
+}
+
+/// The paint thread: BGRA conversion and the renderer hand-off, overlapping the
+/// next frame's decode (1080p on an A53: 23 ms of decode and copy, 15 ms of
+/// conversion; one after the other they missed 30 fps).
+struct Painter {
+    shared: Arc<Shared>,
+    renderer: Arc<Mutex<dyn VideoFrameRenderer>>,
+    flush: Arc<FlushPoint>,
+    /// BGRA buffers handed to the renderer, written again once it lets go: a
+    /// fresh 8 MB buffer a 1080p frame meant zeroing it and faulting its pages in.
+    bgra: Vec<Arc<Vec<u8>>>,
+}
+
+/// Frames waiting for the paint thread: one, so a slow paint holds the decode
+/// back instead of piling frames up.
+const PAINT_QUEUE: usize = 1;
+
+/// Buffers kept for reuse; more are allocated while all of them are in use.
+const BGRA_POOL: usize = 4;
 
 enum Pace {
     /// Nothing due yet (or interrupted); go back to the channel.
@@ -419,11 +444,11 @@ impl Presenter {
             let Some(Reverse(frame)) = self.heap.pop() else {
                 return Pace::Drained;
             };
-            self.show(frame);
+            self.show(frame, epoch);
         }
     }
 
-    fn show(&mut self, frame: Frame) {
+    fn show(&mut self, frame: Frame, epoch: u64) {
         let pts = frame.pts();
         if let Some(target) = self.discard_until {
             if pts < target - 1e-3 {
@@ -440,17 +465,31 @@ impl Presenter {
             return;
         }
         log::trace!("video: present {pts:.3}s");
-        if let Some(video_frame) = self.convert(&frame) {
-            self.renderer
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .render(video_frame);
-            self.presented_any = true;
-            self.shared.send_event(PlayerEvent::VideoFrameUpdated);
-            // Position events come from audio when there is any.
-            if !self.shared.has_audio() && pts - self.last_position >= POSITION_EVENT_SECONDS {
-                self.last_position = pts;
-                self.shared.send_event(PlayerEvent::PositionChanged(pts));
+        if self.paint.send(Paint { frame, epoch }).is_err() {
+            return;
+        }
+        self.presented_any = true;
+        // Position events come from audio when there is any.
+        if !self.shared.has_audio() && pts - self.last_position >= POSITION_EVENT_SECONDS {
+            self.last_position = pts;
+            self.shared.send_event(PlayerEvent::PositionChanged(pts));
+        }
+    }
+}
+
+impl Painter {
+    fn run(mut self, rx: Receiver<Paint>) {
+        while let Ok(Paint { frame, epoch }) = rx.recv() {
+            // Queued before a seek: the element has moved on.
+            if self.shared.is_quit() || self.flush.epoch() != epoch {
+                continue;
+            }
+            if let Some(video_frame) = self.convert(&frame) {
+                self.renderer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .render(video_frame);
+                self.shared.send_event(PlayerEvent::VideoFrameUpdated);
             }
         }
     }
@@ -462,8 +501,19 @@ impl Presenter {
         } else {
             YuvStandardMatrix::Bt601
         };
-        self.bgra.clear();
-        self.bgra.resize(w * h * 4, 0);
+        let size = w * h * 4;
+        let free = self
+            .bgra
+            .iter()
+            .position(|buf| buf.len() == size && Arc::strong_count(buf) == 1);
+        let mut data = match free {
+            Some(at) => self.bgra.swap_remove(at),
+            None => Arc::new(vec![0; size]),
+        };
+        // Ours alone (checked above, or just made): the conversion writes every byte.
+        let Some(bgra) = Arc::get_mut(&mut data) else {
+            return None;
+        };
         let stride = (w * 4) as u32;
         let (cw, range) = (w.div_ceil(2) as u32, YuvRange::Limited);
         let done = match &frame.chroma {
@@ -478,7 +528,7 @@ impl Presenter {
                     width: w as u32,
                     height: h as u32,
                 };
-                yuv420_to_bgra(&planar, &mut self.bgra, stride, range, matrix)
+                yuv420_to_bgra(&planar, bgra, stride, range, matrix)
             }
             Chroma::Interleaved(uv) => {
                 let image = YuvBiPlanarImage {
@@ -490,14 +540,17 @@ impl Presenter {
                     height: h as u32,
                 };
                 let mode = YuvConversionMode::Balanced;
-                yuv_nv12_to_bgra(&image, &mut self.bgra, stride, range, matrix, mode)
+                yuv_nv12_to_bgra(&image, bgra, stride, range, matrix, mode)
             }
         };
         if let Err(e) = done {
             log::debug!("video: conversion failed: {e}");
             return None;
         }
-        let data = Arc::new(std::mem::take(&mut self.bgra));
+        if self.bgra.len() >= BGRA_POOL {
+            self.bgra.remove(0);
+        }
+        self.bgra.push(data.clone());
         VideoFrame::new(w as i32, h as i32, Arc::new(BgraBuffer(data)))
     }
 }
@@ -511,14 +564,27 @@ fn video_thread(
     mut decoder: H264Decoder,
 ) {
     let mut epoch = 0u64;
-    let mut presenter = Presenter {
+    let (paint, paint_rx) = mpsc::sync_channel(PAINT_QUEUE);
+    let painter = Painter {
         shared: shared.clone(),
         renderer,
+        flush: flush.clone(),
+        bgra: Vec::new(),
+    };
+    // Without the thread nothing is painted (the sends fail); decoding goes on.
+    if let Err(e) = thread::Builder::new()
+        .name("video-paint".into())
+        .spawn(move || painter.run(paint_rx))
+    {
+        log::warn!("video: could not spawn the paint thread: {e}");
+    }
+    let mut presenter = Presenter {
+        shared: shared.clone(),
+        paint,
         heap: BinaryHeap::new(),
         discard_until: None,
         presented_any: false,
         last_position: f64::NEG_INFINITY,
-        bgra: Vec::new(),
     };
     let mut backend: Option<String> = None;
 
