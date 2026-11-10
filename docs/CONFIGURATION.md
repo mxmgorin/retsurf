@@ -294,9 +294,9 @@ a bookmark that has tags or other settings takes a second press.
 ## JS engine presets
 
 A preset sets the JS engine's JIT and heap size. A page takes the preset in force when it
-opens: after changing it, Quick Access's **JS engine** row reads `Reopen: <preset>`, and A
-reopens the page in a fresh tab state, history dropped. An app or a game with a preset
-other than `auto` always opens that way.
+opens. In Game Mode, after changing it, Quick Access's **JS engine** row reads
+`Reopen: <preset>`, and A reopens the game in a fresh tab state, history dropped. An app or a
+game with a preset other than `auto` always opens that way.
 
 | Preset | `ion` | `wasm_ion` | `baseline_jit` | `offthread_compilation` | `heap` |
 |---|---|---|---|---|---|

@@ -592,7 +592,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::System,   "Performance", "HTTP disk cache (MB)",    int!(performance.http_disk_cache_mb as u32, bounds::HTTP_DISK_CACHE_MB, 8, Some("Off")), true),
     f(S::System,   "Performance", "Frame cap (fps)",        int!(performance.max_fps as u32, bounds::MAX_FPS, 5, Some("Uncapped")), false),
     f(S::System,   "Performance", "WebGL",                  flag!(performance.webgl), true),
-    f(S::System,   "Performance", JS_ENGINE,                JS_PRESET, false).quick(Modes::Tab),
+    f(S::System,   "Performance", JS_ENGINE,                JS_PRESET, false).quick(Modes::Game),
     f(S::System,   "Display",     "Window width",           int!(display.width as u32, bounds::WIDTH, 16), true),
     f(S::System,   "Display",     "Window height",          int!(display.height as u32, bounds::HEIGHT, 16), true),
     f(S::System,   "Display",     "Use OpenGL ES",          flag!(display.use_gles), true),

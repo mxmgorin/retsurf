@@ -115,8 +115,6 @@ pub enum Over {
 pub enum Modes {
     Browser,
     Game,
-    /// Over a tab in any mode.
-    Tab,
     Home,
 }
 
@@ -125,7 +123,6 @@ impl Modes {
         match self {
             Modes::Browser => matches!(over, Over::Tab(mode) if mode != TabMode::Game),
             Modes::Game => over == Over::Tab(TabMode::Game),
-            Modes::Tab => matches!(over, Over::Tab(_)),
             Modes::Home => over == Over::Home,
         }
     }
@@ -1045,7 +1042,6 @@ mod tests {
                 "Bookmark",
                 "User agent",
                 "Ad blocker",
-                "JS engine",
                 "Reader view",
                 "Page theme"
             ]
@@ -1635,17 +1631,17 @@ mod tests {
         assert_eq!(press_on(&mut panel, "Ad blocker"), Press::Toggle);
         assert_eq!(press_on(&mut panel, "Reader view"), Press::Toggle);
         assert_eq!(press_on(&mut panel, "User agent"), Press::Next);
+        let mut panel = open(TabMode::Game);
         assert_eq!(press_on(&mut panel, "JS engine"), Press::Next);
         let config = AppConfig::default();
-        // The page opened under another preset than the one in force.
+        // The game opened under another preset than the one in force.
         let opened = format!("not-{}", config.performance.js_preset);
-        let page = Opening {
+        let game = Opening {
             page_js: Some(&opened),
-            ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Page))
+            ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Game))
         };
-        panel.open(&page, &config);
+        panel.open(&game, &config);
         assert_eq!(press_on(&mut panel, "JS engine"), Press::Reopen);
-        let mut panel = open(TabMode::Game);
         assert_eq!(press_on(&mut panel, "Input map"), Press::Open);
         assert_eq!(press_on(&mut panel, "Reload"), Press::Select);
         panel.confirm(Entry::Reload);

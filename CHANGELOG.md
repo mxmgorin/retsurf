@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Button hints under the menus, settings and start page can be turned off (`[interface] button_hints`)
 - Start page brand `icon`: the sun over the waves, no wordmark (`[home] brand`)
 - Site settings: a bookmark keeps its own user agent, page theme, zoom, ad blocker, data saving, experimental and Game Mode settings, applied while its site is shown and changed from Quick Access
-- JS engine presets (auto, fast, lean, safe and your own `[js_presets]`) for the JIT and JS heap, global or per site; Quick Access reopens the page to apply one
+- JS engine presets (auto, fast, lean, safe and your own `[js_presets]`) for the JIT and JS heap, global or per site; Quick Access over a game reopens it to apply one
 - Android: flick scrolling, pinch zoom, and touch for sites and web games
 - Interface themes (`[interface] theme`): Dusk (the default), Night, OLED, Sand and DMG
 - `retsurf --kiosk PATH` (or `--open ID`) runs a game alone: Game Mode with no browser menus, notices, update check, new windows, downloads or other sites
