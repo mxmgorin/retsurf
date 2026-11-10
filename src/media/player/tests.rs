@@ -243,6 +243,37 @@ fn push_evicts_on_live_input() {
     assert!(!stream.stalled);
 }
 
+/// A jump ahead of a live fetch, inside what it will deliver, waits for those
+/// bytes instead of refetching (an MP4 whose `moov` follows `mdat`).
+#[test]
+fn jump_ahead_of_a_live_fetch_waits_for_it() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let shared = Arc::new(Shared::new(Box::new(Collector(events.clone()))));
+    lock(&shared.stream).total_len = Some(1000);
+
+    let reader_shared = shared.clone();
+    let reader = thread::spawn(move || {
+        let mut reader = ByteReader {
+            shared: reader_shared,
+            seekable: true,
+        };
+        reader.seek(SeekFrom::Start(500)).unwrap();
+        let mut buf = [0u8; 4];
+        reader.read_exact(&mut buf).unwrap();
+        buf
+    });
+
+    for chunk in (0..1000u32).collect::<Vec<_>>().chunks(100) {
+        thread::sleep(Duration::from_millis(5));
+        lock(&shared.stream)
+            .data
+            .extend(chunk.iter().map(|&n| (n % 251) as u8));
+        shared.bytes_cv.notify_all();
+    }
+    assert_eq!(reader.join().unwrap(), [249, 250, 0, 1]);
+    assert!(!has(&events, |e| matches!(e, PlayerEvent::SeekData(..))));
+}
+
 /// The refetch handshake end to end: a read outside the buffered region
 /// emits SeekData, waits for the unlock, re-emits NeedData for the new
 /// fetch context, and serves the bytes that then arrive.
@@ -251,6 +282,8 @@ fn jump_read_runs_the_seek_data_handshake() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let shared = Arc::new(Shared::new(Box::new(Collector(events.clone()))));
     lock(&shared.stream).total_len = Some(1000);
+    // No live fetch to wait for (it stalled): the jump has to refetch.
+    lock(&shared.stream).stalled = true;
 
     let reader_shared = shared.clone();
     let reader = thread::spawn(move || {
@@ -290,4 +323,48 @@ fn jump_read_runs_the_seek_data_handshake() {
     }
     shared.bytes_cv.notify_all();
     assert_eq!(reader.join().unwrap(), [1, 2, 3, 4]);
+}
+
+/// symphonia 0.6.1's MP4 reader cannot seek once it returned its last packet
+/// (every read after fails "no atom pending read"); one reopened from byte 0
+/// can, which is how the pipeline restarts a `loop`.
+#[test]
+fn a_reopened_mp4_reader_seeks_where_a_spent_one_cannot() {
+    use symphonia::core::formats::{SeekMode, SeekTo};
+    use symphonia::core::units::Time;
+
+    const CLIP: &[u8] = include_bytes!("testdata/moov-last.m4a");
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let shared = Arc::new(Shared::new(Box::new(Collector(events))));
+    {
+        let mut stream = lock(&shared.stream);
+        stream.data.extend_from_slice(CLIP);
+        stream.total_len = Some(CLIP.len() as u64);
+        stream.eos = true;
+    }
+    let source = || ByteReader {
+        shared: shared.clone(),
+        seekable: true,
+    };
+    let mut spent = super::pipeline::open_reader(source()).unwrap();
+    let track_id = Some(spent.tracks()[0].id);
+    let to_start = || SeekTo::Time {
+        time: Time::ZERO,
+        track_id,
+    };
+    let mut packets = 0;
+    while spent.next_packet().unwrap().is_some() {
+        packets += 1;
+    }
+    assert!(packets > 0);
+    spent.seek(SeekMode::Accurate, to_start()).unwrap();
+    assert!(
+        spent.next_packet().is_err(),
+        "symphonia seeks after the end now: the reopen in the pipeline can go"
+    );
+
+    lock(&shared.stream).read_pos = 0;
+    let mut fresh = super::pipeline::open_reader(source()).unwrap();
+    fresh.seek(SeekMode::Accurate, to_start()).unwrap();
+    assert!(fresh.next_packet().unwrap().is_some());
 }
