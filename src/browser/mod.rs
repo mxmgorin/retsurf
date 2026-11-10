@@ -189,6 +189,8 @@ struct Tab {
     /// The page's icon, row-sized; dropped on top-level navigations, since
     /// Servo keeps the previous page's until the new one names its own.
     favicon: Option<Favicon>,
+    /// When it was last shown, as a count of shows; `0` for never.
+    shown: Cell<u64>,
 }
 
 impl Tab {
@@ -199,6 +201,7 @@ impl Tab {
             state: BrowserState::loading(),
             page_images: RefCell::default(),
             favicon: None,
+            shown: Cell::new(0),
         }
     }
 }
@@ -209,6 +212,8 @@ struct AppBrowserInner {
     tabs: RefCell<Vec<Tab>>,
     /// Index of the shown tab in `tabs`.
     active: Cell<usize>,
+    /// How many times a tab was shown, which stamps the latest.
+    shows: Cell<u64>,
     event_sender: UserEventSender,
     servo: servo::Servo,
     rendering_ctx: Rc<dyn RenderingContext>,
@@ -374,6 +379,7 @@ impl AppBrowserInner {
         Self {
             tabs: RefCell::new(vec![]),
             active: Cell::new(0),
+            shows: Cell::new(0),
             servo,
             rendering_ctx,
             repaint_pending: Cell::new(false),
@@ -477,9 +483,19 @@ impl AppBrowserInner {
         tab.webview.set_focused(true);
         let mut tabs = self.tabs.borrow_mut();
         tabs.push(tab);
-        self.active.set(tabs.len() - 1);
+        self.activate(&tabs, tabs.len() - 1);
         drop(tabs);
         self.repaint_pending.set(true);
+    }
+
+    /// Make the tab at `index` of `tabs` the shown one, and the latest shown.
+    fn activate(&self, tabs: &[Tab], index: usize) {
+        self.active.set(index);
+        let stamp = self.shows.get() + 1;
+        self.shows.set(stamp);
+        if let Some(tab) = tabs.get(index) {
+            tab.shown.set(stamp);
+        }
     }
 
     /// The currently shown tab's webview, if any.

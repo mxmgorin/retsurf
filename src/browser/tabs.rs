@@ -20,6 +20,16 @@ impl AppBrowser {
         self.inner.active.get()
     }
 
+    /// Up to `n` open tabs by index, the latest shown first: the shown tab,
+    /// then the one before it.
+    pub fn recent_tabs(&self, n: usize) -> Vec<usize> {
+        let tabs = self.inner.tabs.borrow();
+        let mut order: Vec<usize> = (0..tabs.len()).collect();
+        order.sort_by_key(|&i| std::cmp::Reverse(tabs[i].shown.get()));
+        order.truncate(n);
+        order
+    }
+
     /// A snapshot of the open tabs for the menu's Tabs section.
     pub fn tabs(&self) -> Vec<TabInfo> {
         let active = self.inner.active.get();
@@ -197,8 +207,8 @@ impl AppBrowser {
         tabs.extend(built.into_iter().map(Tab::loading));
         tabs[shown].webview.show();
         tabs[shown].webview.set_focused(true);
+        self.inner.activate(&tabs, shown);
         drop(tabs);
-        self.inner.active.set(shown);
         self.inner.repaint_pending.set(true);
         true
     }
@@ -225,8 +235,8 @@ impl AppBrowser {
         let target = &tabs[index];
         target.webview.show();
         target.webview.set_focused(true);
+        self.inner.activate(&tabs, index);
         drop(tabs);
-        self.inner.active.set(index);
         self.inner.repaint_pending.set(true);
     }
 
@@ -282,7 +292,7 @@ impl AppBrowser {
         } else {
             active
         };
-        self.inner.active.set(new_active);
+        self.inner.activate(&tabs, new_active);
         if was_active {
             let tab = &tabs[new_active];
             tab.webview.show();

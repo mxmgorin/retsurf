@@ -162,10 +162,8 @@ impl App {
                 // on Game Mode's screens (the keyboard has a row of its own).
                 Focus::Settings | Focus::UpdateNotice => {}
                 Focus::GameInputMaps => {}
-                // X sets a site's own value back to the global one.
-                Focus::QuickAccess => {
-                    out.push(AppCommand::QuickAccess(QuickAccessAction::ResetRow))
-                }
+                // X sets a site's own value back to the global one, or closes a tab.
+                Focus::QuickAccess => out.push(AppCommand::QuickAccess(QuickAccessAction::Remove)),
                 // X unbinds the focused source, which is what takes its row away.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
                 // In hint mode X is a combo symbol, not the OSK toggle (unless

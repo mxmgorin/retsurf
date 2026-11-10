@@ -17,7 +17,9 @@ use crate::overlay::game::map_edit::{
     Take, DIRECTIONS, NEW_LAYER_NAME, UNBOUND,
 };
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, Opening, OptionsRow, Over, SiteHead, Strip};
+use crate::overlay::quick_access::{
+    Entry, Opening, OptionsRow, Over, SiteHead, Strip, TabRow, MENU_TABS,
+};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -76,6 +78,16 @@ impl App {
         let url = self.browser.state().page_url().to_string();
         let page = crate::ui::site_label(&url);
         let page_js = self.browser.page_js_preset();
+        let tabs = self.browser.tabs();
+        let recent_tabs: Vec<TabRow> = self
+            .browser
+            .recent_tabs(MENU_TABS)
+            .into_iter()
+            .map(|index| TabRow {
+                index,
+                title: &tabs[index].title,
+            })
+            .collect();
         let opening = Opening {
             strip,
             over,
@@ -86,6 +98,7 @@ impl App {
             saved: !url.is_empty() && self.ui.menu.is_bookmarked(&url),
             tabs: self.browser.tab_count(),
             input_map: input_map.as_deref(),
+            recent_tabs: &recent_tabs,
         };
         self.ui.quick_access.open(&opening, &self.config);
         self.refresh_options();
@@ -202,16 +215,23 @@ impl App {
                 self.ui.quick_access.select(*index);
                 self.quick_access_activate(out);
             }
-            QuickAccessAction::ResetRow => self.reset_quick_row(out),
+            QuickAccessAction::Remove => self.remove_quick_row(out),
             QuickAccessAction::Text(text) => self.options_text(text),
         }
     }
 
-    /// X on the focused row: what the shown site holds as its own, back to the
-    /// global value.
-    fn reset_quick_row(&mut self, out: &mut Vec<AppCommand>) {
+    /// X on the focused row: an open tab closed, the strip staying on the row
+    /// that takes its place; else what the shown site holds as its own, back
+    /// to the global value.
+    fn remove_quick_row(&mut self, out: &mut Vec<AppCommand>) {
         let panel = &self.ui.quick_access;
-        let (row, own) = (panel.row(), panel.own(panel.selected()));
+        let (row, at, own) = (panel.row(), panel.selected(), panel.own(panel.selected()));
+        if let Entry::Tab(index) = row {
+            self.close_tab_at(index);
+            self.open_strip(Strip::QuickMenu);
+            self.ui.quick_access.select(at);
+            return;
+        }
         let Some(global) = self.global_config().filter(|_| own) else {
             return;
         };
@@ -238,6 +258,14 @@ impl App {
     fn quick_access_activate(&mut self, out: &mut Vec<AppCommand>) {
         let row = self.ui.quick_access.row();
         match row {
+            Entry::Tab(index) => {
+                self.ui.quick_access.close();
+                self.open_tab_at(index);
+            }
+            Entry::NewTab => {
+                self.ui.quick_access.close();
+                self.new_tab();
+            }
             Entry::Quick(_) if self.ui.quick_access.wants_reopen(row, &self.config) => {
                 self.ui.quick_access.close();
                 self.reopen_page();

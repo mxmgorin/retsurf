@@ -136,8 +136,9 @@ pub enum QuickAccessAction {
     Click(usize),
     /// Left/Right on the focused row: step its value.
     Adjust(i32),
-    /// X on the focused row: back from the site's own value to the global one.
-    ResetRow,
+    /// X on the focused row: take away what it holds, a site's own value or
+    /// an open tab.
+    Remove,
     /// What the keyboard submitted for the bookmark's options.
     Text(String),
 }

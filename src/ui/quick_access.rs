@@ -6,6 +6,7 @@
 //! hints on, a footer names what the buttons do on the focused row. The brand
 //! horizon sits at the strip's bottom wherever the rows leave it room.
 
+use crate::clock;
 use crate::command::{AppCommand, QuickAccessAction};
 use crate::config::FaceLabels;
 use crate::event::bindings::Action;
@@ -83,7 +84,8 @@ pub(in crate::ui) fn add_quick_access(
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
-                add_header(ui, panel.title());
+                let clock = (panel.strip() == Strip::QuickMenu).then(|| clock_text(ui.ctx()));
+                add_header(ui, panel.title(), clock.as_deref());
                 ui.spacing_mut().item_spacing.y = ROW_GAP;
                 let room = screen.bottom() - frame.inner_margin.bottom as f32 - ui.cursor().top();
                 let rows = panel.rows().len() as f32;
@@ -139,11 +141,15 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
                 value,
                 after: Some(bold::CARET_RIGHT),
             },
-            // The caret says the row opens a screen rather than acting.
             (None, false) => Trail {
                 before: None,
                 value,
-                after: entry.opens().then_some(bold::CARET_RIGHT),
+                after: match entry {
+                    // The caret says the row opens a screen rather than acting.
+                    _ if entry.opens() => Some(bold::CARET_RIGHT),
+                    Entry::Tab(index) if panel.shown_tab() == Some(index) => Some(bold::CHECK),
+                    _ => None,
+                },
             },
         };
         let tone = match entry.destructive() {
@@ -182,8 +188,8 @@ fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabe
     if steps {
         hints.push((&sideways, "change"));
     }
-    if panel.own(at) {
-        hints.push((&x, "reset"));
+    if let Some(verb) = panel.x_verb() {
+        hints.push((&x, verb));
     }
     hints.push((&b, "back"));
     ui.scope(|ui| {
@@ -233,14 +239,36 @@ fn add_backdrop(ctx: &egui::Context, screen: egui::Rect, commands: &mut Vec<AppC
         });
 }
 
-/// The strip's header: what its rows act on, cut to the strip.
-fn add_header(ui: &mut egui::Ui, title: &str) {
+/// The strip's header: what its rows act on, cut to the strip, with `clock`
+/// at the far end.
+fn add_header(ui: &mut egui::Ui, title: &str, clock: Option<&str>) {
     let text = egui::RichText::new(title)
         .color(palette().accent)
         .size(ROW_FONT)
         .strong();
-    ui.add(egui::Label::new(text).truncate());
+    ui.horizontal(|ui| {
+        ui.add(egui::Label::new(text).truncate());
+        if let Some(clock) = clock {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(clock)
+                        .color(palette().dim)
+                        .size(ROW_FONT),
+                );
+            });
+        }
+    });
     ui.add_space(ROW_GAP * 2.0);
+}
+
+/// The local time as the header shows it; asks for a repaint when the minute
+/// turns.
+fn clock_text(ctx: &egui::Context) -> String {
+    let now = clock::now_unix();
+    let (hour, minute) = clock::local_time(now);
+    let turn = clock::SECS_PER_MINUTE - now % clock::SECS_PER_MINUTE;
+    ctx.request_repaint_after(std::time::Duration::from_secs(turn));
+    format!("{hour:02}:{minute:02}")
 }
 
 /// A section's head over its rows, muted, cut to the strip and set off from
@@ -292,6 +320,7 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::Run(Action::Reader) => bold::BOOK_OPEN,
         Entry::Run(Action::Bookmark) => bold::STAR,
         Entry::Run(Action::Home) => bold::HOUSE,
+        Entry::Run(Action::Address) => bold::MAGNIFYING_GLASS,
         Entry::Run(_) => NO_ICON,
         Entry::List(Section::Tabs) => bold::TABS,
         Entry::List(Section::Bookmarks) => bold::BOOKMARKS,
@@ -305,6 +334,8 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::Options(OptionsRow::MoveLeft) => bold::ARROW_LEFT,
         Entry::Options(OptionsRow::MoveRight) => bold::ARROW_RIGHT,
         Entry::Options(OptionsRow::Remove) => bold::TRASH,
+        Entry::Tab(_) => bold::BROWSER,
+        Entry::NewTab => bold::PLUS,
         Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "Scaling" => bold::FRAME_CORNERS,
             "Shader" => bold::TELEVISION_SIMPLE,

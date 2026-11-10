@@ -40,6 +40,25 @@ pub fn utc_offset(_secs: u64) -> i64 {
     0
 }
 
+/// Seconds in a minute.
+pub const SECS_PER_MINUTE: u64 = 60;
+const SECS_PER_HOUR: i64 = 60 * SECS_PER_MINUTE as i64;
+const SECS_PER_DAY: i64 = 24 * SECS_PER_HOUR;
+
+/// The local wall-clock time at unix time `secs`, as hour and minute.
+pub fn local_time(secs: u64) -> (u32, u32) {
+    let local = i64::try_from(secs).unwrap_or(i64::MAX) + utc_offset(secs);
+    hour_minute(local)
+}
+
+/// The hour and minute of the day `secs` into it, counted from any midnight.
+fn hour_minute(secs: i64) -> (u32, u32) {
+    let of_day = secs.rem_euclid(SECS_PER_DAY);
+    let hour = of_day / SECS_PER_HOUR;
+    let minute = of_day % SECS_PER_HOUR / SECS_PER_MINUTE as i64;
+    (hour as u32, minute as u32)
+}
+
 /// Days since the unix epoch as a `(year, month, day)` civil date (UTC), by
 /// Howard Hinnant's civil-from-days.
 pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
@@ -70,7 +89,7 @@ pub fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, days_from_civil, now_unix, utc_offset};
+    use super::{civil_from_days, days_from_civil, hour_minute, now_unix, utc_offset};
 
     /// Real zones sit within a day of UTC, on quarter hours.
     #[test]
@@ -81,6 +100,14 @@ mod tests {
         println!("utc offset here: {offset}s");
         assert!(offset.abs() <= MAX_OFFSET);
         assert_eq!(offset % QUARTER_HOUR, 0);
+    }
+
+    #[test]
+    fn the_time_of_day_wraps_at_midnight() {
+        assert_eq!(hour_minute(0), (0, 0));
+        assert_eq!(hour_minute(14 * 3600 + 32 * 60 + 59), (14, 32));
+        assert_eq!(hour_minute(-60), (23, 59));
+        assert_eq!(hour_minute(20_744 * 86_400 + 3_600), (1, 0));
     }
 
     #[test]

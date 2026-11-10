@@ -8,7 +8,7 @@ use super::{AppBrowserInner, BrowserState, Favicon, Tab, TabMode};
 use crate::event::user::UserEvent;
 use content_security_policy::Destination;
 use servo::WebView;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use url::Url;
 
 impl AppBrowserInner {
@@ -289,6 +289,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             },
             page_images: RefCell::default(),
             favicon: None,
+            shown: Cell::default(),
         });
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }

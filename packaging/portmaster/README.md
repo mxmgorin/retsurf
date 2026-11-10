@@ -20,9 +20,9 @@ L2 + R2              Reset zoom
 Left stick click     Link hints
 Start                Quick Access (reader view, Game Mode, bookmark, page theme)
 Start + L1 / R1      Close the tab / open a new one
-Select               Quick Menu (home, tabs,        Hold: address bar
-                     bookmarks, history, downloads,
-                     settings, quit)
+Select               Quick Menu (home, address,     Hold: address bar
+                     tabs, bookmarks, history,
+                     downloads, settings, quit)
 Select + L1 / R1     Previous / next tab
 Select + Start       Quit (PortMaster's own)
 

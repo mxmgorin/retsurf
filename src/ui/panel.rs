@@ -135,9 +135,9 @@ pub(super) struct Trail<'a> {
     pub after: Option<&'a str>,
 }
 
-/// A [`toned_named_row`] with `trail` at its trailing edge, and with `dot` an
-/// accent dot after its label. Selected, its label gives way first, so the
-/// trail shows whole while it leaves the label [`LABEL_KEEP`] of the row.
+/// A row with `trail` at its trailing edge, and with `dot` an accent dot after
+/// its label, which takes `tone`'s colour. The wider of label and trail gives
+/// way, but selected the trail shows whole while it leaves the label [`LABEL_KEEP`].
 pub(super) fn marked_row(
     ui: &mut egui::Ui,
     width: f32,
@@ -148,15 +148,18 @@ pub(super) fn marked_row(
     tone: Tone,
 ) -> egui::Response {
     let font = egui::FontId::proportional(ROW_FONT);
+    let text_w = |text: String| {
+        ui.fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE))
+            .size()
+            .x
+    };
     let shown: String = [trail.before, Some(trail.value), trail.after]
         .into_iter()
         .flatten()
         .collect();
-    let trail_w = ui
-        .fonts_mut(|f| f.layout_no_wrap(shown, font, egui::Color32::WHITE))
-        .size()
-        .x;
-    let label_gives = selected && trail_w <= width * (1.0 - LABEL_KEEP);
+    let trail_w = text_w(shown);
+    let label_w = text_w(label.to_string());
+    let label_gives = (selected && trail_w <= width * (1.0 - LABEL_KEEP)) || label_w > trail_w;
     let (label, value) = toned_texts(label, trail.value, tone);
     let mark = |glyph: &str| {
         egui::RichText::new(glyph)
