@@ -100,8 +100,29 @@ export RETSURF_PANIC_FILE="$GAMEDIR/retsurf-panic.log"
 #export RETSURF_LOG_FILE="$GAMEDIR/retsurf.log"
 #export RETSURF_LOG_LEVEL=debug
 
+# Hardware video decoding: ArkOS / dArkOS keep the Rockchip decoder nodes
+# root-only while ports run as a user. Open them to the video group for this run
+# and put each node's group and mode back afterwards.
+hwnodes=""
+if [ "$(id -u)" != 0 ] && [ -f "$GAMEDIR/libpmhwdec.so.1" ]; then
+  for node in /dev/vpu_service /dev/hevc_service /dev/rkvdec /dev/mpp_service; do
+    [ -e "$node" ] && [ ! -r "$node" ] || continue
+    hwnodes="$hwnodes $node:$(stat -c %G:%a "$node")"
+    $ESUDO chgrp video "$node" && $ESUDO chmod 660 "$node"
+  done
+fi
+
 $GPTOKEYB "$BINNAME" &
 pm_platform_helper "$BIN"
 "$BIN"
+
+for entry in $hwnodes; do
+  node=${entry%%:*}
+  mode=${entry##*:}
+  group=${entry#*:}
+  group=${group%:*}
+  $ESUDO chgrp "$group" "$node"
+  $ESUDO chmod "$mode" "$node"
+done
 
 pm_finish

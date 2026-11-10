@@ -156,7 +156,8 @@ fn run_pipeline(
                 .extra_data
                 .iter()
                 .find(|data| data.id == VIDEO_EXTRA_DATA_ID_AVC_DECODER_CONFIG)?;
-            let pipeline = VideoPipeline::spawn(shared.clone(), renderer, &extra.data)?;
+            let dims = (params.width.map_or(0, u32::from), params.height.map_or(0, u32::from));
+            let pipeline = VideoPipeline::spawn(shared.clone(), renderer, &extra.data, dims)?;
             Some((
                 VideoPipe {
                     track_id: track.id,

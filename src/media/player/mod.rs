@@ -29,6 +29,8 @@ use servo_media::streams::registry::MediaStreamId;
 use servo_media::traits::{MediaInstance, MediaInstanceError};
 use servo_media::SupportsMediaType;
 
+mod decode;
+mod hwdec;
 mod pipeline;
 mod shared;
 mod source;

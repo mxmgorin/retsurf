@@ -36,6 +36,27 @@ cp "$bins"/retsurf.a35 "$bins"/retsurf.a53 "$bins"/retsurf.a55 "$pm/retsurf/"
 chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
   "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
 
+# Hardware video decoding (optional): libpmhwdec with its Allwinner helper and
+# Rockchip MPP, next to the binaries, where retsurf looks first. PMHWDEC_DIR holds
+# a libpmhwdec aarch64 build: libpmhwdec.so, pmhwdec-cedard, mpp/librockchip_mpp.so,
+# mpp/LICENSE.mpp.txt, LICENSE and LICENSE.pmhwdec-cedard. Without it the port
+# decodes video in software only, as before.
+if [ -n "${PMHWDEC_DIR:-}" ]; then
+  hw=$PMHWDEC_DIR
+  for f in libpmhwdec.so pmhwdec-cedard mpp/librockchip_mpp.so mpp/LICENSE.mpp.txt \
+    LICENSE LICENSE.pmhwdec-cedard; do
+    [ -f "$hw/$f" ] || { echo "PMHWDEC_DIR lacks $f" >&2; exit 1; }
+  done
+  cp "$hw/libpmhwdec.so" "$pm/retsurf/libpmhwdec.so.1"
+  cp "$hw/pmhwdec-cedard" "$hw/mpp/librockchip_mpp.so" "$pm/retsurf/"
+  chmod +x "$pm/retsurf/pmhwdec-cedard"
+  cp "$hw/LICENSE" "$pm/retsurf/licenses/LICENSE.pmhwdec.txt"
+  cp "$hw/LICENSE.pmhwdec-cedard" "$pm/retsurf/licenses/LICENSE.pmhwdec-cedard.txt"
+  cp "$hw/mpp/LICENSE.mpp.txt" "$pm/retsurf/licenses/"
+else
+  echo "PMHWDEC_DIR unset: this port decodes video in software only" >&2
+fi
+
 # Bundled libraries and fontconfig, reached only where the firmware carries none
 # of its own (see tools/arm64/runtime-libs.sh).
 "$here/runtime-libs.sh" "$pm/retsurf/libs" >/dev/null
