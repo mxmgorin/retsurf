@@ -12,6 +12,9 @@
 /// [`crate::browser::AppBrowser::on_home_page`] matches on it.
 pub const HOME_URL: &str = "retsurf:home";
 
+/// What a tab on the start page is called: it has no document to title it.
+pub const HOME_TITLE: &str = "Start page";
+
 /// Whether `url` is the start-page sentinel.
 pub fn is_home(url: &url::Url) -> bool {
     url.as_str() == HOME_URL

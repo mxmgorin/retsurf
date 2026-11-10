@@ -2,7 +2,7 @@
 //! a saved session. All tabs share one rendering context, so exactly one is
 //! shown at a time.
 
-use super::{AppBrowser, Tab};
+use super::{home, AppBrowser, Tab};
 use crate::data::session::TabInfo;
 use ::url::Url;
 
@@ -29,12 +29,15 @@ impl AppBrowser {
             .iter()
             .enumerate()
             .map(|(i, tab)| {
-                let title = tab
-                    .webview
-                    .page_title()
-                    .filter(|t| !t.is_empty())
-                    .or_else(|| Some(tab.state.page_url.clone()).filter(|l| !l.is_empty()))
-                    .unwrap_or_else(|| "New tab".to_string());
+                let title = match tab.state.page_url == home::HOME_URL {
+                    true => home::HOME_TITLE.to_string(),
+                    false => tab
+                        .webview
+                        .page_title()
+                        .filter(|t| !t.is_empty())
+                        .or_else(|| Some(tab.state.page_url.clone()).filter(|l| !l.is_empty()))
+                        .unwrap_or_else(|| "New tab".to_string()),
+                };
                 TabInfo {
                     title,
                     url: tab.state.page_url.clone(),
