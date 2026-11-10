@@ -121,12 +121,13 @@ pub(in crate::ui) fn add_quick_access(
 }
 
 fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut Vec<AppCommand>) {
-    for (index, &entry) in panel.rows().iter().enumerate() {
-        match panel.breaks().iter().find(|(at, _)| *at == index) {
-            Some((_, Break::Rule)) => panel::divider(ui, width),
-            Some((_, Break::Head(head))) => add_head(ui, head),
+    for (index, row) in panel.rows().iter().enumerate() {
+        match &row.above {
+            Some(Break::Rule) => panel::divider(ui, width),
+            Some(Break::Head(head)) => add_head(ui, head),
             None => {}
         }
+        let entry = row.entry;
         let selected = index == panel.selected();
         let label = format!("{}  {}", glyph(entry), panel.label(index));
         let flag = panel.flag(index);
@@ -176,7 +177,7 @@ fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabe
     let (_, sideways) = keys::dpad_caps();
     let (a, b, x, sideways) = ([face.a], [face.b], [face.x], [sideways.as_str()]);
     let at = panel.selected();
-    let steps = panel.rows()[at].steps() && panel.flag(at).is_none();
+    let steps = panel.row().steps() && panel.flag(at).is_none();
     let mut hints: Vec<keys::Hint> = vec![(&a, panel.press().verb())];
     if steps {
         hints.push((&sideways, "change"));
@@ -262,9 +263,10 @@ const HEAD_LEAD: f32 = ROW_GAP;
 fn breaks_h(ui: &egui::Ui, panel: &QuickAccess) -> f32 {
     let text_h = ui.fonts_mut(|fonts| fonts.row_height(&HEAD_FONT));
     panel
-        .breaks()
+        .rows()
         .iter()
-        .map(|(_, part)| match part {
+        .filter_map(|row| row.above.as_ref())
+        .map(|part| match part {
             Break::Rule => DIVIDER_H,
             Break::Head(_) => HEAD_LEAD + text_h,
         } + ROW_GAP)
@@ -325,7 +327,7 @@ mod tests {
     use super::*;
     use crate::browser::TabMode;
     use crate::config::AppConfig;
-    use crate::overlay::quick_access::{HomeTile, Over, SiteHead};
+    use crate::overlay::quick_access::{HomeTile, Opening, Over, SiteHead};
 
     /// A row added to either strip, or a newly flagged quick row, must pick
     /// an icon of its own.
@@ -347,9 +349,16 @@ mod tests {
                     global: &global,
                     overrides: 1,
                 };
-                panel.open(strip, over, Some(site), true, "", &AppConfig::default());
-                for &row in panel.rows() {
-                    assert_ne!(glyph(row), NO_ICON, "{row:?}");
+                panel.open(
+                    &Opening {
+                        site: Some(site),
+                        launched: true,
+                        ..Opening::bare(strip, over)
+                    },
+                    &AppConfig::default(),
+                );
+                for row in panel.rows() {
+                    assert_ne!(glyph(row.entry), NO_ICON, "{row:?}");
                 }
             }
         }
@@ -361,8 +370,8 @@ mod tests {
             game: false,
         };
         panel.open_home(Some(tile), None, &AppConfig::default());
-        for &row in panel.rows() {
-            assert_ne!(glyph(row), NO_ICON, "{row:?}");
+        for row in panel.rows() {
+            assert_ne!(glyph(row.entry), NO_ICON, "{row:?}");
         }
     }
 }

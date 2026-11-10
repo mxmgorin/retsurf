@@ -451,16 +451,77 @@ pub enum Break {
     Head(String),
 }
 
+/// One row of a strip: what it is, what parts it from the row above, and
+/// what it shows.
+#[derive(Clone, Debug)]
+pub struct Row {
+    pub entry: Entry,
+    pub above: Option<Break>,
+    /// Its value as last read (empty for a row with none).
+    value: String,
+    /// Its on/off state, drawn as a switch in place of the value.
+    flag: Option<bool>,
+    /// Whether it holds a value of the shown site's own.
+    own: bool,
+}
+
+impl Row {
+    fn new(entry: Entry) -> Self {
+        Self {
+            entry,
+            above: None,
+            value: String::new(),
+            flag: None,
+            own: false,
+        }
+    }
+}
+
+/// What a strip opens over, as its rows show it.
+pub struct Opening<'a> {
+    pub strip: Strip,
+    pub over: Over,
+    /// The bookmark whose settings apply, if any.
+    pub site: Option<SiteHead<'a>>,
+    /// Whether the tab runs that bookmark.
+    pub launched: bool,
+    /// The shown page's site, for the header.
+    pub page: &'a str,
+    /// The JS preset the page opened with, while one is known.
+    pub page_js: Option<&'a str>,
+    /// Whether the shown page is bookmarked.
+    pub saved: bool,
+    /// How many tabs are open, for the Tabs row.
+    pub tabs: usize,
+    /// The name of the input map the game runs, over a game.
+    pub input_map: Option<&'a str>,
+}
+
+#[cfg(test)]
+impl Opening<'static> {
+    /// `strip` over `over` with nothing else known.
+    pub fn bare(strip: Strip, over: Over) -> Self {
+        Self {
+            strip,
+            over,
+            site: None,
+            launched: false,
+            page: "",
+            page_js: None,
+            saved: false,
+            tabs: 0,
+            input_map: None,
+        }
+    }
+}
+
+/// The Bookmark row's value while the shown page is bookmarked.
+const SAVED: &str = "Saved";
+
 pub struct QuickAccess {
     pub visible: bool,
     strip: Strip,
-    rows: Vec<Entry>,
-    /// Each row's value as last read from the config (empty for rows with none).
-    values: Vec<String>,
-    /// Each on/off row's state, drawn as a switch in place of its value.
-    flags: Vec<Option<bool>>,
-    /// Whether each row holds a value of the shown site's own.
-    own: Vec<bool>,
+    rows: Vec<Row>,
     /// The global values a site's own stand in for, while one applies.
     global: Option<AppConfig>,
     selected: usize,
@@ -470,8 +531,6 @@ pub struct QuickAccess {
     bookmark: Option<OptionsBookmark>,
     /// What the header reads: what the rows act on.
     title: String,
-    /// What parts the runs of rows, each drawn over the row at its index.
-    breaks: Vec<(usize, Break)>,
     /// [`Entry::Leave`]'s label, naming the bookmark it closes.
     leave: String,
     /// [`Entry::ResetSite`]'s label, counting what it drops.
@@ -488,15 +547,11 @@ impl QuickAccess {
             visible: false,
             strip: Strip::QuickAccess,
             rows: Vec::new(),
-            values: Vec::new(),
-            flags: Vec::new(),
-            own: Vec::new(),
             global: None,
             selected: 0,
             armed: None,
             bookmark: None,
             title: String::new(),
-            breaks: Vec::new(),
             leave: String::new(),
             reset: String::new(),
             page_js: None,
@@ -504,20 +559,13 @@ impl QuickAccess {
         }
     }
 
-    /// Show `strip`'s rows `over` what is on screen, highlighting the first.
-    /// `site`: the bookmark whose settings apply, if any; `launched`: whether
-    /// the tab runs it; `page`: the shown page's site, for the header.
-    pub fn open(
-        &mut self,
-        strip: Strip,
-        over: Over,
-        site: Option<SiteHead>,
-        launched: bool,
-        page: &str,
-        config: &AppConfig,
-    ) {
+    /// Show the rows of what `opening` names, highlighting the first.
+    pub fn open(&mut self, opening: &Opening, config: &AppConfig) {
+        let (strip, over) = (opening.strip, opening.over);
         let mut groups = groups(strip, over);
-        let site = site.filter(|_| strip == Strip::QuickAccess && over != Over::Home);
+        let site = opening
+            .site
+            .filter(|_| strip == Strip::QuickAccess && over != Over::Home);
         if let (Some(site), Some(settings)) = (site, groups.last_mut()) {
             // The site's reader view stands in for the tab's, in its place.
             for row in settings.iter_mut() {
@@ -531,47 +579,50 @@ impl QuickAccess {
             }
         }
         if let Some(last) = groups.last_mut() {
-            last.extend(way_out(strip, over, launched));
+            last.extend(way_out(strip, over, opening.launched));
         }
-        let mut rows = Vec::new();
-        let mut breaks = Vec::new();
+        let mut rows: Vec<Row> = Vec::new();
         for group in groups.into_iter().filter(|group| !group.is_empty()) {
-            if !rows.is_empty() {
-                breaks.push((rows.len(), Break::Rule));
-            }
-            rows.extend(group);
+            let above = (!rows.is_empty()).then_some(Break::Rule);
+            let start = rows.len();
+            rows.extend(group.into_iter().map(Row::new));
+            rows[start].above = above;
         }
         self.show(strip, rows);
-        self.breaks = breaks;
-        self.title = header(strip, site, page);
+        self.title = header(strip, site, opening.page);
         self.global = site.map(|site| site.global.clone());
         self.set_overrides(site.map_or(0, |site| site.overrides));
-        self.leave = leave_label(site.filter(|_| launched).map(|site| site.name));
-        if let Some(site) = site.filter(|_| strip == Strip::QuickAccess) {
+        let launched = site.filter(|_| opening.launched).map(|site| site.name);
+        self.leave = leave_label(launched);
+        if let Some(site) = site {
             self.bookmark = Some(OptionsBookmark {
                 id: site.id.to_string(),
                 naming: None,
             });
         }
-        self.refresh(config);
-        if let Some(at) = self.position(Entry::Run(Action::Reader)) {
-            self.flags[at] = Some(over == Over::Tab(TabMode::Reader));
+        self.page_js = opening.page_js.map(str::to_string);
+        let saved = if opening.saved { SAVED } else { "" };
+        self.set_value(Entry::Run(Action::Bookmark), saved.to_string());
+        self.set_value(Entry::List(Section::Tabs), opening.tabs.to_string());
+        if let Some(name) = opening.input_map {
+            self.set_value(Entry::InputMap, name.to_string());
         }
+        self.set_flag(
+            Entry::Run(Action::Reader),
+            over == Over::Tab(TabMode::Reader),
+        );
+        self.refresh(config);
     }
 
     /// Show `rows` as `strip`, highlighting the first, with no values yet.
-    fn show(&mut self, strip: Strip, rows: Vec<Entry>) {
+    fn show(&mut self, strip: Strip, rows: Vec<Row>) {
         self.visible = true;
         self.strip = strip;
         self.bookmark = None;
         self.page_js = None;
         self.reopen = None;
-        self.breaks.clear();
         self.selected = 0;
         self.armed = None;
-        self.values = vec![String::new(); rows.len()];
-        self.flags = vec![None; rows.len()];
-        self.own = vec![false; rows.len()];
         self.global = None;
         self.rows = rows;
     }
@@ -584,18 +635,24 @@ impl QuickAccess {
         launched: Option<&str>,
         config: &AppConfig,
     ) {
-        let mut rows = Vec::new();
-        let mut breaks = Vec::new();
+        let mut rows: Vec<Row> = Vec::new();
         if let Some(tile) = &tile {
-            rows.extend(options_rows(tile.manual, tile.game));
-            breaks.push((rows.len(), Break::Head(HOME_HEAD.to_string())));
+            rows.extend(
+                options_rows(tile.manual, tile.game)
+                    .into_iter()
+                    .map(Row::new),
+            );
         }
-        rows.extend(groups(Strip::QuickAccess, Over::Home).concat());
-        rows.extend(way_out(Strip::QuickAccess, Over::Home, launched.is_some()));
+        let own_rows = rows.len();
+        let page = groups(Strip::QuickAccess, Over::Home).concat();
+        rows.extend(page.into_iter().map(Row::new));
+        rows.extend(way_out(Strip::QuickAccess, Over::Home, launched.is_some()).map(Row::new));
+        if let Some(first) = rows.get_mut(own_rows).filter(|_| own_rows > 0) {
+            first.above = Some(Break::Head(HOME_HEAD.to_string()));
+        }
         self.show(Strip::QuickAccess, rows);
         self.leave = leave_label(launched);
         self.refresh(config);
-        self.breaks = breaks;
         self.title = tile
             .as_ref()
             .map_or_else(|| HOME_HEAD.to_string(), |tile| tile.title.clone());
@@ -608,15 +665,10 @@ impl QuickAccess {
         }
     }
 
-    /// What parts the runs of rows, each over the row at its index.
-    pub fn breaks(&self) -> &[(usize, Break)] {
-        &self.breaks
-    }
-
     /// Show `entry` as a switch in state `on`.
     pub fn set_flag(&mut self, entry: Entry, on: bool) {
         if let Some(at) = self.position(entry) {
-            self.flags[at] = Some(on);
+            self.rows[at].flag = Some(on);
         }
     }
 
@@ -631,21 +683,22 @@ impl QuickAccess {
     /// hold (a page's bookmark, the tab count).
     pub fn set_value(&mut self, entry: Entry, value: String) {
         if let Some(at) = self.position(entry) {
-            self.values[at] = value;
+            self.rows[at].value = value;
         }
     }
 
     fn position(&self, entry: Entry) -> Option<usize> {
-        self.rows.iter().position(|row| *row == entry)
+        self.rows.iter().position(|row| row.entry == entry)
     }
 
     /// Re-read the quick rows' values from `config`; values from
     /// [`Self::set_value`] stay.
     pub fn refresh(&mut self, config: &AppConfig) {
         self.reopen = None;
-        for (at, row) in self.rows.iter().enumerate() {
+        for at in 0..self.rows.len() {
+            let entry = self.rows[at].entry;
             let global = self.global.as_ref();
-            self.own[at] = match *row {
+            self.rows[at].own = match entry {
                 Entry::Quick(i) => global
                     .is_some_and(|g| settings::differs(&Settings::fields()[i].kind, config, g)),
                 Entry::InputMap => {
@@ -653,16 +706,19 @@ impl QuickAccess {
                 }
                 _ => false,
             };
-            if let Entry::Quick(i) = *row {
-                let kind = &Settings::fields()[i].kind;
-                self.values[at] = settings::value_of(kind, config);
-                if let Kind::Bool { get, .. } = kind {
-                    self.flags[at] = Some(get(config));
-                }
-                if self.wants_reopen(*row, config) {
-                    self.values[at].insert_str(0, REOPEN_HINT);
-                    self.reopen = Some(at);
-                }
+            let Entry::Quick(i) = entry else {
+                continue;
+            };
+            let kind = &Settings::fields()[i].kind;
+            let mut value = settings::value_of(kind, config);
+            if self.wants_reopen(entry, config) {
+                value.insert_str(0, REOPEN_HINT);
+                self.reopen = Some(at);
+            }
+            let row = &mut self.rows[at];
+            row.value = value;
+            if let Kind::Bool { get, .. } = kind {
+                row.flag = Some(get(config));
             }
         }
     }
@@ -681,18 +737,12 @@ impl QuickAccess {
     /// sets back to the global one; the site's reader view counts while on.
     pub fn own(&self, index: usize) -> bool {
         match self.rows.get(index) {
-            Some(Entry::Options(OptionsRow::Reader)) => {
-                self.global.is_some() && self.flag(index) == Some(true)
+            Some(row) if row.entry == Entry::Options(OptionsRow::Reader) => {
+                self.global.is_some() && row.flag == Some(true)
             }
-            Some(_) => self.own[index],
+            Some(row) => row.own,
             None => false,
         }
-    }
-
-    /// Tell the rows which JS preset the page opened with, `None` where
-    /// none applies.
-    pub fn set_page_js(&mut self, preset: Option<String>) {
-        self.page_js = preset;
     }
 
     /// Whether `row` is the JS engine row set to another preset than the
@@ -787,47 +837,45 @@ impl QuickAccess {
         self.selected
     }
 
-    pub fn rows(&self) -> &[Entry] {
+    pub fn rows(&self) -> &[Row] {
         &self.rows
     }
 
     pub fn label(&self, index: usize) -> &str {
-        match self.rows.get(index) {
+        match self.rows.get(index).map(|row| row.entry) {
             Some(Entry::Leave) => &self.leave,
             Some(Entry::ResetSite) => &self.reset,
-            Some(row) => row.label(),
+            Some(entry) => entry.label(),
             None => "",
         }
     }
 
     pub fn value(&self, index: usize) -> &str {
-        if let Some(hint) = self.rows.get(index).and_then(|row| {
-            (self.armed == Some(*row))
-                .then(|| row.confirm_hint())
-                .flatten()
-        }) {
+        let Some(row) = self.rows.get(index) else {
+            return "";
+        };
+        if let Some(hint) = (self.armed == Some(row.entry))
+            .then(|| row.entry.confirm_hint())
+            .flatten()
+        {
             return hint;
         }
-        if let Some(typed) = self.typed(index) {
-            return typed;
-        }
-        self.values.get(index).map_or("", String::as_str)
+        self.typed(row.entry).unwrap_or(&row.value)
     }
 
-    /// What the keyboard is typing, when it types for the row at `index`.
-    fn typed(&self, index: usize) -> Option<&str> {
+    /// What the keyboard is typing, when it types for `entry`'s row.
+    fn typed(&self, entry: Entry) -> Option<&str> {
         let (what, text) = self.bookmark.as_ref()?.naming.as_ref()?;
-        let row = Entry::Options(what.row());
-        (self.rows.get(index) == Some(&row)).then_some(text.as_str())
+        (entry == Entry::Options(what.row())).then_some(text.as_str())
     }
 
     /// The row's on/off state, or `None` for a row with a text value.
     pub fn flag(&self, index: usize) -> Option<bool> {
-        self.flags.get(index).copied().flatten()
+        self.rows.get(index).and_then(|row| row.flag)
     }
 
     pub fn row(&self) -> Entry {
-        self.rows[self.selected]
+        self.rows[self.selected].entry
     }
 
     /// What A does on the focused row.
@@ -839,11 +887,6 @@ impl QuickAccess {
             _ => row.press(),
         }
     }
-
-    #[cfg(test)]
-    fn value_count(&self) -> usize {
-        self.values.len().min(self.flags.len()).min(self.own.len())
-    }
 }
 
 #[cfg(test)]
@@ -853,11 +896,7 @@ mod tests {
     fn open(mode: TabMode) -> QuickAccess {
         let mut panel = QuickAccess::new();
         panel.open(
-            Strip::QuickAccess,
-            Over::Tab(mode),
-            None,
-            false,
-            "",
+            &Opening::bare(Strip::QuickAccess, Over::Tab(mode)),
             &AppConfig::default(),
         );
         panel
@@ -867,8 +906,26 @@ mod tests {
     /// applying.
     fn entries(strip: Strip, over: Over, launched: bool) -> Vec<Entry> {
         let mut panel = QuickAccess::new();
-        panel.open(strip, over, None, launched, "", &AppConfig::default());
-        panel.rows().to_vec()
+        panel.open(
+            &Opening {
+                launched,
+                ..Opening::bare(strip, over)
+            },
+            &AppConfig::default(),
+        );
+        entries_of(&panel)
+    }
+
+    /// What `panel` shows, row by row.
+    fn entries_of(panel: &QuickAccess) -> Vec<Entry> {
+        panel.rows().iter().map(|row| row.entry).collect()
+    }
+
+    /// What parts `panel`'s runs of rows, by the row each sits over.
+    fn breaks_of(panel: &QuickAccess) -> Vec<(usize, Break)> {
+        let rows = panel.rows().iter().enumerate();
+        rows.filter_map(|(at, row)| Some((at, row.above.clone()?)))
+            .collect()
     }
 
     #[test]
@@ -956,7 +1013,7 @@ mod tests {
             let at = panel
                 .rows()
                 .iter()
-                .position(|row| *row == Entry::Run(Action::Reader))
+                .position(|row| row.entry == Entry::Run(Action::Reader))
                 .expect("the browser rows carry the reader view");
             (panel.label(at), panel.flag(at))
         }
@@ -966,7 +1023,7 @@ mod tests {
         );
         let panel = open(TabMode::Reader);
         assert_eq!(reader_row(&panel), ("Reader view", Some(true)));
-        assert_eq!(panel.rows(), open(TabMode::Page).rows());
+        assert_eq!(entries_of(&panel), entries_of(&open(TabMode::Page)));
     }
 
     #[test]
@@ -1010,7 +1067,13 @@ mod tests {
             overrides: 2,
             ..itch()
         };
-        panel.open(Strip::QuickAccess, over, Some(site), false, "", &config);
+        panel.open(
+            &Opening {
+                site: Some(site),
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
+            &config,
+        );
         assert!(panel.own(at(&panel, "User agent")));
         assert!(!panel.own(at(&panel, "Ad blocker")));
         let reset = at(&panel, "Reset 2 site settings");
@@ -1022,9 +1085,15 @@ mod tests {
             overrides: 0,
             ..site
         };
-        panel.open(Strip::QuickAccess, over, Some(clean), false, "", &global);
-        assert!(!panel.rows().contains(&Entry::ResetSite));
-        panel.open(Strip::QuickAccess, over, None, false, "", &config);
+        panel.open(
+            &Opening {
+                site: Some(clean),
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
+            &global,
+        );
+        assert!(!entries_of(&panel).contains(&Entry::ResetSite));
+        panel.open(&Opening::bare(Strip::QuickAccess, over), &config);
         assert!(!(0..panel.rows().len()).any(|i| panel.own(i)));
     }
 
@@ -1037,23 +1106,24 @@ mod tests {
             let over = Over::Tab(mode);
             let mut panel = QuickAccess::new();
             panel.open(
-                Strip::QuickAccess,
-                over,
-                None,
-                launched,
-                "example.com",
+                &Opening {
+                    launched,
+                    page: "example.com",
+                    ..Opening::bare(Strip::QuickAccess, over)
+                },
                 &config,
             );
-            let plain = panel.rows().to_vec();
-            let breaks = panel.breaks().to_vec();
+            let plain = entries_of(&panel);
+            let breaks = breaks_of(&panel).to_vec();
             assert_eq!(panel.title(), "example.com");
             assert_eq!(panel.bookmark_id(), None);
             panel.open(
-                Strip::QuickAccess,
-                over,
-                Some(itch()),
-                launched,
-                "example.com",
+                &Opening {
+                    site: Some(itch()),
+                    launched,
+                    page: "example.com",
+                    ..Opening::bare(Strip::QuickAccess, over)
+                },
                 &config,
             );
             let out = way_out(Strip::QuickAccess, over, launched);
@@ -1067,8 +1137,8 @@ mod tests {
                 .collect();
             want.extend([Entry::Options(OptionsRow::LaunchAs), Entry::ResetSite]);
             want.extend(out);
-            assert_eq!(panel.rows(), want);
-            assert_eq!(panel.breaks(), breaks);
+            assert_eq!(entries_of(&panel), want);
+            assert_eq!(breaks_of(&panel), breaks);
             assert_eq!(panel.title(), "itch.io");
             assert_eq!(panel.bookmark_id(), Some("itch"));
         }
@@ -1080,26 +1150,28 @@ mod tests {
         let mut panel = QuickAccess::new();
         let over = Over::Tab(TabMode::Game);
         panel.open(
-            Strip::QuickAccess,
-            over,
-            Some(itch()),
-            true,
-            "",
+            &Opening {
+                site: Some(itch()),
+                launched: true,
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
             &AppConfig::default(),
         );
         assert_eq!(panel.row(), Entry::Reload);
-        assert!(panel.rows().contains(&Entry::Options(OptionsRow::LaunchAs)));
-        assert!(!panel.rows().contains(&Entry::Options(OptionsRow::Reader)));
+        assert!(entries_of(&panel).contains(&Entry::Options(OptionsRow::LaunchAs)));
+        assert!(!entries_of(&panel).contains(&Entry::Options(OptionsRow::Reader)));
         panel.open(
-            Strip::QuickMenu,
-            over,
-            Some(itch()),
-            true,
-            "",
+            &Opening {
+                site: Some(itch()),
+                launched: true,
+                ..Opening::bare(Strip::QuickMenu, over)
+            },
             &AppConfig::default(),
         );
         assert_eq!(panel.title(), Strip::QuickMenu.name());
-        assert!(!panel.rows().iter().any(|r| matches!(r, Entry::Options(_))));
+        assert!(!entries_of(&panel)
+            .iter()
+            .any(|r| matches!(r, Entry::Options(_))));
         assert_eq!(panel.bookmark_id(), None);
     }
 
@@ -1140,22 +1212,22 @@ mod tests {
             ..itch()
         };
         panel.open(
-            Strip::QuickAccess,
-            over,
-            Some(site),
-            true,
-            "",
+            &Opening {
+                site: Some(site),
+                launched: true,
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
             &AppConfig::default(),
         );
         let last = panel.rows().len() - 1;
         assert_eq!(panel.label(last), "Close HexGL");
         let site = SiteHead { name: "", ..site };
         panel.open(
-            Strip::QuickAccess,
-            over,
-            Some(site),
-            true,
-            "",
+            &Opening {
+                site: Some(site),
+                launched: true,
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
             &AppConfig::default(),
         );
         assert_eq!(panel.label(last), "Close");
@@ -1178,12 +1250,12 @@ mod tests {
         let mut panel = QuickAccess::new();
         panel.open_home(Some(tile(true, false)), None, &AppConfig::default());
         let options = options_rows(true, false);
-        assert_eq!(&panel.rows()[..options.len()], &options[..]);
-        assert!(panel.rows()[options.len()..]
+        assert_eq!(&entries_of(&panel)[..options.len()], &options[..]);
+        assert!(entries_of(&panel)[options.len()..]
             .iter()
             .all(|row| matches!(row, Entry::Quick(_))));
         assert_eq!(
-            panel.breaks(),
+            breaks_of(&panel),
             [(options.len(), Break::Head(HOME_HEAD.to_string()))]
         );
         assert_eq!(panel.title(), "A");
@@ -1191,29 +1263,28 @@ mod tests {
         panel.set_title("B".into());
         assert_eq!(panel.title(), "B");
         panel.open_home(None, None, &AppConfig::default());
-        assert!(panel.breaks().is_empty());
+        assert!(breaks_of(&panel).is_empty());
         assert_eq!(panel.title(), HOME_HEAD);
         assert!(panel
             .rows()
             .iter()
-            .all(|row| matches!(row, Entry::Quick(_))));
+            .all(|row| matches!(row.entry, Entry::Quick(_))));
     }
 
     #[test]
     fn the_options_move_only_in_the_manual_order() {
         let mut panel = QuickAccess::new();
         let moves =
-            |panel: &QuickAccess| panel.rows().contains(&Entry::Options(OptionsRow::MoveLeft));
+            |panel: &QuickAccess| entries_of(panel).contains(&Entry::Options(OptionsRow::MoveLeft));
         panel.open_home(Some(tile(true, false)), None, &AppConfig::default());
         assert!(moves(&panel) && panel.bookmark_id() == Some("a"));
         panel.open_home(Some(tile(false, true)), None, &AppConfig::default());
         assert!(!moves(&panel));
-        assert!(!panel.rows().contains(&Entry::Options(OptionsRow::Reader)));
-        assert_eq!(panel.rows().len(), panel.value_count());
+        assert!(!entries_of(&panel).contains(&Entry::Options(OptionsRow::Reader)));
         let rename = panel
             .rows()
             .iter()
-            .position(|row| *row == Entry::Options(OptionsRow::Rename))
+            .position(|row| row.entry == Entry::Options(OptionsRow::Rename))
             .expect("every options strip renames");
         panel.start_naming(OptionsText::Name, "Typed".into());
         assert_eq!(panel.value(rename), "Typed");
@@ -1227,11 +1298,7 @@ mod tests {
     fn quitting_takes_a_second_press() {
         let mut panel = QuickAccess::new();
         panel.open(
-            Strip::QuickMenu,
-            Over::Tab(TabMode::Page),
-            None,
-            false,
-            "",
+            &Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page)),
             &AppConfig::default(),
         );
         panel.move_sel(-1);
@@ -1313,21 +1380,17 @@ mod tests {
             let settings = panel
                 .rows()
                 .iter()
-                .position(|row| matches!(row, Entry::Quick(_)));
+                .position(|row| matches!(row.entry, Entry::Quick(_)));
             let rule = settings.expect("every tab strip sets something");
-            assert_eq!(panel.breaks(), [(rule, Break::Rule)], "{mode:?}");
+            assert_eq!(breaks_of(&panel), [(rule, Break::Rule)], "{mode:?}");
         }
         let mut panel = QuickAccess::new();
         let over = Over::Tab(TabMode::Page);
         panel.open(
-            Strip::QuickMenu,
-            over,
-            None,
-            false,
-            "",
+            &Opening::bare(Strip::QuickMenu, over),
             &AppConfig::default(),
         );
-        assert!(panel.breaks().is_empty());
+        assert!(breaks_of(&panel).is_empty());
     }
 
     /// The header names the page's site, else the strip; Quick Menu always
@@ -1338,15 +1401,14 @@ mod tests {
         let over = Over::Tab(TabMode::Page);
         let config = AppConfig::default();
         panel.open(
-            Strip::QuickAccess,
-            over,
-            None,
-            false,
-            "example.com",
+            &Opening {
+                page: "example.com",
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
             &config,
         );
         assert_eq!(panel.title(), "example.com");
-        panel.open(Strip::QuickAccess, over, None, false, "", &config);
+        panel.open(&Opening::bare(Strip::QuickAccess, over), &config);
         assert_eq!(panel.title(), Strip::QuickAccess.name());
         let removed = SiteHead {
             id: "a",
@@ -1354,15 +1416,21 @@ mod tests {
             ..itch()
         };
         panel.open(
-            Strip::QuickAccess,
-            over,
-            Some(removed),
-            false,
-            "example.com",
+            &Opening {
+                site: Some(removed),
+                page: "example.com",
+                ..Opening::bare(Strip::QuickAccess, over)
+            },
             &config,
         );
         assert_eq!(panel.title(), "example.com");
-        panel.open(Strip::QuickMenu, over, None, false, "example.com", &config);
+        panel.open(
+            &Opening {
+                page: "example.com",
+                ..Opening::bare(Strip::QuickMenu, over)
+            },
+            &config,
+        );
         assert_eq!(panel.title(), Strip::QuickMenu.name());
     }
 
@@ -1383,14 +1451,68 @@ mod tests {
         let config = AppConfig::default();
         // The page opened under another preset than the one in force.
         let opened = format!("not-{}", config.performance.js_preset);
-        panel.set_page_js(Some(opened));
-        panel.refresh(&config);
+        let page = Opening {
+            page_js: Some(&opened),
+            ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Page))
+        };
+        panel.open(&page, &config);
         assert_eq!(press_on(&mut panel, "JS engine"), Press::Reopen);
         let mut panel = open(TabMode::Game);
         assert_eq!(press_on(&mut panel, "Input map"), Press::Open);
         assert_eq!(press_on(&mut panel, "Reload"), Press::Select);
         panel.confirm(Entry::Reload);
         assert_eq!(panel.press(), Press::Confirm);
+    }
+
+    /// Opening fills the rows whose values it names.
+    #[test]
+    fn opening_fills_what_it_names() {
+        let value_of = |panel: &QuickAccess, entry: Entry| {
+            let at = entries_of(panel).iter().position(|row| *row == entry);
+            panel
+                .value(at.expect("the strip shows the row"))
+                .to_string()
+        };
+        let mut panel = QuickAccess::new();
+        let game = Opening {
+            saved: true,
+            input_map: Some("Keyboard (WASD)"),
+            ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Game))
+        };
+        panel.open(&game, &AppConfig::default());
+        assert_eq!(value_of(&panel, Entry::Run(Action::Bookmark)), SAVED);
+        assert_eq!(value_of(&panel, Entry::InputMap), "Keyboard (WASD)");
+        let menu = Opening {
+            tabs: 3,
+            ..Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page))
+        };
+        panel.open(&menu, &AppConfig::default());
+        assert_eq!(value_of(&panel, Entry::List(Section::Tabs)), "3");
+    }
+
+    /// A slot naming a quick row by its label names one, so a renamed row
+    /// cannot fall in with the mode's remaining rows unnoticed.
+    #[test]
+    fn every_named_slot_names_a_quick_row() {
+        let layouts = [
+            ACCESS_BROWSER,
+            ACCESS_GAME,
+            ACCESS_HOME,
+            MENU_BROWSER,
+            MENU_GAME,
+        ];
+        for slot in layouts
+            .iter()
+            .flat_map(|layout| layout.iter().copied())
+            .flatten()
+        {
+            if let Slot::Quick(label) = slot {
+                let named = Settings::fields()
+                    .iter()
+                    .any(|field| field.quick.is_some() && field.quick_label() == *label);
+                assert!(named, "{label}");
+            }
+        }
     }
 
     /// Regression: stepping Scaling blanked the input map's value.
@@ -1402,7 +1524,7 @@ mod tests {
         let at = panel
             .rows()
             .iter()
-            .position(|row| *row == Entry::InputMap)
+            .position(|row| row.entry == Entry::InputMap)
             .expect("the game's strip carries the input map");
         assert_eq!(panel.value(at), "Keyboard (WASD)");
     }
@@ -1413,7 +1535,7 @@ mod tests {
         let at = panel
             .rows()
             .iter()
-            .position(|row| row.label() == "Scaling")
+            .position(|row| row.entry.label() == "Scaling")
             .expect("scaling is a quick row in the mode");
         assert_eq!(panel.value(at), "None");
     }

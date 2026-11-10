@@ -16,9 +16,8 @@ use crate::overlay::game::map_edit::{
     self, CaptureFor, Device, EditPress, Kind, LayerName, LayerRow, Modifier, Row, Slot, Tail,
     Take, DIRECTIONS, NEW_LAYER_NAME, UNBOUND,
 };
-use crate::overlay::menu::Section;
 use crate::overlay::osk::OskCommand;
-use crate::overlay::quick_access::{Entry, OptionsRow, Over, SiteHead, Strip};
+use crate::overlay::quick_access::{Entry, Opening, OptionsRow, Over, SiteHead, Strip};
 use crate::overlay::settings::{self, Settings, SettingsSection};
 use inputbind::Pad;
 
@@ -51,6 +50,11 @@ impl App {
             self.open_home_access(self.ui.home_focused_bookmark());
             return;
         }
+        // Read first: the mode loads its maps through a mutable borrow.
+        let input_map = self
+            .browser
+            .in_game_mode()
+            .then(|| self.game_mode().live().1);
         let name = self.site_name();
         let global = self.global_config();
         let overrides = self.site_overrides();
@@ -65,31 +69,26 @@ impl App {
                 global,
                 overrides,
             });
-        let launched = self.browser.launched().is_some();
         let over = match self.browser.on_home_page() {
             true => Over::Home,
             false => Over::Tab(self.browser.mode()),
         };
         let url = self.browser.state().page_url().to_string();
         let page = crate::ui::site_label(&url);
-        self.ui
-            .quick_access
-            .open(strip, over, site, launched, &page, &self.config);
-        let page_js = Some(self.browser.page_js_preset()).filter(|p| !p.is_empty());
-        self.ui.quick_access.set_page_js(page_js);
-        self.refresh_access();
-        let saved = match !url.is_empty() && self.ui.menu.is_bookmarked(&url) {
-            true => "Saved",
-            false => "",
+        let page_js = self.browser.page_js_preset();
+        let opening = Opening {
+            strip,
+            over,
+            site,
+            launched: self.browser.launched().is_some(),
+            page: &page,
+            page_js: Some(page_js.as_str()).filter(|p| !p.is_empty()),
+            saved: !url.is_empty() && self.ui.menu.is_bookmarked(&url),
+            tabs: self.browser.tab_count(),
+            input_map: input_map.as_deref(),
         };
-        let tabs = self.browser.tab_count().to_string();
-        let panel = &mut self.ui.quick_access;
-        panel.set_value(Entry::Run(Action::Bookmark), saved.to_string());
-        panel.set_value(Entry::List(Section::Tabs), tabs);
-        if self.browser.in_game_mode() {
-            let (_, name) = self.game_mode().live();
-            self.ui.quick_access.set_value(Entry::InputMap, name);
-        }
+        self.ui.quick_access.open(&opening, &self.config);
+        self.refresh_options();
     }
 
     /// Switch to the map `dx` places along the list, wrapping at the ends, and
