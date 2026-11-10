@@ -135,15 +135,28 @@ pub(super) struct Trail<'a> {
     pub after: Option<&'a str>,
 }
 
-/// A row with `trail` at its trailing edge, and with `dot` an accent dot after
-/// its label, which takes `tone`'s colour. The wider of label and trail gives
-/// way, but selected the trail shows whole while it leaves the label [`LABEL_KEEP`].
+/// What a [`marked_row`] shows at its leading edge: an icon, its label, and
+/// with `dot` an accent dot after the label.
+pub(super) struct Lead<'a> {
+    pub icon: RowIcon<'a>,
+    pub label: &'a str,
+    pub dot: bool,
+}
+
+/// A row's leading icon: a glyph in the label's colour, or a picture.
+pub(super) enum RowIcon<'a> {
+    Glyph(&'static str),
+    Image(egui::Atom<'a>),
+}
+
+/// A row with `lead` at its leading edge and `trail` at its trailing one, its
+/// label in `tone`'s colour. The wider of label and trail gives way, but
+/// selected the trail shows whole while it leaves the label [`LABEL_KEEP`].
 pub(super) fn marked_row(
     ui: &mut egui::Ui,
     width: f32,
     selected: bool,
-    label: &str,
-    dot: bool,
+    lead: Lead,
     trail: Trail,
     tone: Tone,
 ) -> egui::Response {
@@ -158,20 +171,28 @@ pub(super) fn marked_row(
         .flatten()
         .collect();
     let trail_w = text_w(shown);
-    let label_w = text_w(label.to_string());
+    // An icon is square at the row's type size.
+    let label_w = text_w(lead.label.to_string()) + ROW_FONT;
     let label_gives = (selected && trail_w <= width * (1.0 - LABEL_KEEP)) || label_w > trail_w;
-    let (label, value) = toned_texts(label, trail.value, tone);
+    let (label, value) = toned_texts(lead.label, trail.value, tone);
     let mark = |glyph: &str| {
         egui::RichText::new(glyph)
             .color(palette().accent)
             .size(ROW_FONT)
     };
     let mut atoms = egui::Atoms::default();
+    atoms.push_right(match lead.icon {
+        RowIcon::Glyph(glyph) => egui::RichText::new(glyph)
+            .color(tone_color(tone))
+            .size(ROW_FONT)
+            .into(),
+        RowIcon::Image(image) => image,
+    });
     atoms.push_right(match label_gives {
         true => label.atom_shrink(true),
         false => label.into(),
     });
-    if dot {
+    if lead.dot {
         let dot = icon_fill(egui_phosphor::fill::CIRCLE)
             .size(DOT_SIZE)
             .color(palette().accent);
@@ -196,14 +217,20 @@ pub(super) fn marked_row(
     )
 }
 
-fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
-    let color = match tone {
+/// The colour of a label in `tone`.
+fn tone_color(tone: Tone) -> egui::Color32 {
+    match tone {
         Tone::Plain => palette().text,
         Tone::Action => palette().accent,
         Tone::Danger => palette().warn,
-    };
+    }
+}
+
+fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
     (
-        egui::RichText::new(label).color(color).size(ROW_FONT),
+        egui::RichText::new(label)
+            .color(tone_color(tone))
+            .size(ROW_FONT),
         egui::RichText::new(value)
             .color(palette().accent)
             .size(ROW_FONT),

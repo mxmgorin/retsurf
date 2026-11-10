@@ -332,7 +332,7 @@ fn add_tabs_section(
 }
 
 /// A row's leading site icon, or a globe so titles line up; `None` with icons off.
-fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
+pub(super) fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'static>> {
     if !icons.enabled() {
         return None;
     }

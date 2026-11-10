@@ -55,7 +55,7 @@ use crate::{
     overlay::menu::{Menu, Section},
     overlay::osk::Osk,
     overlay::prompt::Prompt,
-    overlay::quick_access::QuickAccess,
+    overlay::quick_access::{QuickAccess, Strip},
     overlay::settings::Settings,
     overlay::update_notice::UpdateNotice,
     platform::window::AppWindow,
@@ -169,14 +169,21 @@ struct FrameInputs {
     chrome_hidden: ChromeHidden,
 }
 
-/// The sites whose icons this frame draws: the menu's current section and the
-/// start page's bookmarks when `home_shown`, each tab with its live icon.
+/// The sites whose icons this frame draws: the tabs Menu lists while `strip`
+/// is it, the menu's current section and the start page's bookmarks when
+/// `home_shown`, each tab with its live icon.
 fn page_icon_wants<'a>(
     menu: &'a Menu,
     home_shown: bool,
+    strip: Option<Strip>,
     tabs: &'a [TabInfo],
 ) -> Vec<(&'a str, Option<&'a Favicon>)> {
     let mut wanted = Vec::new();
+    let tab = |t: &'a TabInfo| (t.url.as_str(), t.favicon.as_ref());
+    // Menu lists the tabs.
+    if strip == Some(Strip::QuickMenu) {
+        wanted.extend(tabs.iter().map(tab));
+    }
     if menu.visible {
         match menu.section() {
             Section::Tabs => {
@@ -618,7 +625,7 @@ impl AppUi {
     fn frame_snapshot(&mut self, browser: &mut AppBrowser) -> FrameInputs {
         let tab_count = browser.tab_count();
         let zoom_pct = browser.zoom_chip();
-        let tab_infos = if self.menu.visible {
+        let tab_infos = if self.menu.visible || self.quick_access.visible {
             self.menu.set_tab_count(browser.tab_count());
             browser.tabs()
         } else {
@@ -925,7 +932,8 @@ impl AppUi {
                 loading_shown =
                     state.is_loading() && (self.toolbar_rect.is_positive() || edge_alone);
 
-                let wanted = page_icon_wants(&self.menu, self.home_active, &tab_infos);
+                let strip = self.quick_access.visible.then(|| self.quick_access.strip());
+                let wanted = page_icon_wants(&self.menu, self.home_active, strip, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
 
                 // A backdrop over the blank web view, below the foreground overlays.
@@ -1059,6 +1067,8 @@ impl AppUi {
                         quick_access::add_quick_access(
                             ctx,
                             &self.quick_access,
+                            &tab_infos,
+                            &self.page_icons,
                             face,
                             self.button_hints,
                             commands,

@@ -6,16 +6,22 @@
 //! hints on, a footer names what the buttons do on the focused row. The brand
 //! horizon sits at the strip's bottom wherever the rows leave it room.
 
+use crate::browser::HOME_URL;
 use crate::clock;
 use crate::command::{AppCommand, QuickAccessAction};
 use crate::config::FaceLabels;
+use crate::data::session::TabInfo;
 use crate::event::bindings::Action;
 use crate::overlay::menu::Section;
 use crate::overlay::quick_access::{Break, Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
+use crate::ui::favicon::PageIcons;
 use crate::ui::keys::{self, HINT_FONT};
-use crate::ui::panel::{self, center_selected, Tone, Trail, DIVIDER_H, EPSILON, ROW_GAP, ROW_H};
+use crate::ui::menu;
+use crate::ui::panel::{
+    self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, ROW_GAP, ROW_H,
+};
 use crate::ui::theme::{self, palette, ROW_FONT};
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -53,6 +59,8 @@ const HORIZON_GAP: f32 = ROW_GAP * 3.0;
 pub(in crate::ui) fn add_quick_access(
     ctx: &egui::Context,
     panel: &QuickAccess,
+    tabs: &[TabInfo],
+    icons: &PageIcons,
     face: FaceLabels,
     button_hints: bool,
     commands: &mut Vec<AppCommand>,
@@ -107,7 +115,7 @@ pub(in crate::ui) fn add_quick_access(
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
                     .max_height((room - below).max(0.0))
-                    .show(ui, |ui| add_rows(ui, width, panel, commands));
+                    .show(ui, |ui| add_rows(ui, width, panel, tabs, icons, commands));
                 if button_hints {
                     let h = add_footer(ui, width, panel, face);
                     if (h - footer_h).abs() > EPSILON {
@@ -122,7 +130,14 @@ pub(in crate::ui) fn add_quick_access(
         });
 }
 
-fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut Vec<AppCommand>) {
+fn add_rows(
+    ui: &mut egui::Ui,
+    width: f32,
+    panel: &QuickAccess,
+    tabs: &[TabInfo],
+    icons: &PageIcons,
+    commands: &mut Vec<AppCommand>,
+) {
     for (index, row) in panel.rows().iter().enumerate() {
         match &row.above {
             Some(Break::Rule) => panel::divider(ui, width),
@@ -131,7 +146,16 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
         }
         let entry = row.entry;
         let selected = index == panel.selected();
-        let label = format!("{}  {}", glyph(entry), panel.label(index));
+        let icon = match entry {
+            // The start page is no site: its tab keeps the tab glyph.
+            Entry::Tab(at) => tabs
+                .get(at)
+                .filter(|tab| tab.url != HOME_URL)
+                .and_then(|tab| menu::site_icon(icons, &tab.url))
+                .map(RowIcon::Image),
+            _ => None,
+        };
+        let icon = icon.unwrap_or(RowIcon::Glyph(glyph(entry)));
         let flag = panel.flag(index);
         let value = panel.value(index);
         let trail = match (flag, selected && entry.steps()) {
@@ -156,8 +180,12 @@ fn add_rows(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, commands: &mut V
             true => Tone::Danger,
             false => Tone::Plain,
         };
-        let own = panel.own(index);
-        let resp = panel::marked_row(ui, width, selected, &label, own, trail, tone);
+        let lead = Lead {
+            icon,
+            label: panel.label(index),
+            dot: panel.own(index),
+        };
+        let resp = panel::marked_row(ui, width, selected, lead, trail, tone);
         if let Some(on) = flag {
             panel::paint_switch(ui, resp.rect, on);
         }
