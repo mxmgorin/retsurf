@@ -11,12 +11,13 @@
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::sync::Arc;
 
 use openh264::decoder::{Decoder, DecoderConfig, Flush};
 use openh264::OpenH264API;
 
 use super::hwdec::{self, HwDecoder, Lib};
-use super::video::Frame;
+use super::video::{Frame, PlanePool};
 
 /// The most access-unit bytes kept for a mid-stream hand-off; a longer GOP
 /// makes software start at the next key frame instead.
@@ -56,6 +57,8 @@ pub(crate) struct H264Decoder {
     /// The pts of pictures the hardware gave out since that key frame: software
     /// decoding the same units again drops these.
     shown: Vec<i64>,
+    /// Plane buffers the hardware's pictures are copied into, recycled.
+    planes: Arc<PlanePool>,
 }
 
 impl H264Decoder {
@@ -74,6 +77,7 @@ impl H264Decoder {
             gop_bytes: 0,
             gop_complete: false,
             shown: Vec::new(),
+            planes: Arc::default(),
         }
     }
 
@@ -137,7 +141,8 @@ impl H264Decoder {
             }
             pending.push(Reverse(pts_us));
             let shown = &mut self.shown;
-            let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown));
+            let planes = &self.planes;
+            let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown, planes));
             let r = dec.send(data, pts_us, &mut emit);
             if r == hwdec::UNSUPPORTED {
                 return self.to_software(out);
@@ -164,7 +169,8 @@ impl H264Decoder {
                 headers_pending,
             } => {
                 let (pending, shown) = (&mut self.pending_pts, &mut self.shown);
-                let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown));
+                let planes = &self.planes;
+            let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown, planes));
                 dec.send(&[], 0, &mut emit);
                 dec.drain(&mut emit);
                 dec.flush();
@@ -288,7 +294,8 @@ impl H264Decoder {
         if let Active::Hw { mut dec, .. } = std::mem::replace(&mut self.active, Active::None) {
             // The pictures still in its reorder queue.
             let (pending, shown) = (&mut self.pending_pts, &mut self.shown);
-            let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown));
+            let planes = &self.planes;
+            let mut emit = |pic: hwdec::Nv12| out(hw_frame(&pic, pending, shown, planes));
             dec.send(&[], 0, &mut emit);
             dec.drain(&mut emit);
         }
@@ -345,10 +352,15 @@ const MAX_PENDING: usize = 16;
 
 /// A hardware picture, stamped with the smallest outstanding time (see
 /// `pending_pts`) and remembered for a hand-off to software.
-fn hw_frame(pic: &hwdec::Nv12, pending: &mut BinaryHeap<Reverse<i64>>, shown: &mut Vec<i64>) -> Frame {
+fn hw_frame(
+    pic: &hwdec::Nv12,
+    pending: &mut BinaryHeap<Reverse<i64>>,
+    shown: &mut Vec<i64>,
+    planes: &Arc<PlanePool>,
+) -> Frame {
     let stamp = pending.pop().map_or(pic.pts, |Reverse(us)| us);
     shown.push(stamp);
-    Frame::from_nv12(pic, stamp)
+    Frame::from_nv12(pic, stamp, planes)
 }
 
 #[cfg(test)]

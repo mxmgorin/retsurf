@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use openh264::decoder::DecodedYUV;
 use openh264::formats::YUVSource;
@@ -249,6 +249,56 @@ pub(crate) struct Frame {
     pub(crate) height: usize,
     pub(crate) y: Vec<u8>,
     chroma: Chroma,
+    /// Where the planes go back when the frame is dropped (hardware frames).
+    pool: Option<Arc<PlanePool>>,
+}
+
+impl Drop for Frame {
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.take() {
+            pool.give(std::mem::take(&mut self.y));
+            if let Chroma::Interleaved(uv) = &mut self.chroma {
+                pool.give(std::mem::take(uv));
+            }
+        }
+    }
+}
+
+/// Plane buffers of dropped hardware frames, written again by the next ones: a
+/// fresh 1080p copy faulted all of its 3 MB in, page by page (12,000 faults a
+/// second, about half of the copy's 14 ms on an H700).
+#[derive(Default)]
+pub(crate) struct PlanePool(Mutex<Vec<Vec<u8>>>);
+
+/// Free buffers kept: a Y and a UV plane each for a few frames.
+const PLANE_POOL: usize = 8;
+
+impl PlanePool {
+    /// An empty buffer holding at least `len` bytes: the smallest that fits.
+    fn take(&self, len: usize) -> Vec<u8> {
+        let mut free = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let fit = free
+            .iter()
+            .enumerate()
+            .filter(|(_, buf)| buf.capacity() >= len)
+            .min_by_key(|(_, buf)| buf.capacity())
+            .map(|(at, _)| at);
+        match fit {
+            Some(at) => {
+                let mut buf = free.swap_remove(at);
+                buf.clear();
+                buf
+            }
+            None => Vec::with_capacity(len),
+        }
+    }
+
+    fn give(&self, buf: Vec<u8>) {
+        let mut free = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if free.len() < PLANE_POOL && buf.capacity() > 0 {
+            free.push(buf);
+        }
+    }
 }
 
 /// Each decoder's own chroma layout, kept to the conversion: splitting the
@@ -281,16 +331,17 @@ impl Frame {
                 u: tight(yuv.u(), su, cw, ch),
                 v: tight(yuv.v(), sv, cw, ch),
             },
+            pool: None,
         }
     }
 
     /// A hardware picture: the planes are read once, row by row (they may be
     /// uncached); the chroma stays interleaved, as the conversion takes it.
     /// `pts_us` as for [`Self::from_decoded`].
-    pub(crate) fn from_nv12(pic: &hwdec::Nv12, pts_us: i64) -> Self {
+    pub(crate) fn from_nv12(pic: &hwdec::Nv12, pts_us: i64, pool: &Arc<PlanePool>) -> Self {
         let (width, height) = (pic.width, pic.height);
         let rows = |plane: &[u8], stride: usize, w: usize, h: usize| {
-            let mut out = Vec::with_capacity(w * h);
+            let mut out = pool.take(w * h);
             for row in 0..h {
                 out.extend_from_slice(&plane[row * stride..row * stride + w]);
             }
@@ -307,6 +358,7 @@ impl Frame {
                 width.div_ceil(2) * 2,
                 height.div_ceil(2),
             )),
+            pool: Some(pool.clone()),
         }
     }
 
@@ -398,7 +450,17 @@ struct Painter {
 const PAINT_QUEUE: usize = 1;
 
 /// Buffers kept for reuse; more are allocated while all of them are in use.
-const BGRA_POOL: usize = 4;
+const BGRA_POOL: usize = 6;
+
+/// Frames the renderer may hold before the next is skipped. WebRender keeps a
+/// frame's pixels until its compositor has uploaded them, and that upload is the
+/// slowest step at 1080p on an H700 (RG 34XXSP, RG Cube XX): handed 30 frames a
+/// second, it fell behind and the process grew by 50 MB a second.
+const MAX_HELD: usize = 4;
+
+/// Longest run of skips: a renderer that only lets go of a frame when the next
+/// one arrives must not freeze the picture.
+const MAX_HELD_WAIT: Duration = Duration::from_millis(250);
 
 enum Pace {
     /// Nothing due yet (or interrupted); go back to the channel.
@@ -479,11 +541,18 @@ impl Presenter {
 
 impl Painter {
     fn run(mut self, rx: Receiver<Paint>) {
+        let mut last_sent = Instant::now();
         while let Ok(Paint { frame, epoch }) = rx.recv() {
             // Queued before a seek: the element has moved on.
             if self.shared.is_quit() || self.flush.epoch() != epoch {
                 continue;
             }
+            let held = self.bgra.iter().filter(|buf| Arc::strong_count(buf) > 1).count();
+            if held >= MAX_HELD && last_sent.elapsed() < MAX_HELD_WAIT {
+                log::debug!("video: renderer behind, frame {:.3}s skipped", frame.pts());
+                continue;
+            }
+            last_sent = Instant::now();
             if let Some(video_frame) = self.convert(&frame) {
                 self.renderer
                     .lock()
@@ -658,6 +727,40 @@ fn video_thread(
 mod tests {
     use super::*;
 
+    /// A dropped hardware frame hands its planes back, and the next frame of
+    /// the same size is copied into them instead of into fresh memory.
+    #[test]
+    fn dropped_hardware_frames_hand_their_planes_back() {
+        let pool = Arc::<PlanePool>::default();
+        let frame = Frame {
+            pts_us: 0,
+            width: 4,
+            height: 2,
+            y: pool.take(8),
+            chroma: Chroma::Interleaved(pool.take(4)),
+            pool: Some(pool.clone()),
+        };
+        let y = frame.y.as_ptr();
+        drop(frame);
+        assert_eq!(pool.0.lock().unwrap().len(), 2);
+        // The smallest buffer that fits: the UV plane's stays for the next UV.
+        let again = pool.take(8);
+        assert_eq!(again.as_ptr(), y);
+        assert!(again.is_empty());
+        assert_eq!(pool.take(4).capacity(), 4);
+        assert!(pool.0.lock().unwrap().is_empty());
+    }
+
+    /// The pool keeps a bounded number of free buffers.
+    #[test]
+    fn the_plane_pool_is_bounded() {
+        let pool = PlanePool::default();
+        for _ in 0..PLANE_POOL + 3 {
+            pool.give(vec![0; 16]);
+        }
+        assert_eq!(pool.0.lock().unwrap().len(), PLANE_POOL);
+    }
+
     /// A hardware picture (strided NV12) and the same picture from openh264
     /// (tight planes) hash alike, so the checksum logs of the two compare.
     #[test]
@@ -674,7 +777,7 @@ mod tests {
             uv: &uv,
             uv_stride: stride,
         };
-        let hw = Frame::from_nv12(&pic, 7);
+        let hw = Frame::from_nv12(&pic, 7, &Arc::default());
         assert_eq!(hw.pts_us, 7);
         let chroma = |skip: usize| -> Vec<u8> {
             (0..h / 2)
@@ -691,6 +794,7 @@ mod tests {
                 u: chroma(0),
                 v: chroma(1),
             },
+            pool: None,
         };
         assert_eq!(hw.y, sw.y);
         assert_eq!(hw.checksum(), sw.checksum());

@@ -249,7 +249,11 @@ impl Player for SdlAudioPlayer {
             return Err(PlayerError::BufferPushFailed);
         }
         let mut stream = lock(&self.shared.stream);
+        // Refused only while the reader still has bytes to read: a chunk bigger
+        // than the whole budget (a local file arrives as one) would otherwise be
+        // refused forever, and nothing would ever play.
         if self.stream_type == StreamType::Seekable
+            && stream.read_pos < stream.head()
             && stream.data.len() + data.len() > BYTE_HIGH_WATER
         {
             // The element cancels the fetch on this; the decoder refetches at the
@@ -258,8 +262,9 @@ impl Player for SdlAudioPlayer {
             return Err(PlayerError::EnoughData);
         }
         stream.data.extend_from_slice(&data);
-        // A live stream has no refetch, so shed the oldest bytes instead.
-        if stream.data.len() > BYTE_HIGH_WATER {
+        // A live stream has no refetch, so shed the oldest bytes instead. Not a
+        // seekable one: an oversized chunk taken above is all still unread.
+        if self.stream_type != StreamType::Seekable && stream.data.len() > BYTE_HIGH_WATER {
             let n = stream.data.len() - BYTE_HIGH_WATER;
             stream.data.drain(..n);
             stream.base += n as u64;

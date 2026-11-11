@@ -1,5 +1,6 @@
 use super::source::ByteReader;
 use super::*;
+use super::shared::{EVICT_STEP, KEEP_BACK_BYTES};
 use crate::media::decoder::synth_wav;
 use crate::media::device::CHANNELS;
 use std::io::{Read, Seek, SeekFrom};
@@ -226,6 +227,46 @@ fn push_backpressure_on_seekable_input() {
         .unwrap();
     assert_eq!(player.push_data(vec![0]), Err(PlayerError::EnoughData));
     assert!(lock(&player.shared.stream).stalled);
+}
+
+/// A chunk bigger than the whole budget is taken while the reader has nothing
+/// left to read: a local file arrives in one piece, and refusing it stalled the
+/// element for good.
+#[test]
+fn an_oversized_chunk_is_taken_when_the_reader_waits() {
+    let player = dead_player(StreamType::Seekable);
+    {
+        let mut stream = lock(&player.shared.stream);
+        stream.read_pos = stream.head();
+    }
+    let head = lock(&player.shared.stream).head();
+    player.push_data(vec![0; BYTE_HIGH_WATER + 1]).unwrap();
+    {
+        let stream = lock(&player.shared.stream);
+        assert!(!stream.stalled);
+        // All of it kept: none of it has been read.
+        assert_eq!(stream.head(), head + BYTE_HIGH_WATER as u64 + 1);
+        assert!(stream.base <= stream.read_pos);
+    }
+    // Now there is plenty unread: the next chunk is backpressure as usual.
+    assert_eq!(player.push_data(vec![0]), Err(PlayerError::EnoughData));
+}
+
+/// Read bytes are dropped a step at a time, never on every read: each drop
+/// moves everything still buffered.
+#[test]
+fn read_bytes_are_evicted_in_steps() {
+    let player = dead_player(StreamType::Seekable);
+    let mut stream = lock(&player.shared.stream);
+    let (base, len) = (stream.base, stream.data.len() as u64);
+    stream.data.resize(len as usize + KEEP_BACK_BYTES + EVICT_STEP + 10, 0);
+    stream.read_pos = base + (KEEP_BACK_BYTES + EVICT_STEP - 1) as u64;
+    stream.evict();
+    assert_eq!(stream.base, base, "under a step past the keep-back: kept");
+    stream.read_pos += 1;
+    stream.evict();
+    assert_eq!(stream.base, base + EVICT_STEP as u64);
+    assert_eq!(stream.read_pos - stream.base, KEEP_BACK_BYTES as u64);
 }
 
 /// A live stream has no refetch, so the oldest bytes are shed instead.
