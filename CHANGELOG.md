@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu: the latest tabs with their site icons (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
 - Tabs on the start page are named Start page in the tab lists
 - Bookmarks in the lists show their tags and whether they open as an app or a game
+- Downloads show the kind of each file, a progress bar and the day; a failed one can be tried again
 - History is grouped by day with the time of each visit and names pages by their title; the start page is no longer recorded
 - The lists (Tabs, Bookmarks, History, Downloads): a footer naming what the buttons do on the selected row, the tab count and download progress on their tabs, New tab and Clear rows like Menu's; the pointer moves the highlight. Tabs opens on the shown tab and marks it with a check
 - The start page banner and wordmark are smaller

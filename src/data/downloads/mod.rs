@@ -32,7 +32,6 @@ pub struct BlobDownload {
     /// `Err` carries a page-side failure (over the size limit, unreadable blob).
     pub bytes: Result<Vec<u8>, String>,
 }
-use crate::data::history;
 use crate::event::user::UserEventSender;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -95,22 +94,6 @@ impl Progress {
 impl Download {
     pub fn is_active(&self) -> bool {
         matches!(self.state, State::Active)
-    }
-
-    /// One-line status for the menu row: progress while active, size + date when
-    /// done, the error otherwise.
-    pub fn status_text(&self) -> String {
-        match &self.state {
-            State::Active => format_progress(self.received, self.total),
-            State::Done => format!(
-                "{} · {}",
-                format_size(self.received),
-                history::format_time(self.time)
-            ),
-            // The menu renders this in the Proportional family, which falls back
-            // to the icon font (see `crate::ui::theme`), so the marker resolves.
-            State::Failed(e) => format!("{} {e}", egui_phosphor::bold::X),
-        }
     }
 }
 
@@ -358,6 +341,12 @@ impl Downloads {
     /// Put the highlight on row `index`, counted as [`Self::move_sel`] does.
     pub fn select(&mut self, index: usize) {
         self.cursor.select(index, self.items.len());
+    }
+
+    /// The address of the entry at `index` when it failed, to fetch again.
+    pub fn failed_url(&self, index: usize) -> Option<&str> {
+        let d = self.items.get(index)?;
+        matches!(d.state, State::Failed(_)).then_some(d.url.as_str())
     }
 
     /// Where the entry at `index` was saved, once it finished; `None` otherwise.

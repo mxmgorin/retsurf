@@ -759,6 +759,16 @@ impl AppBrowser {
         self.inner.new_icons.take()
     }
 
+    /// Fetch `url` as a download, as a navigation to a file is; `false` when
+    /// it won't parse.
+    pub fn download(&self, url: &str) -> bool {
+        let Ok(url) = ::url::Url::parse(url) else {
+            return false;
+        };
+        self.inner.queue_download(&url, None);
+        true
+    }
+
     /// Take and clear the download navigations denied since the last call, each
     /// with the browser's cookies for its URL.
     pub fn take_download_requests(&self) -> Vec<DownloadRequest> {

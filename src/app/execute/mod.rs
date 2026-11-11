@@ -292,8 +292,8 @@ impl App {
         }
     }
 
-    /// Bookmark the entry selected in History or Tabs; the other sections have
-    /// nothing to bookmark.
+    /// The selected entry's second action: bookmark it in History or Tabs, or
+    /// fetch a failed download again.
     pub(super) fn menu_y_action(&mut self) {
         match self.ui.menu.section() {
             Section::History => {
@@ -309,7 +309,19 @@ impl App {
                     self.toggle_bookmark(&tab.url);
                 }
             }
-            Section::Bookmarks | Section::Downloads => {}
+            Section::Downloads => {
+                let downloads = &self.ui.menu.downloads;
+                let Some(at) = downloads.selected_entry() else {
+                    return;
+                };
+                let Some(url) = downloads.failed_url(at).map(str::to_owned) else {
+                    return;
+                };
+                if self.browser.download(&url) {
+                    self.ui.menu.downloads.remove(at);
+                }
+            }
+            Section::Bookmarks => {}
         }
     }
 

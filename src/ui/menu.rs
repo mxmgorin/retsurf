@@ -15,6 +15,7 @@ use crate::clock;
 use crate::command::{AppCommand, MenuAction};
 use crate::config::{FaceLabels, TabLayout};
 use crate::data::bookmarks::Launch;
+use crate::data::downloads::{format_progress, format_size, State};
 use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};
@@ -103,25 +104,9 @@ fn action_row(
     row_atoms(ui, width, selected, atoms)
 }
 
-/// A selectable list row at the standard height, with its label left-aligned:
-/// the trailing [`egui::Atom::grow`] fills the rest of the row, where egui
-/// would otherwise center the text.
-fn row_button(
-    ui: &mut egui::Ui,
-    width: f32,
-    selected: bool,
-    text: egui::RichText,
-) -> egui::Response {
-    row_atoms(
-        ui,
-        width,
-        selected,
-        (text.size(ROW_FONT), egui::Atom::grow()),
-    )
-}
-
-/// [`row_button`] over pre-built atoms (a multi-color label). Mark one atom
-/// `shrink` — truncation eats that one; egui otherwise picks the leading run.
+/// A selectable list row at the standard height over `atoms`, which end in an
+/// [`egui::Atom::grow`] or egui centres them. Mark one atom `shrink` —
+/// truncation eats that one; egui otherwise picks the leading run.
 fn row_atoms<'a>(
     ui: &mut egui::Ui,
     width: f32,
@@ -336,7 +321,8 @@ fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
                     true => "cancel",
                     false => "remove",
                 };
-                [a, Some(x), None]
+                let y = menu.downloads.failed_url(at).map(|_| "retry");
+                [a, Some(x), y]
             }
             None => [None; 3],
         },
@@ -906,6 +892,7 @@ fn add_downloads_section(
 
     let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
+    let today = clock::local_day(clock::now_unix());
     section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         clear_row(
@@ -917,25 +904,52 @@ fn add_downloads_section(
             downloads.has_finished(),
             commands,
         );
+        let mut last_day = None;
         for (i, item) in downloads.items().iter().enumerate() {
+            // A download in flight runs today; its time is set once it ends.
+            let day = match (&item.state, item.time) {
+                (State::Active, _) => Some(today),
+                (_, 0) => None,
+                (_, time) => Some(clock::local_day(time)),
+            };
+            if i == 0 || day != last_day {
+                panel::head(ui, &labels::day_label(day, today));
+            }
+            last_day = day;
             let selected = downloads.selected() == i + 1; // index 0 is "Clear finished"
             let line = ui.horizontal(|ui| {
-                let resp = row_button(
-                    ui,
-                    row_w,
-                    selected,
-                    egui::RichText::new(&item.filename).color(palette().text),
+                let (name_color, status, status_color) = match &item.state {
+                    State::Active => (
+                        palette().text,
+                        format_progress(item.received, item.total),
+                        dim,
+                    ),
+                    State::Done => {
+                        let time = labels::time_label(item.time);
+                        let status = format!("{} · {time}", format_size(item.received));
+                        (palette().text, status, dim)
+                    }
+                    State::Failed(error) => (dim, error.clone(), palette().warn),
+                };
+                let text =
+                    |text: &str, color| egui::RichText::new(text).size(ROW_FONT).color(color);
+                let atoms = (
+                    text(file_glyph(&item.filename), dim),
+                    text(&item.filename, name_color).atom_shrink(true),
+                    egui::Atom::grow(),
                 );
+                let resp = row_atoms(ui, row_w, selected, atoms);
+                if item.is_active() {
+                    paint_progress(ui.painter(), resp.rect, item.received, item.total);
+                }
                 if selected {
                     center_selected(&resp);
                 }
                 if resp.clicked() && downloads.saved_path(i).is_some() {
                     commands.push(AppCommand::Menu(MenuAction::OpenDownload(i)));
                 }
-                ui.add_sized(
-                    [status_w, ROW_H],
-                    egui::Label::new(egui::RichText::new(item.status_text()).color(dim)).truncate(),
-                );
+                let status = egui::RichText::new(status).color(status_color);
+                ui.add_sized([status_w, ROW_H], egui::Label::new(status).truncate());
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
@@ -944,6 +958,44 @@ fn add_downloads_section(
             follow_pointer(&line.response, &line.inner, selected, i + 1, commands);
         }
     });
+}
+
+/// A download row's bar along its foot: how much of `total` has arrived;
+/// none while the size is unknown.
+fn paint_progress(painter: &egui::Painter, row: egui::Rect, received: u64, total: u64) {
+    if total == 0 {
+        return;
+    }
+    let track = egui::Rect::from_min_max(
+        egui::pos2(row.left() + ROW_RADIUS, row.bottom() - PROGRESS_H),
+        egui::pos2(row.right() - ROW_RADIUS, row.bottom()),
+    );
+    let radius = PROGRESS_H / 2.0;
+    painter.rect_filled(track, radius, palette().hairline);
+    let share = received.min(total) as f32 / total as f32;
+    let done = egui::Rect::from_min_size(track.min, egui::vec2(track.width() * share, PROGRESS_H));
+    painter.rect_filled(done, radius, palette().accent);
+}
+
+/// A download's progress bar height.
+const PROGRESS_H: f32 = 2.0;
+
+/// A file's icon by the kind its name's extension says it is.
+fn file_glyph(filename: &str) -> &'static str {
+    let extension = filename
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_default();
+    match extension.as_str() {
+        "zip" | "7z" | "rar" | "tar" | "gz" | "tgz" | "xz" | "bz2" | "zst" => bold::FILE_ZIP,
+        "pdf" => bold::FILE_PDF,
+        "mp4" | "mkv" | "webm" | "avi" | "mov" | "m4v" => bold::FILE_VIDEO,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" => bold::FILE_IMAGE,
+        "mp3" | "ogg" | "opus" | "flac" | "wav" | "m4a" => bold::FILE_AUDIO,
+        "txt" | "md" | "log" | "json" | "toml" | "ini" | "cfg" => bold::FILE_TEXT,
+        "apk" => bold::ANDROID_LOGO,
+        _ => bold::FILE,
+    }
 }
 
 /// History section: visited URLs (most-recent first) with their visit date, over
