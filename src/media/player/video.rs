@@ -24,6 +24,7 @@ use yuv::{
 };
 
 use super::decode::H264Decoder;
+use super::glpaint::{GlPainter, Painted};
 use super::hwdec::{self, Lib};
 use super::shared::POSITION_EVENT_SECONDS;
 use super::Shared;
@@ -251,6 +252,22 @@ pub(crate) struct Frame {
     chroma: Chroma,
     /// Where the planes go back when the frame is dropped (hardware frames).
     pool: Option<Arc<PlanePool>>,
+}
+
+/// A hardware frame's planes, tightly packed: Y rows, then interleaved UV rows.
+pub(crate) struct Nv12Planes<'a> {
+    pub(crate) y: &'a [u8],
+    pub(crate) uv: &'a [u8],
+}
+
+impl Frame {
+    /// The planes when the chroma is interleaved (a hardware picture).
+    pub(crate) fn nv12(&self) -> Option<Nv12Planes<'_>> {
+        match &self.chroma {
+            Chroma::Interleaved(uv) => Some(Nv12Planes { y: &self.y, uv }),
+            Chroma::Planar { .. } => None,
+        }
+    }
 }
 
 impl Drop for Frame {
@@ -542,6 +559,10 @@ impl Presenter {
 impl Painter {
     fn run(mut self, rx: Receiver<Paint>) {
         let mut last_sent = Instant::now();
+        // The GPU route for hardware frames (see `glpaint`), made on the first
+        // one: its GL context lives on this thread.
+        let mut gpu: Option<GlPainter> = None;
+        let mut gpu_tried = false;
         while let Ok(Paint { frame, epoch }) = rx.recv() {
             // Queued before a seek: the element has moved on.
             if self.shared.is_quit() || self.flush.epoch() != epoch {
@@ -553,6 +574,30 @@ impl Painter {
                 continue;
             }
             last_sent = Instant::now();
+            if frame.nv12().is_some() && !gpu_tried {
+                gpu_tried = true;
+                gpu = GlPainter::new();
+            }
+            if let Some(painter) = gpu.as_mut() {
+                match painter.paint(&frame) {
+                    Ok(Painted::Frame(video_frame)) => {
+                        self.renderer
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .render(video_frame);
+                        self.shared.send_event(PlayerEvent::VideoFrameUpdated);
+                        continue;
+                    }
+                    Ok(Painted::Busy) => {
+                        log::debug!("video: renderer behind, frame {:.3}s skipped", frame.pts());
+                        continue;
+                    }
+                    Err(e) => {
+                        log::warn!("video: GPU painting failed ({e}); converting on the CPU");
+                        gpu = None;
+                    }
+                }
+            }
             if let Some(video_frame) = self.convert(&frame) {
                 self.renderer
                     .lock()

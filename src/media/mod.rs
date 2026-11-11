@@ -66,6 +66,17 @@ impl Default for Settings {
     }
 }
 
+/// With the window's GL context current: offers it to Servo for GPU video
+/// painting. Before Servo is built.
+pub(crate) fn publish_gl_context() -> bool {
+    player::glpaint::publish_current()
+}
+
+/// Whether [`publish_gl_context`] succeeded (Servo's GL video pref follows it).
+pub(crate) fn gl_context_published() -> bool {
+    player::glpaint::published()
+}
+
 pub(crate) fn settings() -> &'static Settings {
     SETTINGS.get_or_init(Settings::default)
 }
@@ -225,8 +236,14 @@ impl Backend for SdlMediaBackend {
         observer: GenericCallback<PlayerEvent>,
         video_renderer: Option<Arc<Mutex<dyn VideoFrameRenderer>>>,
         audio_renderer: Option<Arc<Mutex<dyn audio::AudioRenderer>>>,
-        _: Box<dyn PlayerGLContext>,
+        gl: Box<dyn PlayerGLContext>,
     ) -> Arc<Mutex<dyn Player>> {
+        // Servo names its context only while its GL player thread runs: the
+        // condition for handing it texture frames.
+        player::glpaint::set_glplayer_up(matches!(
+            gl.get_gl_context(),
+            servo_media::player::context::GlContext::Egl(_)
+        ));
         if !settings().output {
             return Arc::new(Mutex::new(DummyPlayer));
         }
