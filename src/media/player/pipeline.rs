@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Seek};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -51,12 +51,7 @@ fn decoder_thread(
     shared.events.send(PlayerEvent::NeedData);
 
     let seekable = stream_type == StreamType::Seekable;
-    let source = ByteReader {
-        shared: shared.clone(),
-        seekable,
-    };
-
-    match run_pipeline(&shared, source, seekable, video_renderer) {
+    match run_pipeline(&shared, seekable, video_renderer) {
         Ok(()) => {}
         Err(message) => {
             // A quit mid-read surfaces as a decode error; it is not one.
@@ -98,21 +93,31 @@ fn track_duration_secs(track: &Track) -> Option<f64> {
     )
 }
 
+/// Probes the resource from its first byte; returns the format reader over it.
+fn open_reader(
+    shared: &Arc<Shared>,
+    seekable: bool,
+) -> Result<Box<dyn FormatReader>, SymphoniaError> {
+    let mut source = ByteReader {
+        shared: shared.clone(),
+        seekable,
+    };
+    source.seek(io::SeekFrom::Start(0))?;
+    let stream = MediaSourceStream::new(Box::new(source), Default::default());
+    symphonia::default::get_probe().probe(
+        &Hint::new(),
+        stream,
+        FormatOptions::default(),
+        MetadataOptions::default(),
+    )
+}
+
 fn run_pipeline(
     shared: &Arc<Shared>,
-    source: ByteReader,
     seekable: bool,
     video_renderer: Option<Arc<Mutex<dyn VideoFrameRenderer>>>,
 ) -> Result<(), String> {
-    let stream = MediaSourceStream::new(Box::new(source), Default::default());
-    let mut reader = symphonia::default::get_probe()
-        .probe(
-            &Hint::new(),
-            stream,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )
-        .map_err(|e| format!("probe failed: {e}"))?;
+    let mut reader = open_reader(shared, seekable).map_err(|e| format!("probe failed: {e}"))?;
 
     // Audio setup; the decoder is built here, rate/channels are pinned by the
     // preroll below.
@@ -288,6 +293,13 @@ fn run_pipeline(
         }
 
         if let Some(target) = shared.take_pending_seek() {
+            if at_eof {
+                // A reader that has hit the end cannot always read after a seek; reopen it.
+                match open_reader(shared, seekable) {
+                    Ok(fresh) => reader = fresh,
+                    Err(e) => log::warn!("audio: reopen for seek failed: {e}"),
+                }
+            }
             if let Some(a) = &mut audio {
                 let mut pcm = lock(&shared.pcm);
                 pcm.queue.clear();

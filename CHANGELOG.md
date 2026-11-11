@@ -95,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Android: the screen turning with the phone while auto-rotate is off
 - Videos staying blank on some sites, such as portmaster.games
 - Some MP4 videos never starting, mostly on fast connections
+- Looping videos stopping on their last frame
 
 ## [0.10.0] - 2026-10-08
 
