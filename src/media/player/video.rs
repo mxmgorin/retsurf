@@ -183,6 +183,26 @@ pub(crate) struct AvccFormat {
 
 const START_CODE: [u8; 4] = [0, 0, 0, 1];
 
+const NAL_TYPE_MASK: u8 = 0x1F;
+const NAL_TYPE_IDR: u8 = 5;
+const NAL_TYPE_SPS: u8 = 7;
+
+/// SPS byte holding level_idc: after the NAL header, profile_idc and constraint flags.
+const SPS_LEVEL_OFFSET: usize = 3;
+
+/// Highest level_idc openh264 accepts (level 5.2); it rejects any SPS above it.
+const MAX_LEVEL_IDC: u8 = 52;
+
+/// Caps an SPS unit's level_idc at [`MAX_LEVEL_IDC`]; other NAL units are left as they are.
+fn clamp_sps_level(unit: &mut [u8]) {
+    let is_sps = unit
+        .first()
+        .is_some_and(|nal| nal & NAL_TYPE_MASK == NAL_TYPE_SPS);
+    if let Some(level) = unit.get_mut(SPS_LEVEL_OFFSET).filter(|_| is_sps) {
+        *level = (*level).min(MAX_LEVEL_IDC);
+    }
+}
+
 impl AvccFormat {
     /// ISO 14496-15 AVCDecoderConfigurationRecord.
     pub(crate) fn parse(data: &[u8]) -> Option<Self> {
@@ -198,7 +218,9 @@ impl AvccFormat {
                 *pos += 2;
                 let unit = data.get(*pos..*pos + len)?;
                 headers.extend_from_slice(&START_CODE);
+                let start = headers.len();
                 headers.extend_from_slice(unit);
+                clamp_sps_level(&mut headers[start..]);
                 *pos += len;
             }
             Some(())
@@ -224,9 +246,11 @@ impl AvccFormat {
             if len == 0 || pos + len > sample.len() {
                 break;
             }
-            keyframe |= sample[pos] & 0x1F == 5;
+            keyframe |= sample[pos] & NAL_TYPE_MASK == NAL_TYPE_IDR;
             out.extend_from_slice(&START_CODE);
+            let start = out.len();
             out.extend_from_slice(&sample[pos..pos + len]);
+            clamp_sps_level(&mut out[start..]);
             pos += len;
         }
         (out, keyframe)
@@ -480,7 +504,9 @@ fn video_thread(
                     let config = DecoderConfig::new().flush_after_decode(Flush::NoFlush);
                     match Decoder::with_api_config(OpenH264API::from_source(), config) {
                         Ok(mut fresh) => {
-                            let _ = fresh.decode(&headers);
+                            if let Err(e) = fresh.decode(&headers) {
+                                log::warn!("video: stream headers rejected: {e}");
+                            }
                             decoder = Some(fresh);
                         }
                         Err(e) => {
@@ -592,6 +618,42 @@ mod tests {
         let (only_p, keyframe) = format.to_annexb(&sample[..6]);
         assert!(!keyframe);
         assert_eq!(only_p, [&START_CODE[..], &[0x41, 0xAA]].concat());
+    }
+
+    #[test]
+    fn clamps_sps_level_to_decoder_max() {
+        let sps = |level: u8| vec![0x67, 100, 0, level, 0xAC];
+        let mut record = vec![1, 100, 0, 62, 0xFF, 0xE1];
+        record.extend_from_slice(&5u16.to_be_bytes());
+        record.extend_from_slice(&sps(62));
+        record.push(1);
+        record.extend_from_slice(&2u16.to_be_bytes());
+        record.extend_from_slice(&[0x68, 62]);
+        let format = AvccFormat::parse(&record).unwrap();
+        assert_eq!(
+            format.headers,
+            [
+                &START_CODE[..],
+                &sps(MAX_LEVEL_IDC),
+                &START_CODE[..],
+                &[0x68, 62]
+            ]
+            .concat()
+        );
+
+        let mut sample = 5u32.to_be_bytes().to_vec();
+        sample.extend_from_slice(&sps(62));
+        assert_eq!(
+            format.to_annexb(&sample).0,
+            [&START_CODE[..], &sps(MAX_LEVEL_IDC)].concat()
+        );
+
+        let mut supported = 5u32.to_be_bytes().to_vec();
+        supported.extend_from_slice(&sps(31));
+        assert_eq!(
+            format.to_annexb(&supported).0,
+            [&START_CODE[..], &sps(31)].concat()
+        );
     }
 
     /// Truncated or lying length prefixes must not panic or read past the end.
