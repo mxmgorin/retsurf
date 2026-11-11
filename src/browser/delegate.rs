@@ -118,6 +118,16 @@ impl servo::WebViewDelegate for AppBrowserInner {
         }
     }
 
+    fn notify_page_title_changed(&self, webview: WebView, title: Option<String>) {
+        let Some(title) = title.filter(|title| !title.is_empty()) else {
+            return;
+        };
+        if let Some(i) = self.tab_index(webview.id()) {
+            let url = self.tabs.borrow()[i].state.page_url.clone();
+            self.titled.push((url, title));
+        }
+    }
+
     /// `HeadParsed` is dropped: Servo sends it from `HTMLBodyElement::bind_to_tree`,
     /// so a late `<body>` emits one with no `Complete` to follow. `Started` covers
     /// only page-initiated navigations; ours arm the flag themselves.

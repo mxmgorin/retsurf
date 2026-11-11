@@ -51,6 +51,22 @@ pub fn local_time(secs: u64) -> (u32, u32) {
     hour_minute(local)
 }
 
+/// The local calendar day at unix time `secs`, as days since the epoch.
+pub fn local_day(secs: u64) -> i64 {
+    let local = i64::try_from(secs).unwrap_or(i64::MAX) + utc_offset(secs);
+    local.div_euclid(SECS_PER_DAY)
+}
+
+/// Days in a week.
+const DAYS_PER_WEEK: i64 = 7;
+/// The epoch's weekday, counted from Monday: 1970-01-01 was a Thursday.
+const EPOCH_WEEKDAY: i64 = 3;
+
+/// The weekday of `days` since the epoch, counted from Monday.
+pub fn weekday(days: i64) -> usize {
+    (days + EPOCH_WEEKDAY).rem_euclid(DAYS_PER_WEEK) as usize
+}
+
 /// The hour and minute of the day `secs` into it, counted from any midnight.
 fn hour_minute(secs: i64) -> (u32, u32) {
     let of_day = secs.rem_euclid(SECS_PER_DAY);
@@ -89,7 +105,7 @@ pub fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, days_from_civil, hour_minute, now_unix, utc_offset};
+    use super::{civil_from_days, days_from_civil, hour_minute, now_unix, utc_offset, weekday};
 
     /// Real zones sit within a day of UTC, on quarter hours.
     #[test]
@@ -108,6 +124,13 @@ mod tests {
         assert_eq!(hour_minute(14 * 3600 + 32 * 60 + 59), (14, 32));
         assert_eq!(hour_minute(-60), (23, 59));
         assert_eq!(hour_minute(20_744 * 86_400 + 3_600), (1, 0));
+    }
+
+    #[test]
+    fn weekdays_count_from_monday() {
+        assert_eq!(weekday(0), 3, "1970-01-01 was a Thursday");
+        assert_eq!(weekday(days_from_civil(2026, 11, 9)), 0, "a Monday");
+        assert_eq!(weekday(-1), 2);
     }
 
     #[test]

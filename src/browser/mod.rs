@@ -231,6 +231,8 @@ struct AppBrowserInner {
     /// the history log. Sourced from `notify_url_changed` (a real navigation), *not*
     /// the address-bar text — so typing a URL doesn't pollute history.
     visited: FrameQueue<String>,
+    /// Titles pages gave themselves since the last drain, with their URL.
+    titled: FrameQueue<(String, String)>,
     /// Page icons that arrived since the last drain, with the URL of the page
     /// that named them.
     new_icons: FrameQueue<(String, Favicon)>,
@@ -396,6 +398,7 @@ impl AppBrowserInner {
             repaint_pending: Cell::new(false),
             // History entries only matter once a pass happens anyway.
             visited: FrameQueue::silent(event_sender.clone()),
+            titled: FrameQueue::silent(event_sender.clone()),
             new_icons: FrameQueue::silent(event_sender.clone()),
             notices: FrameQueue::new(UserEvent::BrowserFrameReady, event_sender.clone()),
             download_requests: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
@@ -735,6 +738,12 @@ impl AppBrowser {
     #[inline]
     pub fn take_visited(&self) -> Vec<String> {
         self.inner.visited.take()
+    }
+
+    /// Take and clear the `(url, title)` pairs of pages that named themselves
+    /// since the last call, for the history log.
+    pub fn take_titles(&self) -> Vec<(String, String)> {
+        self.inner.titled.take()
     }
 
     /// Take and clear the notices raised since the last call.

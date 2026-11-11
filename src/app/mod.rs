@@ -313,6 +313,9 @@ impl App {
                 self.ui.menu.bookmarks.opened(&url);
                 self.schedule_heap_trim();
             }
+            for (url, title) in self.browser.take_titles() {
+                self.ui.menu.history_mut().set_title(&url, &title);
+            }
             for (url, icon) in self.browser.take_new_icons() {
                 self.store_page_icon(&url, &icon);
             }

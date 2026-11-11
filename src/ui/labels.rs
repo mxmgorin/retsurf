@@ -32,6 +32,50 @@ pub fn site_label(url: &str) -> String {
     })
 }
 
+/// Weekday names, Monday first.
+const WEEKDAYS: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+/// Month names, short, January first.
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/// A list's head over the entries of local `day` (days since the epoch), read
+/// on `today`: Today, Yesterday, the weekday and date this year, else the date
+/// with its year; `None` heads the entries with no time.
+pub(super) fn day_label(day: Option<i64>, today: i64) -> String {
+    let Some(day) = day else {
+        return "Undated".to_string();
+    };
+    let (year, month, date) = crate::clock::civil_from_days(day);
+    let month = MONTHS[month as usize - 1];
+    match today - day {
+        0 => "Today".to_string(),
+        1 => "Yesterday".to_string(),
+        _ if year == crate::clock::civil_from_days(today).0 => {
+            let weekday = WEEKDAYS[crate::clock::weekday(day)];
+            format!("{weekday}, {month} {date}")
+        }
+        _ => format!("{month} {date}, {year}"),
+    }
+}
+
+/// The local time of day at unix time `secs` as `HH:MM`; a dash for no time.
+pub(super) fn time_label(secs: u64) -> String {
+    if secs == 0 {
+        return "\u{2014}".to_string();
+    }
+    let (hour, minute) = crate::clock::local_time(secs);
+    format!("{hour:02}:{minute:02}")
+}
+
 /// What a bookmark is shown as: its name, else its site.
 pub fn bookmark_label(bookmark: &Bookmark) -> String {
     match bookmark.name.is_empty() {
@@ -84,7 +128,19 @@ fn compute_brand_label(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::compute_brand_label;
+    use super::{compute_brand_label, day_label};
+    use crate::clock::days_from_civil;
+
+    #[test]
+    fn day_labels_name_recent_days_and_date_the_rest() {
+        let today = days_from_civil(2026, 11, 10);
+        assert_eq!(day_label(Some(today), today), "Today");
+        assert_eq!(day_label(Some(today - 1), today), "Yesterday");
+        assert_eq!(day_label(Some(today - 2), today), "Sunday, Nov 8");
+        let last_year = days_from_civil(2025, 12, 31);
+        assert_eq!(day_label(Some(last_year), today), "Dec 31, 2025");
+        assert_eq!(day_label(None, today), "Undated");
+    }
 
     #[test]
     fn brand_label_takes_the_registrable_domain() {

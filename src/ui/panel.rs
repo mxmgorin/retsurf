@@ -354,6 +354,22 @@ fn toned_row(
     )
 }
 
+/// A head over the rows that follow it, muted, cut to the list and set off
+/// from the rows above.
+pub(super) fn head(ui: &mut egui::Ui, head: &str) {
+    ui.add_space(HEAD_LEAD);
+    let text = egui::RichText::new(head.to_uppercase())
+        .color(palette().dim)
+        .font(HEAD_FONT);
+    ui.add(egui::Label::new(text).truncate());
+}
+
+/// [`head`]s draw and measure in this font.
+pub(super) const HEAD_FONT: egui::FontId = egui::FontId::proportional(HINT_FONT);
+
+/// The space a [`head`] leaves above itself.
+pub(super) const HEAD_LEAD: f32 = ROW_GAP;
+
 /// A hairline across the list, with a row gap's air on either side.
 pub(super) fn divider(ui: &mut egui::Ui, width: f32) {
     ui.add_space(ROW_GAP);

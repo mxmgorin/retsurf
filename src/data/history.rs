@@ -4,6 +4,7 @@
 //! [`crate::config`]). The full-screen menu (see [`crate::overlay::menu`]) renders it; the
 //! central router drives selection / open / delete / clear.
 
+use crate::browser::HOME_URL;
 use crate::clock::now_unix;
 use crate::config::HistoryConfig;
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,9 @@ pub struct Entry {
     pub url: String,
     #[serde(default)]
     pub time: u64,
+    /// The title the page gave itself; empty until it does.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
 }
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).
@@ -44,6 +48,7 @@ impl History {
     /// Load the saved list, trimmed to the cap; a missing or invalid file yields none.
     pub fn load(cfg: &HistoryConfig) -> Self {
         let mut entries = super::load_toml::<Store>("history.toml").entries;
+        entries.retain(|entry| entry.url != HOME_URL);
         // Honor a shrunk cap from the config right away.
         entries.truncate(cfg.max_entries);
         Self {
@@ -108,7 +113,8 @@ impl History {
     /// top and re-stamps its time), capped at `max_entries`. Only marks the store
     /// dirty; the disk write is deferred to [`Self::flush`].
     pub fn record(&mut self, url: &str) {
-        if !self.enabled || url.is_empty() {
+        // The start page is no visit.
+        if !self.enabled || url.is_empty() || url == HOME_URL {
             return;
         }
         // Already on top: keep the existing entry (avoids reordering the
@@ -116,19 +122,33 @@ impl History {
         if self.entries.first().is_some_and(|e| e.url == url) {
             return;
         }
-        if let Some(i) = self.entries.iter().position(|e| e.url == url) {
-            self.entries.remove(i);
-        }
+        let title = match self.entries.iter().position(|e| e.url == url) {
+            Some(i) => self.entries.remove(i).title,
+            None => String::new(),
+        };
         self.entries.insert(
             0,
             Entry {
                 url: url.to_string(),
                 time: now_unix(),
+                title,
             },
         );
         self.entries.truncate(self.max_entries);
         self.clamp_selected();
         self.dirty = true;
+    }
+
+    /// Name the entry of `url` by the `title` its page gave itself; marks the
+    /// store dirty as [`Self::record`] does.
+    pub fn set_title(&mut self, url: &str, title: &str) {
+        let Some(entry) = self.entries.iter_mut().find(|e| e.url == url) else {
+            return;
+        };
+        if entry.title != title {
+            entry.title = title.to_string();
+            self.dirty = true;
+        }
     }
 
     /// Reset the highlight when the menu opens: land on the first entry (index
@@ -204,4 +224,44 @@ pub fn format_time(secs: u64) -> String {
     let hour = tod / 3_600;
     let min = (tod % 3_600) / 60;
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{min:02}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn history() -> History {
+        History {
+            entries: Vec::new(),
+            enabled: true,
+            max_entries: 10,
+            cursor: super::super::ListCursor::new(1),
+            dirty: false,
+        }
+    }
+
+    #[test]
+    fn the_start_page_is_no_visit() {
+        let mut history = history();
+        history.record(HOME_URL);
+        assert!(history.entries().is_empty());
+    }
+
+    #[test]
+    fn a_revisit_keeps_the_title() {
+        let mut history = history();
+        history.record("https://a.example/");
+        history.set_title("https://a.example/", "A");
+        history.record("https://b.example/");
+        history.record("https://a.example/");
+        assert_eq!(history.entries()[0].title, "A");
+    }
+
+    #[test]
+    fn a_title_names_only_its_page() {
+        let mut history = history();
+        history.record("https://a.example/");
+        history.set_title("https://b.example/", "B");
+        assert_eq!(history.entries()[0].title, "");
+    }
 }

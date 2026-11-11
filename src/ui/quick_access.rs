@@ -20,7 +20,8 @@ use crate::ui::favicon::PageIcons;
 use crate::ui::keys::{self, HINT_FONT};
 use crate::ui::menu;
 use crate::ui::panel::{
-    self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, ROW_GAP, ROW_H,
+    self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, HEAD_FONT, HEAD_LEAD,
+    ROW_GAP, ROW_H,
 };
 use crate::ui::theme::{self, palette, ROW_FONT};
 use egui_phosphor::bold;
@@ -152,7 +153,7 @@ fn add_rows(
     for (index, row) in panel.rows().iter().enumerate() {
         match &row.above {
             Some(Break::Rule) => panel::divider(ui, width),
-            Some(Break::Head(head)) => add_head(ui, head),
+            Some(Break::Head(head)) => panel::head(ui, head),
             None => {}
         }
         let entry = row.entry;
@@ -318,22 +319,6 @@ fn clock_text(ctx: &egui::Context) -> String {
     ctx.request_repaint_after(std::time::Duration::from_secs(turn));
     format!("{hour:02}:{minute:02}")
 }
-
-/// A section's head over its rows, muted, cut to the strip and set off from
-/// the rows above.
-fn add_head(ui: &mut egui::Ui, head: &str) {
-    ui.add_space(HEAD_LEAD);
-    let text = egui::RichText::new(head.to_uppercase())
-        .color(palette().dim)
-        .font(HEAD_FONT);
-    ui.add(egui::Label::new(text).truncate());
-}
-
-/// Section heads draw and measure in this font.
-const HEAD_FONT: egui::FontId = egui::FontId::proportional(HINT_FONT);
-
-/// The space a section head leaves above itself.
-const HEAD_LEAD: f32 = ROW_GAP;
 
 /// The height the breaks add to the list, each with its gaps.
 fn breaks_h(ui: &egui::Ui, panel: &QuickAccess) -> f32 {

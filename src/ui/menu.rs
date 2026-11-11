@@ -4,16 +4,17 @@
 
 use super::favicon::PageIcons;
 use super::keys;
+use super::labels;
 use super::panel::{
     self, center_selected, section_scroll_over, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
 };
 use super::tab_thumbs::TabThumbs;
 use super::theme::{self, palette, ROW_FONT};
 use crate::browser::HOME_URL;
+use crate::clock;
 use crate::command::{AppCommand, MenuAction};
 use crate::config::{FaceLabels, TabLayout};
 use crate::data::bookmarks::Launch;
-use crate::data::history;
 use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};
@@ -161,6 +162,28 @@ fn url_atoms(
     }
     atoms
 }
+
+/// A titled page's row label: its title, cut first, then its `site` dim.
+fn titled_atoms(
+    title: &str,
+    site: String,
+    icon: Option<egui::Atom<'static>>,
+) -> egui::Atoms<'static> {
+    let title = egui::RichText::new(title)
+        .size(ROW_FONT)
+        .color(palette().text);
+    let site = egui::RichText::new(site)
+        .size(ROW_FONT)
+        .color(palette().dim);
+    let mut atoms = egui::Atoms::new((title.atom_shrink(true), site, egui::Atom::grow()));
+    if let Some(icon) = icon {
+        atoms.push_left(icon);
+    }
+    atoms
+}
+
+/// Width of a row's time of day, `HH:MM`.
+const TIME_W: f32 = 48.0;
 
 /// Rendered width of `text` in `font` (logical px).
 fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
@@ -664,7 +687,7 @@ fn paint_tab_picture(
             paint_card_glyph(ui.painter(), rect, bold::BROWSER, selected)
         }
         None => {
-            let label = super::labels::brand_label(&tab.url);
+            let label = labels::brand_label(&tab.url);
             let icon = view.icons.icon(&tab.url);
             super::home::paint_site_card(ui.painter(), rect, &label, icon, selected);
         }
@@ -826,7 +849,7 @@ fn add_bookmarks_section(
                     true => url_tail(url),
                     false => url_without_scheme(url),
                 };
-                let label = super::labels::bookmark_label(bookmark);
+                let label = labels::bookmark_label(bookmark);
                 let atoms = url_atoms(ui, label, tail, icon, row_w);
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
@@ -921,10 +944,10 @@ fn add_history_section(
         return;
     }
 
-    // `date_w` fits "YYYY-MM-DD HH:MM"; the URL gets what's left after the date,
-    // the two trailing buttons, and their spacing.
-    let date_w = 118.0;
-    let row_w = screen.width() - SIDES - 2.0 * DEL_W - date_w - 18.0;
+    // The page gets what's left after the time, the two trailing buttons, and
+    // their spacing.
+    let row_w = screen.width() - SIDES - 2.0 * DEL_W - TIME_W - 18.0;
+    let today = clock::local_day(clock::now_unix());
     section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // Top row (cursor index 0, mirroring Tabs' "+ New tab"): drops every
@@ -938,12 +961,23 @@ fn add_history_section(
             true,
             commands,
         );
+        let mut last_day = None;
         for (i, entry) in hist.entries().iter().enumerate() {
+            let day = (entry.time != 0).then(|| clock::local_day(entry.time));
+            if i == 0 || day != last_day {
+                panel::head(ui, &labels::day_label(day, today));
+            }
+            last_day = day;
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
             let line = ui.horizontal(|ui| {
                 let icon = site_icon(icons, &entry.url);
-                let brand = super::labels::brand_label(&entry.url);
-                let atoms = url_atoms(ui, brand, url_tail(&entry.url), icon, row_w);
+                let atoms = match entry.title.is_empty() {
+                    true => {
+                        let brand = labels::brand_label(&entry.url);
+                        url_atoms(ui, brand, url_tail(&entry.url), icon, row_w)
+                    }
+                    false => titled_atoms(&entry.title, labels::site_label(&entry.url), icon),
+                };
                 let resp = row_atoms(ui, row_w, selected, atoms);
                 if selected {
                     center_selected(&resp);
@@ -951,13 +985,8 @@ fn add_history_section(
                 if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));
                 }
-                ui.add_sized(
-                    [date_w, ROW_H],
-                    egui::Label::new(
-                        egui::RichText::new(history::format_time(entry.time)).color(dim),
-                    )
-                    .truncate(),
-                );
+                let time = egui::RichText::new(labels::time_label(entry.time)).color(dim);
+                ui.add_sized([TIME_W, ROW_H], egui::Label::new(time).truncate());
                 // Trailing actions: the bookmark toggle (same as Y), then delete.
                 let marked = menu.is_bookmarked(&entry.url);
                 if bookmark_button(ui, selected, marked, dim).clicked() {
