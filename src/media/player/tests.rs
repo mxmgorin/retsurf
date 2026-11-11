@@ -2,6 +2,7 @@ use super::source::ByteReader;
 use super::*;
 use crate::media::decoder::synth_wav;
 use crate::media::device::CHANNELS;
+use servo_media::player::SeekLock;
 use std::io::{Read, Seek, SeekFrom};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -243,6 +244,18 @@ fn push_evicts_on_live_input() {
     assert!(!stream.stalled);
 }
 
+fn seek_lock(events: &Mutex<Vec<PlayerEvent>>) -> SeekLock {
+    events
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|e| match e {
+            PlayerEvent::SeekData(_, lock) => Some(lock.clone()),
+            _ => None,
+        })
+        .expect("callers wait for SeekData first")
+}
+
 /// The refetch handshake end to end: a read outside the buffered region
 /// emits SeekData, waits for the unlock, re-emits NeedData for the new
 /// fetch context, and serves the bytes that then arrive.
@@ -267,17 +280,8 @@ fn jump_read_runs_the_seek_data_handshake() {
     wait_for("SeekData", || {
         has(&events, |e| matches!(e, PlayerEvent::SeekData(500, _)))
     });
-    let seek_lock = events
-        .lock()
-        .unwrap()
-        .iter()
-        .find_map(|e| match e {
-            PlayerEvent::SeekData(_, lock) => Some(lock.clone()),
-            _ => None,
-        })
-        .expect("just waited for it");
     // Blocks until the reader acks, exactly like the element's fetch_request.
-    seek_lock.unlock(true);
+    seek_lock(&events).unlock(true);
     wait_for("NeedData after the handshake", || {
         let events = events.lock().unwrap();
         matches!(events.last(), Some(PlayerEvent::NeedData))
@@ -286,6 +290,50 @@ fn jump_read_runs_the_seek_data_handshake() {
     {
         let mut stream = lock(&shared.stream);
         assert_eq!(stream.base, 500, "the region reset to the jump target");
+        stream.data.extend_from_slice(&[1, 2, 3, 4]);
+    }
+    shared.bytes_cv.notify_all();
+    assert_eq!(reader.join().unwrap(), [1, 2, 3, 4]);
+}
+
+/// Bytes and the end the old fetch delivers before the unlock belong to the
+/// abandoned offset; none of them may land in the jump target's region.
+#[test]
+fn refetch_drops_what_the_old_fetch_pushes_before_the_unlock() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let shared = Arc::new(Shared::new(Box::new(Collector(events.clone()))));
+    lock(&shared.stream).total_len = Some(1000);
+
+    let reader_shared = shared.clone();
+    let reader = thread::spawn(move || {
+        let mut reader = ByteReader {
+            shared: reader_shared,
+            seekable: true,
+        };
+        reader.seek(SeekFrom::Start(500)).unwrap();
+        let mut buf = [0u8; 4];
+        reader.read_exact(&mut buf).unwrap();
+        buf
+    });
+
+    wait_for("SeekData", || {
+        has(&events, |e| matches!(e, PlayerEvent::SeekData(500, _)))
+    });
+    {
+        let mut stream = lock(&shared.stream);
+        stream.data.extend_from_slice(&[9; 16]);
+        stream.eos = true;
+    }
+    seek_lock(&events).unlock(true);
+    wait_for("NeedData after the handshake", || {
+        let events = events.lock().unwrap();
+        matches!(events.last(), Some(PlayerEvent::NeedData))
+    });
+
+    {
+        let mut stream = lock(&shared.stream);
+        assert_eq!((stream.base, stream.data.len()), (500, 0));
+        assert!(!stream.eos, "the old fetch's end does not end the new one");
         stream.data.extend_from_slice(&[1, 2, 3, 4]);
     }
     shared.bytes_cv.notify_all();

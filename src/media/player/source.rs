@@ -22,17 +22,6 @@ impl ByteReader {
     /// the element acknowledges through the `SeekLock`. `clear` drops the region
     /// (a jump); a resume at the head keeps it and stays contiguous.
     fn request_range(&self, offset: u64, clear: bool) -> io::Result<()> {
-        {
-            let mut stream = lock(&self.shared.stream);
-            if clear {
-                stream.base = offset;
-                stream.data.clear();
-            }
-            stream.stalled = false;
-            // The new fetch delivers a fresh body with its own end.
-            stream.eos = false;
-        }
-
         let (sender, receiver) = generic_channel::channel::<SeekLockMsg>()
             .ok_or_else(|| io::Error::other("seek-lock channel failed"))?;
         self.shared.events.send(PlayerEvent::SeekData(
@@ -47,6 +36,18 @@ impl ByteReader {
         let _ = ack.send(());
         if !ok {
             return Err(io::Error::other("element refused the refetch"));
+        }
+        {
+            // Reset after the ack: until the element switches fetches, the old one still pushes.
+            let mut stream = lock(&self.shared.stream);
+            if clear {
+                stream.base = offset;
+            }
+            let keep = (offset - stream.base) as usize;
+            stream.data.truncate(keep);
+            stream.stalled = false;
+            // The new fetch delivers a fresh body with its own end.
+            stream.eos = false;
         }
         // The new fetch context starts locked; NeedData is what unlocks it.
         self.shared.events.send(PlayerEvent::NeedData);
