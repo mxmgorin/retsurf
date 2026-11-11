@@ -6,7 +6,7 @@ use super::favicon::PageIcons;
 use super::keys;
 use super::labels;
 use super::panel::{
-    self, center_selected, section_scroll_over, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
+    self, center_selected, section_scroll, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
 };
 use super::tab_thumbs::TabThumbs;
 use super::theme::{self, palette, ROW_FONT};
@@ -431,7 +431,7 @@ fn add_tabs_section(
     let selected = menu.tab_selected();
     // Title width, less the two trailing buttons and the spacing before each.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
-    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         let full_w = screen.width() - SIDES;
         let new_tab = action_row(
@@ -551,7 +551,7 @@ fn add_tab_grid(
     };
     let selected = menu.tab_selected();
     let count = view.tabs.len() + 1;
-    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing = egui::vec2(CARD_GAP, CARD_GAP);
         for row in 0..count.div_ceil(cols) {
             ui.horizontal(|ui| {
@@ -829,7 +829,7 @@ fn add_bookmarks_section(
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
     let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
-    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, bookmark) in bookmarks.all().iter().enumerate() {
             let selected = i == bookmarks.selected();
@@ -893,7 +893,7 @@ fn add_downloads_section(
     let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
     let today = clock::local_day(clock::now_unix());
-    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         clear_row(
             ui,
@@ -1019,7 +1019,7 @@ fn add_history_section(
     // their spacing.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - TIME_W - 18.0;
     let today = clock::local_day(clock::now_unix());
-    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // Top row (cursor index 0, mirroring Tabs' "+ New tab"): drops every
         // entry.

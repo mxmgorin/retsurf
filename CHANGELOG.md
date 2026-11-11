@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Quick Access marks a site's own settings with a dot; X sets one back to the global value, and Reset site settings counts them
 - Menu: the latest tabs with their site icons (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
 - Tabs on the start page are named Start page in the tab lists
+- Settings names what the buttons do in a footer, as the other menus do
 - Bookmarks in the lists show their tags and whether they open as an app or a game
 - Downloads show the kind of each file, a progress bar and the day; a failed one can be tried again
 - History is grouped by day with the time of each visit and names pages by their title; the start page is no longer recorded

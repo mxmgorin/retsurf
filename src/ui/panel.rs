@@ -307,7 +307,7 @@ pub(super) fn grouped_row_list_above(
         );
         ui.add_space(ROW_GAP * 3.0);
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        section_scroll(ui, screen).show(ui, |ui| {
+        section_scroll(ui, screen, 0.0).show(ui, |ui| {
             let mut index = 0;
             for item in items {
                 let (label, value, tone) = match item {
@@ -509,20 +509,10 @@ fn pointed_key(layer: egui::LayerId) -> egui::Id {
     egui::Id::new(("pointed_row", layer))
 }
 
-/// A section's scroll area, capped to the room down to the screen bottom: the
-/// panel's `Area` auto-sizes, so an unbounded `ScrollArea` would grow past the
-/// screen and clip instead of scrolling.
-pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollArea {
-    section_scroll_over(ui, screen, 0.0)
-}
-
-/// A [`section_scroll`] ending `foot` above the panel's bottom padding, clear
-/// of a [`footer`] that tall.
-pub(super) fn section_scroll_over(
-    ui: &egui::Ui,
-    screen: egui::Rect,
-    foot: f32,
-) -> egui::ScrollArea {
+/// A section's scroll area, capped to the room down to the screen bottom less
+/// `foot`, kept for a [`footer`]: the panel's `Area` auto-sizes, so an unbounded
+/// `ScrollArea` would grow past the screen and clip instead of scrolling.
+pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect, foot: f32) -> egui::ScrollArea {
     let max_h = (screen.bottom() - PAD_Y - foot - ui.cursor().top()).max(0.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false; 2])

@@ -228,6 +228,7 @@ pub(super) fn about_icon() -> SvgTexture {
 fn add_about(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    foot: f32,
     dim: egui::Color32,
     sel: usize,
     view: &AboutView,
@@ -235,7 +236,7 @@ fn add_about(
 ) {
     let info = crate::overlay::settings::about_info();
     let full_w = screen.width() - SIDES;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
 
         ui.horizontal(|ui| {
@@ -346,13 +347,14 @@ fn add_controls(
     ui: &mut egui::Ui,
     settings: &Settings,
     screen: egui::Rect,
+    foot: f32,
     commands: &mut Vec<AppCommand>,
 ) {
     let rows = settings.controls_rows();
     let sel = settings.selected();
     let capturing = settings.capturing_action();
     let full_w = screen.width() - SIDES;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, row) in rows.iter().enumerate() {
             // A group is a label; every other row goes through one click path.
@@ -425,6 +427,7 @@ fn add_engines(
     ui: &mut egui::Ui,
     settings: &Settings,
     screen: egui::Rect,
+    foot: f32,
     commands: &mut Vec<AppCommand>,
 ) {
     let Some((title, rows)) = settings.engine_screen() else {
@@ -443,7 +446,7 @@ fn add_engines(
     );
     let sel = settings.selected();
     let full_w = screen.width() - SIDES;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, row) in rows.into_iter().enumerate() {
             let new = matches!(row, EngineRow::New { .. });
@@ -501,8 +504,12 @@ fn section_icon(section: SettingsSection) -> &'static str {
     }
 }
 
-/// Draw the settings overlay: the section bar, a control hint, and the active
-/// section's field list. See the module docs for the controls.
+/// The panel's id, which its footer is kept under too.
+const PANEL_ID: &str = "settings";
+
+/// Draw the settings overlay: the section bar, the active section's field
+/// list, and a footer naming what the buttons do. See the module docs for the
+/// controls.
 pub(super) fn add_settings(
     ctx: &egui::Context,
     settings: &Settings,
@@ -514,7 +521,7 @@ pub(super) fn add_settings(
 ) {
     let screen = ctx.content_rect();
     let dim = palette().dim;
-    let closed = panel::panel(ctx, "settings", screen, |ui| {
+    let closed = panel::panel(ctx, PANEL_ID, screen, |ui| {
         let active = settings.section();
         let clicked = panel::section_bar(
             ui,
@@ -551,28 +558,38 @@ pub(super) fn add_settings(
                 (&[], "* needs restart"),
             ]
         };
-        // Capture's line says what to do, not which button does it.
-        if button_hints || settings.capturing() {
-            keys::hint_row(ui, &hints);
-        }
         if let Some(note) = settings.controls_note() {
             ui.label(egui::RichText::new(note).color(palette().warn));
         }
         ui.add_space(8.0);
+        // Capture's line says what to do, not which button does it.
+        let shows_footer = button_hints || settings.capturing();
+        let foot = match shows_footer {
+            true => panel::footer_room(ui, PANEL_ID),
+            false => 0.0,
+        };
+        let footer = |ui: &mut egui::Ui| {
+            if shows_footer {
+                panel::footer(ui, screen, PANEL_ID, &hints);
+            }
+        };
 
         // The About tab is read-only info, not a FIELDS list.
         if settings.is_info_section() {
-            add_about(ui, screen, dim, settings.selected(), &about, commands);
+            add_about(ui, screen, foot, dim, settings.selected(), &about, commands);
+            footer(ui);
             return;
         }
 
         // The binding list is dynamic, not FIELDS.
         if settings.bindings_open() {
-            add_controls(ui, settings, screen, commands);
+            add_controls(ui, settings, screen, foot, commands);
+            footer(ui);
             return;
         }
         if settings.engines_open() {
-            add_engines(ui, settings, screen, commands);
+            add_engines(ui, settings, screen, foot, commands);
+            footer(ui);
             return;
         }
 
@@ -588,7 +605,7 @@ pub(super) fn add_settings(
         let full_w = screen.width() - SIDES;
         let num_w = full_w - 2.0 * STEP_W - 8.0;
 
-        section_scroll(ui, screen).show(ui, |ui| {
+        section_scroll(ui, screen, foot).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = ROW_GAP;
             let mut last_cat = "";
             for (i, field) in rows {
@@ -656,6 +673,7 @@ pub(super) fn add_settings(
                 });
             }
         });
+        footer(ui);
     });
     // Both close paths (B and the corner button) save the draft on the way out.
     if closed {
