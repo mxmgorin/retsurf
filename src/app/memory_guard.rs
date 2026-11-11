@@ -142,6 +142,7 @@ mod tests {
                 active: false,
                 launched: false,
                 favicon: None,
+                thumbnail: None,
             })
             .collect()
     }

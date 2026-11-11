@@ -68,6 +68,7 @@ toolbar_position = "top"   # "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, show on scroll up
 page_icons = true          # site icons in tabs, bookmarks, history and the start page
 button_hints = true        # name what the buttons do in the lists, settings, start page, Quick Access and Menu
+tab_layout = "list"        # open tabs in the lists: "list" (rows) or "grid" (cards with a picture of each page)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 
 [home]

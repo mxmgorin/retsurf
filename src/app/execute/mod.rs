@@ -101,7 +101,7 @@ impl App {
                 if self.ui.menu.visible {
                     self.ui.menu.close();
                 } else {
-                    self.ui.menu_open(self.browser.active_tab());
+                    self.open_lists();
                 }
             }
             MenuAction::Close => self.ui.menu.close(),
@@ -122,6 +122,13 @@ impl App {
             MenuAction::CloseTab(index) => self.close_tab_at(*index),
             MenuAction::NewTab => self.new_tab(),
         }
+    }
+
+    /// Open the lists on the shown tab, taking its picture for the tab grid
+    /// first.
+    pub(super) fn open_lists(&mut self) {
+        self.browser.capture_thumbnail();
+        self.ui.menu_open(self.browser.active_tab());
     }
 
     /// The browser tab the Tabs section's highlight points at, or `None` on the
@@ -515,6 +522,7 @@ impl App {
         self.ui.set_hint_badges(self.config.controls.hint_badges);
         self.ui.set_page_icons(self.config.interface.page_icons);
         self.ui.set_button_hints(self.config.interface.button_hints);
+        self.ui.set_tab_layout(self.config.interface.tab_layout);
         self.ui.set_ui_theme(self.config.interface.theme);
         self.ui.set_home(&self.config.home);
         self.ui.set_search_engines(&self.config.browser);

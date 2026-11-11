@@ -27,6 +27,9 @@ pub struct InterfaceConfig {
     /// Name what the buttons do at the foot of the menus, the settings, the
     /// start page and the edge strips, and the shoulders beside its filter tabs.
     pub button_hints: bool,
+    /// How the lists show the open tabs: rows, or cards with a picture of each
+    /// page, kept from when it was last on screen.
+    pub tab_layout: TabLayout,
 }
 
 impl Default for InterfaceConfig {
@@ -39,10 +42,12 @@ impl Default for InterfaceConfig {
             toolbar_autohide: false,
             page_icons: true,
             button_hints: true,
+            tab_layout: TabLayout::List,
         }
     }
 }
 
+pub use tab_layout::TabLayout;
 pub use ui_theme::UiTheme;
 
 // Own modules: a file holds one `token_enum!`, whose tests take a fixed name.
@@ -64,6 +69,22 @@ mod ui_theme {
             Sand => "sand", "Sand",
             /// The original Game Boy's four greens.
             Dmg => "dmg", "DMG",
+        }
+    }
+}
+
+mod tab_layout {
+    use crate::config::token_enum::token_enum;
+
+    token_enum! {
+        /// How the lists show the open tabs. Serializes to its lowercase name in
+        /// TOML; an unknown value falls back to `List`.
+        pub enum TabLayout {
+            default List;
+            /// A row per tab (the default).
+            List => "list", "List",
+            /// A card per tab with a picture of its page.
+            Grid => "grid", "Grid",
         }
     }
 }

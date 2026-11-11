@@ -209,13 +209,7 @@ impl App {
                     let state = self.ui.update.snapshot();
                     self.ui.update_notice.move_sel(*dx, &state);
                 }
-                Focus::Menu => {
-                    if *dx != 0 {
-                        self.ui.menu.switch_section(*dx);
-                    } else if *dy != 0 {
-                        self.ui.menu.move_sel(*dy);
-                    }
-                }
+                Focus::Menu => self.ui.menu.nav(*dx, *dy),
                 Focus::QuickAccess => {
                     if *dy != 0 {
                         self.ui.quick_access.move_sel(*dy);

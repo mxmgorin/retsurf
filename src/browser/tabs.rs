@@ -54,6 +54,7 @@ impl AppBrowser {
                     active: i == active,
                     launched: tab.state.launched.is_some(),
                     favicon: tab.favicon.clone(),
+                    thumbnail: tab.thumbnail.clone(),
                 }
             })
             .collect()
@@ -172,6 +173,22 @@ impl AppBrowser {
         }
     }
 
+    /// Turning thumbnails off frees the kept ones; turning them on keeps each
+    /// tab's from when it next leaves the screen.
+    pub fn set_thumbnails(&self, on: bool) {
+        self.inner.thumbnails.set(on);
+        if !on {
+            for tab in self.inner.tabs.borrow_mut().iter_mut() {
+                tab.thumbnail = None;
+            }
+        }
+    }
+
+    /// Keep the shown tab's page as its thumbnail now, while thumbnails are on.
+    pub fn capture_thumbnail(&self) {
+        self.inner.capture_active();
+    }
+
     /// Reopen a saved session (see [`crate::data::session`]): a tab per URL, with
     /// `active` shown, cut to `max_tabs` and past unparseable URLs. `false` when
     /// nothing was restored. Startup only: it assumes an empty tab list.
@@ -223,11 +240,12 @@ impl AppBrowser {
 
     /// Switch the shown tab to `index` (no-op if out of range or already active).
     pub fn switch_to(&self, index: usize) {
-        let tabs = self.inner.tabs.borrow();
         let active = self.inner.active.get();
-        if index >= tabs.len() || index == active {
+        if index >= self.tab_count() || index == active {
             return;
         }
+        self.inner.capture_active();
+        let tabs = self.inner.tabs.borrow();
         if let Some(cur) = tabs.get(active) {
             cur.webview.hide();
             cur.webview.set_focused(false);

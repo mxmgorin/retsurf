@@ -31,6 +31,7 @@ pub mod memory;
 mod page_theme;
 mod reader;
 mod tabs;
+mod thumbnail;
 mod url;
 
 pub use about::ABOUT_URL;
@@ -42,6 +43,7 @@ pub use home::HOME_URL;
 pub use junk_surfer::inline_game;
 use local_site::LocalServer;
 pub use local_site::LocalSite;
+pub use thumbnail::Thumbnail;
 pub use url::try_into_url;
 
 mod pads;
@@ -53,12 +55,12 @@ use crate::{
     browser::{adblock::Adblock, content_filter::ContentFilter},
     config::{
         js_preset::{self, JsPreset},
-        AppConfig, BrowserConfig, ExperimentalConfig, PageTheme,
+        AppConfig, BrowserConfig, ExperimentalConfig, PageTheme, TabLayout,
     },
     event::user::{FrameQueue, UserEvent, UserEventSender},
 };
 use servo::profile_traits::mem::MemoryReportResult;
-use servo::{EventLoopWaker, RenderingContext, WebView};
+use servo::{DeviceIntRect, EventLoopWaker, RenderingContext, WebView};
 use servo_base::generic_channel::GenericCallback;
 use std::{
     cell::{Cell, Ref, RefCell, RefMut},
@@ -191,6 +193,11 @@ struct Tab {
     favicon: Option<Favicon>,
     /// When it was last shown, as a count of shows; `0` for never.
     shown: Cell<u64>,
+    /// Its page as last painted, for the tab grid.
+    thumbnail: Option<Thumbnail>,
+    /// Whether the rendering context holds a frame of it: painted since it was
+    /// last shown.
+    painted: Cell<bool>,
 }
 
 impl Tab {
@@ -202,6 +209,8 @@ impl Tab {
             page_images: RefCell::default(),
             favicon: None,
             shown: Cell::new(0),
+            thumbnail: None,
+            painted: Cell::new(false),
         }
     }
 }
@@ -289,6 +298,8 @@ struct AppBrowserInner {
     js_applied: RefCell<Option<(String, JsPreset)>>,
     /// `[interface] page_icons`: whether tabs keep their page's icon.
     page_icons: Cell<bool>,
+    /// Whether tabs keep a picture of their page, which the tab grid shows.
+    thumbnails: Cell<bool>,
     /// The page theme's stylesheets, attached to `user_content` while the theme
     /// asks for them. Kept so they can be detached again.
     theme_sheets: page_theme::ThemeSheets,
@@ -415,6 +426,7 @@ impl AppBrowserInner {
             user_agent: RefCell::new(effective_user_agent(browser)),
             js_applied: RefCell::new(None),
             page_icons: Cell::new(config.interface.page_icons),
+            thumbnails: Cell::new(config.interface.tab_layout == TabLayout::Grid),
             theme_sheets,
             pads: RefCell::new(PadSlots::default()),
             haptics: Cell::new(haptics),
@@ -475,6 +487,7 @@ impl AppBrowserInner {
     }
 
     fn adopt_tab(&self, tab: Tab) {
+        self.capture_active();
         if let Some(cur) = self.active_webview() {
             cur.hide();
             cur.set_focused(false);
@@ -490,11 +503,45 @@ impl AppBrowserInner {
 
     /// Make the tab at `index` of `tabs` the shown one, and the latest shown.
     fn activate(&self, tabs: &[Tab], index: usize) {
-        self.active.set(index);
+        let changed = self.active.replace(index) != index;
         let stamp = self.shows.get() + 1;
         self.shows.set(stamp);
         if let Some(tab) = tabs.get(index) {
             tab.shown.set(stamp);
+            if changed {
+                tab.painted.set(false);
+            }
+        }
+    }
+
+    /// Keep the shown tab's frame as its thumbnail, while thumbnails are on and
+    /// the rendering context holds its frame; the start page keeps none.
+    fn capture_active(&self) {
+        if !self.thumbnails.get() {
+            return;
+        }
+        let index = self.active.get();
+        let (painted, home) = match self.tabs.borrow().get(index) {
+            Some(tab) => (tab.painted.get(), tab.state.page_url == home::HOME_URL),
+            None => return,
+        };
+        let thumbnail = match (painted, home) {
+            (_, true) => None,
+            (false, false) => return,
+            (true, false) => {
+                let size = self.rendering_ctx.size();
+                let full = euclid::Size2D::new(size.width as i32, size.height as i32);
+                let frame = self
+                    .rendering_ctx
+                    .read_to_image(DeviceIntRect::from_size(full));
+                let Some(thumbnail) = frame.as_ref().and_then(Thumbnail::from_frame) else {
+                    return;
+                };
+                Some(thumbnail)
+            }
+        };
+        if let Some(tab) = self.tabs.borrow_mut().get_mut(index) {
+            tab.thumbnail = thumbnail;
         }
     }
 
@@ -670,6 +717,7 @@ impl AppBrowser {
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
         self.set_page_icons(config.interface.page_icons);
+        self.set_thumbnails(config.interface.tab_layout == TabLayout::Grid);
     }
 
     /// Whether any tab is fetching, not just the shown one — a background tab's

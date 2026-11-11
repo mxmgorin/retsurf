@@ -23,6 +23,9 @@ impl AppBrowser {
         if let Some(tab) = self.inner.active_webview() {
             self.inner.repaint_pending.set(false);
             tab.paint();
+            if let Some(tab) = self.inner.tabs.borrow().get(self.inner.active.get()) {
+                tab.painted.set(true);
+            }
             return true;
         }
 

@@ -52,7 +52,7 @@ pub use experimental::{ExperimentalConfig, ExperimentalPreset};
 pub use game_mode::{GameModeConfig, Scaling};
 pub use history::HistoryConfig;
 pub use home::{HomeBookmarksConfig, HomeConfig, HomeLayout, HomeSearch, HomeSize, HomeSort};
-pub use interface::{InterfaceConfig, ToolbarPosition, UiTheme};
+pub use interface::{InterfaceConfig, TabLayout, ToolbarPosition, UiTheme};
 pub use osk::{OskConfig, OskStyle};
 pub use pad_layout::{Face, FaceLabels, FacePlaces, PadLayout};
 pub use paths::{cache_dir, data_dir, device_scale, servo_data_dir};

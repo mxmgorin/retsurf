@@ -7,10 +7,11 @@ use super::keys;
 use super::panel::{
     self, center_selected, section_scroll_over, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
 };
+use super::tab_thumbs::TabThumbs;
 use super::theme::{self, palette, ROW_FONT};
 use crate::browser::HOME_URL;
 use crate::command::{AppCommand, MenuAction};
-use crate::config::FaceLabels;
+use crate::config::{FaceLabels, TabLayout};
 use crate::data::bookmarks::Launch;
 use crate::data::history;
 use crate::data::session::TabInfo;
@@ -314,18 +315,33 @@ fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
     }
 }
 
+/// What the lists draw besides their own state.
+pub(super) struct ListsView<'a> {
+    pub tabs: &'a [TabInfo],
+    pub icons: &'a PageIcons,
+    pub thumbs: &'a TabThumbs,
+    pub tab_layout: TabLayout,
+    pub face: FaceLabels,
+    /// Whether a footer names what the buttons do.
+    pub button_hints: bool,
+}
+
 /// Draw the menu overlay: the section bar over the active section's list, and
 /// with `button_hints` a footer naming what the buttons do on the highlighted
 /// row. Left/Right switch section, Up/Down move, A open, X delete, B close.
 pub(super) fn add_menu(
     ctx: &egui::Context,
-    menu: &Menu,
-    tabs: &[TabInfo],
-    icons: &PageIcons,
-    face: FaceLabels,
-    button_hints: bool,
+    menu: &mut Menu,
+    view: &ListsView,
     commands: &mut Vec<AppCommand>,
 ) {
+    let ListsView {
+        tabs,
+        icons,
+        face,
+        button_hints,
+        ..
+    } = *view;
     let screen = ctx.content_rect();
     let closed = panel::panel(ctx, PANEL_ID, screen, |ui| {
         let clicked = panel::section_bar(
@@ -346,11 +362,19 @@ pub(super) fn add_menu(
             false => 0.0,
         };
 
-        match menu.section() {
-            Section::Tabs => add_tabs_section(ui, screen, foot, menu, tabs, icons, commands),
-            Section::Bookmarks => add_bookmarks_section(ui, screen, foot, menu, icons, commands),
-            Section::History => add_history_section(ui, screen, foot, menu, icons, commands),
-            Section::Downloads => add_downloads_section(ui, screen, foot, menu, commands),
+        match (menu.section(), view.tab_layout) {
+            (Section::Tabs, TabLayout::List) => {
+                menu.set_tab_cols(1);
+                add_tabs_section(ui, screen, foot, menu, tabs, icons, commands);
+            }
+            (Section::Tabs, TabLayout::Grid) => {
+                add_tab_grid(ui, screen, foot, menu, view, commands)
+            }
+            (Section::Bookmarks, _) => {
+                add_bookmarks_section(ui, screen, foot, menu, icons, commands)
+            }
+            (Section::History, _) => add_history_section(ui, screen, foot, menu, icons, commands),
+            (Section::Downloads, _) => add_downloads_section(ui, screen, foot, menu, commands),
         }
 
         if button_hints {
@@ -362,8 +386,13 @@ pub(super) fn add_menu(
                 .zip([a, x, y])
                 .filter_map(|(cap, verb)| Some((&cap[..], verb?)))
                 .collect();
-            let (sideways, back) = ([sideways.as_str()], [face.b]);
-            hints.push((&sideways, "section"));
+            // A grid takes Left/Right across its columns.
+            let sections: &[&str] = match menu.section() == Section::Tabs && menu.tab_grid() {
+                true => &keys::SHOULDERS,
+                false => &[sideways.as_str()],
+            };
+            let back = [face.b];
+            hints.push((sections, "section"));
             hints.push((&back, "back"));
             panel::footer(ui, screen, PANEL_ID, &hints);
         }
@@ -456,6 +485,283 @@ fn add_tabs_section(
             follow_pointer(&line.response, &line.inner, sel, i + 1, commands);
         }
     });
+}
+
+/// Narrowest a tab card gets before the grid drops a column.
+const CARD_MIN_W: f32 = 180.0;
+/// Space between cards, across and down.
+const CARD_GAP: f32 = 12.0;
+/// A card's content inset from its highlight.
+const CARD_PAD: f32 = 4.0;
+/// The close button over a card's picture.
+const CARD_CLOSE: f32 = 24.0;
+/// The glyph a card without a picture shows, for the start page or a new tab.
+const CARD_GLYPH: f32 = 40.0;
+
+/// A card's outer size and its picture's.
+#[derive(Clone, Copy)]
+struct CardSize {
+    card: egui::Vec2,
+    picture: egui::Vec2,
+}
+
+/// Tabs section as a grid of cards: a leading "New tab" card (selection index
+/// 0) before the open tabs, each with a picture of its page and a close button.
+fn add_tab_grid(
+    ui: &mut egui::Ui,
+    screen: egui::Rect,
+    foot: f32,
+    menu: &mut Menu,
+    view: &ListsView,
+    commands: &mut Vec<AppCommand>,
+) {
+    let full_w = screen.width() - SIDES;
+    let cols = ((full_w + CARD_GAP) / (CARD_MIN_W + CARD_GAP))
+        .floor()
+        .max(1.0) as usize;
+    menu.set_tab_cols(cols);
+    let card_w = (full_w - (cols - 1) as f32 * CARD_GAP) / cols as f32;
+    let picture_w = card_w - 2.0 * CARD_PAD;
+    // The pictures' shape, else the screen's, which the page's is near.
+    let aspect = view
+        .tabs
+        .iter()
+        .find_map(|tab| tab.thumbnail.as_ref())
+        .map_or(screen.height() / screen.width(), |thumb| {
+            thumb.height as f32 / thumb.width as f32
+        });
+    let picture = egui::vec2(picture_w, (picture_w * aspect).round());
+    let size = CardSize {
+        card: egui::vec2(card_w, CARD_PAD + picture.y + ROW_H),
+        picture,
+    };
+    let selected = menu.tab_selected();
+    let count = view.tabs.len() + 1;
+    section_scroll_over(ui, screen, foot).show(ui, |ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(CARD_GAP, CARD_GAP);
+        for row in 0..count.div_ceil(cols) {
+            ui.horizontal(|ui| {
+                for index in row * cols..count.min((row + 1) * cols) {
+                    // Index 0 is the "New tab" card.
+                    let tab = index.checked_sub(1).map(|i| (i, &view.tabs[i]));
+                    add_tab_card(ui, size, tab, index == selected, view, commands);
+                }
+            });
+        }
+    });
+}
+
+/// One card of the tab grid: `tab`'s picture over its icon and title, or the
+/// "New tab" card for `None`.
+fn add_tab_card(
+    ui: &mut egui::Ui,
+    size: CardSize,
+    tab: Option<(usize, &TabInfo)>,
+    selected: bool,
+    view: &ListsView,
+    commands: &mut Vec<AppCommand>,
+) {
+    let (rect, resp) = ui.allocate_exact_size(size.card, egui::Sense::click());
+    let painter = ui.painter();
+    if selected {
+        painter.rect_filled(rect, ROW_RADIUS, ui.visuals().selection.bg_fill);
+    }
+    let picture =
+        egui::Rect::from_min_size(rect.min + egui::vec2(CARD_PAD, CARD_PAD), size.picture);
+    let title = egui::Rect::from_min_max(
+        picture.left_bottom(),
+        egui::pos2(picture.right(), rect.bottom()),
+    );
+    match tab {
+        None => {
+            paint_card_glyph(painter, picture, bold::PLUS, selected);
+            paint_card_title(painter, title, None, "New tab", false);
+        }
+        Some((_, tab)) => {
+            paint_tab_picture(ui, picture, tab, view, selected);
+            let icon = card_icon(view.icons, tab);
+            paint_card_title(ui.painter(), title, icon, &tab.title, tab.active);
+        }
+    }
+    if selected {
+        center_selected(&resp);
+    }
+    let index = tab.map_or(0, |(i, _)| i + 1);
+    follow_pointer(&resp, &resp, selected, index, commands);
+    if resp.clicked() {
+        let action = match tab {
+            Some((i, _)) => MenuAction::OpenTab(i),
+            None => MenuAction::NewTab,
+        };
+        commands.push(AppCommand::Menu(action));
+    }
+    if let Some((i, _)) = tab {
+        let at = picture.right_top() + egui::vec2(-CARD_PAD - CARD_CLOSE, CARD_PAD);
+        let close = egui::Rect::from_min_size(at, egui::vec2(CARD_CLOSE, CARD_CLOSE));
+        let id = egui::Id::new(("tab_card_close", i));
+        if close_disc(ui, close, id, selected).clicked() {
+            commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
+        }
+    }
+}
+
+/// A round close button over a card: a cross drawn from strokes, since an icon
+/// glyph sits on its font's line rather than at the disc's centre.
+fn close_disc(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id, selected: bool) -> egui::Response {
+    let resp = ui.interact(rect, id, egui::Sense::click());
+    let fill = match resp.hovered() {
+        true => palette().surface,
+        false => palette().panel_fill,
+    };
+    let color = if selected {
+        palette().accent
+    } else {
+        palette().text
+    };
+    let painter = ui.painter();
+    let center = rect.center();
+    painter.circle_filled(center, rect.width() / 2.0, fill);
+    let arm = rect.width() * CROSS_ARM;
+    let stroke = egui::Stroke::new(CROSS_STROKE, color);
+    for dir in [egui::vec2(arm, arm), egui::vec2(arm, -arm)] {
+        painter.line_segment([center - dir, center + dir], stroke);
+    }
+    resp
+}
+
+/// Half a close cross's diagonal, as a share of its disc's width.
+const CROSS_ARM: f32 = 0.18;
+/// A close cross's line width.
+const CROSS_STROKE: f32 = 2.0;
+
+/// Paint `tab`'s picture into `rect`: its kept frame, else a stand-in for the
+/// start page or its site.
+fn paint_tab_picture(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    tab: &TabInfo,
+    view: &ListsView,
+    selected: bool,
+) {
+    let texture = tab
+        .thumbnail
+        .as_ref()
+        .and_then(|thumb| view.thumbs.texture(thumb));
+    match texture {
+        Some(texture) => {
+            egui::Image::new(texture)
+                .uv(cover_uv(texture.size_vec2(), rect.size()))
+                .corner_radius(ROW_RADIUS)
+                .paint_at(ui, rect);
+            let stroke = match selected {
+                true => egui::Stroke::new(2.0, palette().accent),
+                false => egui::Stroke::new(1.0, palette().border),
+            };
+            ui.painter()
+                .rect_stroke(rect, ROW_RADIUS, stroke, egui::StrokeKind::Inside);
+        }
+        None if tab.url == HOME_URL => {
+            paint_card_glyph(ui.painter(), rect, bold::BROWSER, selected)
+        }
+        None => {
+            let label = super::labels::brand_label(&tab.url);
+            let icon = view.icons.icon(&tab.url);
+            super::home::paint_site_card(ui.painter(), rect, &label, icon, selected);
+        }
+    }
+}
+
+/// The part of a `texture`-sized picture that fills a `frame`-shaped box:
+/// whole across or down, cut evenly at the sides or from the bottom.
+fn cover_uv(texture: egui::Vec2, frame: egui::Vec2) -> egui::Rect {
+    let scale = (frame.x / texture.x).max(frame.y / texture.y);
+    let seen = frame / scale / texture;
+    egui::Rect::from_min_size(egui::pos2((1.0 - seen.x) / 2.0, 0.0), seen)
+}
+
+/// A card with no picture: `glyph` centred on the surface.
+fn paint_card_glyph(painter: &egui::Painter, rect: egui::Rect, glyph: &str, selected: bool) {
+    painter.rect_filled(rect, ROW_RADIUS, palette().surface);
+    let stroke = match selected {
+        true => egui::Stroke::new(2.0, palette().accent),
+        false => egui::Stroke::new(1.0, palette().border),
+    };
+    painter.rect_stroke(rect, ROW_RADIUS, stroke, egui::StrokeKind::Inside);
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        glyph,
+        egui::FontId::proportional(CARD_GLYPH),
+        palette().dim,
+    );
+}
+
+/// A card's title row: `icon`, `title` cut to the row, and a check when the
+/// tab is the `shown` one.
+fn paint_card_title(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    icon: Option<CardIcon>,
+    title: &str,
+    shown: bool,
+) {
+    let font = egui::FontId::proportional(ROW_FONT);
+    let gap = ROW_GAP * 2.0;
+    let mut left = rect.left() + ROW_GAP;
+    let side = egui::vec2(ROW_FONT, ROW_FONT);
+    match icon {
+        Some(CardIcon::Image(texture)) => {
+            let at =
+                egui::Rect::from_min_size(egui::pos2(left, rect.center().y - ROW_FONT / 2.0), side);
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            painter.image(texture, at, uv, egui::Color32::WHITE);
+            left += ROW_FONT + gap;
+        }
+        Some(CardIcon::Glyph(glyph, color)) => {
+            let at = egui::pos2(left, rect.center().y);
+            painter.text(at, egui::Align2::LEFT_CENTER, glyph, font.clone(), color);
+            left += ROW_FONT + gap;
+        }
+        None => {}
+    }
+    let mut right = rect.right() - ROW_GAP;
+    if shown {
+        let at = egui::pos2(right, rect.center().y);
+        let check = painter.text(
+            at,
+            egui::Align2::RIGHT_CENTER,
+            bold::CHECK,
+            font.clone(),
+            palette().accent,
+        );
+        right = check.left() - gap;
+    }
+    let mut job = egui::text::LayoutJob::simple_singleline(title.to_string(), font, palette().text);
+    job.wrap.max_width = (right - left).max(0.0);
+    job.wrap.max_rows = 1;
+    job.wrap.break_anywhere = true;
+    let galley = painter.layout_job(job);
+    let at = egui::pos2(left, rect.center().y - galley.size().y / 2.0);
+    painter.galley(at, galley, palette().text);
+}
+
+/// A card title's icon: the site's picture, or a glyph in its colour.
+enum CardIcon {
+    Image(egui::TextureId),
+    Glyph(&'static str, egui::Color32),
+}
+
+/// `tab`'s icon on its card, as on its row: the site's, a globe without one,
+/// the tab glyph for the start page; `None` with icons off.
+fn card_icon(icons: &PageIcons, tab: &TabInfo) -> Option<CardIcon> {
+    if !icons.enabled() {
+        return None;
+    }
+    Some(match (tab.url == HOME_URL, icons.icon(&tab.url)) {
+        (true, _) => CardIcon::Glyph(bold::BROWSER, palette().text),
+        (false, Some(icon)) => CardIcon::Image(icon.row.id()),
+        (false, None) => CardIcon::Glyph(bold::GLOBE, palette().dim),
+    })
 }
 
 /// A tab row's leading icon: its site's, but the tab glyph for the start page,

@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interface themes (`[interface] theme`): Dusk (the default), Night, OLED, Sand and DMG
 - `retsurf --kiosk PATH` (or `--open ID`) runs a game alone: Game Mode with no browser menus, notices, update check, new windows, downloads or other sites
 - Start + Select quits, in Game Mode too
+- Tab grid (`[interface] tab_layout = "grid"`, Settings > Interface): the lists show the open tabs as cards with a picture of each page
 - Search engine choice (`[browser] search_engine`) from a list of ten that can be added to, renamed, edited and deleted (Settings > Browser > Search engines, `[[browser.search_engines]]`); the search icon in the address bar picks one, and the empty address and search fields name it
 
 ### Changed

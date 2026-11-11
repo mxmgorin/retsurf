@@ -26,6 +26,7 @@ mod search_menu;
 mod settings;
 mod splash;
 mod svg;
+mod tab_thumbs;
 mod theme;
 mod toast;
 mod toolbar;
@@ -43,7 +44,8 @@ use crate::{
     command::AppCommand,
     config::{
         Brand, ControlsConfig, DebugConfig, DownloadsConfig, FaceLabels, HistoryConfig, HomeConfig,
-        HomeSearch, InterfaceConfig, OskConfig, PadLayout, ToolbarPosition, UpdateConfig,
+        HomeSearch, InterfaceConfig, OskConfig, PadLayout, TabLayout, ToolbarPosition,
+        UpdateConfig,
     },
     data::bookmarks::{self, Filter, Launch},
     data::session::TabInfo,
@@ -358,6 +360,10 @@ pub struct AppUi {
     about_icon: svg::SvgTexture,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
+    /// Pictures of the tabs while the tab grid is on screen.
+    tab_thumbs: tab_thumbs::TabThumbs,
+    /// `[interface] tab_layout`.
+    tab_layout: TabLayout,
     /// Link-hint navigation state; the rects come from the browser.
     pub hints: Hints,
     /// Modal page prompts: queued `<select>` pickers and JS dialogs.
@@ -448,6 +454,8 @@ impl AppUi {
             home: Home::new(search_field(home_config.search)),
             home_active: false,
             page_icons: favicon::PageIcons::new(interface.page_icons),
+            tab_thumbs: tab_thumbs::TabThumbs::default(),
+            tab_layout: interface.tab_layout,
             home_config: home_config.clone(),
             home_pad: false,
             banner: home::banner(),
@@ -750,6 +758,11 @@ impl AppUi {
         self.button_hints = on;
     }
 
+    /// `[interface] tab_layout`, applied live.
+    pub fn set_tab_layout(&mut self, layout: TabLayout) {
+        self.tab_layout = layout;
+    }
+
     /// `[interface] theme`, applied live; the brand images redraw in it on their next use.
     pub fn set_ui_theme(&mut self, ui_theme: crate::config::UiTheme) {
         theme::set(ui_theme);
@@ -937,6 +950,12 @@ impl AppUi {
                 let strip = self.quick_access.visible.then(|| self.quick_access.strip());
                 let wanted = page_icon_wants(&self.menu, self.home_active, strip, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
+                let tab_grid = self.menu.visible
+                    && self.menu.section() == Section::Tabs
+                    && self.tab_layout == TabLayout::Grid;
+                let thumbs = tab_infos.iter().filter(|_| tab_grid);
+                self.tab_thumbs
+                    .sync(ctx, thumbs.filter_map(|tab| tab.thumbnail.as_ref()));
 
                 // A backdrop over the blank web view, below the foreground overlays.
                 if let Some(list) = &home_list {
@@ -1053,15 +1072,15 @@ impl AppUi {
                 self.transients_built.cursor = false;
                 if self.menu.visible {
                     drop_egui_focus(ctx);
-                    menu::add_menu(
-                        ctx,
-                        &self.menu,
-                        &tab_infos,
-                        &self.page_icons,
+                    let view = menu::ListsView {
+                        tabs: &tab_infos,
+                        icons: &self.page_icons,
+                        thumbs: &self.tab_thumbs,
+                        tab_layout: self.tab_layout,
                         face,
-                        self.button_hints,
-                        commands,
-                    );
+                        button_hints: self.button_hints,
+                    };
+                    menu::add_menu(ctx, &mut self.menu, &view, commands);
                 } else if self.quick_access.visible || self.osk.visible {
                     if self.quick_access.visible {
                         // Same as the menu's: a focused row would activate twice.

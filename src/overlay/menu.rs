@@ -56,6 +56,9 @@ pub struct Menu {
     /// shown. The row at index `tab_count` is the "+ New tab" entry.
     tab_selected: usize,
     tab_count: usize,
+    /// Columns the Tabs section is laid out in, recorded by the renderer each
+    /// frame; one for a list.
+    tab_cols: usize,
     /// The clear row was activated once and awaits confirmation. Clearing history
     /// or the download list can't be undone, so it takes two presses.
     clear_armed: bool,
@@ -75,6 +78,7 @@ impl Menu {
             downloads: Downloads::load(downloads_cfg, user_agent),
             tab_selected: 0,
             tab_count: 0,
+            tab_cols: 1,
             clear_armed: false,
         }
     }
@@ -140,6 +144,32 @@ impl Menu {
             self.clear_armed = false;
             self.clear();
         }
+    }
+
+    /// One D-pad step: across a tab grid's columns, else sideways to the next
+    /// section, and down a list's rows.
+    pub fn nav(&mut self, dx: i32, dy: i32) {
+        if self.section == Section::Tabs && self.tab_cols > 1 {
+            self.clear_armed = false;
+            let rows = self.tab_count + 1;
+            self.tab_selected =
+                crate::list::grid_step(self.tab_selected, dx, dy, self.tab_cols, rows);
+        } else if dx != 0 {
+            self.switch_section(dx);
+        } else if dy != 0 {
+            self.move_sel(dy);
+        }
+    }
+
+    /// Record the Tabs section's column count from the renderer.
+    pub fn set_tab_cols(&mut self, cols: usize) {
+        self.tab_cols = cols.max(1);
+    }
+
+    /// Whether the Tabs section is laid out in columns, where Left/Right move
+    /// across them.
+    pub fn tab_grid(&self) -> bool {
+        self.tab_cols > 1
     }
 
     /// Move the active section's selection by `dy` rows.

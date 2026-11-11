@@ -1154,6 +1154,27 @@ fn paint_glyph(
     }
 }
 
+/// A site card's glyph: the large tile's icon and monogram, the card's own
+/// size and corners, no badge.
+const CARD: Glyph = Glyph {
+    side: 0.0,
+    radius: ROW_RADIUS,
+    mark: 0.0,
+    ..tile_style(HomeSize::Large).glyph
+};
+
+/// Paint `rect` as a site with no picture of its own, as a tile's glyph: the
+/// site `icon` on a fill tinted after it, else the monogram of `label`.
+pub(super) fn paint_site_card(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    label: &str,
+    icon: Option<Icon>,
+    active: bool,
+) {
+    paint_glyph(painter, rect, CARD, label, icon, active);
+}
+
 /// The letters standing in for a missing icon: the initials of the label's
 /// first words, skipping the short ones; its first letter when that leaves none.
 fn monogram(label: &str) -> String {

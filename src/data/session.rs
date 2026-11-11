@@ -20,6 +20,8 @@ pub struct TabInfo {
     /// Whether it runs a bookmark as an app or a game.
     pub launched: bool,
     pub favicon: Option<crate::browser::Favicon>,
+    /// Its page as last painted, kept for the tab grid.
+    pub thumbnail: Option<crate::browser::Thumbnail>,
 }
 
 /// On-disk shape (a TOML table can't be a bare array, so wrap the list).
@@ -110,6 +112,7 @@ mod tests {
             active,
             launched: false,
             favicon: None,
+            thumbnail: None,
         }
     }
 
