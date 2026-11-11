@@ -82,6 +82,16 @@ pub struct Progress {
     pub total: Option<u64>,
 }
 
+impl Progress {
+    /// How far the downloads are while their size is known, else how many run.
+    pub fn label(&self) -> String {
+        match self.total {
+            Some(total) if total > 0 => format!("{}%", self.received.min(total) * 100 / total),
+            _ => format!("{} active", self.active),
+        }
+    }
+}
+
 impl Download {
     pub fn is_active(&self) -> bool {
         matches!(self.state, State::Active)
@@ -343,6 +353,11 @@ impl Downloads {
     /// Move the highlight by `dy` rows, clamped to the list.
     pub fn move_sel(&mut self, dy: i32) {
         self.cursor.move_sel(dy, self.items.len());
+    }
+
+    /// Put the highlight on row `index`, counted as [`Self::move_sel`] does.
+    pub fn select(&mut self, index: usize) {
+        self.cursor.select(index, self.items.len());
     }
 
     /// Where the entry at `index` was saved, once it finished; `None` otherwise.

@@ -106,6 +106,7 @@ impl App {
             }
             MenuAction::Close => self.ui.menu.close(),
             MenuAction::SetSection(section) => self.ui.menu.set_section(*section),
+            MenuAction::Select(index) => self.ui.menu.select(*index),
             MenuAction::OpenSelected => self.menu_open_selected(out),
             MenuAction::RemoveSelected => self.delete_menu_selection(),
             MenuAction::Clear => self.ui.menu.clear_or_arm(),

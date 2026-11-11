@@ -523,7 +523,7 @@ pub(super) fn add_settings(
             active,
             SettingsSection::label,
             section_icon,
-            |_| {},
+            |_| None,
         );
         if let Some(section) = clicked {
             commands.push(AppCommand::Settings(SettingsAction::SetSection(section)));

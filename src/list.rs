@@ -53,6 +53,12 @@ impl ListCursor {
         self.selected = step(self.selected, dy, len + self.reserved);
     }
 
+    /// Put the highlight on row `index` of the reserved rows plus the `len`
+    /// entries, clamped to the last.
+    pub fn select(&mut self, index: usize, len: usize) {
+        self.selected = index.min((len + self.reserved).saturating_sub(1));
+    }
+
     /// Clamp the highlight after the list shrank to `len` entries.
     pub fn clamp(&mut self, len: usize) {
         self.selected = self.selected.min((len + self.reserved).saturating_sub(1));

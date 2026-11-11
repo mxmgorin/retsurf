@@ -1,6 +1,7 @@
 //! Shared chrome for the menu and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section tab bar, the bounded section scroll.
 
+use super::keys::{centered_hints, Hint, HINT_FONT};
 use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
@@ -218,11 +219,12 @@ pub(super) fn marked_row(
 }
 
 /// The colour of a label in `tone`.
-fn tone_color(tone: Tone) -> egui::Color32 {
+pub(super) fn tone_color(tone: Tone) -> egui::Color32 {
     match tone {
         Tone::Plain => palette().text,
         Tone::Action => palette().accent,
         Tone::Danger => palette().warn,
+        Tone::Muted => palette().disabled,
     }
 }
 
@@ -237,13 +239,14 @@ fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::R
     )
 }
 
-/// How a row's label is coloured: a value to read, a verb, or a verb that
-/// destroys something.
+/// How a row's label is coloured: a value to read, a verb, a verb that
+/// destroys something, or a verb with nothing to act on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Tone {
     Plain,
     Action,
     Danger,
+    Muted,
 }
 
 /// One entry of a [`grouped_row_list`]: a row to select, or a heading or divider
@@ -388,7 +391,8 @@ const TAB_GAP: f32 = 6.0;
 const ICON_TAB_W: f32 = 40.0;
 
 /// The top section bar: a tab per section (icon and label, or just the icon on
-/// an inactive tab where not all fit), then `trailing`. Returns the clicked one.
+/// an inactive tab where not all fit) with its `badge` after. Returns the
+/// clicked one.
 pub(super) fn section_bar<T: Copy + PartialEq>(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -396,19 +400,23 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     active: T,
     label: fn(T) -> &'static str,
     icon: fn(T) -> &'static str,
-    trailing: impl FnOnce(&mut egui::Ui),
+    badge: impl Fn(T) -> Option<String>,
 ) -> Option<T> {
     let mut clicked = None;
     let full = |section: T| format!("{}  {}", icon(section), label(section));
     let font = egui::FontId::proportional(ROW_FONT);
     let pad = 2.0 * ui.spacing().button_padding.x + TAB_GAP;
-    let width = |text: String| {
+    let text_w = |text: String| {
         ui.fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE))
             .size()
             .x
-            + pad
     };
-    let wanted: f32 = sections.iter().map(|&s| width(full(s))).sum();
+    let badge_w =
+        |section: T| badge(section).map_or(0.0, |text| text_w(text) + ui.spacing().icon_spacing);
+    let wanted: f32 = sections
+        .iter()
+        .map(|&s| text_w(full(s)) + badge_w(s) + pad)
+        .sum();
     let fits = wanted <= screen.width() - SIDES - (CLOSE_SIZE + 8.0);
     ui.horizontal(|ui| {
         // The gap turns the flush button row into a segmented control.
@@ -418,26 +426,25 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
                 true => (full(section), 0.0),
                 false => (icon(section).to_string(), ICON_TAB_W),
             };
-            let tab = egui::Button::selectable(
-                section == active,
+            let mut atoms = egui::Atoms::new(
                 egui::RichText::new(text)
                     .color(palette().text)
                     .size(ROW_FONT),
-            )
-            .corner_radius(ROW_RADIUS)
-            .min_size(egui::vec2(min_w, TAB_H));
+            );
+            if let Some(badge) = badge(section) {
+                atoms.push_right(
+                    egui::RichText::new(badge)
+                        .color(palette().accent)
+                        .size(ROW_FONT),
+                );
+            }
+            let tab = egui::Button::selectable(section == active, atoms)
+                .corner_radius(ROW_RADIUS)
+                .min_size(egui::vec2(min_w, TAB_H));
             if ui.add(tab).clicked() {
                 clicked = Some(section);
             }
         }
-        // Width from `screen`; `available_width()` runs past the visible edge.
-        // Reserve the close button's footprint so `trailing` sits left of it.
-        let remaining = screen.width() - SIDES - ui.min_rect().width() - (CLOSE_SIZE + 8.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(remaining.max(1.0), TAB_H),
-            egui::Layout::right_to_left(egui::Align::Center),
-            trailing,
-        );
     });
     clicked
 }
@@ -450,8 +457,30 @@ pub(super) fn center_selected(resp: &egui::Response) {
     if resp.ctx.data(|d| d.get_temp::<egui::Id>(key)) == Some(resp.id) {
         return;
     }
-    resp.ctx.data_mut(|d| d.insert_temp(key, resp.id));
-    resp.scroll_to_me(Some(egui::Align::Center));
+    let pointed = pointed_key(resp.layer_id);
+    let by_pointer = resp.ctx.data_mut(|d| {
+        d.insert_temp(key, resp.id);
+        let picked = d.get_temp::<egui::Id>(pointed);
+        d.remove::<egui::Id>(pointed);
+        picked == Some(resp.id)
+    });
+    // The row under the pointer is in view already.
+    if !by_pointer {
+        resp.scroll_to_me(Some(egui::Align::Center));
+    }
+}
+
+/// Whether the pointer moved onto `area` this frame: a pointer resting over a
+/// scrolling list picks nothing. Marks `row` for [`center_selected`] to leave
+/// where it is once highlighted.
+pub(super) fn pointer_moved_onto(area: &egui::Response, row: &egui::Response) -> bool {
+    let moved =
+        area.contains_pointer() && area.ctx.input(|i| i.pointer.delta() != egui::Vec2::ZERO);
+    if moved {
+        let key = pointed_key(row.layer_id);
+        row.ctx.data_mut(|d| d.insert_temp(key, row.id));
+    }
+    moved
 }
 
 /// Where [`center_selected`] remembers the row it last brought into view.
@@ -459,14 +488,68 @@ fn centered_key(layer: egui::LayerId) -> egui::Id {
     egui::Id::new(("centered_row", layer))
 }
 
+/// Where [`pointer_moved_onto`] marks the row the pointer picked.
+fn pointed_key(layer: egui::LayerId) -> egui::Id {
+    egui::Id::new(("pointed_row", layer))
+}
+
 /// A section's scroll area, capped to the room down to the screen bottom: the
 /// panel's `Area` auto-sizes, so an unbounded `ScrollArea` would grow past the
 /// screen and clip instead of scrolling.
 pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect) -> egui::ScrollArea {
-    let max_h = (screen.bottom() - PAD_Y - ui.cursor().top()).max(0.0);
+    section_scroll_over(ui, screen, 0.0)
+}
+
+/// A [`section_scroll`] ending `foot` above the panel's bottom padding, clear
+/// of a [`footer`] that tall.
+pub(super) fn section_scroll_over(
+    ui: &egui::Ui,
+    screen: egui::Rect,
+    foot: f32,
+) -> egui::ScrollArea {
+    let max_h = (screen.bottom() - PAD_Y - foot - ui.cursor().top()).max(0.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false; 2])
         .max_height(max_h)
+}
+
+/// The room a panel's [`footer`] keeps under the list above it: its height as
+/// last drawn, one line of hints under its rule before then.
+pub(super) fn footer_room(ui: &egui::Ui, id: &str) -> f32 {
+    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(HINT_FONT)));
+    let measured = ui.ctx().data(|d| d.get_temp(footer_key(id)));
+    measured.unwrap_or(DIVIDER_H + line) + ROW_GAP
+}
+
+/// `hints` centred at the panel's foot under a rule. Laid out after the list
+/// it sits under, so a change of height shows on the next frame.
+pub(super) fn footer(ui: &mut egui::Ui, screen: egui::Rect, id: &str, hints: &[Hint]) {
+    let width = screen.width() - SIDES;
+    let bottom = screen.bottom() - PAD_Y;
+    let drawn = ui.ctx().data(|d| d.get_temp::<f32>(footer_key(id)));
+    let room = footer_room(ui, id) - ROW_GAP;
+    let rect = egui::Rect::from_min_max(
+        egui::pos2(screen.left() + PAD_X, bottom - room),
+        egui::pos2(screen.left() + PAD_X + width, bottom),
+    );
+    let h = ui
+        .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            divider(ui, width);
+            centered_hints(ui, hints, width);
+        })
+        .response
+        .rect
+        .height();
+    if drawn.is_none_or(|drawn| (drawn - h).abs() > EPSILON) {
+        ui.ctx().data_mut(|d| d.insert_temp(footer_key(id), h));
+        ui.ctx().request_repaint();
+    }
+}
+
+/// Where a panel's [`footer`] keeps its measured height.
+fn footer_key(id: &str) -> egui::Id {
+    egui::Id::new(("panel_footer_h", id))
 }
 
 /// The band over a scroll viewport's edge that dissolves into the page while

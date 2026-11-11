@@ -250,6 +250,8 @@ pub enum MenuAction {
     /// Jump to a specific section. Relative movement comes through
     /// [`InputCommand::Nav`] instead.
     SetSection(Section),
+    /// Highlight row `index` of the active section.
+    Select(usize),
     /// Open the highlighted entry and close the menu.
     OpenSelected,
     /// Remove the highlighted entry.

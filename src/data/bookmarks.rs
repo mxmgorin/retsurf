@@ -537,6 +537,11 @@ impl Bookmarks {
     pub fn move_sel(&mut self, dy: i32) {
         self.cursor.move_sel(dy, self.items.len());
     }
+
+    /// Put the highlight on row `index`, counted as [`Self::move_sel`] does.
+    pub fn select(&mut self, index: usize) {
+        self.cursor.select(index, self.items.len());
+    }
 }
 
 /// Whether the bookmark of id `id` is on disk and reads as one; the reason

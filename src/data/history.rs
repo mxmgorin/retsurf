@@ -144,6 +144,11 @@ impl History {
         self.cursor.move_sel(dy, self.entries.len());
     }
 
+    /// Put the highlight on row `index`, counted as [`Self::move_sel`] does.
+    pub fn select(&mut self, index: usize) {
+        self.cursor.select(index, self.entries.len());
+    }
+
     pub fn selected_url(&self) -> Option<String> {
         // Index 0 is the "Clear all" row (no URL); entries start at 1.
         self.cursor

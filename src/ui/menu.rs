@@ -4,43 +4,100 @@
 
 use super::favicon::PageIcons;
 use super::keys;
-use super::panel::{self, center_selected, section_scroll, ROW_GAP, ROW_RADIUS, SIDES};
+use super::panel::{
+    self, center_selected, section_scroll_over, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
+};
 use super::theme::{self, palette, ROW_FONT};
 use crate::command::{AppCommand, MenuAction};
 use crate::config::FaceLabels;
+use crate::data::bookmarks::Launch;
 use crate::data::history;
 use crate::data::session::TabInfo;
 use crate::overlay::menu::{Menu, Section};
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, AtomExt as _};
 
-/// Shared list-row height — taller than egui's default so rows stay legible on a
-/// handheld; radius, gap, and padding come from [`super::panel`].
-const ROW_H: f32 = 32.0;
 /// The square delete button leading each row.
 const DEL_W: f32 = 26.0;
 
-/// A row's leading delete button, accent on the selected row.
+/// The panel's id, which its footer is kept under too.
+const PANEL_ID: &str = "menu";
+
+/// A row's trailing delete button, framed and accent on the selected row.
 fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui::Response {
     let color = if selected { palette().accent } else { dim };
-    ui.add_sized(
-        [DEL_W, ROW_H],
-        egui::Button::new(theme::icon(bold::X).color(color)).corner_radius(ROW_RADIUS),
-    )
+    row_action(ui, selected, theme::icon(bold::X).color(color))
 }
 
 /// A row's bookmark toggle (Tabs / History), sized like [`delete_button`] so the
 /// trailing buttons line up across rows.
-fn bookmark_button(ui: &mut egui::Ui, bookmarked: bool, dim: egui::Color32) -> egui::Response {
+fn bookmark_button(
+    ui: &mut egui::Ui,
+    selected: bool,
+    bookmarked: bool,
+    dim: egui::Color32,
+) -> egui::Response {
     let star = if bookmarked {
         theme::icon_fill(fill::STAR).color(palette().accent)
     } else {
         theme::icon(bold::STAR).color(dim)
     };
-    ui.add_sized(
-        [DEL_W, ROW_H],
-        egui::Button::new(star).corner_radius(ROW_RADIUS),
-    )
+    row_action(ui, selected, star)
+}
+
+/// A row's trailing button: framed on the selected row, a bare glyph elsewhere.
+fn row_action(ui: &mut egui::Ui, selected: bool, glyph: egui::RichText) -> egui::Response {
+    let button = egui::Button::new(glyph)
+        .corner_radius(ROW_RADIUS)
+        .frame_when_inactive(selected);
+    ui.add_sized([DEL_W, ROW_H], unframed_unless(button, selected))
+}
+
+/// `button` with no frame at all unless `selected`: the pointer selects the row
+/// it moves onto, so a hover frame would be a second highlight.
+fn unframed_unless(button: egui::Button<'_>, selected: bool) -> egui::Button<'_> {
+    match selected {
+        true => button,
+        false => button
+            .fill(egui::Color32::TRANSPARENT)
+            .stroke(egui::Stroke::NONE),
+    }
+}
+
+/// Ask for row `index` to be highlighted when the pointer moved onto `area`,
+/// the line that holds `row`.
+fn follow_pointer(
+    area: &egui::Response,
+    row: &egui::Response,
+    selected: bool,
+    index: usize,
+    commands: &mut Vec<AppCommand>,
+) {
+    if !selected && panel::pointer_moved_onto(area, row) {
+        commands.push(AppCommand::Menu(MenuAction::Select(index)));
+    }
+}
+
+/// A full-width row that acts rather than lists: `glyph` and `label` in
+/// `tone`'s colour, with `note` at its trailing edge.
+fn action_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    glyph: &'static str,
+    label: &str,
+    note: &str,
+    tone: Tone,
+) -> egui::Response {
+    let color = panel::tone_color(tone);
+    let text = |text: &str, color| egui::RichText::new(text).color(color).size(ROW_FONT);
+    let atoms = (
+        text(glyph, color),
+        text(label, color).atom_shrink(true),
+        egui::Atom::grow(),
+        text(note, palette().accent),
+    );
+    row_atoms(ui, width, selected, atoms)
 }
 
 /// A selectable list row at the standard height, with its label left-aligned:
@@ -68,12 +125,10 @@ fn row_atoms<'a>(
     selected: bool,
     atoms: impl egui::IntoAtoms<'a>,
 ) -> egui::Response {
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, atoms)
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
+    let button = egui::Button::selectable(selected, atoms)
+        .corner_radius(ROW_RADIUS)
+        .truncate();
+    ui.add_sized([width, ROW_H], unframed_unless(button, selected))
 }
 
 /// A URL row's label: site name in white, rest of the URL dim and middle-elided
@@ -145,8 +200,8 @@ fn join_around_ellipsis(chars: &[char], keep: usize) -> String {
 }
 
 /// The leading clear row of History / Downloads. Two presses: the first arms it
-/// (the label says so, in the warn color), the second wipes the list. `enabled`
-/// dims it further when there is nothing to clear.
+/// and says so, the second wipes the list. `enabled` mutes it when there is
+/// nothing to clear.
 fn clear_row(
     ui: &mut egui::Ui,
     width: f32,
@@ -156,17 +211,13 @@ fn clear_row(
     enabled: bool,
     commands: &mut Vec<AppCommand>,
 ) {
-    let text = if armed {
-        egui::RichText::new(format!("{label} — press again to confirm")).color(palette().warn)
-    } else if enabled {
-        egui::RichText::new(label).color(palette().dim)
-    } else {
-        egui::RichText::new(label).color(palette().disabled)
-    };
-    let resp = row_button(ui, width, selected, text);
+    let note = if armed { "press again to clear" } else { "" };
+    let tone = if enabled { Tone::Danger } else { Tone::Muted };
+    let resp = action_row(ui, width, selected, bold::TRASH, label, note, tone);
     if selected {
         center_selected(&resp);
     }
+    follow_pointer(&resp, &resp, selected, 0, commands);
     if resp.clicked() {
         commands.push(AppCommand::Menu(MenuAction::Clear));
     }
@@ -198,9 +249,73 @@ fn section_icon(section: Section) -> &'static str {
     }
 }
 
-/// Draw the menu overlay: the section bar over the active section's list, plus a
-/// one-line control hint. Left/Right switch section, Up/Down move, A open,
-/// X delete, B close.
+/// What a section's tab shows after its label: how many tabs are open, how
+/// far the downloads in flight are.
+fn section_badge(menu: &Menu, tabs: &[TabInfo], section: Section) -> Option<String> {
+    match section {
+        Section::Tabs => Some(tabs.len().to_string()),
+        Section::Downloads => menu.downloads.progress().map(|p| p.label()),
+        Section::Bookmarks | Section::History => None,
+    }
+}
+
+/// What A, X and Y do on the highlighted row; `None` where a button does nothing.
+type RowVerbs = [Option<&'static str>; 3];
+
+/// The verbs of the highlighted row in the active section.
+fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
+    let bookmark = |url: &str| match menu.is_bookmarked(url) {
+        true => "unbookmark",
+        false => "bookmark",
+    };
+    let clear = || match menu.clear_armed() {
+        true => "confirm",
+        false => "clear",
+    };
+    match menu.section() {
+        Section::Tabs => match menu.tab_selected().checked_sub(1).and_then(|i| tabs.get(i)) {
+            Some(tab) => {
+                let y = (!tab.url.is_empty()).then(|| bookmark(&tab.url));
+                [Some("switch"), Some("close"), y]
+            }
+            None => [Some("new tab"), None, None],
+        },
+        Section::Bookmarks => match menu.bookmarks.selected_index() {
+            Some(at) => {
+                let open = match menu.bookmarks.all()[at].launch {
+                    Launch::Browser => "open",
+                    Launch::App | Launch::Game => "launch",
+                };
+                [Some(open), Some("remove"), None]
+            }
+            None => [None; 3],
+        },
+        Section::History if menu.clear_selected() => [Some(clear()), None, None],
+        Section::History => match menu.selected_url() {
+            Some(url) => [Some("open"), Some("remove"), Some(bookmark(&url))],
+            None => [None; 3],
+        },
+        Section::Downloads if menu.clear_selected() => {
+            let a = menu.downloads.has_finished().then(clear);
+            [a, None, None]
+        }
+        Section::Downloads => match menu.downloads.selected_entry() {
+            Some(at) => {
+                let a = menu.downloads.saved_path(at).map(|_| "open");
+                let x = match menu.downloads.items()[at].is_active() {
+                    true => "cancel",
+                    false => "remove",
+                };
+                [a, Some(x), None]
+            }
+            None => [None; 3],
+        },
+    }
+}
+
+/// Draw the menu overlay: the section bar over the active section's list, and
+/// with `button_hints` a footer naming what the buttons do on the highlighted
+/// row. Left/Right switch section, Up/Down move, A open, X delete, B close.
 pub(super) fn add_menu(
     ctx: &egui::Context,
     menu: &Menu,
@@ -211,7 +326,7 @@ pub(super) fn add_menu(
     commands: &mut Vec<AppCommand>,
 ) {
     let screen = ctx.content_rect();
-    let closed = panel::panel(ctx, "menu", screen, |ui| {
+    let closed = panel::panel(ctx, PANEL_ID, screen, |ui| {
         let clicked = panel::section_bar(
             ui,
             screen,
@@ -219,42 +334,37 @@ pub(super) fn add_menu(
             menu.section(),
             Section::label,
             section_icon,
-            // Both clear actions are the top row of their list, not a bar button:
-            // a gamepad can reach a row.
-            |_| {},
+            |section| section_badge(menu, tabs, section),
         );
         if let Some(section) = clicked {
             commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
         }
-        let y_action = match menu.section() {
-            Section::History | Section::Tabs => Some("bookmark"),
-            Section::Bookmarks | Section::Downloads => None,
+        ui.add_space(ROW_GAP * 2.0);
+        let foot = match button_hints {
+            true => panel::footer_room(ui, PANEL_ID),
+            false => 0.0,
         };
-        let x_action = match menu.section() {
-            Section::Tabs => "close",
-            Section::Bookmarks | Section::History | Section::Downloads => "remove",
-        };
-        let (upright, sideways) = keys::dpad_caps();
-        let (sideways, upright) = ([sideways.as_str()], [upright.as_str()]);
-        let (a, x, y, b) = ([face.a], [face.x], [face.y], [face.b]);
-        let mut hints: Vec<keys::Hint> = vec![
-            (&sideways, "section"),
-            (&upright, "select"),
-            (&a, "open"),
-            (&x, x_action),
-        ];
-        hints.extend(y_action.map(|action| (&y[..], action)));
-        hints.push((&b, "back"));
-        if button_hints {
-            keys::hint_row(ui, &hints);
-        }
-        ui.add_space(8.0);
 
         match menu.section() {
-            Section::Tabs => add_tabs_section(ui, screen, menu, tabs, icons, commands),
-            Section::Bookmarks => add_bookmarks_section(ui, screen, menu, icons, commands),
-            Section::History => add_history_section(ui, screen, menu, icons, commands),
-            Section::Downloads => add_downloads_section(ui, screen, menu, commands),
+            Section::Tabs => add_tabs_section(ui, screen, foot, menu, tabs, icons, commands),
+            Section::Bookmarks => add_bookmarks_section(ui, screen, foot, menu, icons, commands),
+            Section::History => add_history_section(ui, screen, foot, menu, icons, commands),
+            Section::Downloads => add_downloads_section(ui, screen, foot, menu, commands),
+        }
+
+        if button_hints {
+            let (_, sideways) = keys::dpad_caps();
+            let [a, x, y] = row_verbs(menu, tabs);
+            let caps = [[face.a], [face.x], [face.y]];
+            let mut hints: Vec<keys::Hint> = caps
+                .iter()
+                .zip([a, x, y])
+                .filter_map(|(cap, verb)| Some((&cap[..], verb?)))
+                .collect();
+            let (sideways, back) = ([sideways.as_str()], [face.b]);
+            hints.push((&sideways, "section"));
+            hints.push((&back, "back"));
+            panel::footer(ui, screen, PANEL_ID, &hints);
         }
     });
     if closed {
@@ -267,6 +377,7 @@ pub(super) fn add_menu(
 fn add_tabs_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    foot: f32,
     menu: &Menu,
     tabs: &[TabInfo],
     icons: &PageIcons,
@@ -276,26 +387,29 @@ fn add_tabs_section(
     let selected = menu.tab_selected();
     // Title width, less the two trailing buttons and the spacing before each.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        // "+ New tab" at the top (selection index 0): a plain full-width row with
-        // no fill of its own, so only the cursor highlight marks it.
-        let new_tab = row_button(
+        let full_w = screen.width() - SIDES;
+        let new_tab = action_row(
             ui,
-            screen.width() - SIDES,
+            full_w,
             selected == 0,
-            egui::RichText::new("+ New tab").color(palette().text),
+            bold::PLUS,
+            "New tab",
+            "",
+            Tone::Plain,
         );
         if selected == 0 {
             center_selected(&new_tab);
         }
+        follow_pointer(&new_tab, &new_tab, selected == 0, 0, commands);
         if new_tab.clicked() {
             commands.push(AppCommand::Menu(MenuAction::NewTab));
         }
 
         for (i, tab) in tabs.iter().enumerate() {
             let sel = selected == i + 1; // index 0 is the "+ New tab" button
-            ui.horizontal(|ui| {
+            let line = ui.horizontal(|ui| {
                 // The active tab is accent and bold, the cursor's row is the
                 // selectable highlight: the two must read apart on one row.
                 let text = egui::RichText::new(&tab.title).size(ROW_FONT);
@@ -318,7 +432,7 @@ fn add_tabs_section(
                 // The bookmark toggle needs a URL; close sits at the far right.
                 let can_bookmark = !tab.url.is_empty();
                 let marked = can_bookmark && menu.is_bookmarked(&tab.url);
-                if bookmark_button(ui, marked, dim).clicked() && can_bookmark {
+                if bookmark_button(ui, sel, marked, dim).clicked() && can_bookmark {
                     commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
                         tab.url.clone(),
                     )));
@@ -326,7 +440,9 @@ fn add_tabs_section(
                 if delete_button(ui, sel, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
                 }
+                resp
             });
+            follow_pointer(&line.response, &line.inner, sel, i + 1, commands);
         }
     });
 }
@@ -351,6 +467,7 @@ pub(super) fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'stat
 fn add_bookmarks_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    foot: f32,
     menu: &Menu,
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
@@ -367,12 +484,12 @@ fn add_bookmarks_section(
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
     let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, bookmark) in bookmarks.all().iter().enumerate() {
             let selected = i == bookmarks.selected();
             let url = &bookmark.url;
-            ui.horizontal(|ui| {
+            let line = ui.horizontal(|ui| {
                 let icon = site_icon(icons, url);
                 let tail = match bookmark.name.is_empty() {
                     true => url_tail(url),
@@ -390,7 +507,9 @@ fn add_bookmarks_section(
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
+                resp
             });
+            follow_pointer(&line.response, &line.inner, selected, i, commands);
         }
     });
 }
@@ -401,6 +520,7 @@ fn add_bookmarks_section(
 fn add_downloads_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    foot: f32,
     menu: &Menu,
     commands: &mut Vec<AppCommand>,
 ) {
@@ -413,7 +533,7 @@ fn add_downloads_section(
 
     let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
     let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         clear_row(
             ui,
@@ -426,7 +546,7 @@ fn add_downloads_section(
         );
         for (i, item) in downloads.items().iter().enumerate() {
             let selected = downloads.selected() == i + 1; // index 0 is "Clear finished"
-            ui.horizontal(|ui| {
+            let line = ui.horizontal(|ui| {
                 let resp = row_button(
                     ui,
                     row_w,
@@ -446,7 +566,9 @@ fn add_downloads_section(
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
+                resp
             });
+            follow_pointer(&line.response, &line.inner, selected, i + 1, commands);
         }
     });
 }
@@ -456,6 +578,7 @@ fn add_downloads_section(
 fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
+    foot: f32,
     menu: &Menu,
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
@@ -471,10 +594,10 @@ fn add_history_section(
     // the two trailing buttons, and their spacing.
     let date_w = 118.0;
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - date_w - 18.0;
-    section_scroll(ui, screen).show(ui, |ui| {
+    section_scroll_over(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         // Top row (cursor index 0, mirroring Tabs' "+ New tab"): drops every
-        // entry. Dim, to set a destructive action apart from the URL rows.
+        // entry.
         clear_row(
             ui,
             screen.width() - SIDES,
@@ -486,7 +609,7 @@ fn add_history_section(
         );
         for (i, entry) in hist.entries().iter().enumerate() {
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
-            ui.horizontal(|ui| {
+            let line = ui.horizontal(|ui| {
                 let icon = site_icon(icons, &entry.url);
                 let brand = super::labels::brand_label(&entry.url);
                 let atoms = url_atoms(ui, brand, url_tail(&entry.url), icon, row_w);
@@ -506,7 +629,7 @@ fn add_history_section(
                 );
                 // Trailing actions: the bookmark toggle (same as Y), then delete.
                 let marked = menu.is_bookmarked(&entry.url);
-                if bookmark_button(ui, marked, dim).clicked() {
+                if bookmark_button(ui, selected, marked, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
                         entry.url.clone(),
                     )));
@@ -514,7 +637,9 @@ fn add_history_section(
                 if delete_button(ui, selected, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
                 }
+                resp
             });
+            follow_pointer(&line.response, &line.inner, selected, i + 1, commands);
         }
     });
 }

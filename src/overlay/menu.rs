@@ -154,6 +154,18 @@ impl Menu {
         }
     }
 
+    /// Put the active section's highlight on row `index`, counted as
+    /// [`Self::move_sel`] does.
+    pub fn select(&mut self, index: usize) {
+        self.clear_armed = false;
+        match self.section {
+            Section::Bookmarks => self.bookmarks.select(index),
+            Section::History => self.history.select(index),
+            Section::Downloads => self.downloads.select(index),
+            Section::Tabs => self.tab_selected = index.min(self.tab_count),
+        }
+    }
+
     /// Highlighted row in the Tabs section (0 == the "+ New tab" button, then
     /// the tabs at `1..=tab_count`).
     pub fn tab_selected(&self) -> usize {
