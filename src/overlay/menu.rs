@@ -5,11 +5,13 @@
 //! maps gamepad / keyboard / mouse input to section switches, selection moves,
 //! open, delete, and clear; [`crate::ui`] renders it.
 
+use crate::browser::HOME_URL;
 use crate::config::{DownloadsConfig, HistoryConfig};
 use crate::data::bookmarks::Bookmarks;
 use crate::data::downloads::Downloads;
 use crate::data::history::History;
 use crate::data::page_icons;
+use crate::data::session::TabInfo;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -77,15 +79,15 @@ impl Menu {
         }
     }
 
-    /// Show the menu, resetting every section's highlight to the top. In Tabs,
-    /// index 0 is the "+ New tab" button, so the cursor starts on the first tab
-    /// (index 1) — A then switches tabs rather than spawning a new one.
-    pub fn open(&mut self) {
+    /// Show the menu, resetting every section's highlight to the top, but Tabs'
+    /// to the tab at `active_tab`.
+    pub fn open(&mut self, active_tab: usize) {
         self.visible = true;
         self.bookmarks.reset();
         self.history.reset();
         self.downloads.reset();
-        self.tab_selected = 1;
+        // Index 0 is the "+ New tab" button.
+        self.tab_selected = active_tab + 1;
         self.clear_armed = false;
     }
 
@@ -257,6 +259,13 @@ impl Menu {
     /// dirty; the disk write is deferred (see [`Self::flush_history`]).
     pub fn record_history(&mut self, url: &str) {
         self.history.record(url);
+    }
+
+    /// Whether `tab`'s page can be bookmarked or unbookmarked: never the start
+    /// page, and never the bookmark the tab runs.
+    pub fn can_toggle_bookmark(&self, tab: &TabInfo) -> bool {
+        let runs_it = tab.launched && self.is_bookmarked(&tab.url);
+        !tab.url.is_empty() && tab.url != HOME_URL && !runs_it
     }
 
     /// Whether `url` is a saved bookmark (drives the toolbar bookmark icon).

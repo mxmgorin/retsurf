@@ -271,13 +271,14 @@ impl AppUi {
         }
     }
 
-    /// Open the menu. It takes over the stick and A, so the other user
-    /// overlays close — input focus and draw order can never disagree.
+    /// Open the menu on the tab at `active_tab`. It takes over the stick and A,
+    /// so the other user overlays close — input focus and draw order can never
+    /// disagree.
     #[inline]
-    pub fn menu_open(&mut self) {
+    pub fn menu_open(&mut self, active_tab: usize) {
         self.osk.hide();
         self.hints.hide();
-        self.menu.open();
+        self.menu.open(active_tab);
     }
 
     /// Open the settings overlay, seeding its draft from the live config. Like

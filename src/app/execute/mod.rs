@@ -101,7 +101,7 @@ impl App {
                 if self.ui.menu.visible {
                     self.ui.menu.close();
                 } else {
-                    self.ui.menu_open();
+                    self.ui.menu_open(self.browser.active_tab());
                 }
             }
             MenuAction::Close => self.ui.menu.close(),
@@ -295,12 +295,11 @@ impl App {
                 }
             }
             Section::Tabs => {
-                if let Some(index) = self.selected_tab_index() {
-                    if let Some(info) = self.browser.tabs().get(index) {
-                        if !info.url.is_empty() {
-                            self.toggle_bookmark(&info.url);
-                        }
-                    }
+                let tab = self
+                    .selected_tab_index()
+                    .and_then(|index| self.browser.tabs().into_iter().nth(index));
+                if let Some(tab) = tab.filter(|tab| self.ui.menu.can_toggle_bookmark(tab)) {
+                    self.toggle_bookmark(&tab.url);
                 }
             }
             Section::Bookmarks | Section::Downloads => {}

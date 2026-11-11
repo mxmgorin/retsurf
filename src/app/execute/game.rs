@@ -316,7 +316,7 @@ impl App {
             }
             Entry::List(section) => {
                 self.ui.quick_access.close();
-                self.ui.menu_open();
+                self.ui.menu_open(self.browser.active_tab());
                 self.ui.menu.set_section(section);
             }
             Entry::Quit => {

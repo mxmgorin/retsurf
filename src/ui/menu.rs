@@ -8,6 +8,7 @@ use super::panel::{
     self, center_selected, section_scroll_over, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
 };
 use super::theme::{self, palette, ROW_FONT};
+use crate::browser::HOME_URL;
 use crate::command::{AppCommand, MenuAction};
 use crate::config::FaceLabels;
 use crate::data::bookmarks::Launch;
@@ -275,7 +276,7 @@ fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
     match menu.section() {
         Section::Tabs => match menu.tab_selected().checked_sub(1).and_then(|i| tabs.get(i)) {
             Some(tab) => {
-                let y = (!tab.url.is_empty()).then(|| bookmark(&tab.url));
+                let y = menu.can_toggle_bookmark(tab).then(|| bookmark(&tab.url));
                 [Some("switch"), Some("close"), y]
             }
             None => [Some("new tab"), None, None],
@@ -410,16 +411,17 @@ fn add_tabs_section(
         for (i, tab) in tabs.iter().enumerate() {
             let sel = selected == i + 1; // index 0 is the "+ New tab" button
             let line = ui.horizontal(|ui| {
-                // The active tab is accent and bold, the cursor's row is the
-                // selectable highlight: the two must read apart on one row.
-                let text = egui::RichText::new(&tab.title).size(ROW_FONT);
-                let text = if tab.active {
-                    text.color(palette().accent).strong()
-                } else {
-                    text.color(palette().text)
-                };
+                let text = egui::RichText::new(&tab.title)
+                    .size(ROW_FONT)
+                    .color(palette().text);
                 let mut atoms = egui::Atoms::new((text.atom_shrink(true), egui::Atom::grow()));
-                if let Some(icon) = site_icon(icons, &tab.url) {
+                if tab.active {
+                    let check = egui::RichText::new(bold::CHECK)
+                        .size(ROW_FONT)
+                        .color(palette().accent);
+                    atoms.push_right(check);
+                }
+                if let Some(icon) = tab_icon(icons, tab) {
                     atoms.push_left(icon);
                 }
                 let resp = row_atoms(ui, row_w, sel, atoms);
@@ -429,10 +431,19 @@ fn add_tabs_section(
                 if resp.clicked() {
                     commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
                 }
-                // The bookmark toggle needs a URL; close sits at the far right.
-                let can_bookmark = !tab.url.is_empty();
-                let marked = can_bookmark && menu.is_bookmarked(&tab.url);
-                if bookmark_button(ui, sel, marked, dim).clicked() && can_bookmark {
+                // Close sits at the far right, so the toggle's slot stays when it can't act.
+                let marked = menu.is_bookmarked(&tab.url);
+                if !menu.can_toggle_bookmark(tab) {
+                    let star = theme::icon_fill(fill::STAR).color(palette().accent);
+                    let shown = egui::Label::new(star).selectable(false);
+                    match marked {
+                        true => ui.add_sized([DEL_W, ROW_H], shown),
+                        false => {
+                            ui.allocate_exact_size(egui::vec2(DEL_W, ROW_H), egui::Sense::hover())
+                                .1
+                        }
+                    };
+                } else if bookmark_button(ui, sel, marked, dim).clicked() {
                     commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
                         tab.url.clone(),
                     )));
@@ -445,6 +456,20 @@ fn add_tabs_section(
             follow_pointer(&line.response, &line.inner, sel, i + 1, commands);
         }
     });
+}
+
+/// A tab row's leading icon: its site's, but the tab glyph for the start page,
+/// which is no site; `None` with icons off.
+fn tab_icon(icons: &PageIcons, tab: &TabInfo) -> Option<egui::Atom<'static>> {
+    match tab.url == HOME_URL {
+        true => icons.enabled().then(|| {
+            egui::RichText::new(bold::BROWSER)
+                .size(ROW_FONT)
+                .color(palette().text)
+                .into()
+        }),
+        false => site_icon(icons, &tab.url),
+    }
 }
 
 /// A row's leading site icon, or a globe so titles line up; `None` with icons off.
