@@ -134,29 +134,34 @@ fn row_atoms<'a>(
     ui.add_sized([width, ROW_H], unframed_unless(button, selected))
 }
 
-/// A URL row's label: site name in white, rest of the URL dim and middle-elided
-/// to `width`. Leading with the name makes the list scannable; keeping both ends
-/// of the path keeps what differs between two rows of the same site.
+/// A URL row's label: site name in white, `mark` after it, the rest of the URL
+/// dim and middle-elided to `width`. Leading with the name makes the list
+/// scannable; keeping both ends of the path keeps what differs between rows.
 fn url_atoms(
     ui: &egui::Ui,
     brand_text: String,
     tail: &str,
     icon: Option<egui::Atom<'static>>,
+    mark: Option<egui::RichText>,
     width: f32,
 ) -> egui::Atoms<'static> {
     let font = egui::FontId::proportional(ROW_FONT);
-    // Row padding, the gap after the brand, and the icon when present.
+    // Row padding, the gap after the brand, and the icon and mark when present.
     let mut budget = width - text_width(ui, &brand_text, &font) - 24.0;
-    if icon.is_some() {
-        budget -= ROW_FONT + 4.0;
-    }
+    let glyphs = usize::from(icon.is_some()) + usize::from(mark.is_some());
+    budget -= glyphs as f32 * (ROW_FONT + 4.0);
     let brand = egui::RichText::new(brand_text)
         .size(ROW_FONT)
         .color(palette().text);
     let tail = egui::RichText::new(elide_middle(ui, tail, &font, budget))
         .size(ROW_FONT)
         .color(palette().dim);
-    let mut atoms = egui::Atoms::new((brand, tail.atom_shrink(true), egui::Atom::grow()));
+    let mut atoms = egui::Atoms::new(brand);
+    if let Some(mark) = mark {
+        atoms.push_right(mark);
+    }
+    atoms.push_right(tail.atom_shrink(true));
+    atoms.push_right(egui::Atom::grow());
     if let Some(icon) = icon {
         atoms.push_left(icon);
     }
@@ -850,8 +855,22 @@ fn add_bookmarks_section(
                     false => url_without_scheme(url),
                 };
                 let label = labels::bookmark_label(bookmark);
-                let atoms = url_atoms(ui, label, tail, icon, row_w);
+                // Sites are the default and go unmarked.
+                let mark = (bookmark.launch != Launch::Browser).then(|| {
+                    let (glyph, color) = super::home::launch_glyph(bookmark.launch);
+                    egui::RichText::new(glyph).size(ROW_FONT).color(color)
+                });
+                let tags_budget = row_w * super::home::TAGS_SHARE;
+                let tags_w = super::home::tags_width(ui.painter(), &bookmark.tags, tags_budget);
+                let tail = tail.trim_end_matches('/');
+                let mut atoms = url_atoms(ui, label, tail, icon, mark, row_w - tags_w);
+                if tags_w > 0.0 {
+                    atoms.push_right(egui::Atom::custom(egui::Id::NULL, egui::vec2(tags_w, 0.0)));
+                }
                 let resp = row_atoms(ui, row_w, selected, atoms);
+                let right = resp.rect.right() - ui.spacing().button_padding.x;
+                let y = resp.rect.center().y;
+                super::home::paint_tags(ui.painter(), &bookmark.tags, right, y, tags_budget);
                 if selected {
                     center_selected(&resp);
                 }
@@ -974,7 +993,7 @@ fn add_history_section(
                 let atoms = match entry.title.is_empty() {
                     true => {
                         let brand = labels::brand_label(&entry.url);
-                        url_atoms(ui, brand, url_tail(&entry.url), icon, row_w)
+                        url_atoms(ui, brand, url_tail(&entry.url), icon, None, row_w)
                     }
                     false => titled_atoms(&entry.title, labels::site_label(&entry.url), icon),
                 };

@@ -290,7 +290,7 @@ const TAG_PAD_X: f32 = 6.0;
 const TAG_H: f32 = 18.0;
 const TAG_GAP: f32 = 4.0;
 /// The most of a row the tags may take.
-const TAGS_SHARE: f32 = 0.4;
+pub(super) const TAGS_SHARE: f32 = 0.4;
 
 /// How many tiles `w` wide, `gap` apart, fit in `width`; at least one.
 fn fit(width: f32, w: f32, gap: f32) -> usize {
@@ -1029,31 +1029,17 @@ fn add_row(
 /// Paint `tags` as pills ending at `right`, centred on `y`, within `budget`
 /// across; the ones that do not fit count in a closing `+N` pill. Returns the
 /// left edge drawn to, or `right` with no tags.
-fn paint_tags(painter: &egui::Painter, tags: &[String], right: f32, y: f32, budget: f32) -> f32 {
-    let pill = |text: String| painter.layout_no_wrap(text, font(TAG_FONT), palette().muted);
-    let width = |g: &std::sync::Arc<egui::Galley>| g.size().x + 2.0 * TAG_PAD_X;
-    let mut pills: Vec<_> = Vec::new();
-    let mut used = 0.0;
-    for (at, tag) in tags.iter().enumerate() {
-        let galley = pill(tag.clone());
-        let rest = tags.len() - at - 1;
-        let reserve = match rest {
-            0 => 0.0,
-            n => width(&pill(format!("+{n}"))) + TAG_GAP,
-        };
-        if used + width(&galley) + reserve > budget {
-            break;
-        }
-        used += width(&galley) + TAG_GAP;
-        pills.push(galley);
-    }
-    if pills.len() < tags.len() {
-        pills.push(pill(format!("+{}", tags.len() - pills.len())));
-    }
+pub(super) fn paint_tags(
+    painter: &egui::Painter,
+    tags: &[String],
+    right: f32,
+    y: f32,
+    budget: f32,
+) -> f32 {
     let mut x = right;
-    for galley in pills.into_iter().rev() {
+    for galley in tag_pills(painter, tags, budget).into_iter().rev() {
         let rect = egui::Rect::from_min_max(
-            egui::pos2(x - width(&galley), y - TAG_H / 2.0),
+            egui::pos2(x - pill_width(&galley), y - TAG_H / 2.0),
             egui::pos2(x, y + TAG_H / 2.0),
         );
         let stroke = egui::Stroke::new(LINE_W, palette().border);
@@ -1066,6 +1052,47 @@ fn paint_tags(painter: &egui::Painter, tags: &[String], right: f32, y: f32, budg
         true => right,
         false => x + TAG_GAP,
     }
+}
+
+/// The width [`paint_tags`] takes for `tags` within `budget`; none without tags.
+pub(super) fn tags_width(painter: &egui::Painter, tags: &[String], budget: f32) -> f32 {
+    let pills = tag_pills(painter, tags, budget);
+    let gaps = pills.len().saturating_sub(1) as f32 * TAG_GAP;
+    pills.iter().map(pill_width).sum::<f32>() + gaps
+}
+
+/// The pills `tags` show within `budget` across: those that fit, then a `+N`
+/// pill counting the rest.
+fn tag_pills(
+    painter: &egui::Painter,
+    tags: &[String],
+    budget: f32,
+) -> Vec<std::sync::Arc<egui::Galley>> {
+    let pill = |text: String| painter.layout_no_wrap(text, font(TAG_FONT), palette().muted);
+    let mut pills: Vec<_> = Vec::new();
+    let mut used = 0.0;
+    for (at, tag) in tags.iter().enumerate() {
+        let galley = pill(tag.clone());
+        let rest = tags.len() - at - 1;
+        let reserve = match rest {
+            0 => 0.0,
+            n => pill_width(&pill(format!("+{n}"))) + TAG_GAP,
+        };
+        if used + pill_width(&galley) + reserve > budget {
+            break;
+        }
+        used += pill_width(&galley) + TAG_GAP;
+        pills.push(galley);
+    }
+    if pills.len() < tags.len() {
+        pills.push(pill(format!("+{}", tags.len() - pills.len())));
+    }
+    pills
+}
+
+/// A tag pill's width around its text.
+fn pill_width(galley: &std::sync::Arc<egui::Galley>) -> f32 {
+    galley.size().x + 2.0 * TAG_PAD_X
 }
 
 /// Scroll the selected item (`id` at `rect`) into view on the frame the
@@ -1200,11 +1227,7 @@ fn monogram(label: &str) -> String {
 /// bookmark opens: a page-coloured disc, its glyph muted for a site, in the
 /// accent for an app and in the brand's warm end for a game.
 fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, launch: Launch) {
-    let (mark, ink) = match launch {
-        Launch::Browser => (bold::GLOBE, palette().muted),
-        Launch::App => (bold::APP_WINDOW, palette().accent),
-        Launch::Game => (bold::GAME_CONTROLLER, palette().surf_warm),
-    };
+    let (mark, ink) = launch_glyph(launch);
     let radius = radius * MARK_SCALE;
     let inset = radius * MARK_INSET;
     let center = glyph.right_bottom() - egui::vec2(inset, inset);
@@ -1221,6 +1244,15 @@ fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, la
         font(radius * MARK_GLYPH),
         ink,
     );
+}
+
+/// How a bookmark opens, as its badge names it: the glyph and its colour.
+pub(super) fn launch_glyph(launch: Launch) -> (&'static str, egui::Color32) {
+    match launch {
+        Launch::Browser => (bold::GLOBE, palette().muted),
+        Launch::App => (bold::APP_WINDOW, palette().accent),
+        Launch::Game => (bold::GAME_CONTROLLER, palette().surf_warm),
+    }
 }
 
 /// An iconless tile's fill: a hue hashed from `label`, so a site keeps its
