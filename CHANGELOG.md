@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Videos staying blank on some sites, such as portmaster.games
 - Some MP4 videos never starting, mostly on fast connections
 - Looping videos stopping on their last frame
+- Possible crashes and broken pages on handhelds and Android from garbage collection modes the engine does not support
 
 ## [0.10.0] - 2026-10-08
 
