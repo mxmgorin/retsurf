@@ -219,8 +219,7 @@ fn embedded() -> Preferences {
 }
 
 /// ~1 GB: aggressive. Minimal parallelism, low GC ceiling, most optional
-/// subsystems off, optimizing JIT (Ion) off to shed generated-code memory while
-/// keeping the baseline JIT for usable speed.
+/// subsystems off; full JIT kept.
 fn tight() -> Preferences {
     let mut p = Preferences::default();
 
@@ -243,8 +242,8 @@ fn tight() -> Preferences {
     p.js_mem_gc_per_zone_enabled = false; // collect all zones together
     p.js_baseline_interpreter_enabled = true; // never drop JS to the slow path
 
-    // Drop the heavy optimizing JIT; keep baseline JIT.
-    p.js_ion_enabled = false;
+    // Kept: JS is CPU-bound on these in-order cores, and Ion costs code memory, not heap.
+    p.js_ion_enabled = true;
     // Kept: asm.js compiles only through it, and only wasm and asm.js pay for it.
     p.js_wasm_ion_enabled = true;
 

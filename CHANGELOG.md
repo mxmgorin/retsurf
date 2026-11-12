@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Quick Menu is now Menu
-- On ~1 GB boards the `auto` JS preset keeps wasm Ion on: asm.js and wasm games load without `fast`
+- On ~1 GB boards the `auto` JS preset keeps Ion and wasm Ion on: pages run JS faster, and asm.js and wasm games load without `fast`
 - `[controls] dpad` replaces `cursor_mode`, which is no longer read
 - `[browser] search_engine` replaces `search_page`, which is no longer read
 - `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped

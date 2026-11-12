@@ -114,7 +114,7 @@ token_enum! {
         /// Tightest floor (~512 MB, sub-1 GB boards): baseline JIT only, single
         /// thread, minimal caches, foreground tab only.
         Embedded => "embedded", "Embedded",
-        /// Very constrained (~1 GB boards): baseline JIT only, small caches.
+        /// Very constrained (~1 GB boards): low GC ceiling, small caches.
         Tight => "tight", "Tight",
         /// Balanced handheld (~2 GB boards): modest parallelism, full JIT.
         Balanced => "balanced", "Balanced",
