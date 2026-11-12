@@ -27,12 +27,12 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 
 <table>
   <tr>
-    <td width="50%"><img src="resources/images/retsurf-game-mode.png" alt="Quick Access over the WebGL racer HexGL on the start line through the zfast CRT shader, the browser chrome hidden: reload, scaling, shader, the input map in use, the on-screen keyboard and exit"></td>
+    <td width="50%"><img src="resources/images/retsurf-game-mode.png" alt="Quick Access over the WebGL racer HexGL at the start through the zfast CRT shader, the browser chrome hidden: reload, the on-screen keyboard and bookmark, then scaling, shader, cursor, JS engine, the input map in use, launch mode and exit"></td>
     <td width="50%"><img src="resources/images/retsurf-hints.png" alt="Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="The built-in start page: the retsurf banner over filter tabs, a grid of bookmarks marked as sites, apps or games, and the search field at the bottom"></td>
-    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News: reload, enter game mode, bookmark, user agent, the ad blocker switch, JS engine, the reader view switch, page theme"></td>
+    <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="The built-in start page: the retsurf banner over filter tabs, a grid of bookmarks marked as sites, apps or games, and the search field and button hints at the bottom"></td>
+    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News, headed by its bookmark: reload, enter game mode and bookmark, then user agent, the ad blocker switch, the reader view switch, page theme and launch mode, with button hints below"></td>
   </tr>
 </table>
 

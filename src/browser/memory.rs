@@ -11,7 +11,7 @@
 //! Unit notes:
 //!   * `js_mem_max`, `*_limit_mb`: megabytes (`js_mem_max = -1` => unlimited).
 //!   * `*_heap_growth*`: percent (150 == heap may reach 150% before next GC).
-//!   * `network_http_cache_size`: an opaque relative *weight*, not bytes/count.
+//!   * `network_http_cache_size`: a count of cached responses, not bytes.
 //!
 //! TARGET HARDWARE (RK3566, Allwinner H700, A527, A133 Plus, RK3326):
 //!   * All are aarch64 with weak *in-order* little cores — Cortex-A35 (RK3326),
@@ -300,7 +300,7 @@ fn balanced() -> Preferences {
 
     p.session_history_max_length = 6;
 
-    // Small HTTP cache (weight is a relative dial — tune to your profiler).
+    // Small HTTP cache, in responses.
     p.network_http_cache_size = 32;
 
     // Trim rarely-needed subsystems; keep service workers. (WebGL2/WebGPU: [experimental].)
