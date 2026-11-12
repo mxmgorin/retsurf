@@ -51,6 +51,9 @@ pub(super) fn build_preferences(
 
     // The explicit [performance] knobs still win when set (non-zero); `0` keeps
     // the tier's choice.
+    // Texture frames for hardware video (see media::player::glpaint).
+    prefs.media_glvideo_enabled = crate::media::gl_context_published();
+
     if perf.layout_threads != 0 {
         prefs.layout_threads = perf.layout_threads as i64;
     }

@@ -16,7 +16,12 @@ pub(super) const BYTE_HIGH_WATER: usize = 16 * 1024 * 1024;
 
 /// Already-read bytes kept behind the cursor so small backward seeks stay local
 /// instead of costing a refetch round-trip.
-const KEEP_BACK_BYTES: usize = 4 * 1024 * 1024;
+pub(super) const KEEP_BACK_BYTES: usize = 4 * 1024 * 1024;
+
+/// Read bytes dropped at a time. Dropping the front of the buffer moves all of
+/// what is left (up to the 16 MB high-water mark): done on every 32 KB read, it
+/// kept the demuxer at a whole A53 core (RG 34XXSP, 1080p H.264).
+pub(super) const EVICT_STEP: usize = 1024 * 1024;
 
 /// `pending_seek` sentinel for "none"; a real seek target is never NaN because
 /// the element clamps it into the seekable ranges first.
@@ -68,10 +73,10 @@ impl StreamBuf {
         self.base + self.data.len() as u64
     }
 
-    /// Drops read bytes beyond the keep-back window.
+    /// Drops read bytes beyond the keep-back window, a step at a time.
     pub(super) fn evict(&mut self) {
         let consumed = (self.read_pos - self.base) as usize;
-        if consumed > KEEP_BACK_BYTES {
+        if consumed >= KEEP_BACK_BYTES + EVICT_STEP {
             let n = consumed - KEEP_BACK_BYTES;
             self.data.drain(..n);
             self.base += n as u64;

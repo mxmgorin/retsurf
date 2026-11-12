@@ -154,6 +154,10 @@ impl GlBackend {
         let (w, h) = window.drawable_size();
         log::info!("window: GL context current ({w}x{h}); creating rendering context");
         let size = dpi::PhysicalSize::new(w, h);
+        // Hardware video is painted on the GPU in a context sharing this one.
+        if config.use_gles {
+            crate::media::publish_gl_context();
+        }
         let rendering_ctx = SdlRenderingContext::new(gl, glow_ctx.clone(), size, webgl, get_proc);
         log::info!("window: rendering context created");
 

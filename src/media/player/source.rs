@@ -6,7 +6,7 @@ use servo_base::generic_channel;
 use servo_media::player::{PlayerEvent, SeekLock, SeekLockMsg};
 use symphonia::core::io::MediaSource;
 
-use super::shared::{lock, wait, Shared};
+use super::shared::{lock, wait, Shared, BYTE_HIGH_WATER};
 
 /// The blocking byte source symphonia reads the resource through. Absence is
 /// resolved at `read`: block if the live fetch will deliver it, otherwise run the
@@ -85,6 +85,25 @@ impl io::Read for ByteReader {
                     stream = wait(&self.shared.bytes_cv, stream);
                     continue;
                 }
+            }
+
+            // Past the end: nothing to fetch (an MP4 scan reads its last header here).
+            if stream.total_len.is_some_and(|len| stream.read_pos >= len) {
+                return Ok(0);
+            }
+            // Ahead of the live fetch, but inside what it delivers before it stalls:
+            // wait for it rather than refetch. An index at the end of a small MP4
+            // (`moov` after `mdat`) is read this way. A refetch while a fetch is still
+            // delivering lets that fetch's remaining chunks into the new one's bytes
+            // (the element hands every chunk to its current fetch), which corrupts
+            // the stream at the new offset.
+            if stream.read_pos > head
+                && !stream.eos
+                && !stream.stalled
+                && stream.read_pos - stream.base < BYTE_HIGH_WATER as u64
+            {
+                stream = wait(&self.shared.bytes_cv, stream);
+                continue;
             }
 
             // A jump outside the region, or a dry head whose fetch we stalled.

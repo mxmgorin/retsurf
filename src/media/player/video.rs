@@ -1,9 +1,9 @@
-//! `<video>`: H.264 decode (openh264) and frame presentation for [`super::player`].
+//! `<video>`: H.264 decode ([`super::decode`]: the hardware decoder through
+//! libpmhwdec, else openh264) and frame presentation for [`super::player`].
 //!
 //! The demux thread routes video packets here over a bounded channel; this
-//! module's thread decodes, reorders by PTS (openh264 outputs in decode order,
-//! so B-frames arrive out of presentation order) and presents against the
-//! player's clock. Frames are kept as YUV and converted to the BGRA8 WebRender
+//! module's thread decodes, reorders by PTS (B-frames arrive out of
+//! presentation order) and presents against the player's clock. Frames are kept as YUV and converted to the BGRA8 WebRender
 //! wants only when actually shown.
 
 use std::cmp::Reverse;
@@ -12,15 +12,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use openh264::decoder::{DecodedYUV, Decoder, DecoderConfig, Flush};
+use openh264::decoder::DecodedYUV;
 use openh264::formats::YUVSource;
-use openh264::OpenH264API;
 use servo_media::player::video::{Buffer, VideoFrame, VideoFrameData, VideoFrameRenderer};
 use servo_media::player::PlayerEvent;
-use yuv::{yuv420_to_bgra, YuvPlanarImage, YuvRange, YuvStandardMatrix};
+use yuv::{
+    yuv420_to_bgra, yuv_nv12_to_bgra, YuvBiPlanarImage, YuvConversionMode, YuvPlanarImage, YuvRange,
+    YuvStandardMatrix,
+};
 
+use super::decode::H264Decoder;
+use super::glpaint::{GlPainter, Painted};
+use super::hwdec::{self, Lib};
 use super::shared::POSITION_EVENT_SECONDS;
 use super::Shared;
 
@@ -87,11 +92,13 @@ pub(crate) struct VideoPipeline {
 }
 
 impl VideoPipeline {
-    /// `extra_data` is the container's AVCDecoderConfigurationRecord.
+    /// `extra_data` is the container's AVCDecoderConfigurationRecord;
+    /// `width`/`height` the track's (0 if unknown).
     pub(crate) fn spawn(
         shared: Arc<Shared>,
         renderer: Arc<Mutex<dyn VideoFrameRenderer>>,
         extra_data: &[u8],
+        (width, height): (u32, u32),
     ) -> Option<Self> {
         let format = AvccFormat::parse(extra_data)?;
         let (tx, rx) = mpsc::sync_channel(CHANNEL_PACKETS);
@@ -105,7 +112,10 @@ impl VideoPipeline {
         let (flush_, done_) = (flush.clone(), done.clone());
         let spawned = thread::Builder::new()
             .name("video-player".into())
-            .spawn(move || video_thread(shared, renderer, rx, flush_, done_, headers));
+            .spawn(move || {
+                let decoder = H264Decoder::new(headers, width, height, Lib::get());
+                video_thread(shared, renderer, rx, flush_, done_, decoder)
+            });
         if let Err(e) = spawned {
             log::warn!("video: could not spawn the decoder thread: {e}");
             return None;
@@ -234,17 +244,91 @@ impl AvccFormat {
 }
 
 /// A decoded frame waiting for its presentation time; tight YUV 420 planes.
-struct Frame {
-    pts_us: i64,
-    width: usize,
-    height: usize,
-    y: Vec<u8>,
-    u: Vec<u8>,
-    v: Vec<u8>,
+pub(crate) struct Frame {
+    pub(crate) pts_us: i64,
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+    pub(crate) y: Vec<u8>,
+    chroma: Chroma,
+    /// Where the planes go back when the frame is dropped (hardware frames).
+    pool: Option<Arc<PlanePool>>,
+}
+
+/// A hardware frame's planes, tightly packed: Y rows, then interleaved UV rows.
+pub(crate) struct Nv12Planes<'a> {
+    pub(crate) y: &'a [u8],
+    pub(crate) uv: &'a [u8],
 }
 
 impl Frame {
-    fn from_decoded(yuv: &DecodedYUV, pts: f64) -> Self {
+    /// The planes when the chroma is interleaved (a hardware picture).
+    pub(crate) fn nv12(&self) -> Option<Nv12Planes<'_>> {
+        match &self.chroma {
+            Chroma::Interleaved(uv) => Some(Nv12Planes { y: &self.y, uv }),
+            Chroma::Planar { .. } => None,
+        }
+    }
+}
+
+impl Drop for Frame {
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.take() {
+            pool.give(std::mem::take(&mut self.y));
+            if let Chroma::Interleaved(uv) = &mut self.chroma {
+                pool.give(std::mem::take(uv));
+            }
+        }
+    }
+}
+
+/// Plane buffers of dropped hardware frames, written again by the next ones: a
+/// fresh 1080p copy faulted all of its 3 MB in, page by page (12,000 faults a
+/// second, about half of the copy's 14 ms on an H700).
+#[derive(Default)]
+pub(crate) struct PlanePool(Mutex<Vec<Vec<u8>>>);
+
+/// Free buffers kept: a Y and a UV plane each for a few frames.
+const PLANE_POOL: usize = 8;
+
+impl PlanePool {
+    /// An empty buffer holding at least `len` bytes: the smallest that fits.
+    fn take(&self, len: usize) -> Vec<u8> {
+        let mut free = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let fit = free
+            .iter()
+            .enumerate()
+            .filter(|(_, buf)| buf.capacity() >= len)
+            .min_by_key(|(_, buf)| buf.capacity())
+            .map(|(at, _)| at);
+        match fit {
+            Some(at) => {
+                let mut buf = free.swap_remove(at);
+                buf.clear();
+                buf
+            }
+            None => Vec::with_capacity(len),
+        }
+    }
+
+    fn give(&self, buf: Vec<u8>) {
+        let mut free = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if free.len() < PLANE_POOL && buf.capacity() > 0 {
+            free.push(buf);
+        }
+    }
+}
+
+/// Each decoder's own chroma layout, kept to the conversion: splitting the
+/// hardware's interleaved plane cost 15 ms a 1080p frame on an A53 (RG Cube XX).
+enum Chroma {
+    /// openh264: U and V planes.
+    Planar { u: Vec<u8>, v: Vec<u8> },
+    /// The hardware: NV12, U and V interleaved.
+    Interleaved(Vec<u8>),
+}
+
+impl Frame {
+    pub(crate) fn from_decoded(yuv: &DecodedYUV, pts_us: i64) -> Self {
         let (width, height) = yuv.dimensions();
         let (sy, su, sv) = yuv.strides();
         let (cw, ch) = (width.div_ceil(2), height.div_ceil(2));
@@ -256,13 +340,66 @@ impl Frame {
             out
         };
         Self {
-            pts_us: (pts * 1e6) as i64,
+            pts_us,
             width,
             height,
             y: tight(yuv.y(), sy, width, height),
-            u: tight(yuv.u(), su, cw, ch),
-            v: tight(yuv.v(), sv, cw, ch),
+            chroma: Chroma::Planar {
+                u: tight(yuv.u(), su, cw, ch),
+                v: tight(yuv.v(), sv, cw, ch),
+            },
+            pool: None,
         }
+    }
+
+    /// A hardware picture: the planes are read once, row by row (they may be
+    /// uncached); the chroma stays interleaved, as the conversion takes it.
+    /// `pts_us` as for [`Self::from_decoded`].
+    pub(crate) fn from_nv12(pic: &hwdec::Nv12, pts_us: i64, pool: &Arc<PlanePool>) -> Self {
+        let (width, height) = (pic.width, pic.height);
+        let rows = |plane: &[u8], stride: usize, w: usize, h: usize| {
+            let mut out = pool.take(w * h);
+            for row in 0..h {
+                out.extend_from_slice(&plane[row * stride..row * stride + w]);
+            }
+            out
+        };
+        Self {
+            pts_us,
+            width,
+            height,
+            y: rows(pic.y, pic.y_stride, width, height),
+            chroma: Chroma::Interleaved(rows(
+                pic.uv,
+                pic.uv_stride,
+                width.div_ceil(2) * 2,
+                height.div_ceil(2),
+            )),
+            pool: Some(pool.clone()),
+        }
+    }
+
+    /// FNV-1a over the planes: trace logs compare decoders picture by picture.
+    pub(crate) fn checksum(&self) -> u64 {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        let mut add = |bytes: &mut dyn Iterator<Item = &u8>| {
+            for byte in bytes {
+                hash = (hash ^ *byte as u64).wrapping_mul(0x100_0000_01b3);
+            }
+        };
+        add(&mut self.y.iter());
+        // U then V either way, so both decoders' frames hash alike.
+        match &self.chroma {
+            Chroma::Planar { u, v } => {
+                add(&mut u.iter());
+                add(&mut v.iter());
+            }
+            Chroma::Interleaved(uv) => {
+                add(&mut uv.iter().step_by(2));
+                add(&mut uv.iter().skip(1).step_by(2));
+            }
+        }
+        hash
     }
 
     fn pts(&self) -> f64 {
@@ -297,15 +434,50 @@ impl Buffer for BgraBuffer {
 
 struct Presenter {
     shared: Arc<Shared>,
-    renderer: Arc<Mutex<dyn VideoFrameRenderer>>,
+    /// Frames due now, to the paint thread.
+    paint: SyncSender<Paint>,
     heap: BinaryHeap<Reverse<Frame>>,
     /// Post-seek: drop frames before this time.
     discard_until: Option<f64>,
     /// The first frame after start/seek shows immediately, clock regardless.
     presented_any: bool,
     last_position: f64,
-    bgra: Vec<u8>,
 }
+
+/// A frame for the paint thread, with the seek epoch it belongs to.
+struct Paint {
+    frame: Frame,
+    epoch: u64,
+}
+
+/// The paint thread: BGRA conversion and the renderer hand-off, overlapping the
+/// next frame's decode (1080p on an A53: 23 ms of decode and copy, 15 ms of
+/// conversion; one after the other they missed 30 fps).
+struct Painter {
+    shared: Arc<Shared>,
+    renderer: Arc<Mutex<dyn VideoFrameRenderer>>,
+    flush: Arc<FlushPoint>,
+    /// BGRA buffers handed to the renderer, written again once it lets go: a
+    /// fresh 8 MB buffer a 1080p frame meant zeroing it and faulting its pages in.
+    bgra: Vec<Arc<Vec<u8>>>,
+}
+
+/// Frames waiting for the paint thread: one, so a slow paint holds the decode
+/// back instead of piling frames up.
+const PAINT_QUEUE: usize = 1;
+
+/// Buffers kept for reuse; more are allocated while all of them are in use.
+const BGRA_POOL: usize = 6;
+
+/// Frames the renderer may hold before the next is skipped. WebRender keeps a
+/// frame's pixels until its compositor has uploaded them, and that upload is the
+/// slowest step at 1080p on an H700 (RG 34XXSP, RG Cube XX): handed 30 frames a
+/// second, it fell behind and the process grew by 50 MB a second.
+const MAX_HELD: usize = 4;
+
+/// Longest run of skips: a renderer that only lets go of a frame when the next
+/// one arrives must not freeze the picture.
+const MAX_HELD_WAIT: Duration = Duration::from_millis(250);
 
 enum Pace {
     /// Nothing due yet (or interrupted); go back to the channel.
@@ -351,11 +523,11 @@ impl Presenter {
             let Some(Reverse(frame)) = self.heap.pop() else {
                 return Pace::Drained;
             };
-            self.show(frame);
+            self.show(frame, epoch);
         }
     }
 
-    fn show(&mut self, frame: Frame) {
+    fn show(&mut self, frame: Frame, epoch: u64) {
         let pts = frame.pts();
         if let Some(target) = self.discard_until {
             if pts < target - 1e-3 {
@@ -372,51 +544,127 @@ impl Presenter {
             return;
         }
         log::trace!("video: present {pts:.3}s");
-        if let Some(video_frame) = self.convert(&frame) {
-            self.renderer
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .render(video_frame);
-            self.presented_any = true;
-            self.shared.send_event(PlayerEvent::VideoFrameUpdated);
-            // Position events come from audio when there is any.
-            if !self.shared.has_audio() && pts - self.last_position >= POSITION_EVENT_SECONDS {
-                self.last_position = pts;
-                self.shared.send_event(PlayerEvent::PositionChanged(pts));
+        if self.paint.send(Paint { frame, epoch }).is_err() {
+            return;
+        }
+        self.presented_any = true;
+        // Position events come from audio when there is any.
+        if !self.shared.has_audio() && pts - self.last_position >= POSITION_EVENT_SECONDS {
+            self.last_position = pts;
+            self.shared.send_event(PlayerEvent::PositionChanged(pts));
+        }
+    }
+}
+
+impl Painter {
+    fn run(mut self, rx: Receiver<Paint>) {
+        let mut last_sent = Instant::now();
+        // The GPU route for hardware frames (see `glpaint`), made on the first
+        // one: its GL context lives on this thread.
+        let mut gpu: Option<GlPainter> = None;
+        let mut gpu_tried = false;
+        while let Ok(Paint { frame, epoch }) = rx.recv() {
+            // Queued before a seek: the element has moved on.
+            if self.shared.is_quit() || self.flush.epoch() != epoch {
+                continue;
+            }
+            let held = self.bgra.iter().filter(|buf| Arc::strong_count(buf) > 1).count();
+            if held >= MAX_HELD && last_sent.elapsed() < MAX_HELD_WAIT {
+                log::debug!("video: renderer behind, frame {:.3}s skipped", frame.pts());
+                continue;
+            }
+            last_sent = Instant::now();
+            if frame.nv12().is_some() && !gpu_tried {
+                gpu_tried = true;
+                gpu = GlPainter::new();
+            }
+            if let Some(painter) = gpu.as_mut() {
+                match painter.paint(&frame) {
+                    Ok(Painted::Frame(video_frame)) => {
+                        self.renderer
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .render(video_frame);
+                        self.shared.send_event(PlayerEvent::VideoFrameUpdated);
+                        continue;
+                    }
+                    Ok(Painted::Busy) => {
+                        log::debug!("video: renderer behind, frame {:.3}s skipped", frame.pts());
+                        continue;
+                    }
+                    Err(e) => {
+                        log::warn!("video: GPU painting failed ({e}); converting on the CPU");
+                        gpu = None;
+                    }
+                }
+            }
+            if let Some(video_frame) = self.convert(&frame) {
+                self.renderer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .render(video_frame);
+                self.shared.send_event(PlayerEvent::VideoFrameUpdated);
             }
         }
     }
 
     fn convert(&mut self, frame: &Frame) -> Option<VideoFrame> {
         let (w, h) = (frame.width, frame.height);
-        let planar = YuvPlanarImage {
-            y_plane: &frame.y,
-            y_stride: w as u32,
-            u_plane: &frame.u,
-            u_stride: w.div_ceil(2) as u32,
-            v_plane: &frame.v,
-            v_stride: w.div_ceil(2) as u32,
-            width: w as u32,
-            height: h as u32,
-        };
         let matrix = if h >= 720 {
             YuvStandardMatrix::Bt709
         } else {
             YuvStandardMatrix::Bt601
         };
-        self.bgra.clear();
-        self.bgra.resize(w * h * 4, 0);
-        if let Err(e) = yuv420_to_bgra(
-            &planar,
-            &mut self.bgra,
-            (w * 4) as u32,
-            YuvRange::Limited,
-            matrix,
-        ) {
+        let size = w * h * 4;
+        let free = self
+            .bgra
+            .iter()
+            .position(|buf| buf.len() == size && Arc::strong_count(buf) == 1);
+        let mut data = match free {
+            Some(at) => self.bgra.swap_remove(at),
+            None => Arc::new(vec![0; size]),
+        };
+        // Ours alone (checked above, or just made): the conversion writes every byte.
+        let Some(bgra) = Arc::get_mut(&mut data) else {
+            return None;
+        };
+        let stride = (w * 4) as u32;
+        let (cw, range) = (w.div_ceil(2) as u32, YuvRange::Limited);
+        let done = match &frame.chroma {
+            Chroma::Planar { u, v } => {
+                let planar = YuvPlanarImage {
+                    y_plane: &frame.y,
+                    y_stride: w as u32,
+                    u_plane: u,
+                    u_stride: cw,
+                    v_plane: v,
+                    v_stride: cw,
+                    width: w as u32,
+                    height: h as u32,
+                };
+                yuv420_to_bgra(&planar, bgra, stride, range, matrix)
+            }
+            Chroma::Interleaved(uv) => {
+                let image = YuvBiPlanarImage {
+                    y_plane: &frame.y,
+                    y_stride: w as u32,
+                    uv_plane: uv,
+                    uv_stride: cw * 2,
+                    width: w as u32,
+                    height: h as u32,
+                };
+                let mode = YuvConversionMode::Balanced;
+                yuv_nv12_to_bgra(&image, bgra, stride, range, matrix, mode)
+            }
+        };
+        if let Err(e) = done {
             log::debug!("video: conversion failed: {e}");
             return None;
         }
-        let data = Arc::new(std::mem::take(&mut self.bgra));
+        if self.bgra.len() >= BGRA_POOL {
+            self.bgra.remove(0);
+        }
+        self.bgra.push(data.clone());
         VideoFrame::new(w as i32, h as i32, Arc::new(BgraBuffer(data)))
     }
 }
@@ -427,22 +675,32 @@ fn video_thread(
     rx: Receiver<VideoMsg>,
     flush: Arc<FlushPoint>,
     done: Arc<AtomicBool>,
-    headers: Vec<u8>,
+    mut decoder: H264Decoder,
 ) {
-    let mut decoder: Option<Decoder> = None;
     let mut epoch = 0u64;
-    // openh264 emits pictures in display order with a reorder delay, so each
-    // output gets the smallest PTS still outstanding, not its packet's.
-    let mut pending_pts: BinaryHeap<Reverse<i64>> = BinaryHeap::new();
-    let mut presenter = Presenter {
+    let (paint, paint_rx) = mpsc::sync_channel(PAINT_QUEUE);
+    let painter = Painter {
         shared: shared.clone(),
         renderer,
+        flush: flush.clone(),
+        bgra: Vec::new(),
+    };
+    // Without the thread nothing is painted (the sends fail); decoding goes on.
+    if let Err(e) = thread::Builder::new()
+        .name("video-paint".into())
+        .spawn(move || painter.run(paint_rx))
+    {
+        log::warn!("video: could not spawn the paint thread: {e}");
+    }
+    let mut presenter = Presenter {
+        shared: shared.clone(),
+        paint,
         heap: BinaryHeap::new(),
         discard_until: None,
         presented_any: false,
         last_position: f64::NEG_INFINITY,
-        bgra: Vec::new(),
     };
+    let mut backend: Option<String> = None;
 
     while let Ok(msg) = rx.recv() {
         if shared.is_quit() {
@@ -457,12 +715,25 @@ fn video_thread(
         if msg_epoch > epoch {
             // A seek: resync at the next IDR, drop everything queued.
             epoch = msg_epoch;
-            decoder = None;
-            pending_pts.clear();
+            decoder.reset();
             presenter.reset(flush.target());
             done.store(false, Ordering::SeqCst);
         }
 
+        let heap = &mut presenter.heap;
+        let mut queue = |frame: Frame| {
+            // Its own target, off unless asked for (`video_checksum=trace`):
+            // hashing every picture costs real time on a handheld.
+            if log::log_enabled!(target: "video_checksum", log::Level::Trace) {
+                log::trace!(
+                    target: "video_checksum",
+                    "video: decoded {:.3}s {:016x}",
+                    frame.pts(),
+                    frame.checksum()
+                );
+            }
+            heap.push(Reverse(frame));
+        };
         match msg {
             VideoMsg::Packet {
                 pts,
@@ -471,62 +742,20 @@ fn video_thread(
                 ..
             } => {
                 log::trace!("video: packet {pts:.3}s keyframe={keyframe}");
-                if decoder.is_none() {
-                    if !keyframe {
-                        continue;
-                    }
-                    // Mid-stream flushing corrupts B-frame reordering; frames
-                    // are pulled out only by later packets and flush_remaining.
-                    let config = DecoderConfig::new().flush_after_decode(Flush::NoFlush);
-                    match Decoder::with_api_config(OpenH264API::from_source(), config) {
-                        Ok(mut fresh) => {
-                            let _ = fresh.decode(&headers);
-                            decoder = Some(fresh);
-                        }
-                        Err(e) => {
-                            log::warn!("video: decoder init failed: {e}");
-                            break;
-                        }
-                    }
+                let pts_us = (pts * 1e6) as i64;
+                if let Err(e) = decoder.decode(&annexb, pts_us, keyframe, &mut queue) {
+                    log::warn!("video: decoder init failed: {e}");
+                    break;
                 }
-                let Some(active) = decoder.as_mut() else {
-                    continue;
-                };
-                pending_pts.push(Reverse((pts * 1e6) as i64));
-                match active.decode(&annexb) {
-                    Ok(Some(yuv)) => {
-                        let stamp = pending_pts.pop().map_or(pts, |Reverse(us)| us as f64 / 1e6);
-                        presenter
-                            .heap
-                            .push(Reverse(Frame::from_decoded(&yuv, stamp)));
-                    }
-                    Ok(None) => {}
-                    // Corrupt bitstream: rebuild at the next keyframe.
-                    Err(e) => {
-                        log::debug!("video: decode failed: {e}");
-                        decoder = None;
-                        pending_pts.clear();
-                    }
+                let now = decoder.backend();
+                if now.is_some() && now != backend {
+                    log::info!("video: decoding on {}", now.as_deref().unwrap_or("?"));
+                    backend = now;
                 }
                 presenter.present_due(epoch, &flush, false);
             }
             VideoMsg::Eos { .. } => {
-                if let Some(active) = decoder.as_mut() {
-                    if let Ok(frames) = active.flush_remaining() {
-                        let mut last = 0.0;
-                        for yuv in frames {
-                            let stamp = pending_pts
-                                .pop()
-                                .map_or(last + 1.0 / 60.0, |Reverse(us)| us as f64 / 1e6);
-                            last = stamp;
-                            presenter
-                                .heap
-                                .push(Reverse(Frame::from_decoded(&yuv, stamp)));
-                        }
-                    }
-                }
-                decoder = None;
-                pending_pts.clear();
+                decoder.finish(&mut queue);
                 if matches!(presenter.present_due(epoch, &flush, true), Pace::Drained) {
                     done.store(true, Ordering::SeqCst);
                     shared.notify_work();
@@ -542,6 +771,79 @@ fn video_thread(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A dropped hardware frame hands its planes back, and the next frame of
+    /// the same size is copied into them instead of into fresh memory.
+    #[test]
+    fn dropped_hardware_frames_hand_their_planes_back() {
+        let pool = Arc::<PlanePool>::default();
+        let frame = Frame {
+            pts_us: 0,
+            width: 4,
+            height: 2,
+            y: pool.take(8),
+            chroma: Chroma::Interleaved(pool.take(4)),
+            pool: Some(pool.clone()),
+        };
+        let y = frame.y.as_ptr();
+        drop(frame);
+        assert_eq!(pool.0.lock().unwrap().len(), 2);
+        // The smallest buffer that fits: the UV plane's stays for the next UV.
+        let again = pool.take(8);
+        assert_eq!(again.as_ptr(), y);
+        assert!(again.is_empty());
+        assert_eq!(pool.take(4).capacity(), 4);
+        assert!(pool.0.lock().unwrap().is_empty());
+    }
+
+    /// The pool keeps a bounded number of free buffers.
+    #[test]
+    fn the_plane_pool_is_bounded() {
+        let pool = PlanePool::default();
+        for _ in 0..PLANE_POOL + 3 {
+            pool.give(vec![0; 16]);
+        }
+        assert_eq!(pool.0.lock().unwrap().len(), PLANE_POOL);
+    }
+
+    /// A hardware picture (strided NV12) and the same picture from openh264
+    /// (tight planes) hash alike, so the checksum logs of the two compare.
+    #[test]
+    fn nv12_and_planar_frames_hash_alike() {
+        let (w, h, stride) = (6usize, 4usize, 8usize);
+        let y: Vec<u8> = (0..stride * h).map(|n| n as u8).collect();
+        let uv: Vec<u8> = (0..stride * h / 2).map(|n| 100 + n as u8).collect();
+        let pic = hwdec::Nv12 {
+            width: w,
+            height: h,
+            pts: 0,
+            y: &y,
+            y_stride: stride,
+            uv: &uv,
+            uv_stride: stride,
+        };
+        let hw = Frame::from_nv12(&pic, 7, &Arc::default());
+        assert_eq!(hw.pts_us, 7);
+        let chroma = |skip: usize| -> Vec<u8> {
+            (0..h / 2)
+                .flat_map(|r| (0..w / 2).map(move |c| (r, c)))
+                .map(|(r, c)| uv[r * stride + c * 2 + skip])
+                .collect()
+        };
+        let sw = Frame {
+            pts_us: 7,
+            width: w,
+            height: h,
+            y: (0..h).flat_map(|r| y[r * stride..r * stride + w].to_vec()).collect(),
+            chroma: Chroma::Planar {
+                u: chroma(0),
+                v: chroma(1),
+            },
+            pool: None,
+        };
+        assert_eq!(hw.y, sw.y);
+        assert_eq!(hw.checksum(), sw.checksum());
+    }
 
     /// avcC with one SPS `[0x67, 1, 2]` and one PPS `[0x68, 3]`, 4-byte lengths.
     fn avcc() -> Vec<u8> {

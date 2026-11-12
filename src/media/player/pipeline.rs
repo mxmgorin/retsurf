@@ -104,15 +104,7 @@ fn run_pipeline(
     seekable: bool,
     video_renderer: Option<Arc<Mutex<dyn VideoFrameRenderer>>>,
 ) -> Result<(), String> {
-    let stream = MediaSourceStream::new(Box::new(source), Default::default());
-    let mut reader = symphonia::default::get_probe()
-        .probe(
-            &Hint::new(),
-            stream,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )
-        .map_err(|e| format!("probe failed: {e}"))?;
+    let mut reader = open_reader(source)?;
 
     // Audio setup; the decoder is built here, rate/channels are pinned by the
     // preroll below.
@@ -156,7 +148,8 @@ fn run_pipeline(
                 .extra_data
                 .iter()
                 .find(|data| data.id == VIDEO_EXTRA_DATA_ID_AVC_DECODER_CONFIG)?;
-            let pipeline = VideoPipeline::spawn(shared.clone(), renderer, &extra.data)?;
+            let dims = (params.width.map_or(0, u32::from), params.height.map_or(0, u32::from));
+            let pipeline = VideoPipeline::spawn(shared.clone(), renderer, &extra.data, dims)?;
             Some((
                 VideoPipe {
                     track_id: track.id,
@@ -279,6 +272,8 @@ fn run_pipeline(
     let mut open_failed = false;
     // The demuxer ran dry for good; cleared only by a seek (`loop` attribute).
     let mut at_eof = false;
+    // The reader returned its last packet: it cannot seek any more (see `open_reader`).
+    let mut reader_spent = false;
     let mut eos_sent = false;
     let mut eos_announced = false;
 
@@ -302,6 +297,20 @@ fn run_pipeline(
             if let Some(v) = &mut video {
                 v.pipeline.flush.flush_to(target);
                 v.lagging = false;
+            }
+            if reader_spent {
+                // From byte 0 again; the tracks and their ids are the file's own.
+                lock(&shared.stream).read_pos = 0;
+                match open_reader(ByteReader {
+                    shared: shared.clone(),
+                    seekable,
+                }) {
+                    Ok(fresh) => {
+                        reader = fresh;
+                        reader_spent = false;
+                    }
+                    Err(e) => log::warn!("media: reopening for the seek failed: {e}"),
+                }
             }
             match seek_to(&mut *reader, target, &audio, &mut video) {
                 Ok(()) => {
@@ -388,6 +397,7 @@ fn run_pipeline(
             Ok(Some(packet)) => packet,
             Ok(None) => {
                 at_eof = true;
+                reader_spent = true;
                 continue 'main;
             }
             Err(SymphoniaError::IoError(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {
@@ -395,6 +405,7 @@ fn run_pipeline(
                 // the loop top sorts the three cases apart.
                 if !shared.quit.load(Ordering::SeqCst) && !shared.seek_pending() {
                     at_eof = true;
+                    reader_spent = true;
                 }
                 continue 'main;
             }
@@ -472,6 +483,24 @@ fn run_pipeline(
     }
 
     Ok(())
+}
+
+/// The format reader over the resource, from the source's read position.
+///
+/// symphonia 0.6.1's MP4 reader cannot seek once it has returned its last
+/// packet: the scan past the last sample drops the atom it reads samples
+/// through, and every read after a seek fails ("no atom pending read"). A seek
+/// after the end, which is how `loop` restarts, opens a fresh one instead.
+pub(super) fn open_reader(source: ByteReader) -> Result<Box<dyn FormatReader>, String> {
+    let stream = MediaSourceStream::new(Box::new(source), Default::default());
+    symphonia::default::get_probe()
+        .probe(
+            &Hint::new(),
+            stream,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
+        .map_err(|e| format!("probe failed: {e}"))
 }
 
 /// Seek to `target`. Video must restart at an IDR, but symphonia's mp4 seek is
