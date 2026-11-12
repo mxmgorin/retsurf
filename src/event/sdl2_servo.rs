@@ -113,7 +113,8 @@ pub fn into_wheel_event(dx: i32, dy: i32, mouse_x: f32, mouse_y: f32) -> servo::
         mode: servo::WheelMode::DeltaLine,
     };
     let point = into_device_point(mouse_x, mouse_y);
-    servo::WheelEvent::new(delta, point)
+    // Unmodified: page scrolling ignores Shift, so the DOM delta must not rotate with it.
+    servo::WheelEvent::new(delta, point, servo::Modifiers::empty())
 }
 
 #[inline]
