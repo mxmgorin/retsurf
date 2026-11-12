@@ -18,7 +18,7 @@ pub struct PerformanceConfig {
     /// overrides it.
     pub layout_threads: u32,
     /// Cap on each of Servo's worker pools (image cache, async runtime,
-    /// storage, WebRender workers). `0` = keep the memory profile's choice;
+    /// storage, WebRender and canvas workers). `0` = keep the memory profile's choice;
     /// non-zero overrides every pool with this value.
     pub worker_pool_max: u32,
     /// Hold the CPU's `performance` governor while a page loads, where the

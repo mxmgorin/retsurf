@@ -47,6 +47,8 @@ pub(super) fn build_preferences(
         clamp(&mut prefs.thread_pool_fallback_workers);
         clamp(&mut prefs.thread_pool_workers_max);
         clamp(&mut prefs.thread_pool_webrender_workers_max);
+        // Zero is valid here: canvases paint without a helper pool.
+        prefs.thread_pool_canvas_workers = prefs.thread_pool_canvas_workers.min(cores_u);
     }
 
     // The explicit [performance] knobs still win when set (non-zero); `0` keeps
@@ -60,6 +62,7 @@ pub(super) fn build_preferences(
         prefs.thread_pool_fallback_workers = n;
         prefs.thread_pool_workers_max = n;
         prefs.thread_pool_webrender_workers_max = n;
+        prefs.thread_pool_canvas_workers = n;
     }
 
     // Guarded so an off knob doesn't create the cache dir.
@@ -356,5 +359,20 @@ mod tests {
 
         assert!(!prefs.network_http_cache_disabled);
         assert_eq!(prefs.network_http_cache_size, SPILL_MEMORY_CACHE_ENTRIES);
+    }
+
+    /// The core clamp keeps a tier's zero canvas pool; the worker knob sets it.
+    #[test]
+    fn canvas_pool_keeps_zero_and_takes_the_worker_knob() {
+        let config = BrowserConfig::default();
+        let mut perf = PerformanceConfig {
+            memory_profile: config::MemoryProfile::Embedded,
+            ..PerformanceConfig::default()
+        };
+        let canvas =
+            |perf: &PerformanceConfig| build_preferences(&config, perf).thread_pool_canvas_workers;
+        assert_eq!(canvas(&perf), 0);
+        perf.worker_pool_max = 2;
+        assert_eq!(canvas(&perf), 2);
     }
 }

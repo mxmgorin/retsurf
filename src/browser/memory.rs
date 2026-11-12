@@ -172,6 +172,8 @@ fn embedded() -> Preferences {
     p.thread_pool_async_runtime_workers_max = 1;
     p.thread_pool_fallback_workers = 1;
     p.layout_threads = 1;
+    // Each large canvas starts a pool of its own; zero paints it on the canvas thread.
+    p.thread_pool_canvas_workers = 0;
 
     // Keep the BASELINE JIT (weak in-order cores need it); drop only the
     // optimizing Ion compiler and its wasm counterpart to shed code memory.
@@ -227,6 +229,7 @@ fn tight() -> Preferences {
     p.thread_pool_webrender_workers_max = 1;
     p.thread_pool_async_runtime_workers_max = 1;
     p.thread_pool_fallback_workers = 1;
+    p.thread_pool_canvas_workers = 2;
     p.layout_threads = 1;
 
     // SpiderMonkey GC: collect early and often, keep the ceiling low.
