@@ -311,13 +311,13 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
     } else {
         count.to_string()
     };
-    painter.text(
-        c,
-        egui::Align2::CENTER_CENTER,
+    let galley = painter.layout_no_wrap(
         label,
         egui::FontId::proportional(scale * if count > 9 { 8.0 } else { 10.0 }),
         color,
     );
+    // Centered on the digits' ink: the font's line box leaves descender room below them.
+    painter.galley(c - galley.mesh_bounds.center().to_vec2(), galley, color);
     resp
 }
 
