@@ -14,8 +14,9 @@ RETSURF_SERVO_SRC=~/Repos/servo tools/arm64/build.sh       # against a local for
 ```
 
 Caches live in `~/.cache/retsurf-arm64` (`RETSURF_ARM64_CACHE`). `RETSURF_ARM64_LTO=thin`
-links in less RAM for a slower binary. The `target/` cache belongs to one base image: after
-changing the image, delete it, or every cached build script dies on `GLIBC_2.34 not found`.
+links in less RAM for a slower binary; `RETSURF_ARM64_OPT=s` builds a smaller, slower one.
+The `target/` cache belongs to one base image: after changing the image, delete it, or every
+cached build script dies on `GLIBC_2.34 not found`.
 
 ## Ubuntu 20.04, for the glibc floor
 

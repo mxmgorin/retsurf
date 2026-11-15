@@ -53,7 +53,7 @@ docker run --rm -i --network host \
   -v "$cache/cargo":/cargo \
   -e CARGO_TARGET_DIR=/target -e CARGO_HOME=/cargo -e RUSTUP_HOME=/cargo \
   -e "TARGET=$target" -e "LIBDIR=$libdir" -e "FLOOR=$floor" \
-  -e "LTO=${RETSURF_ARM64_LTO:-fat}" -e "OPT=${RETSURF_ARM64_OPT:-s}" \
+  -e "LTO=${RETSURF_ARM64_LTO:-fat}" -e "OPT=${RETSURF_ARM64_OPT:-3}" \
   -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
   -e "VARIANTS=${variants[*]}" \
   "$image" bash -euxs <<'CONTAINER'
@@ -126,7 +126,7 @@ docker run --rm -i --network host \
 
       # The binary is ~100 MB of demand-paged text off the same card the device
       # swaps to: an OOM-killed session showed 212 MB of file-backed resident.
-      # The armhf build took the same three levers and went 95 -> 76 MB with
+      # The armhf build took these two with opt-level s and went 95 -> 76 MB with
       # major faults 191k -> 931 and no regression in the frame.
       #   --gc-sections drops what the C/C++ halves never reference;
       #   relocation-model=static skips a PIE's relocation work at every launch.
@@ -139,9 +139,7 @@ docker run --rm -i --network host \
       # One section per function/datum, so the link above can drop the unreached.
       export CFLAGS_aarch64_unknown_linux_gnu="-ffunction-sections -fdata-sections"
       export CXXFLAGS_aarch64_unknown_linux_gnu="$CFLAGS_aarch64_unknown_linux_gnu"
-      # Size over speed for the bulk of the Rust: the engine's code is cold and
-      # there is a lot of it. The rasterizers keep -O3, pinned in Cargo.toml.
-      # RETSURF_ARM64_OPT=3 puts the old level back, which is how the two compare.
+      # The release default, as CI builds it; RETSURF_ARM64_OPT=s builds for size.
       export CARGO_PROFILE_RELEASE_OPT_LEVEL="$OPT"
 
       cargo build --release --target "$TARGET" $features
