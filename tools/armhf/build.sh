@@ -44,7 +44,7 @@ docker run --rm -i --network host \
   -v "$cache/cargo":/cargo \
   -e CARGO_TARGET_DIR=/target -e CARGO_HOME=/cargo -e RUSTUP_HOME=/cargo \
   -e "TARGET=$target" -e "LIBDIR=$libdir" -e "FLOOR=$floor" \
-  -e "LTO=${RETSURF_ARM_LTO:-fat}" \
+  -e "LTO=${RETSURF_ARM_LTO:-fat}" -e "OPT=${RETSURF_ARM_OPT:-s}" \
   -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
   -e "CARGO_ARGS=$*" \
   "$image" bash -euxs <<'CONTAINER'
@@ -173,7 +173,7 @@ docker run --rm -i --network host \
     export CARGO_PROFILE_RELEASE_PANIC=abort
     # Size over speed for the bulk of the Rust: the engine's code is cold and
     # there is a lot of it. The rasterizers keep -O3, see Cargo.toml.
-    export CARGO_PROFILE_RELEASE_OPT_LEVEL="${RETSURF_ARM_OPT:-s}"
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL="$OPT"
 
     cargo build --release --no-default-features --features software,webgl --target "$TARGET" $CARGO_ARGS
     out="/target/$TARGET/release/retsurf"

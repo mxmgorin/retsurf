@@ -57,7 +57,7 @@ docker run --rm -i --network host \
   -v "$cache/cargo":/cargo \
   -e CARGO_TARGET_DIR=/target -e CARGO_HOME=/cargo -e RUSTUP_HOME=/cargo \
   -e "TARGET=$target" -e "LIBDIR=$libdir" -e "FLOOR=$floor" \
-  -e "LTO=${RETSURF_ARM64_LTO:-fat}" \
+  -e "LTO=${RETSURF_ARM64_LTO:-fat}" -e "OPT=${RETSURF_ARM64_OPT:-s}" \
   -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
   -e "CPUS=${cpus[*]}" \
   "$image" bash -euxs <<'CONTAINER'
@@ -149,7 +149,7 @@ docker run --rm -i --network host \
       # Size over speed for the bulk of the Rust: the engine's code is cold and
       # there is a lot of it. The rasterizers keep -O3, pinned in Cargo.toml.
       # RETSURF_ARM64_OPT=3 puts the old level back, which is how the two compare.
-      export CARGO_PROFILE_RELEASE_OPT_LEVEL="${RETSURF_ARM64_OPT:-s}"
+      export CARGO_PROFILE_RELEASE_OPT_LEVEL="$OPT"
 
       cargo build --release --target "$TARGET"
       out="/target/$TARGET/release/retsurf"
