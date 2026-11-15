@@ -33,6 +33,9 @@ software = ["dep:swgl", "egui-sdl2/canvas-backend"]
 eink = ["software"]
 sdl2-bundled = ["sdl2/bundled"]
 sdl2-static-link = ["sdl2/static-link"]
+# aarch64 Linux: LL/SC atomics in prebuilt std and C++ even where the core has LSE.
+# Build with `-C target-feature=-outline-atomics` too, or the Rust code keeps LSE.
+llsc-atomics = []
 
 # Fat LTO and codegen-units = 1 are CI-only (CARGO_PROFILE_RELEASE_* in the
 # workflows), so a local release build stays fast. `panic` is set per target

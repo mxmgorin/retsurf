@@ -5,13 +5,12 @@ from x86_64 is for when the engine fix is still in a local Servo checkout, which
 cannot see: that is what `RETSURF_SERVO_SRC` is for.
 
 ```
-tools/arm64/build.sh                      # a35 a53 a55 -> dist/arm64/
-tools/arm64/build.sh a55                  # one core
+tools/arm64/build.sh                      # retsurf.aarch64 -> dist/arm64/
 tools/arm64/build.sh universal            # the generic non-PortMaster binary
 tools/arm64/package-portmaster.sh         # builds, then dist/portmaster{,.zip}
 tools/arm64/package-portmaster.sh -n      # package what is already built
 
-RETSURF_SERVO_SRC=~/Repos/servo tools/arm64/build.sh a53   # against a local fork
+RETSURF_SERVO_SRC=~/Repos/servo tools/arm64/build.sh       # against a local fork
 ```
 
 Caches live in `~/.cache/retsurf-arm64` (`RETSURF_ARM64_CACHE`). `RETSURF_ARM64_LTO=thin`
@@ -36,22 +35,21 @@ What follows from the old base:
   and leave `PKG_CONFIG_SYSROOT_DIR` unset. apt's existing sources are pinned to
   `[arch=amd64]` before arm64 is added.
 
-## Three binaries
+## Two binaries
 
-Cortex-A55 code (ARMv8.2) crashes on v8.0 cores, so `Retsurf.sh` picks one by
-`/proc/cpuinfo`:
+Both run on any ARMv8.0 core.
 
-| | cores | panic |
-|---|---|---|
-| `a35` | RK3326, A53 | abort |
-| `a53` | H700, A133 Plus | abort |
-| `a55` | RK3566, A523/T527 | abort |
-| `universal` | any ARMv8.0, non-PortMaster | unwind |
+| | for | atomics | panic |
+|---|---|---|---|
+| `aarch64` | every handheld package | LL/SC (`llsc-atomics`) | abort |
+| `universal` | non-PortMaster installs | the toolchain's pick per core | unwind |
 
-Each core's `RUSTFLAGS` rebuild the whole Rust graph; SpiderMonkey (~20 minutes) is reused.
+Each variant's `RUSTFLAGS` rebuild the whole Rust graph; SpiderMonkey (~20 minutes) is reused.
 
 ## Not failures
 
+- **`unstable feature specified for -Ctarget-feature: outline-atomics`** in the `aarch64`
+  build: the flag that gives it LL/SC atomics, as intended.
 - **`patch ... was not used in the crate graph`** under `RETSURF_SERVO_SRC`: the path patch
   replaced the git source, as intended. To confirm, `strings` the binary for text only the
   local checkout has.

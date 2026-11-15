@@ -311,7 +311,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
           CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
           # panic=abort drops the unwind tables for a smaller binary, as on the
-          # aarch64 per-core builds; RETSURF_PANIC_FILE still logs the panic.
+          # aarch64 handheld build; RETSURF_PANIC_FILE still logs the panic.
           CARGO_PROFILE_RELEASE_PANIC: "abort"
         run: |
           set -eux

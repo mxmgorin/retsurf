@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assemble the PortMaster port around freshly cross-built aarch64 binaries.
+# Assemble the PortMaster port around a freshly cross-built aarch64 binary.
 #
 #   tools/arm64/package-portmaster.sh [-n]   # -n: skip the build, package what is there
 #
@@ -17,11 +17,9 @@ bins=$repo/dist/arm64
 pkg=$repo/packaging/portmaster
 pm=$repo/dist/portmaster
 
-[ "$build" = yes ] && "$here/build.sh" a35 a53 a55
+[ "$build" = yes ] && "$here/build.sh" aarch64
 
-for cpu in a35 a53 a55; do
-  [ -f "$bins/retsurf.$cpu" ] || { echo "missing $bins/retsurf.$cpu (run build.sh)" >&2; exit 1; }
-done
+[ -f "$bins/retsurf.aarch64" ] || { echo "missing $bins/retsurf.aarch64 (run build.sh)" >&2; exit 1; }
 
 rm -rf "$pm"
 mkdir -p "$pm/retsurf"
@@ -32,9 +30,8 @@ cp "$pkg/README.md" "$pm/retsurf/"
 cp "$pkg/screenshot.png" "$pm/retsurf/"
 mkdir -p "$pm/retsurf/licenses"
 cp "$repo/LICENSE" "$repo/NOTICE" "$pm/retsurf/licenses/"
-cp "$bins"/retsurf.a35 "$bins"/retsurf.a53 "$bins"/retsurf.a55 "$pm/retsurf/"
-chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.a35" \
-  "$pm/retsurf/retsurf.a53" "$pm/retsurf/retsurf.a55"
+cp "$bins/retsurf.aarch64" "$pm/retsurf/"
+chmod +x "$pm/Retsurf.sh" "$pm/retsurf/retsurf.aarch64"
 
 # Bundled libraries and fontconfig, reached only where the firmware carries none
 # of its own (see tools/arm64/runtime-libs.sh).

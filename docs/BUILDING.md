@@ -111,7 +111,7 @@ both.
 CI builds these; the scripts build locally in the same containers.
 
 ```sh
-tools/arm64/build.sh                 # aarch64 per-core binaries -> dist/arm64/
+tools/arm64/build.sh                 # aarch64 handheld binary -> dist/arm64/
 tools/arm64/package-portmaster.sh    # builds, then dist/portmaster{,.zip}
 tools/armhf/build.sh                 # Miyoo Mini (armv7) binary
 ```

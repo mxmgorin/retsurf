@@ -77,7 +77,7 @@ pub enum Offer {
 /// The detected install kind, resolved once from the live process.
 #[derive(Clone)]
 pub(crate) enum Kind {
-    /// PortMaster port: the launcher + three per-core binaries live in the gamedir.
+    /// PortMaster port: the launcher + the aarch64 binary live in the gamedir.
     PortMaster { gamedir: PathBuf, launcher: PathBuf },
     /// A single replaceable binary (Linux x86_64 / aarch64 desktop). `asset` is the
     /// release zip and `bin` the binary's name inside it.

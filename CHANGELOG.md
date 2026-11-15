@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A page a site sends instead of the file, such as a sign-in, opens in the tab instead of being saved as the file
 - Android: a finished download opens with the app the system picks for its type
 - Engine on Servo `main` as of 2026-11-12
+- Handheld packages carry one binary, `retsurf.aarch64`, for every board in place of `retsurf.a35`, `retsurf.a53` and `retsurf.a55`; pages run faster on all of them. The three old binaries can be deleted from the port folder
+- A handheld install updated from inside an earlier version does not start: unpack the new package over it, as for a first install
 
 ### Removed
 

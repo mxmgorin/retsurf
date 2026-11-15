@@ -4,8 +4,8 @@
 //! each transition. A stalled body leaves that thread blocked in a read the OS
 //! owns, so a watchdog publishes the failure in its stead and bars the swap.
 //!
-//! Only executables are ever replaced — the three `retsurf.a{35,53,55}` + the
-//! `Retsurf.sh` launcher for a PortMaster port, or the single running binary for a
+//! Only executables are ever replaced — [`PORT_BINARY`] + the `Retsurf.sh`
+//! launcher for a PortMaster port, or the single running binary for a
 //! desktop install — never `data/`, `downloads/`, or the config (which on the
 //! handheld also live under the gamedir). Each swap renames a fully-written sibling
 //! over the target, so a running/mmap'd binary keeps its old inode and a mid-swap
@@ -21,9 +21,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// The per-core binaries a PortMaster release ships, named under the extracted
-/// `retsurf/` subfolder and directly in the gamedir.
-const BINARIES: [&str; 3] = ["retsurf.a35", "retsurf.a53", "retsurf.a55"];
+/// The binary a PortMaster release ships, named under the extracted `retsurf/`
+/// subfolder and directly in the gamedir.
+const PORT_BINARY: &str = "retsurf.aarch64";
 
 /// No received bytes for this long fails the download as stalled (ureq has no
 /// idle timeout).
@@ -115,19 +115,17 @@ fn target_dir(kind: &Kind) -> Option<PathBuf> {
 }
 
 /// The `(extracted src, live dst)` pairs to swap for this kind. A release that omits
-/// a variant just leaves its src absent, and the swap skips it.
+/// a file just leaves its src absent, and the swap skips it.
 fn swap_pairs(kind: &Kind, staging: &Path) -> Vec<(PathBuf, PathBuf)> {
     match kind {
-        Kind::PortMaster { gamedir, launcher } => {
-            // Binaries live under the extracted `retsurf/`; the launcher at the root.
-            let extracted = staging.join("retsurf");
-            let mut pairs: Vec<(PathBuf, PathBuf)> = BINARIES
-                .iter()
-                .map(|name| (extracted.join(name), gamedir.join(name)))
-                .collect();
-            pairs.push((staging.join("Retsurf.sh"), launcher.clone()));
-            pairs
-        }
+        // The binary lives under the extracted `retsurf/`; the launcher at the root.
+        Kind::PortMaster { gamedir, launcher } => vec![
+            (
+                staging.join("retsurf").join(PORT_BINARY),
+                gamedir.join(PORT_BINARY),
+            ),
+            (staging.join("Retsurf.sh"), launcher.clone()),
+        ],
         // Single binary: the extracted `bin` at the zip root -> the running exe.
         Kind::Single { exe, bin, .. } => vec![(staging.join(bin), exe.clone())],
         Kind::Manual => Vec::new(),
@@ -241,14 +239,14 @@ fn extract(zip_path: &Path, dest: &Path) -> Result<(), String> {
 
 /// Transactionally swap the executable(s) from the extracted tree over the live
 /// ones. On any failure, every pair already swapped is rolled back, so the install
-/// is left fully-old. A pair whose src is absent (an omitted variant) is skipped.
+/// is left fully-old. A pair whose src is absent (an omitted file) is skipped.
 fn swap(kind: &Kind, staging: &Path) -> Result<(), String> {
     let pairs = swap_pairs(kind, staging);
     // Each entry: the target we replaced and the backup to restore it from.
     let mut done: Vec<(PathBuf, Option<PathBuf>)> = Vec::new();
     for (src, dst) in &pairs {
         if !src.is_file() {
-            continue; // a release may not ship every variant
+            continue; // a release may not ship every file
         }
         if let Err(e) = make_executable(src) {
             rollback(&done);

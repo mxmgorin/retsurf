@@ -14,8 +14,8 @@ Which handhelds retsurf targets, and how it is packaged for them.
 ## Packages
 
 - **PortMaster** (the firmwares above, and the others PortMaster supports):
-  `packaging/portmaster/`. Three per-core aarch64 binaries, picked at launch by
-  `Retsurf.sh`; how they are built is in [`tools/arm64/README.md`](../tools/arm64/README.md).
+  `packaging/portmaster/`. One aarch64 binary, `retsurf.aarch64`, for every board; how it
+  is built is in [`tools/arm64/README.md`](../tools/arm64/README.md).
   `libGLESv2` and `libEGL` (the GPU blob) resolve at runtime on the device, so they are not
   bundled.
 - **Miyoo Mini** (OnionOS and Allium): `packaging/miyoo/onionos/` and

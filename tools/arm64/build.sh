@@ -2,12 +2,8 @@
 # Cross-build the aarch64 handheld binaries the way the Linux ARM workflow does,
 # and print their paths.
 #
-#   tools/arm64/build.sh [cpu...]        # default: a35 a53 a55
+#   tools/arm64/build.sh [variant...]    # default: aarch64, the handheld binary
 #   tools/arm64/build.sh universal       # the generic non-PortMaster binary
-#
-# Three per-core binaries exist because Cortex-A55 is ARMv8.2 (LSE atomics,
-# fp16, dotprod) and code built for it SIGILLs on the v8.0 cores; `Retsurf.sh`
-# picks one at runtime from /proc/cpuinfo.
 #
 # Caches live outside the repo so container-root files never mix with host
 # builds. RETSURF_ARM64_LTO=thin trades a slower binary for a link that fits in
@@ -23,8 +19,8 @@ repo=$(cd "$here/../.." && pwd)
 cache=${RETSURF_ARM64_CACHE:-$HOME/.cache/retsurf-arm64}
 floor=$(cat "$here/glibc-floor")
 
-cpus=("$@")
-[ ${#cpus[@]} -eq 0 ] && cpus=(a35 a53 a55)
+variants=("$@")
+[ ${#variants[@]} -eq 0 ] && variants=(aarch64)
 
 mkdir -p "$cache/target" "$cache/cargo"
 # --network host for the same reason as the run below: the Debian indexes and
@@ -59,7 +55,7 @@ docker run --rm -i --network host \
   -e "TARGET=$target" -e "LIBDIR=$libdir" -e "FLOOR=$floor" \
   -e "LTO=${RETSURF_ARM64_LTO:-fat}" -e "OPT=${RETSURF_ARM64_OPT:-s}" \
   -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
-  -e "CPUS=${cpus[*]}" \
+  -e "VARIANTS=${variants[*]}" \
   "$image" bash -euxs <<'CONTAINER'
     export PATH="/cargo/bin:$PATH"
     command -v cargo >/dev/null || curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
@@ -114,17 +110,14 @@ docker run --rm -i --network host \
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 
     mkdir -p /repo/dist/arm64
-    for cpu in $CPUS; do
-      case "$cpu" in
-        # No -C target-cpu: runs on any ARMv8.0+.
-        universal) tune=""            ; panic=unwind ;;
-        # ARMv8.0-A, in-order. RK3326; runs on A53 too (same ISA).
-        a35)       tune=cortex-a35    ; panic=abort  ;;
-        # ARMv8.0-A with crypto off (optional on A53). H700, Allwinner A133 Plus.
-        a53)       tune=cortex-a53    ; panic=abort  ;;
-        # ARMv8.2-A. SIGILLs on the v8.0 cores above, hence a separate binary.
-        a55)       tune=cortex-a55    ; panic=abort  ;;
-        *) echo "unknown cpu: $cpu" >&2; exit 2 ;;
+    # Neither sets -C target-cpu: both run on any ARMv8.0+ core.
+    for variant in $VARIANTS; do
+      case "$variant" in
+        universal) atomics="" ; features="" ; panic=unwind ;;
+        # LL/SC atomics even where the core has LSE, which is slower on Cortex-A55.
+        # -outline-atomics is not a stable target feature, so rustc warns about it.
+        aarch64) atomics="-C target-feature=-outline-atomics" ; features="--features llsc-atomics" ; panic=abort ;;
+        *) echo "unknown variant: $variant" >&2; exit 2 ;;
       esac
 
       # Nothing in retsurf catches an unwind any more, so `universal` keeping
@@ -139,7 +132,7 @@ docker run --rm -i --network host \
       #   relocation-model=static skips a PIE's relocation work at every launch.
       # Static libstdc++: the devices at the floor carry a GCC-9 C++ runtime.
       # /opt/cxx-static covers cc-rs's own -lstdc++, which the flag does not.
-      export RUSTFLAGS="${tune:+-C target-cpu=$tune} \
+      export RUSTFLAGS="$atomics \
         -C link-arg=-L/opt/cxx-static -C link-arg=-static-libstdc++ \
         -C link-arg=-Wl,--gc-sections \
         -C relocation-model=static -C link-arg=-no-pie"
@@ -151,24 +144,24 @@ docker run --rm -i --network host \
       # RETSURF_ARM64_OPT=3 puts the old level back, which is how the two compare.
       export CARGO_PROFILE_RELEASE_OPT_LEVEL="$OPT"
 
-      cargo build --release --target "$TARGET"
+      cargo build --release --target "$TARGET" $features
       out="/target/$TARGET/release/retsurf"
-      aarch64-linux-gnu-strip -o "/repo/dist/arm64/retsurf.$cpu" "$out"
+      aarch64-linux-gnu-strip -o "/repo/dist/arm64/retsurf.$variant" "$out"
 
-      file "/repo/dist/arm64/retsurf.$cpu"
-      aarch64-linux-gnu-readelf -d "/repo/dist/arm64/retsurf.$cpu" | grep NEEDED
+      file "/repo/dist/arm64/retsurf.$variant"
+      aarch64-linux-gnu-readelf -d "/repo/dist/arm64/retsurf.$variant" | grep NEEDED
       # Above the floor the loader on the device refuses it, so fail here instead.
-      newer=$(aarch64-linux-gnu-readelf -V "/repo/dist/arm64/retsurf.$cpu" \
+      newer=$(aarch64-linux-gnu-readelf -V "/repo/dist/arm64/retsurf.$variant" \
         | grep -o "GLIBC_2\.[0-9]*" | sort -uV \
         | awk -F. -v f="${FLOOR#2.}" "\$2 > f" | tr "\n" " ")
-      [ -z "$newer" ] || { echo "retsurf.$cpu requires $newer; the floor is GLIBC_$FLOOR" >&2; exit 1; }
+      [ -z "$newer" ] || { echo "retsurf.$variant requires $newer; the floor is GLIBC_$FLOOR" >&2; exit 1; }
       # The C++ runtime carries no GLIBC_ version for the check above to catch.
-      if aarch64-linux-gnu-readelf -d "/repo/dist/arm64/retsurf.$cpu" | grep -q "NEEDED.*libstdc++"; then
-        echo "retsurf.$cpu links libstdc++ dynamically; it has to be static here" >&2
+      if aarch64-linux-gnu-readelf -d "/repo/dist/arm64/retsurf.$variant" | grep -q "NEEDED.*libstdc++"; then
+        echo "retsurf.$variant links libstdc++ dynamically; it has to be static here" >&2
         exit 1
       fi
 
-      # A per-core build differs from the last only in codegen flags, so cargo
+      # A variant differs from the last only in codegen flags, so cargo
       # would otherwise reuse the previous binary wholesale.
       cargo clean --release --target "$TARGET" -p retsurf
     done
