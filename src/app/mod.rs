@@ -670,6 +670,7 @@ impl App {
     fn persist(&mut self) {
         self.flush_user_data();
         self.browser.persist_site_data();
+        self.browser.store_http_cache();
     }
 
     /// Write the config when a press changed it since the last write.

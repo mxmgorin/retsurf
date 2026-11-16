@@ -957,10 +957,21 @@ impl AppBrowser {
         self.inner.servo.site_data_manager().persist();
     }
 
+    /// Move the memory HTTP cache into the disk cache and wait until it is written.
+    /// Leaves the memory cache empty; does nothing without a disk cache.
+    pub fn store_http_cache(&self) {
+        self.inner
+            .servo
+            .network_manager()
+            .store_http_cache_to_disk();
+    }
+
     /// Shut Servo down cleanly: drop every webview, then the `Servo` handle —
     /// its `Drop` spins the exit pass in which the net/storage threads write the
     /// persisted site data. Skipping it (a bare `process::exit`) loses logins.
     pub fn shutdown(self) {
+        // The disk cache otherwise keeps only what the memory cache evicted.
+        self.store_http_cache();
         // Dropping the webviews releases their delegate handles, making `self`
         // the last owner of the inner state — dropping it drops the `Servo`.
         self.inner.tabs.borrow_mut().clear();

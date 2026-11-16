@@ -111,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WebGL 2 errors on mipmaps of non-power-of-two textures, on unbinding a sampler and on drawing with shaders that use `gl_VertexID`
 - Canvas `putImageData` blending translucent pixels instead of replacing them, and drawing stray edges at an offset
 - Canvas colors shifting when a page reads pixels and writes them back
+- Sites downloading their images and scripts again after a restart with the HTTP disk cache on (`[performance] http_disk_cache_mb`)
 
 ## [0.10.0] - 2026-10-08
 
