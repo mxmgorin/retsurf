@@ -106,6 +106,7 @@ haptics = true             # let pages rumble the pad
 [osk]
 style = "grid"             # "grid" (D-pad over keys) or "wheel" (stick picks, buttons type)
 layouts = ["en", "ru"]     # cycled by the Lang key
+auto_show = true           # open when a text field is focused by touch or pad
 
 [performance]
 # Memory budget, restart to apply. Lower tiers use less RAM and run slower; auto picks by
