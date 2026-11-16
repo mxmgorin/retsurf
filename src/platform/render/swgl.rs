@@ -169,6 +169,11 @@ impl RenderingContext for SwglRenderingContext {
     }
 
     #[cfg(all(feature = "webgl", target_os = "linux"))]
+    fn adapter(&self) -> Option<surfman::Adapter> {
+        self.webgl.as_ref().map(Readback::adapter)
+    }
+
+    #[cfg(all(feature = "webgl", target_os = "linux"))]
     fn create_texture(
         &self,
         surface: surfman::Surface,

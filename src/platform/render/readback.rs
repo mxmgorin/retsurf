@@ -17,7 +17,9 @@ use glow::HasContext;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::CStr;
-use surfman::{Connection, Context, ContextAttributeFlags, ContextAttributes, Device, GLVersion};
+use surfman::{
+    Adapter, Connection, Context, ContextAttributeFlags, ContextAttributes, Device, GLVersion,
+};
 use surfman::{Surface, SurfaceTexture};
 
 /// Any version reads a texture through an FBO.
@@ -98,6 +100,11 @@ impl Readback {
 
     pub fn connection(&self) -> Connection {
         self.connection.clone()
+    }
+
+    /// The reading device's adapter: Servo's WebGL device must share it.
+    pub fn adapter(&self) -> Adapter {
+        self.device.adapter()
     }
 
     /// The front buffer's pixels as a swgl texture, or the surface handed back:

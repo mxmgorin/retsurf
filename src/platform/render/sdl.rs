@@ -173,6 +173,10 @@ impl RenderingContext for SdlRenderingContext {
         self.webgl.as_ref().map(FrontBuffers::connection)
     }
 
+    fn adapter(&self) -> Option<surfman::Adapter> {
+        self.webgl.as_ref().map(FrontBuffers::adapter)
+    }
+
     fn create_texture(
         &self,
         surface: Surface,

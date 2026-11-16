@@ -30,7 +30,7 @@ pub(super) fn build_preferences(
 ) -> servo::Preferences {
     let cores = std::thread::available_parallelism()
         .map(std::num::NonZeroUsize::get)
-        .unwrap_or(4) as i64;
+        .unwrap_or(4) as u64;
 
     // The memory profile is the holistic baseline, from GC ceilings to thread
     // counts; `auto` resolves it from the build target and detected RAM.
@@ -40,21 +40,20 @@ pub(super) fn build_preferences(
     // A tier's thread counts assume its own core count, so a smaller board is
     // clamped down — never up. Desktop keeps Servo's defaults untouched.
     if profile != crate::config::MemoryProfile::Desktop {
-        let cores_u = cores as u64;
-        prefs.layout_threads = prefs.layout_threads.clamp(1, cores);
-        let clamp = |v: &mut u64| *v = (*v).clamp(1, cores_u);
+        let clamp = |v: &mut u64| *v = (*v).clamp(1, cores);
+        clamp(&mut prefs.layout_threads);
         clamp(&mut prefs.thread_pool_async_runtime_workers_max);
         clamp(&mut prefs.thread_pool_fallback_workers);
         clamp(&mut prefs.thread_pool_workers_max);
         clamp(&mut prefs.thread_pool_webrender_workers_max);
         // Zero is valid here: canvases paint without a helper pool.
-        prefs.thread_pool_canvas_workers = prefs.thread_pool_canvas_workers.min(cores_u);
+        prefs.thread_pool_canvas_workers = prefs.thread_pool_canvas_workers.min(cores);
     }
 
     // The explicit [performance] knobs still win when set (non-zero); `0` keeps
     // the tier's choice.
     if perf.layout_threads != 0 {
-        prefs.layout_threads = perf.layout_threads as i64;
+        prefs.layout_threads = perf.layout_threads as u64;
     }
     if perf.worker_pool_max != 0 {
         let n = perf.worker_pool_max as u64;

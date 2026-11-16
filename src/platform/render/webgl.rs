@@ -22,7 +22,7 @@ use std::mem;
 use surfman::hardware_buffer::context::NativeContext;
 #[cfg(target_os = "linux")]
 use surfman::wayland::context::NativeContext;
-use surfman::{Connection, Context, Device, Surface, SurfaceTexture};
+use surfman::{Adapter, Connection, Context, Device, Surface, SurfaceTexture};
 
 /// `eglGetCurrentSurface` selectors. retsurf links no EGL headers.
 const EGL_DRAW: i32 = 0x3059;
@@ -138,6 +138,11 @@ impl FrontBuffers {
 
     pub fn connection(&self) -> Connection {
         self.connection.clone()
+    }
+
+    /// The importing device's adapter: Servo's WebGL device must share it.
+    pub fn adapter(&self) -> Adapter {
+        self.device.adapter()
     }
 
     /// The front buffer as a texture in SDL's context, or the surface handed

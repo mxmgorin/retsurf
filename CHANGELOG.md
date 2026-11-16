@@ -65,9 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History and download times in the device's time zone instead of UTC
 - A page a site sends instead of the file, such as a sign-in, opens in the tab instead of being saved as the file
 - Android: a finished download opens with the app the system picks for its type
-- Engine on Servo `main` as of 2026-11-12
+- Engine on Servo `main` as of 2026-11-16
 - Handheld packages carry one binary, `retsurf.aarch64`, for every board in place of `retsurf.a35`, `retsurf.a53` and `retsurf.a55`; pages run faster on all of them. The three old binaries can be deleted from the port folder
 - A handheld install updated from inside an earlier version does not start: unpack the new package over it, as for a first install
+- Faster canvas text measuring, canvas pixel reads and writes, and image decoding
 
 ### Removed
 
@@ -106,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Some MP4 videos never starting, mostly on fast connections
 - Looping videos stopping on their last frame
 - Possible crashes and broken pages on handhelds and Android from garbage collection modes the engine does not support
+- Crash on WebGL pages that create and drop many vertex arrays
+- WebGL 2 errors on mipmaps of non-power-of-two textures, on unbinding a sampler and on drawing with shaders that use `gl_VertexID`
+- Canvas `putImageData` blending translucent pixels instead of replacing them, and drawing stray edges at an offset
+- Canvas colors shifting when a page reads pixels and writes them back
 
 ## [0.10.0] - 2026-10-08
 

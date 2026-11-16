@@ -4,7 +4,7 @@
 
 use euclid::default::Size2D;
 use std::ffi::c_void;
-use surfman::{Connection, Surface, SurfaceTexture};
+use surfman::{Adapter, Connection, Surface, SurfaceTexture};
 
 /// Uninhabited: there is nothing here to construct.
 pub enum FrontBuffers {}
@@ -16,6 +16,10 @@ impl FrontBuffers {
     }
 
     pub fn connection(&self) -> Connection {
+        match *self {}
+    }
+
+    pub fn adapter(&self) -> Adapter {
         match *self {}
     }
 
