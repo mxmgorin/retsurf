@@ -7,13 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-16
+
 ### Added
 
 - Start page filter tabs (sites, apps, games, tags) on L1 / R1 and a sort on Y: manual, recent or name
 - Start page layouts (`[home.bookmarks] layout`): a grid or a list with each bookmark's site and tags; three sizes (`size`); both in Quick Access
 - Start page search field pinned at the bottom (default), at the top or off (`[home] search`)
 - Start page without the toolbar (`[home] toolbar`, off by default): Menu and Quick Access at the ends of its search bar, a footer of button hints
-- Bookmark options on X or right-click on a start page tile: open, rename, tags, move, remove
+- X or right-click on a start page tile opens Quick Access on the bookmark: open, launch as, reader view, rename, tags, move, remove
 - Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings); Quick Access gets Close while one runs and switches the open page between site, app and game
 - Reader view per site: a bookmark's articles open in it, set from Quick Access on the site
 - Reload row in Quick Access on a page
@@ -31,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Start + Select quits, in Game Mode too
 - Tab grid (`[interface] tab_layout = "grid"`, Settings > Interface): the lists show the open tabs as cards with a picture of each page
 - Search engine choice (`[browser] search_engine`) from a list of ten that can be added to, renamed, edited and deleted (Settings > Browser > Search engines, `[[browser.search_engines]]`); the search icon in the address bar picks one, and the empty address and search fields name it
+- Kindle (jailbroken): `retsurf-kindle.zip`, started from KUAL or KOReader, with touch input
+- Miyoo Mini: WebGL for pages and games
+- WebGL switch (`[performance] webgl`, Settings > System) and the texture units WebGL pages see (`[performance] webgl_texture_units`)
+- `gamepad` input map: the whole pad as itself; holding L3 turns the right stick into the cursor
+- Input map layers can remap a stick (`[layer.<name>.stick.left]` / `.right`)
+- Map editor edits layers: New layer, Held by, Rename, Delete; a row can send Layer
+- Map editor: A on a row lists what it can send, grouped; keys picked on the on-screen keyboard; Ctrl, Alt and Shift for a key; stick speed from x0.25 to x2
+- Game Mode shader resolution (`[game_mode.view] shader_resolution`): auto, native, 480, 360 or 240 rows; also in Quick Access
+- Game Mode texture limit and filter (`[game_mode.view] texture_limit` / `texture_filter`, Settings > Gaming): games too big for the GPU memory still load
+- Game Mode cursor switch (`[game_mode.view] cursor`, Settings > Gaming and Quick Access) for games that draw their own
+- Game patches (`[game_mode] patches`, on by default): built-in fixes for known games, such as saves in Humble's asm.js ports
+- Cursor curve (`[controls] cursor_curve`, Settings > Controls): small stick pushes move the cursor slowly, a full push at the cursor speed
+- On-screen keyboard opens by itself when a text field is focused or tapped by touch or pad (`[osk] auto_show`)
+- Memory guard also trips when the system stalls while swapping (`[performance] memory_guard_pressure`, Settings > System)
 
 ### Changed
 
@@ -68,6 +84,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Engine on Servo `main` as of 2026-11-16
 - Handheld packages carry one binary, `retsurf.aarch64`, for every board in place of `retsurf.a35`, `retsurf.a53` and `retsurf.a55`; pages run faster on all of them. The three old binaries can be deleted from the port folder
 - A handheld install updated from inside an earlier version does not start: unpack the new package over it, as for a first install
+- Built-in input maps follow Steam Input's templates: `keys` sends Z / X / C / Space on A / B / X / Y; `wasd` puts 1-4 on the D-pad, the wheel on the bumpers and Shift on L3; `mouse` right-clicks on X and sends Esc on B; in all three L2 / R2 click right / left, Start is Enter and Select is Esc
+- Map list and editor: + New map and + New binding in place of + Add
+- Toasts are pills with an icon; button hints show buttons and keys as key caps
+- Smaller wheel on-screen keyboard
+- Caret in page text fields does not blink
+- Android: status and navigation bars stay hidden while the toolbar shows too
 - Faster canvas text measuring, canvas pixel reads and writes, and image decoding
 
 ### Removed
@@ -107,6 +129,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Some MP4 videos never starting, mostly on fast connections
 - Looping videos stopping on their last frame
 - Possible crashes and broken pages on handhelds and Android from garbage collection modes the engine does not support
+- Miyoo Mini: retsurf failing to start after several launches, until a reboot
+- Shift and Caps Lock not capitalizing text typed on a physical keyboard in page fields
+- Android: non-Latin text from the system keyboard, such as Cyrillic, not reaching page fields
+- Android: Back over a text field not closing the keyboard, which came straight back
+- Cookies of signed-in sites written to the log
+- On-screen keyboard keys tapped or clicked while typing an address going to the page instead of the address bar
+- On-screen keyboard grid running off narrow and portrait screens
+- Game Mode: games ignoring punctuation keys from an input map or the on-screen keyboard
+- Game Mode: a quick tap of a button that opens Quick Access when held not reaching the game
+- Game scaling set before a game loads leaving some games drawn at the wrong size
 - Crash on WebGL pages that create and drop many vertex arrays
 - WebGL 2 errors on mipmaps of non-power-of-two textures, on unbinding a sampler and on drawing with shaders that use `gl_VertexID`
 - Canvas `putImageData` blending translucent pixels instead of replacing them, and drawing stray edges at an offset
@@ -1007,6 +1039,7 @@ use (Knulli, muOS, ROCKNIX), with desktop and Android builds.
 - Deferred history writes (dirty flag with flush on close, throttle, and shutdown).
 - Color-only FBO with in-place readback flip and NEAREST composite.
 
+[0.11.0]: https://github.com/mxmgorin/retsurf/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mxmgorin/retsurf/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mxmgorin/retsurf/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mxmgorin/retsurf/compare/v0.7.0...v0.8.0
