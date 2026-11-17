@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Engine on Servo `main` as of 2026-11-17
+
+### Fixed
+
+- Tap or click on an empty spot of sites built with web components, such as a Reddit post, highlighted all of their text
+
 ## [0.11.0] - 2026-11-16
 
 ### Added
