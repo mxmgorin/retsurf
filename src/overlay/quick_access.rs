@@ -190,7 +190,9 @@ const ACCESS_BROWSER: Layout = &[
     &[
         Slot::QuickRows,
         Slot::Row(Entry::Run(Action::Reader)),
-        Slot::Quick("Page theme"),
+        Slot::Quick("Theme"),
+        Slot::Quick("Zoom"),
+        Slot::Quick("Font size"),
     ],
 ];
 
@@ -206,7 +208,8 @@ const ACCESS_GAME: Layout = &[
 
 /// Quick Access over the start page: how it shows its bookmarks.
 const ACCESS_HOME: Layout = &[&[Slot::QuickRows]];
-/// Put before the JS engine row's value while A would reopen the page.
+/// Put before the JS engine or font size row's value while A would reopen the
+/// page.
 const REOPEN_HINT: &str = "Reopen: ";
 
 /// What heads the page's own rows when a tile's rows come first, and the
@@ -532,6 +535,8 @@ pub struct Opening<'a> {
     pub page: &'a str,
     /// The JS preset the page opened with, while one is known.
     pub page_js: Option<&'a str>,
+    /// The font size the page opened with, while one is known.
+    pub page_font_size: Option<u32>,
     /// Whether the shown page is bookmarked.
     pub saved: bool,
     /// How many tabs are open, for the Tabs row.
@@ -561,6 +566,7 @@ impl Opening<'static> {
             launched: false,
             page: "",
             page_js: None,
+            page_font_size: None,
             saved: false,
             tabs: 0,
             input_map: None,
@@ -589,6 +595,8 @@ pub struct QuickAccess {
     shown_tab: Option<usize>,
     /// The JS preset the page opened with, while one is known.
     page_js: Option<String>,
+    /// The font size the page opened with, while one is known.
+    page_font_size: Option<u32>,
     /// The row whose A reopens the page, while one would.
     reopen: Option<usize>,
 }
@@ -606,6 +614,7 @@ impl QuickAccess {
             title: String::new(),
             shown_tab: None,
             page_js: None,
+            page_font_size: None,
             reopen: None,
         }
     }
@@ -660,6 +669,7 @@ impl QuickAccess {
             });
         }
         self.page_js = opening.page_js.map(str::to_string);
+        self.page_font_size = opening.page_font_size;
         let saved = if opening.saved { SAVED } else { "" };
         self.set_value(Entry::Run(Action::Bookmark), saved.to_string());
         self.set_value(Entry::List(Section::Tabs), opening.tabs.to_string());
@@ -679,6 +689,7 @@ impl QuickAccess {
         self.strip = strip;
         self.bookmark = None;
         self.page_js = None;
+        self.page_font_size = None;
         self.reopen = None;
         self.selected = 0;
         self.armed = None;
@@ -833,17 +844,22 @@ impl QuickAccess {
         }
     }
 
-    /// Whether `row` is the JS engine row set to another preset than the
-    /// page opened with, which A then reopens it in.
+    /// Whether `row` is the JS engine or font size row set to another value
+    /// than the page opened with, which A then reopens it in.
     pub fn wants_reopen(&self, row: Entry, config: &AppConfig) -> bool {
         let Entry::Quick(i) = row else {
             return false;
         };
-        Settings::fields()[i].label == settings::JS_ENGINE
-            && self
+        match Settings::fields()[i].label {
+            settings::JS_ENGINE => self
                 .page_js
                 .as_deref()
-                .is_some_and(|page| page != config.performance.js_preset)
+                .is_some_and(|page| page != config.performance.js_preset),
+            settings::PAGE_FONT_SIZE => self
+                .page_font_size
+                .is_some_and(|page| page != config.browser.page_font_size),
+            _ => false,
+        }
     }
 
     /// The bookmark the options rows are open on.
@@ -1035,11 +1051,13 @@ mod tests {
                 "User agent",
                 "Ad blocker",
                 "Reader view",
-                "Page theme"
+                "Theme",
+                "Zoom",
+                "Font size"
             ]
         );
         panel.move_sel(-1);
-        assert_eq!(panel.label(panel.selected()), "Page theme");
+        assert_eq!(panel.label(panel.selected()), "Font size");
     }
 
     #[test]
@@ -1051,7 +1069,7 @@ mod tests {
         assert!(!browser.contains(&Entry::Osk));
         let has = |rows: &[Entry], label| rows.iter().any(|row| row.label() == label);
         assert!(has(&game, "Scaling") && !has(&browser, "Scaling"));
-        assert!(has(&browser, "Page theme") && !has(&game, "Page theme"));
+        assert!(has(&browser, "Theme") && !has(&game, "Theme"));
         // A game keeps its page, so only bookmarking it runs from its strip.
         assert!(!game.iter().any(|row| {
             matches!(row, Entry::List(_))
@@ -1092,7 +1110,7 @@ mod tests {
         let home = entries(Strip::QuickAccess, Over::Home, false);
         assert!(home.iter().all(|row| matches!(row, Entry::Quick(_))));
         assert!(home.iter().any(|row| row.label() == "Sort"));
-        assert!(!home.iter().any(|row| row.label() == "Page theme"));
+        assert!(!home.iter().any(|row| row.label() == "Theme"));
         // Quick Menu goes everywhere a page's does, short of where it already is.
         let mut menu = entries(Strip::QuickMenu, Over::Tab(TabMode::Page), false);
         menu.retain(|row| *row != Entry::Run(Action::Home));
@@ -1623,9 +1641,16 @@ mod tests {
         assert_eq!(press_on(&mut panel, "Ad blocker"), Press::Toggle);
         assert_eq!(press_on(&mut panel, "Reader view"), Press::Toggle);
         assert_eq!(press_on(&mut panel, "User agent"), Press::Next);
+        assert_eq!(press_on(&mut panel, "Font size"), Press::Next);
+        let config = AppConfig::default();
+        let page = Opening {
+            page_font_size: Some(config.browser.page_font_size + 1),
+            ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Page))
+        };
+        panel.open(&page, &config);
+        assert_eq!(press_on(&mut panel, "Font size"), Press::Reopen);
         let mut panel = open(TabMode::Game);
         assert_eq!(press_on(&mut panel, "JS engine"), Press::Next);
-        let config = AppConfig::default();
         // The game opened under another preset than the one in force.
         let opened = format!("not-{}", config.performance.js_preset);
         let game = Opening {

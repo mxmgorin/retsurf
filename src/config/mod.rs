@@ -157,6 +157,11 @@ impl AppConfig {
             &mut self.browser.page_zoom,
             b::PAGE_ZOOM,
         );
+        fix_u32(
+            "browser.page_font_size",
+            &mut self.browser.page_font_size,
+            b::PAGE_FONT_SIZE,
+        );
         fix_u32("browser.max_tabs", &mut self.browser.max_tabs, b::MAX_TABS);
 
         fix_u32("display.width", &mut self.display.width, b::WIDTH);

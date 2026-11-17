@@ -108,6 +108,10 @@ impl servo::WebViewDelegate for AppBrowserInner {
             if tabs[i].state.js_preset.is_empty() || host(&tabs[i].state.page_url) != host(&url) {
                 tabs[i].state.js_preset = preset;
             }
+            // A loading tab commits a new document, which took the font size in force.
+            if tabs[i].state.loading || tabs[i].state.font_size == 0 {
+                tabs[i].state.font_size = self.font_size.get();
+            }
             tabs[i].state.location = url.clone();
             tabs[i].state.page_url = url.clone();
             tabs[i].state.heading = None;

@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Page font size (`[browser] page_font_size`, Settings > Browser), also per site; sites that fix their own text sizes keep them
+- Zoom and Font size rows in Quick Access on a page
+
 ### Changed
 
 - Engine on Servo `main` as of 2026-11-17
+- Quick Access on a page: the Page theme row reads Theme
 
 ### Fixed
 
+- Page zoom changed in Settings applies to the shown page at once
 - Tap or click on an empty spot of sites built with web components, such as a Reddit post, highlighted all of their text
 
 ## [0.11.0] - 2026-11-16

@@ -2,6 +2,9 @@ use super::search::{self, SearchEngine};
 use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
+/// CSS's `medium` text size, in px.
+pub const DEFAULT_FONT_SIZE: u32 = 16;
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserConfig {
@@ -29,6 +32,9 @@ pub struct BrowserConfig {
     /// `1.25` makes the whole web bigger on a small screen; `zoom_in` /
     /// `zoom_out` step from here, `zoom_reset` returns.
     pub page_zoom: f32,
+    /// The text size, in CSS px, of pages that size their text relative to the
+    /// default; monospace text scales with it. A page takes it when it loads.
+    pub page_font_size: u32,
     /// Page color scheme: `dark` only reaches sites that ship a dark theme,
     /// `forced-dark` inverts every page. Changing it reloads the open tabs (see
     /// [`crate::browser::AppBrowser::set_page_theme`]).
@@ -45,6 +51,7 @@ impl Default for BrowserConfig {
             restore_tabs: true,
             max_tabs: 8,
             page_zoom: 1.0,
+            page_font_size: DEFAULT_FONT_SIZE,
             page_theme: PageTheme::Light,
         }
     }

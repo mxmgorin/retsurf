@@ -32,6 +32,8 @@ pub const PAGE_ZOOM: FloatBounds = FloatBounds {
     max: 3.0,
     default: 1.0,
 };
+/// CSS px.
+pub const PAGE_FONT_SIZE: IntBounds = IntBounds { min: 10, max: 32 };
 /// `0` is unlimited; `1` makes every new tab replace the one before it.
 pub const MAX_TABS: IntBounds = IntBounds { min: 0, max: 32 };
 

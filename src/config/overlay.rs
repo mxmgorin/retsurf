@@ -64,6 +64,7 @@ pub const SITE_KEYS: &[&str] = &[
     "browser.user_agent",
     "browser.page_theme",
     "browser.page_zoom",
+    "browser.page_font_size",
     "adblock.enabled",
     "data_saving",
     "experimental",

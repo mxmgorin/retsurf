@@ -476,6 +476,7 @@ impl App {
             return;
         };
         self.apply_config(config, out);
+        self.browser.reload_for_font_size();
         if let Some(store) = bindings {
             self.apply_bindings(store, out);
         }
@@ -494,9 +495,13 @@ impl App {
     /// re-apply the parts the running app can change without a restart. The rest
     /// take effect on the next launch, and their rows are flagged with `*`.
     fn apply_config(&mut self, config: AppConfig, out: &mut Vec<AppCommand>) {
+        let zoom = self.config.browser.page_zoom;
         self.config = config;
         self.save_config();
         self.apply_live(out);
+        if self.config.browser.page_zoom != zoom {
+            self.browser.set_active_zoom(self.config.browser.page_zoom);
+        }
     }
 
     /// Push the config into everything that holds a copy of it.

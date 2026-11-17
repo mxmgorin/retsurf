@@ -77,6 +77,9 @@ pub(super) fn build_preferences(
         log::info!("user agent: {ua}");
         prefs.user_agent = ua;
     }
+    for (pref, size) in font_size_pref_values(config.page_font_size) {
+        prefs.set_value(pref, servo::PrefValue::UInt(size));
+    }
 
     apply_pref_overrides(&mut prefs);
 
@@ -255,6 +258,20 @@ fn resolve_user_agent(value: &str) -> Option<String> {
     Some(platform.to_user_agent_string())
 }
 
+/// `(Servo pref, px)` for a `[browser] page_font_size`: monospace keeps Servo's
+/// stock ratio to the proportional size.
+pub(super) fn font_size_pref_values(size: u32) -> [(&'static str, u64); 2] {
+    let stock = servo::Preferences::default();
+    let ratio = stock.fonts_default_monospace_size as f32 / stock.fonts_default_size as f32;
+    [
+        ("fonts_default_size", u64::from(size)),
+        (
+            "fonts_default_monospace_size",
+            (size as f32 * ratio).round() as u64,
+        ),
+    ]
+}
+
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
 fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
@@ -305,6 +322,23 @@ pub(super) fn set_experimental_prefs(servo: &servo::Servo, exp: &ExperimentalCon
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The default font size leaves Servo's stock text sizes as they are.
+    #[test]
+    fn the_default_font_size_is_servos_own() {
+        let stock = servo::Preferences::default();
+        let default = crate::config::BrowserConfig::default().page_font_size;
+        assert_eq!(
+            font_size_pref_values(default),
+            [
+                ("fonts_default_size", stock.fonts_default_size),
+                (
+                    "fonts_default_monospace_size",
+                    stock.fonts_default_monospace_size
+                ),
+            ]
+        );
+    }
 
     /// A preset's unset keys keep the profile's values; the heap scales a
     /// ceiling but leaves an unlimited one so.

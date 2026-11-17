@@ -95,6 +95,7 @@ impl App {
             launched: self.browser.launched().is_some(),
             page: &page,
             page_js: Some(page_js.as_str()).filter(|p| !p.is_empty()),
+            page_font_size: Some(self.browser.page_font_size()).filter(|&size| size != 0),
             saved: !url.is_empty() && self.ui.menu.is_bookmarked(&url),
             tabs: self.browser.tab_count(),
             input_map: input_map.as_deref(),
@@ -266,9 +267,13 @@ impl App {
                 self.ui.quick_access.close();
                 self.new_tab();
             }
-            Entry::Quick(_) if self.ui.quick_access.wants_reopen(row, &self.config) => {
+            Entry::Quick(field) if self.ui.quick_access.wants_reopen(row, &self.config) => {
                 self.ui.quick_access.close();
-                self.reopen_page();
+                // A reload reads the font size; a JS preset needs a fresh runtime.
+                match Settings::fields()[field].label {
+                    settings::PAGE_FONT_SIZE => self.browser.reload_for_font_size(),
+                    _ => self.reopen_page(),
+                }
             }
             Entry::Quick(field) => self.step_quick(field, 1, out),
             Entry::InputMap => {

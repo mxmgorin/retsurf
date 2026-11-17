@@ -414,6 +414,8 @@ const SEARCH_ENGINE: Kind = Kind::Choice {
 
 /// The JS engine preset row's label, which Quick Access finds it by.
 pub const JS_ENGINE: &str = "JS engine";
+/// The page font size row's label, which Quick Access finds it by.
+pub const PAGE_FONT_SIZE: &str = "Page font size";
 
 /// The JS engine preset; its options include the user's own.
 const JS_PRESET: Kind = Kind::Choice {
@@ -493,8 +495,9 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Browser",     "Search engine",          SEARCH_ENGINE, false),
     f(S::Browser,  "Browser",     "Search engines",         Kind::Door { door: Door::SearchEngines }, false),
     f(S::Browser,  "Browser",     "User agent",             ua_kind(), false).quick(Modes::Browser),
-    f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false),
-    f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false).quick(Modes::Browser),
+    f(S::Browser,  "Browser",     "Page zoom",              float!(browser.page_zoom as f32, bounds::PAGE_ZOOM, 0.05, 2), false).quick_as(Modes::Browser, "Zoom"),
+    f(S::Browser,  "Browser",     PAGE_FONT_SIZE,           int!(browser.page_font_size as u32, bounds::PAGE_FONT_SIZE, 1), false).quick_as(Modes::Browser, "Font size"),
+    f(S::Browser,  "Browser",     "Page theme",             choice!(browser.page_theme: PageTheme), false).quick_as(Modes::Browser, "Theme"),
     f(S::Browser,  "Browser",     "Restore tabs",           flag!(browser.restore_tabs), false),
     f(S::Browser,  "Browser",     "Max tabs",               int!(browser.max_tabs as u32, bounds::MAX_TABS, 1, Some("Unlimited")), false),
     f(S::Browser,  "Browser",     "Keep site data",         flag!(browser.persist_site_data), true),

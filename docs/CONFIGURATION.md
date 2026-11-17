@@ -33,6 +33,9 @@ restore_tabs = true            # reopen last session's tabs
 # 1 GB devices.
 max_tabs = 8
 page_zoom = 1.0                # default page zoom
+# Text size in px (10-32). Sites that fix their own text sizes keep them. A page takes it
+# when it loads.
+page_font_size = 16
 # "light", "dark" (sites with a dark theme use it) or "forced-dark" (every page inverted,
 # photos kept; slower). Reloads the open tabs.
 page_theme = "light"
@@ -267,7 +270,7 @@ A bookmark can override these settings for its site:
 
 | Section | Keys |
 |---|---|
-| `[browser]` | `user_agent`, `page_theme`, `page_zoom` |
+| `[browser]` | `user_agent`, `page_theme`, `page_zoom`, `page_font_size` |
 | `[adblock]` | `enabled` |
 | `[data_saving]` | any |
 | `[experimental]` | any |

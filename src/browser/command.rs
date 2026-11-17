@@ -91,6 +91,7 @@ impl AppBrowser {
         let active = self.inner.active.get();
         if let Some(tab) = self.inner.tabs.borrow_mut().get_mut(active) {
             tab.state.loading = true;
+            tab.state.font_size = self.inner.font_size.get();
             // Not left to Servo's notify: a page that never sends it would hide
             // the chrome for the rest of the session.
             tab.state.fullscreen = false;

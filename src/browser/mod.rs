@@ -109,6 +109,9 @@ pub struct BrowserState {
     heading: Option<String>,
     /// The JS preset its page's runtime started with, by id.
     js_preset: String,
+    /// The `[browser] page_font_size` its page loaded with; `0` before its
+    /// first page.
+    font_size: u32,
     /// Set when a load starts, cleared on ready state complete. Not Servo's
     /// [`servo::LoadStatus`] verbatim — see [`delegate`] for why.
     loading: bool,
@@ -169,6 +172,7 @@ impl Default for BrowserState {
             page_url: "".into(),
             heading: None,
             js_preset: String::new(),
+            font_size: 0,
             loading: false,
             fullscreen: false,
             mode: TabMode::Page,
@@ -296,6 +300,8 @@ struct AppBrowserInner {
     page_theme: Cell<PageTheme>,
     /// The User-Agent in force, to skip a save that leaves it unchanged.
     user_agent: RefCell<String>,
+    /// The `[browser] page_font_size` set in the engine prefs.
+    font_size: Cell<u32>,
     /// The JS preset set in the engine prefs, by id and as resolved.
     js_applied: RefCell<Option<(String, JsPreset)>>,
     /// `[interface] page_icons`: whether tabs keep their page's icon.
@@ -427,6 +433,7 @@ impl AppBrowserInner {
             max_tabs: Cell::new(browser.max_tabs as usize),
             page_theme: Cell::new(browser.page_theme),
             user_agent: RefCell::new(effective_user_agent(browser)),
+            font_size: Cell::new(browser.page_font_size),
             js_applied: RefCell::new(None),
             page_icons: Cell::new(config.interface.page_icons),
             thumbnails: Cell::new(config.interface.tab_layout == TabLayout::Grid),
@@ -716,6 +723,7 @@ impl AppBrowser {
         self.set_experimental_prefs(&config.experimental);
         self.set_page_theme(config.browser.page_theme);
         self.set_user_agent(&config.browser);
+        self.set_page_font_size(config.browser.page_font_size);
         self.set_js_preset(config);
         // Binds later opens; the tabs already open stay.
         self.set_max_tabs(config.browser.max_tabs);
@@ -834,8 +842,9 @@ impl AppBrowser {
         }
     }
 
-    /// Take a site's user agent and page theme for later loads, reloading
-    /// nothing but, when `reload`, the shown tab if its page would now differ.
+    /// Take a site's user agent, page theme and font size for later loads,
+    /// reloading nothing but, when `reload`, the shown tab if its page would now
+    /// differ.
     pub fn adopt_site(&self, config: &AppConfig, reload: bool) {
         let theme = config.browser.page_theme;
         let old_theme = self.inner.page_theme.replace(theme);
@@ -854,6 +863,8 @@ impl AppBrowser {
             self.inner.user_agent.replace(ua);
             stale = true;
         }
+        self.set_page_font_size(config.browser.page_font_size);
+        stale |= self.font_size_stale();
         if reload && stale {
             if let Some(webview) = self.inner.active_webview() {
                 self.mark_loading();
@@ -880,6 +891,43 @@ impl AppBrowser {
     /// page.
     pub fn page_js_preset(&self) -> String {
         self.state().js_preset.clone()
+    }
+
+    /// Set the text size pages loaded from now on take.
+    fn set_page_font_size(&self, size: u32) {
+        if self.inner.font_size.replace(size) == size {
+            return;
+        }
+        for (pref, px) in engine::font_size_pref_values(size) {
+            self.inner
+                .servo
+                .set_preference(pref, servo::PrefValue::UInt(px));
+        }
+    }
+
+    /// The font size the shown tab's page loaded with; `0` before its first
+    /// page.
+    pub fn page_font_size(&self) -> u32 {
+        self.state().font_size
+    }
+
+    /// Whether the shown tab's page loaded with another font size than the one
+    /// in force.
+    fn font_size_stale(&self) -> bool {
+        let page = self.state().font_size;
+        page != 0 && page != self.inner.font_size.get()
+    }
+
+    /// Reload the shown tab if its page loaded with another font size than the
+    /// one in force.
+    pub fn reload_for_font_size(&self) {
+        if !self.font_size_stale() {
+            return;
+        }
+        if let Some(webview) = self.inner.active_webview() {
+            self.mark_loading();
+            webview.reload();
+        }
     }
 
     /// Set the shown tab's page zoom.
