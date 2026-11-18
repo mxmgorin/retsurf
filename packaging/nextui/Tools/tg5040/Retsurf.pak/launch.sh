@@ -1,6 +1,5 @@
 #!/bin/sh
-# NextUI / NX Redux (TrimUI) launcher. No PortMaster here, so the pad mapping
-# is done here.
+# NextUI / NX Redux (TrimUI) launcher. Runs without PortMaster.
 gamedir=$(cd "$(dirname "$0")" && pwd)
 cd "$gamedir" || exit 1
 
@@ -9,19 +8,18 @@ mkdir -p "$gamedir/data" "$gamedir/downloads"
 
 bin=retsurf.aarch64
 
-# The menu leaves the clusters capped and each pak raises its own; the governor
-# still drops the clock when idle.
+# NextUI leaves the CPU clusters capped; each pak lifts its own cap.
 for policy in /sys/devices/system/cpu/cpufreq/policy*; do
   cat "$policy/cpuinfo_max_freq" > "$policy/scaling_max_freq" 2>/dev/null
 done
 
-# Bundled libraries are a fallback: a firmware carrying its own keeps using it.
+# libs/ is added only when the firmware lacks a needed library.
 if LD_TRACE_LOADED_OBJECTS=1 "$gamedir/$bin" 2>/dev/null | grep -q "not found"; then
   echo "retsurf: a library is missing from this firmware, falling back to libs/" >> "$gamedir/log.txt"
   export LD_LIBRARY_PATH="$gamedir/libs:$LD_LIBRARY_PATH"
 fi
 
-# fontconfig finds no font without a config, and the stock firmware ships none.
+# Firmwares without /etc/fonts/fonts.conf leave fontconfig with no fonts.
 fonts_in="$gamedir/etc/fonts/fonts.conf.in"
 fonts_conf="$gamedir/data/fonts.conf"
 if [ ! -f /etc/fonts/fonts.conf ]; then
@@ -32,10 +30,10 @@ if [ ! -f /etc/fonts/fonts.conf ]; then
   export FONTCONFIG_FILE="$fonts_conf"
 fi
 
-# Servo panics when the platform store holds no CA bundle, as on stock TrimUI.
+# Servo panics without a CA bundle; stock TrimUI ships none.
 export SSL_CERT_FILE="$gamedir/etc/ssl/cacert.pem"
 
-# trimui_inputd's pad reports Xbox codes under Nintendo labels; map by label.
+# trimui_inputd reports Xbox codes under Nintendo labels; buttons map by label.
 export SDL_GAMECONTROLLERCONFIG="030000005e0400008e02000014010000,TRIMUI Player1,a:b1,b:b0,back:b6,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b8,leftshoulder:b4,leftstick:b9,lefttrigger:a2,leftx:a0,lefty:a1,rightshoulder:b5,rightstick:b10,righttrigger:a5,rightx:a3,righty:a4,start:b7,x:b3,y:b2,platform:Linux,"
 
 export HOME="$gamedir"

@@ -90,6 +90,12 @@ impl SdlRenderingContext {
             self.color_tex.get(),
             0,
         );
+        // Fresh storage is undefined and shows until WebRender paints; fill it
+        // with the color WebRender clears to.
+        let [r, g, b, a] = servo::pref!(shell_background_color_rgba);
+        gl.disable(gl::SCISSOR_TEST);
+        gl.clear_color(r as f32, g as f32, b as f32, a as f32);
+        gl.clear(gl::COLOR_BUFFER_BIT);
 
         gl.bind_texture(gl::TEXTURE_2D, 0);
         gl.bind_framebuffer(gl::FRAMEBUFFER, 0);
