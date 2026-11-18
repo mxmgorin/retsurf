@@ -14,10 +14,16 @@ src=${RETSURF_FBINK_SRC:-$HOME/.cache/retsurf-kindle/src/FBInk}
 rev=$(cat "$here/fbink-rev")
 
 if [ ! -d "$src/.git" ]; then
-  git clone --recurse-submodules https://github.com/NiLuJe/FBInk.git "$src"
+  git clone https://github.com/NiLuJe/FBInk.git "$src"
 fi
 git -C "$src" checkout -q "$rev"
+# i2c-tools (Kobo) and libevdev (a demo) go unused; skipped to fetch from GitHub alone.
+for unused in i2c-tools libevdev; do
+  git -C "$src" config "submodule.$unused.update" none
+done
 git -C "$src" submodule update -q --init --recursive
+# Every FBInk object waits on libi2c, which only a Kobo build links.
+touch "$src/libi2c.built"
 
 out=$repo/target/fbink
 mkdir -p "$out"
