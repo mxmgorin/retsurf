@@ -165,7 +165,7 @@ impl TileStyle {
 #[derive(Clone, Copy)]
 struct Glyph {
     side: f32,
-    radius: f32,
+    radius: egui::CornerRadius,
     /// Near the icon cache's size: far past it an icon blurs.
     icon: f32,
     monogram: f32,
@@ -179,7 +179,7 @@ const fn tile_style(size: HomeSize) -> TileStyle {
             w: 72.0,
             glyph: Glyph {
                 side: 40.0,
-                radius: 10.0,
+                radius: egui::CornerRadius::same(10),
                 icon: 26.0,
                 monogram: 16.0,
                 mark: 9.0,
@@ -192,7 +192,7 @@ const fn tile_style(size: HomeSize) -> TileStyle {
             w: 120.0,
             glyph: Glyph {
                 side: 68.0,
-                radius: 14.0,
+                radius: egui::CornerRadius::same(14),
                 icon: 44.0,
                 monogram: 26.0,
                 mark: 14.0,
@@ -208,7 +208,7 @@ const GRID: TileStyle = TileStyle {
     w: 96.0,
     glyph: Glyph {
         side: 52.0,
-        radius: 12.0,
+        radius: egui::CornerRadius::same(12),
         icon: 34.0,
         monogram: 20.0,
         mark: 12.0,
@@ -234,7 +234,7 @@ const fn row_style(size: HomeSize) -> RowStyle {
             h: 40.0,
             glyph: Glyph {
                 side: 28.0,
-                radius: 6.0,
+                radius: egui::CornerRadius::same(6),
                 icon: 20.0,
                 monogram: 12.0,
                 mark: 9.0,
@@ -246,7 +246,7 @@ const fn row_style(size: HomeSize) -> RowStyle {
             h: 48.0,
             glyph: Glyph {
                 side: 36.0,
-                radius: 8.0,
+                radius: egui::CornerRadius::same(8),
                 icon: 24.0,
                 monogram: 14.0,
                 mark: 10.0,
@@ -258,7 +258,7 @@ const fn row_style(size: HomeSize) -> RowStyle {
             h: 60.0,
             glyph: Glyph {
                 side: 48.0,
-                radius: 10.0,
+                radius: egui::CornerRadius::same(10),
                 icon: 32.0,
                 monogram: 18.0,
                 mark: 12.0,
@@ -1182,10 +1182,9 @@ fn paint_glyph(
 }
 
 /// A site card's glyph: the large tile's icon and monogram, the card's own
-/// size and corners, no badge.
+/// size, no badge.
 const CARD: Glyph = Glyph {
     side: 0.0,
-    radius: ROW_RADIUS,
     mark: 0.0,
     ..tile_style(HomeSize::Large).glyph
 };
@@ -1195,11 +1194,16 @@ const CARD: Glyph = Glyph {
 pub(super) fn paint_site_card(
     painter: &egui::Painter,
     rect: egui::Rect,
+    corners: egui::CornerRadius,
     label: &str,
     icon: Option<Icon>,
     active: bool,
 ) {
-    paint_glyph(painter, rect, CARD, label, icon, active);
+    let style = Glyph {
+        radius: corners,
+        ..CARD
+    };
+    paint_glyph(painter, rect, style, label, icon, active);
 }
 
 /// The letters standing in for a missing icon: the initials of the label's
@@ -1286,7 +1290,7 @@ fn letter_fill(label: &str) -> egui::Color32 {
 fn paint_glyph_square(
     painter: &egui::Painter,
     glyph: egui::Rect,
-    radius: f32,
+    radius: egui::CornerRadius,
     active: bool,
     fill: egui::Color32,
 ) {

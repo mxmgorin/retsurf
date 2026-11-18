@@ -505,19 +505,26 @@ fn add_tabs_section(
 const CARD_MIN_W: f32 = 180.0;
 /// Space between cards, across and down.
 const CARD_GAP: f32 = 12.0;
-/// A card's content inset from its highlight.
-const CARD_PAD: f32 = 4.0;
-/// The close button over a card's picture.
+/// The close button in a card's header.
 const CARD_CLOSE: f32 = 24.0;
 /// The glyph a card without a picture shows, for the start page or a new tab.
 const CARD_GLYPH: f32 = 40.0;
-
-/// A card's outer size and its picture's.
-#[derive(Clone, Copy)]
-struct CardSize {
-    card: egui::Vec2,
-    picture: egui::Vec2,
-}
+/// A card's corner, shared by its header's top and its picture's bottom.
+const CARD_CORNER: u8 = ROW_RADIUS as u8;
+/// A card header's corners, over its picture.
+const HEAD_CORNERS: egui::CornerRadius = egui::CornerRadius {
+    nw: CARD_CORNER,
+    ne: CARD_CORNER,
+    sw: 0,
+    se: 0,
+};
+/// A card picture's corners, under its header.
+const PICTURE_CORNERS: egui::CornerRadius = egui::CornerRadius {
+    nw: 0,
+    ne: 0,
+    sw: CARD_CORNER,
+    se: CARD_CORNER,
+};
 
 /// Tabs section as a grid of cards: a leading "New tab" card (selection index
 /// 0) before the open tabs, each with a picture of its page and a close button.
@@ -535,7 +542,6 @@ fn add_tab_grid(
         .max(1.0) as usize;
     menu.set_tab_cols(cols);
     let card_w = (full_w - (cols - 1) as f32 * CARD_GAP) / cols as f32;
-    let picture_w = card_w - 2.0 * CARD_PAD;
     // The pictures' shape, else the screen's, which the page's is near.
     let aspect = view
         .tabs
@@ -544,11 +550,7 @@ fn add_tab_grid(
         .map_or(screen.height() / screen.width(), |thumb| {
             thumb.height as f32 / thumb.width as f32
         });
-    let picture = egui::vec2(picture_w, (picture_w * aspect).round());
-    let size = CardSize {
-        card: egui::vec2(card_w, CARD_PAD + picture.y + ROW_H),
-        picture,
-    };
+    let size = egui::vec2(card_w, ROW_H + (card_w * aspect).round());
     let selected = menu.tab_selected();
     let count = view.tabs.len() + 1;
     section_scroll(ui, screen, foot).show(ui, |ui| {
@@ -565,38 +567,46 @@ fn add_tab_grid(
     });
 }
 
-/// One card of the tab grid: `tab`'s picture over its icon and title, or the
-/// "New tab" card for `None`.
+/// One card of the tab grid: a header with `tab`'s icon, title and close
+/// button over its picture, or the "New tab" card for `None`.
 fn add_tab_card(
     ui: &mut egui::Ui,
-    size: CardSize,
+    size: egui::Vec2,
     tab: Option<(usize, &TabInfo)>,
     selected: bool,
     view: &ListsView,
     commands: &mut Vec<AppCommand>,
 ) {
-    let (rect, resp) = ui.allocate_exact_size(size.card, egui::Sense::click());
-    let painter = ui.painter();
-    if selected {
-        painter.rect_filled(rect, ROW_RADIUS, ui.visuals().selection.bg_fill);
-    }
-    let picture =
-        egui::Rect::from_min_size(rect.min + egui::vec2(CARD_PAD, CARD_PAD), size.picture);
-    let title = egui::Rect::from_min_max(
-        picture.left_bottom(),
-        egui::pos2(picture.right(), rect.bottom()),
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let (head, picture) = rect.split_top_bottom_at_y(rect.top() + ROW_H);
+    let head_fill = match selected {
+        true => ui.visuals().selection.bg_fill,
+        false => palette().surface,
+    };
+    ui.painter().rect_filled(head, HEAD_CORNERS, head_fill);
+    // Centred in the header, as far from its right edge as from its top.
+    let inset = (ROW_H - CARD_CLOSE) / 2.0;
+    let close = egui::Rect::from_min_size(
+        head.right_top() + egui::vec2(-inset - CARD_CLOSE, inset),
+        egui::Vec2::splat(CARD_CLOSE),
     );
     match tab {
         None => {
-            paint_card_glyph(painter, picture, bold::PLUS, selected);
-            paint_card_title(painter, title, None, "New tab", false);
+            paint_card_glyph(ui.painter(), picture, bold::PLUS);
+            let plus = CardIcon::Glyph(bold::PLUS, palette().text);
+            paint_card_title(ui.painter(), head, Some(plus), "New tab", false);
         }
         Some((_, tab)) => {
             paint_tab_picture(ui, picture, tab, view, selected);
             let icon = card_icon(view.icons, tab);
+            let title = head.with_max_x(close.left());
             paint_card_title(ui.painter(), title, icon, &tab.title, tab.active);
         }
     }
+    let stroke = card_stroke(selected);
+    ui.painter().hline(rect.x_range(), head.bottom(), stroke);
+    ui.painter()
+        .rect_stroke(rect, ROW_RADIUS, stroke, egui::StrokeKind::Inside);
     if selected {
         center_selected(&resp);
     }
@@ -610,23 +620,31 @@ fn add_tab_card(
         commands.push(AppCommand::Menu(action));
     }
     if let Some((i, _)) = tab {
-        let at = picture.right_top() + egui::vec2(-CARD_PAD - CARD_CLOSE, CARD_PAD);
-        let close = egui::Rect::from_min_size(at, egui::vec2(CARD_CLOSE, CARD_CLOSE));
         let id = egui::Id::new(("tab_card_close", i));
-        if close_disc(ui, close, id, selected).clicked() {
+        if close_cross(ui, close, id, selected).clicked() {
             commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
         }
     }
 }
 
-/// A round close button over a card: a cross drawn from strokes, since an icon
-/// glyph sits on its font's line rather than at the disc's centre.
-fn close_disc(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id, selected: bool) -> egui::Response {
+/// A card's outline and its header's underline, heavier and in the accent
+/// on the selected card.
+fn card_stroke(selected: bool) -> egui::Stroke {
+    match selected {
+        true => egui::Stroke::new(2.0, palette().accent),
+        false => egui::Stroke::new(1.0, palette().border),
+    }
+}
+
+/// A card header's close button: a cross on a disc shown under the pointer.
+/// Stroked: an icon glyph sits on its font's line, off the button's centre.
+fn close_cross(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    id: egui::Id,
+    selected: bool,
+) -> egui::Response {
     let resp = ui.interact(rect, id, egui::Sense::click());
-    let fill = match resp.hovered() {
-        true => palette().surface,
-        false => palette().panel_fill,
-    };
     let color = if selected {
         palette().accent
     } else {
@@ -634,7 +652,9 @@ fn close_disc(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id, selected: bool)
     };
     let painter = ui.painter();
     let center = rect.center();
-    painter.circle_filled(center, rect.width() / 2.0, fill);
+    if resp.hovered() {
+        painter.circle_filled(center, rect.width() / 2.0, palette().panel_fill);
+    }
     let arm = rect.width() * CROSS_ARM;
     let stroke = egui::Stroke::new(CROSS_STROKE, color);
     for dir in [egui::vec2(arm, arm), egui::vec2(arm, -arm)] {
@@ -648,8 +668,8 @@ const CROSS_ARM: f32 = 0.18;
 /// A close cross's line width.
 const CROSS_STROKE: f32 = 2.0;
 
-/// Paint `tab`'s picture into `rect`: its kept frame, else a stand-in for the
-/// start page or its site.
+/// Paint `tab`'s picture into a card's lower `rect`: its kept frame, else a
+/// stand-in for the start page or its site.
 fn paint_tab_picture(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -665,22 +685,15 @@ fn paint_tab_picture(
         Some(texture) => {
             egui::Image::new(texture)
                 .uv(cover_uv(texture.size_vec2(), rect.size()))
-                .corner_radius(ROW_RADIUS)
+                .corner_radius(PICTURE_CORNERS)
                 .paint_at(ui, rect);
-            let stroke = match selected {
-                true => egui::Stroke::new(2.0, palette().accent),
-                false => egui::Stroke::new(1.0, palette().border),
-            };
-            ui.painter()
-                .rect_stroke(rect, ROW_RADIUS, stroke, egui::StrokeKind::Inside);
         }
-        None if tab.url == HOME_URL => {
-            paint_card_glyph(ui.painter(), rect, bold::BROWSER, selected)
-        }
+        None if tab.url == HOME_URL => paint_card_glyph(ui.painter(), rect, bold::BROWSER),
         None => {
             let label = labels::brand_label(&tab.url);
             let icon = view.icons.icon(&tab.url);
-            super::home::paint_site_card(ui.painter(), rect, &label, icon, selected);
+            let painter = ui.painter();
+            super::home::paint_site_card(painter, rect, PICTURE_CORNERS, &label, icon, selected);
         }
     }
 }
@@ -693,14 +706,9 @@ fn cover_uv(texture: egui::Vec2, frame: egui::Vec2) -> egui::Rect {
     egui::Rect::from_min_size(egui::pos2((1.0 - seen.x) / 2.0, 0.0), seen)
 }
 
-/// A card with no picture: `glyph` centred on the surface.
-fn paint_card_glyph(painter: &egui::Painter, rect: egui::Rect, glyph: &str, selected: bool) {
-    painter.rect_filled(rect, ROW_RADIUS, palette().surface);
-    let stroke = match selected {
-        true => egui::Stroke::new(2.0, palette().accent),
-        false => egui::Stroke::new(1.0, palette().border),
-    };
-    painter.rect_stroke(rect, ROW_RADIUS, stroke, egui::StrokeKind::Inside);
+/// A card's lower `rect` with no picture: `glyph` centred on the surface.
+fn paint_card_glyph(painter: &egui::Painter, rect: egui::Rect, glyph: &str) {
+    painter.rect_filled(rect, PICTURE_CORNERS, palette().surface);
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
