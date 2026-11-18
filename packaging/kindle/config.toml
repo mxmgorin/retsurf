@@ -6,6 +6,8 @@ max_tabs = 2
 [performance]
 # Every presented frame is an e-ink refresh.
 max_fps = 5
+# The kernel has zram, but the firmware sets up no swap.
+swap_tuning = true
 
 [display]
 software_render = true

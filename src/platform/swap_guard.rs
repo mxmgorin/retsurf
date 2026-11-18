@@ -11,7 +11,7 @@
 //! What the guard changed is also written to a state file, which the next start
 //! reverts when the guard did not get to.
 
-use std::ffi::CString;
+use std::ffi::{CString, OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -178,7 +178,7 @@ pub fn start(enabled: bool, data_dir: &str) {
 }
 
 fn spawn_guard(state: &Path) -> std::io::Result<()> {
-    let mut child = Command::new(std::env::current_exe()?)
+    let mut child = self_command()?
         .arg(GUARD_FLAG)
         .arg(state)
         .stdin(Stdio::piped())
@@ -196,6 +196,37 @@ fn spawn_guard(state: &Path) -> std::io::Result<()> {
     // Held until the process ends, whatever ends it: the guard reverts on EOF.
     std::mem::forget(child.stdin.take());
     Ok(())
+}
+
+/// A command starting this binary again the way it was started: through the
+/// dynamic loader and its options when a launcher ran it under one.
+fn self_command() -> std::io::Result<Command> {
+    let cmdline = std::fs::read("/proc/self/cmdline")
+        .map(|raw| split_cmdline(&raw))
+        .unwrap_or_default();
+    if let Some([loader, rest @ ..]) = loader_prefix(&cmdline, std::env::args_os().count()) {
+        let mut command = Command::new(loader);
+        command.args(rest);
+        return Ok(command);
+    }
+    // Without a loader only: under one this names the loader.
+    Ok(Command::new(std::env::current_exe()?))
+}
+
+/// The words of `cmdline` up to and including the binary when a loader ran it,
+/// `own_args` being the length of its `argv`; `None` when the binary ran itself.
+fn loader_prefix(cmdline: &[OsString], own_args: usize) -> Option<&[OsString]> {
+    let end = cmdline.len().checked_sub(own_args)? + 1;
+    (end > 1).then(|| &cmdline[..end])
+}
+
+/// `/proc/<pid>/cmdline` split into its NUL-terminated words.
+fn split_cmdline(raw: &[u8]) -> Vec<OsString> {
+    raw.strip_suffix(&[0])
+        .unwrap_or(raw)
+        .split(|&byte| byte == 0)
+        .map(|word| OsStr::from_bytes(word).to_owned())
+        .collect()
 }
 
 fn guard(state: &Path) -> ! {
@@ -466,5 +497,31 @@ mod tests {
 
         revert(&sys, &tuning);
         assert_eq!(read_trimmed(&sys.vm("swappiness")).unwrap(), "10");
+    }
+
+    fn words(line: &str) -> Vec<OsString> {
+        line.split(' ').map(OsString::from).collect()
+    }
+
+    #[test]
+    fn loader_prefix_keeps_the_loader_options_and_binary() {
+        let cmdline = words("lib/ld.so --inhibit-cache --library-path lib ./retsurf a.html");
+        assert_eq!(
+            loader_prefix(&cmdline, 2).unwrap(),
+            words("lib/ld.so --inhibit-cache --library-path lib ./retsurf")
+        );
+    }
+
+    #[test]
+    fn loader_prefix_is_none_for_a_binary_run_itself() {
+        assert_eq!(loader_prefix(&words("./retsurf a.html"), 2), None);
+    }
+
+    #[test]
+    fn cmdline_splits_on_its_nuls_and_keeps_empty_words() {
+        assert_eq!(
+            split_cmdline(b"ld.so\0--x\0\0bin\0"),
+            words("ld.so --x  bin")
+        );
     }
 }

@@ -17,11 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Engine on Servo `main` as of 2026-11-17
 - Quick Access on a page: the Page theme row reads Theme
 - Tab grid: a card's title and close button sit in a header above the page picture
+- Kindle: swap tuning (`[performance] swap_tuning`) is on in a new install; an existing config keeps its value
 - Software rendering frame cap (`[performance] max_fps`) defaults to 60 fps, 30 on the Miyoo Mini; an existing config keeps its value
 
 ### Fixed
 
 - Page zoom changed in Settings applies to the shown page at once
+- Swap tuning did nothing on Kindle
 - Tap or click on an empty spot of sites built with web components, such as a Reddit post, highlighted all of their text
 
 ## [0.11.0] - 2026-11-16
