@@ -7,26 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Page font size (`[browser] page_font_size`, Settings > Browser), also per site; sites that fix their own text sizes keep them
-- Zoom and Font size rows in Quick Access on a page
-
-### Changed
-
-- Engine on Servo `main` as of 2026-11-17
-- Quick Access on a page: the Page theme row reads Theme
-- Tab grid: a card's title and close button sit in a header above the page picture
-- Kindle: swap tuning (`[performance] swap_tuning`) is on in a new install; an existing config keeps its value
-- Software rendering frame cap (`[performance] max_fps`) defaults to 60 fps, 30 on the Miyoo Mini; an existing config keeps its value
-
-### Fixed
-
-- Page zoom changed in Settings applies to the shown page at once
-- Swap tuning did nothing on Kindle
-- Tap or click on an empty spot of sites built with web components, such as a Reddit post, highlighted all of their text
-
-## [0.11.0] - 2026-11-16
+## [0.11.0] - 2026-11-18
 
 ### Added
 
@@ -37,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - X or right-click on a start page tile opens Quick Access on the bookmark: open, launch as, reader view, rename, tags, move, remove
 - Bookmarks that open as an app (no toolbar) or a game (Game Mode, with its own `[game_mode]` settings); Quick Access gets Close while one runs and switches the open page between site, app and game
 - Reader view per site: a bookmark's articles open in it, set from Quick Access on the site
-- Reload row in Quick Access on a page
+- Reload, Zoom and Font size rows in Quick Access on a page
+- Page font size (`[browser] page_font_size`, Settings > Browser), also per site; sites that fix their own text sizes keep them
 - Stick and D-pad roles on a page (`[controls] left_stick` / `right_stick` / `dpad`): cursor, scroll or none
 - Cursor and scroll actions (`cursor_up` ... `scroll_right`) for any button or key, moving while held; unbound by default
 - Bookmark row in Game Mode's Quick Access
@@ -50,9 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interface themes (`[interface] theme`): Dusk (the default), Night, OLED, Sand and DMG
 - `retsurf --kiosk PATH` (or `--open ID`) runs a game alone: Game Mode with no browser menus, notices, update check, new windows, downloads or other sites
 - Start + Select quits, in Game Mode too
-- Tab grid (`[interface] tab_layout = "grid"`, Settings > Interface): the lists show the open tabs as cards with a picture of each page
+- Tab grid (`[interface] tab_layout = "grid"`, Settings > Interface): the lists show the open tabs as cards with a picture of each page under its title and close button
 - Search engine choice (`[browser] search_engine`) from a list of ten that can be added to, renamed, edited and deleted (Settings > Browser > Search engines, `[[browser.search_engines]]`); the search icon in the address bar picks one, and the empty address and search fields name it
-- Kindle (jailbroken): `retsurf-kindle.zip`, started from KUAL or KOReader, with touch input
+- Kindle (jailbroken): `retsurf-kindle.zip`, started from KUAL or KOReader, with touch input and swap tuning (`[performance] swap_tuning`) on
 - Miyoo Mini: WebGL for pages and games
 - WebGL switch (`[performance] webgl`, Settings > System) and the texture units WebGL pages see (`[performance] webgl_texture_units`)
 - `gamepad` input map: the whole pad as itself; holding L3 turns the right stick into the cursor
@@ -72,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Quick Menu is now Menu
 - On ~1 GB boards the `auto` JS preset keeps Ion and wasm Ion on: pages run JS faster, and asm.js and wasm games load without `fast`
 - `[performance] worker_pool_max` also caps canvas threads, and boards up to 1 GB start fewer of them
+- Software rendering frame cap (`[performance] max_fps`) defaults to 60 fps, 30 on the Miyoo Mini; an existing config keeps its value
 - `[controls] dpad` replaces `cursor_mode`, which is no longer read
 - `[browser] search_engine` replaces `search_page`, which is no longer read
 - `bindings.toml` no longer reads `game_mode` as `quick_access`; a binding to it is dropped
@@ -79,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update notice shows the release summary and download size, installs from the notice with its progress and offers Quit to apply
 - Quick Access: actions on top and rows in the same place with or without a site's bookmark, the page or bookmark named at the top with its site icon, a footer of button hints (in Menu too)
 - Quick Access marks a site's own settings with a dot; X sets one back to the global value, and Reset site settings counts them
+- Quick Access on a page: the Page theme row reads Theme
 - Menu: the latest tabs with their site icons (X closes one), New tab, Search or address, download progress and the time; no Home row on the start page
 - Tabs on the start page are named Start page in the tab lists
 - Settings names what the buttons do in a footer, as the other menus do
@@ -100,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History and download times in the device's time zone instead of UTC
 - A page a site sends instead of the file, such as a sign-in, opens in the tab instead of being saved as the file
 - Android: a finished download opens with the app the system picks for its type
-- Engine on Servo `main` as of 2026-11-16
+- Engine on Servo `main` as of 2026-11-17
 - Handheld packages carry one binary, `retsurf.aarch64`, for every board in place of `retsurf.a35`, `retsurf.a53` and `retsurf.a55`; pages run faster on all of them. The three old binaries can be deleted from the port folder
 - A handheld install updated from inside an earlier version does not start: unpack the new package over it, as for a first install
 - Built-in input maps follow Steam Input's templates: `keys` sends Z / X / C / Space on A / B / X / Y; `wasd` puts 1-4 on the D-pad, the wheel on the bumpers and Shift on L3; `mouse` right-clicks on X and sends Esc on B; in all three L2 / R2 click right / left, Start is Enter and Select is Esc
@@ -163,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas `putImageData` blending translucent pixels instead of replacing them, and drawing stray edges at an offset
 - Canvas colors shifting when a page reads pixels and writes them back
 - Sites downloading their images and scripts again after a restart with the HTTP disk cache on (`[performance] http_disk_cache_mb`)
+- Page zoom changed in Settings applies to the shown page at once
 
 ## [0.10.0] - 2026-10-08
 
