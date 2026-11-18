@@ -202,11 +202,13 @@ struct Tab {
     /// Whether the rendering context holds a frame of it: painted since it was
     /// last shown.
     painted: Cell<bool>,
+    /// Whether its webview was built fetching the start page.
+    opened_home: bool,
 }
 
 impl Tab {
-    /// A tab around a webview that was built already fetching its URL.
-    fn loading(webview: WebView) -> Self {
+    /// A tab around a webview that was built already fetching `url`.
+    fn loading(webview: WebView, url: &str) -> Self {
         Self {
             webview,
             state: BrowserState::loading(),
@@ -215,6 +217,16 @@ impl Tab {
             shown: Cell::new(0),
             thumbnail: None,
             painted: Cell::new(false),
+            opened_home: url == home::HOME_URL,
+        }
+    }
+
+    /// Whether it shows the start page: loaded there, or opened at it with no
+    /// URL committed yet.
+    fn on_home(&self) -> bool {
+        match self.state.page_url.as_str() {
+            "" => self.opened_home,
+            url => url == home::HOME_URL,
         }
     }
 }
@@ -691,8 +703,7 @@ impl AppBrowser {
     #[inline]
     pub fn on_home_page(&self) -> bool {
         let tabs = self.inner.tabs.borrow();
-        tabs.get(self.inner.active.get())
-            .is_some_and(|t| t.state.page_url == home::HOME_URL)
+        tabs.get(self.inner.active.get()).is_some_and(Tab::on_home)
     }
 
     /// The active tab's toolbar state (address bar text + load status). Panics if

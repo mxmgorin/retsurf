@@ -111,7 +111,7 @@ impl AppBrowser {
         let Some(webview) = self.build_tab(url) else {
             return;
         };
-        self.inner.adopt_tab(Tab::loading(webview));
+        self.inner.adopt_tab(Tab::loading(webview, url));
         self.trim_tabs();
     }
 
@@ -132,7 +132,10 @@ impl AppBrowser {
         let Some(webview) = self.build_tab(url) else {
             return;
         };
-        self.inner.tabs.borrow_mut().push(Tab::loading(webview));
+        self.inner
+            .tabs
+            .borrow_mut()
+            .push(Tab::loading(webview, url));
         self.trim_tabs();
     }
 
@@ -209,7 +212,7 @@ impl AppBrowser {
             match self.build_tab(url) {
                 Some(webview) => {
                     kept.push(i);
-                    built.push(webview);
+                    built.push((webview, url));
                 }
                 None => log::warn!("session: dropping unparseable url `{url}`"),
             }
@@ -221,7 +224,11 @@ impl AppBrowser {
         log::info!("session: restoring {} tabs, showing {shown}", built.len());
 
         let mut tabs = self.inner.tabs.borrow_mut();
-        tabs.extend(built.into_iter().map(Tab::loading));
+        tabs.extend(
+            built
+                .into_iter()
+                .map(|(webview, url)| Tab::loading(webview, url)),
+        );
         tabs[shown].webview.show();
         tabs[shown].webview.set_focused(true);
         self.inner.activate(&tabs, shown);
@@ -289,7 +296,7 @@ impl AppBrowser {
             return;
         };
         self.inner.tabs.borrow_mut().clear();
-        self.inner.adopt_tab(Tab::loading(webview));
+        self.inner.adopt_tab(Tab::loading(webview, home));
     }
 
     /// Drop the tab at `index`, keeping at least one open.

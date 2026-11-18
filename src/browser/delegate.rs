@@ -306,6 +306,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
             shown: Cell::default(),
             thumbnail: None,
             painted: Cell::default(),
+            opened_home: false,
         });
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
