@@ -84,7 +84,7 @@ impl Default for PerformanceConfig {
             memory_guard_floor_mb: 0,
             memory_guard_pressure: 10,
             http_disk_cache_mb: 0,
-            max_fps: 30,
+            max_fps: 60,
             webgl_texture_units: 0,
             webgl: true,
             js_preset: super::js_preset::AUTO.to_string(),

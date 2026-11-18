@@ -10,6 +10,8 @@ max_tabs = 1
 memory_profile = "micro"
 # The launcher runs as root: `performance` while a page loads is -16% page time.
 cpu_boost_on_load = true
+# Each presented frame takes CPU from the engine on this board's two A7 cores.
+max_fps = 30
 
 [data_saving]
 # Decoded images are what runs this device out of memory: 87 MB on one gallery

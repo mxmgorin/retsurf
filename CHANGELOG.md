@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Engine on Servo `main` as of 2026-11-17
 - Quick Access on a page: the Page theme row reads Theme
+- Software rendering frame cap (`[performance] max_fps`) defaults to 60 fps, 30 on the Miyoo Mini; an existing config keeps its value
 
 ### Fixed
 
