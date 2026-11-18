@@ -98,7 +98,10 @@ pub(super) fn paint_switch(ui: &egui::Ui, row: egui::Rect, on: bool) {
     } else {
         track.left() + SWITCH_H / 2.0
     };
-    painter.circle_filled(egui::pos2(x, track.center().y), r, knob_fill);
+    // A fully rounded rect, not a circle: it must square along with the track.
+    let knob =
+        egui::Rect::from_center_size(egui::pos2(x, track.center().y), egui::vec2(r, r) * 2.0);
+    painter.rect_filled(knob, r, knob_fill);
 }
 
 /// A [`row`] whose value gives way first, for a short label beside a value of
