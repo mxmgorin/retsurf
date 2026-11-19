@@ -17,7 +17,7 @@
   <a href="https://github.com/mxmgorin/retsurf/discussions">Discussions</a>
 </p>
 
-retsurf is a web browser written in Rust and built with [Servo](https://servo.org/) and [SDL2](https://www.libsdl.org/). It aims to provide a full-featured web experience while staying lightweight and portable. It targets handheld devices while also working on Android and desktops. It has gamepad- and keyboard-friendly controls for browsing and gaming-specific features like remappable input.
+retsurf is a portable web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It runs on retro handhelds, Kindle e-readers, Android, Linux, Windows and macOS, on ARM and x86, from a Miyoo Mini with 128 MB of RAM up to desktops. It is driven by a gamepad, a keyboard or touch, with gaming features like remappable input, game scaling and shaders.
 
 **[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, CrossMix-OS, NextUI, or NX Redux, on Android, Linux, Windows, or macOS, and on jailbroken Kindle e-readers.
 
@@ -38,7 +38,16 @@ retsurf is a web browser written in Rust and built with [Servo](https://servo.or
 
 More screenshots and device photos are on the [website](https://retsurf.app/).
 
+## Goals
+
+- **A browser for any device.** A full web engine on hardware that ships without a modern browser, like retro handhelds.
+- **A runner for web games and apps.** Runs a site or a local game folder full screen with its own controls and no browser UI, so a web game can ship as a port of its own.
+- **Help Servo grow.** Running Servo on real devices finds engine bugs, and the fixes go upstream.
+
 ## Features
+
+- **Runs on almost anything**<br>
+  From a 128 MB handheld to desktops, and on e-ink Kindles. No X11 or Wayland required: SDL2 draws through whatever video backend the firmware ships. Renders on the GPU through OpenGL ES, or on the CPU on devices without one.
 
 - **Gamepad-first navigation**<br>
   The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard as a grid or a wheel.
@@ -76,11 +85,8 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
 - **Audio and video**<br>
   A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players, but not streaming sites that require MSE.
 
-- **No display server required**<br>
-  SDL2 draws through whatever video backend the firmware ships. X11 and Wayland are optional, not required.
-
-- **Hardware or software rendering**<br>
-  A custom Servo rendering backend uses OpenGL ES for GPU-accelerated rendering on supported devices, with a CPU-based software renderer for devices without a GPU.
+- **No telemetry**<br>
+  The only requests retsurf makes on its own are the update check and the ad-block list refresh, and both can be turned off in Settings.
 
 ## Install
 

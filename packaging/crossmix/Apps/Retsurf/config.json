@@ -3,5 +3,5 @@
   "icon": "icon.png",
   "iconsel": "icon.png",
   "launch": "launch.sh",
-  "description": "Gamepad-first web browser (Servo)"
+  "description": "Portable, gamepad-first web browser on Servo"
 }
