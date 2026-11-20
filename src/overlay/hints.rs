@@ -309,7 +309,7 @@ impl Hints {
         }
         // The scroll is hit-tested to pick its scroller: the hint's column, at
         // mid-viewport, because an edge hint often sits in a sticky header.
-        let (sx, _) = self.selected_center().unwrap_or(cx.cursor);
+        let (sx, _) = self.anchor(cx.cursor);
         let sx = sx.clamp(1.0, (width - 1.0).max(1.0));
         // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
         // the selection to the bottom edge; up is the mirror.
@@ -353,8 +353,14 @@ impl Hints {
         self.selected
     }
 
-    pub fn selected_center(&self) -> Option<(f32, f32)> {
+    fn selected_center(&self) -> Option<(f32, f32)> {
         self.hints.get(self.selected).map(Hint::center)
+    }
+
+    /// The point hint mode works from: the selected hint's center, else `cursor`.
+    /// Scrolls hit-test it and a re-collect selects near it, so all of them agree.
+    pub fn anchor(&self, cursor: (f32, f32)) -> (f32, f32) {
+        self.selected_center().unwrap_or(cursor)
     }
 
     /// The selected hint's link URL, if it is a link (`None` for buttons etc.).

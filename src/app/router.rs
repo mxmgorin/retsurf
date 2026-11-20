@@ -407,11 +407,7 @@ impl App {
             // itself schedules the re-collect its movement calls for.
             if self.ui.hints.visible && scroll != (0.0, 0.0) {
                 let (dx, dy) = (scroll.0 * scroll_speed * dt, scroll.1 * scroll_speed * dt);
-                let (x, y) = self
-                    .ui
-                    .hints
-                    .selected_center()
-                    .unwrap_or_else(|| self.ui.cursor_browser_rel());
+                let (x, y) = self.ui.hints.anchor(self.ui.cursor_browser_rel());
                 self.ui.scroll_page(&self.browser, dx, dy, x, y);
             }
             return;

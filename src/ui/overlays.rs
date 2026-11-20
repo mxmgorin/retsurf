@@ -388,10 +388,7 @@ impl AppUi {
     /// Fresh clickable rects from the page. Selection lands near the previous
     /// one (a post-scroll refresh) or near the gamepad cursor (mode entry).
     pub fn hints_apply(&mut self, rects: Vec<Hint>) {
-        let near = self
-            .hints
-            .selected_center()
-            .unwrap_or_else(|| self.cursor_browser_rel());
+        let near = self.hints.anchor(self.cursor_browser_rel());
         // Combo codes are ordered from the viewport top-center (browser-relative),
         // so the nearest-to-top hints get the shortest codes.
         let top_center = (self.webview_rect.width() / 2.0, 0.0);
