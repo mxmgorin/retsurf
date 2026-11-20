@@ -29,6 +29,7 @@ use std::cell::OnceCell;
 use std::str::FromStr;
 use wheel::Wheel;
 
+pub mod auto_show;
 mod edit;
 mod layout;
 pub mod wheel;

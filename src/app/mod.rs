@@ -17,6 +17,7 @@ use crate::data::{page_icons, session::Session};
 use crate::event::handler::AppEventHandler;
 use crate::event::nav_repeat::NavRepeat;
 use crate::event::user::UserEventSender;
+use crate::overlay::osk::auto_show::{self, AutoShow};
 use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
 use crate::ui::{AppUi, Notice};
@@ -39,10 +40,8 @@ pub struct App {
     last_tick: Instant,
     /// Held-stick steps over an overlay.
     nav_repeat: NavRepeat,
-    /// `[osk] auto_show` state: a text field focused last frame, and a page tap
-    /// waiting out [`OSK_TAP_SETTLE`].
-    osk_field_focused: bool,
-    osk_tap_at: Option<Instant>,
+    /// When the keyboard rises by itself (`[osk] auto_show`).
+    osk_auto_show: AutoShow,
     /// The page a site last sent in a download's place, and when it opened.
     last_download_page: Option<(String, Instant)>,
     /// Whether the last frame asked for the system keyboard.
@@ -115,10 +114,6 @@ const MEMORY_LOG_INTERVAL: Duration = Duration::from_secs(10);
 /// How long after a navigation the allocator is asked for its free memory back:
 /// long enough that the document being replaced has finished going away.
 const HEAP_TRIM_DELAY: Duration = Duration::from_secs(5);
-
-/// How long a page tap waits before raising the keyboard: the page reports a
-/// blur only after the click reaches it.
-const OSK_TAP_SETTLE: Duration = Duration::from_millis(300);
 
 /// How soon the same page coming back in a download's place counts as a loop.
 const DOWNLOAD_PAGE_LOOP: Duration = Duration::from_secs(60);
@@ -210,8 +205,7 @@ impl App {
             running: false,
             last_tick: Instant::now(),
             nav_repeat: NavRepeat::new(),
-            osk_field_focused: false,
-            osk_tap_at: None,
+            osk_auto_show: AutoShow::new(),
             last_download_page: None,
             #[cfg(target_os = "android")]
             system_keyboard_up: false,
@@ -508,37 +502,23 @@ impl App {
     /// Open the on-screen keyboard for a text field just focused or tapped again,
     /// unless a physical keyboard or mouse reached it.
     fn auto_show_osk(&mut self, out: &mut Vec<AppCommand>) {
-        let tapped = self.event_handler.take_tap();
-        let chrome = self.ui.wants_keyboard();
-        let page = self.browser.text_input_wants_keyboard();
-        let focused = chrome || page;
-        let rose = focused && !std::mem::replace(&mut self.osk_field_focused, focused);
-        if self.ui.focus() == crate::ui::Focus::Osk {
-            self.osk_tap_at = None;
-            return;
-        }
-        // egui moves focus within the pass that saw the tap; the page does not.
-        if tapped && page && !chrome {
-            self.osk_tap_at = Some(Instant::now());
-        }
-        let settled = match self.osk_tap_at {
-            Some(at) if at.elapsed() >= OSK_TAP_SETTLE => {
-                self.osk_tap_at = None;
-                true
-            }
-            Some(_) => {
-                self.ui.request_repaint();
-                false
-            }
-            None => false,
+        let focus = self.ui.focus();
+        let frame = auto_show::Frame {
+            tapped: self.event_handler.take_tap(),
+            chrome: self.ui.wants_keyboard(),
+            page: self.browser.text_input_wants_keyboard(),
+            osk_open: focus == crate::ui::Focus::Osk,
+            home: focus == crate::ui::Focus::Home,
+            // A physical keyboard types already; Android raises its own instead.
+            needed: !self.event_handler.hardware_input()
+                && !(cfg!(target_os = "android") && self.config.controls.system_keyboard),
+            now: Instant::now(),
         };
-        // A physical keyboard types already; Android raises its own instead.
-        let needed = !self.event_handler.hardware_input()
-            && !(cfg!(target_os = "android") && self.config.controls.system_keyboard);
-        // The start page's field is selected like its tiles: Confirm opens the
-        // keyboard, or it would cover the grid on every visit.
-        let home = self.ui.focus() == crate::ui::Focus::Home;
-        if needed && ((rose && !home) || (tapped && chrome) || (settled && page)) {
+        let outcome = self.osk_auto_show.read(&frame);
+        if outcome.settling {
+            self.ui.request_repaint();
+        }
+        if outcome.show {
             self.ui.osk(OskCommand::Show, &self.browser, out);
         }
     }
