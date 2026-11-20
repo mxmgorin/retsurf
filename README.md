@@ -21,7 +21,7 @@ retsurf is a portable web browser built on [Servo](https://servo.org/), an indep
 
 **[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, CrossMix-OS, NextUI, or NX Redux, on Android, Linux, Windows, or macOS, and on jailbroken Kindle e-readers.
 
-> **Work in progress.** Early development — expect bugs.
+> **Work in progress.** Early development — expect bugs. See [Limitations](#limitations).
 
 ## Screenshots
 
@@ -83,10 +83,23 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
   Checks GitHub for updates, displays release notes, and installs updates in place on Linux. Supports stable, beta, and nightly channels.
 
 - **Audio and video**<br>
-  A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players, but not streaming sites that require MSE.
+  A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players.
 
 - **No telemetry**<br>
   The only requests retsurf makes on its own are the update check and the ad-block list refresh, and both can be turned off in Settings.
+
+## Limitations
+
+| Area | Limitation |
+| --- | --- |
+| Site compatibility | Servo does not support every web feature yet: some sites render incorrectly or break. |
+| Streaming video | No Media Source Extensions: YouTube, Twitch and similar players do not play. |
+| Media formats | Video: H.264 in MP4 only, no WebM, VP9, AV1 or HEVC. Audio: MP3, AAC, FLAC, Vorbis and WAV, no Opus. |
+| DRM | No Encrypted Media Extensions: Netflix, Spotify and other DRM services do not play. |
+| Video calls | No WebRTC. |
+| Extensions | Browser extensions are not supported. |
+| Low-end devices | Heavy sites load slowly and can run out of memory on 128 MB devices. |
+| Security | All sites run in one process, with no site isolation. |
 
 ## Install
 
