@@ -24,3 +24,16 @@ fn prefer_exclusive_atomics() {
     // SAFETY: single-threaded here, and both paths are valid atomics on the same memory.
     unsafe { std::ptr::write_volatile(&raw mut __aarch64_have_lse_atomics, 0) };
 }
+
+/// C's `fmod`, from glibc. Rust's runtime brings a generic one for `%` on floats, and the
+/// linker would hand it to every caller, SpiderMonkey's JavaScript `%` included.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[unsafe(no_mangle)]
+extern "C" fn fmod(x: f64, y: f64) -> f64 {
+    unsafe extern "C" {
+        // glibc's `_Float64` name for the same function, which Rust's runtime does not define.
+        fn fmodf64(x: f64, y: f64) -> f64;
+    }
+    // SAFETY: a pure function of its two arguments.
+    unsafe { fmodf64(x, y) }
+}
