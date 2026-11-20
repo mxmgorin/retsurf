@@ -19,7 +19,7 @@
 
 retsurf is a portable web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It runs on retro handhelds, Kindle e-readers, Android, Linux, Windows and macOS, on ARM and x86, from a Miyoo Mini with 128 MB of RAM up to desktops. It is driven by a gamepad, a keyboard or touch, with gaming features like remappable input, game scaling and shaders.
 
-**[Install](#install)** on handhelds through PortMaster, OnionOS, Allium, spruceOS, CrossMix-OS, NextUI, or NX Redux, on Android, Linux, Windows, or macOS, and on jailbroken Kindle e-readers.
+**[Supported platforms and downloads](#install)**
 
 > **Work in progress.** Early development — expect bugs. See [Limitations](#limitations).
 
@@ -103,12 +103,12 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
 
 ## Install
 
-Download the latest release for your platform below. All builds are available on
+retsurf runs on the platforms below; download the package for yours. All builds are available on
 [Releases](https://github.com/mxmgorin/retsurf/releases). Nightly builds from `main` use
 the same file names under the rolling
 [`nightly`](https://github.com/mxmgorin/retsurf/releases/tag/nightly) tag.
 
-| OS | Package | Where it goes |
+| Platform | Package | Where it goes |
 | --- | --- | --- |
 | [PortMaster](https://portmaster.games/supported-devices.html) | [`retsurf-portmaster.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-portmaster.zip) | ports folder, e.g. `/roms/ports/` |
 | [OnionOS](https://onionui.github.io/) | [`retsurf-onionos.zip`](https://github.com/mxmgorin/retsurf/releases/latest/download/retsurf-onionos.zip) | `App/Retsurf/` on the SD card |
@@ -125,6 +125,8 @@ the same file names under the rolling
 On the Miyoo Mini firmwares, spruceOS included, the app shows up in the Apps menu, and **MENU quits** it. On spruceOS's aarch64 handhelds and CrossMix-OS it is under Apps too, and **Select + Start** quits it.
 
 On Kindle, start it from KUAL (**Retsurf > Start Retsurf**) or from KOReader (**Tools > Retsurf browser**), and quit with **Quit retsurf** in the menu at the top left; it returns to where it was started.
+
+Devices people have run it on are collected in [Tested devices](https://github.com/mxmgorin/retsurf/discussions/78).
 
 ## Building
 
