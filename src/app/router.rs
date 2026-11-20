@@ -11,14 +11,10 @@ use crate::browser::BrowserCommand;
 use crate::command::Analog;
 use crate::event::game::input_map::ClickButton;
 use crate::event::gamepad::cursor_curve;
-use crate::overlay::hints::{HintInput, Sym};
+use crate::overlay::hints;
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::ui::Focus;
 use std::time::{Duration, Instant};
-
-/// How much of the viewport a hint-mode edge auto-scroll covers — a chunk shy of
-/// a full screen, so a strip of the old hints stays on-screen for continuity.
-const HINT_EDGE_SCROLL_FRACTION: f32 = 0.8;
 
 /// The button as SDL spells it, which is what the page is told.
 fn sdl_button(button: ClickButton) -> sdl2::mouse::MouseButton {
@@ -34,6 +30,11 @@ impl App {
     /// [`Focus`] for the overlay precedence.
     pub(super) fn route_input(&mut self, command: &InputCommand, out: &mut Vec<AppCommand>) {
         let focus = self.ui.focus();
+        // Hint mode reads each intent first; what it passes keeps the bare page's
+        // meaning, hence `Focus::Hints | Focus::Page` below.
+        if focus == Focus::Hints && self.hints_input(command) {
+            return;
+        }
         match command {
             InputCommand::Confirm(pressed) => match focus {
                 Focus::Osk => {
@@ -80,31 +81,6 @@ impl App {
                         self.settings_confirm(out);
                     }
                 }
-                Focus::Hints => {
-                    // Tap vs hold on the selected hint: the press starts the
-                    // clock, and a hold opens the link in a background tab.
-                    if *pressed {
-                        self.hint_press_at = Some(Instant::now());
-                    } else if self.ui.hints.is_stale() {
-                        // Nothing is on screen to have aimed at, and the
-                        // selection no longer sits where the page does.
-                        self.hint_press_at = None;
-                    } else {
-                        let hold = Duration::from_millis(self.config.controls.hold_ms);
-                        let held_long = self
-                            .hint_press_at
-                            .take()
-                            .is_some_and(|t| t.elapsed() >= hold);
-                        let url = self.ui.hints.selected_url().filter(|_| held_long);
-                        match url.map(str::to_owned) {
-                            Some(url) => {
-                                self.ui.hints.hide();
-                                self.browser.open_tab_background(&url);
-                            }
-                            None => self.activate_hint(),
-                        }
-                    }
-                }
                 // The start page: A opens the OSK to type into its search field,
                 // or opens the focused bookmark (see [`App::home_confirm`]).
                 Focus::Home => {
@@ -112,7 +88,7 @@ impl App {
                         self.home_confirm(out);
                     }
                 }
-                Focus::Page => self.primary_action(*pressed),
+                Focus::Hints | Focus::Page => self.primary_action(*pressed),
             },
             InputCommand::Cancel => match focus {
                 Focus::Osk => {
@@ -137,17 +113,9 @@ impl App {
                         self.settings_close(out);
                     }
                 }
-                // B drops a half-typed combo first, then exits hint mode.
-                Focus::Hints => {
-                    if self.ui.hints.has_typed() {
-                        self.ui.hints.clear_typed();
-                    } else {
-                        self.ui.hints.hide();
-                    }
-                }
                 // B on the start page goes back like a normal page — except that
                 // it is also the only way out of a page holding fullscreen.
-                Focus::Home | Focus::Page => {
+                Focus::Hints | Focus::Home | Focus::Page => {
                     let command = match self.browser.is_fullscreen() {
                         true => BrowserCommand::ExitFullscreen,
                         false => BrowserCommand::Back,
@@ -166,9 +134,6 @@ impl App {
                 Focus::QuickAccess => out.push(AppCommand::QuickAccess(QuickAccessAction::Remove)),
                 // X unbinds the focused source, which is what takes its row away.
                 Focus::GameMapEdit => out.push(AppCommand::GameMapEdit(GameMapEditAction::Remove)),
-                // In hint mode X is a combo symbol, not the OSK toggle (unless
-                // combos are disabled, when it falls through to the OSK below).
-                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::X),
                 Focus::Osk => {
                     self.osk_input(PadInput::X, out);
                 }
@@ -233,26 +198,12 @@ impl App {
                         self.ui.settings.adjust(*dx);
                     }
                 }
-                Focus::Hints => self.hints_nav(*dx, *dy),
                 Focus::Home => self.ui.home_move(*dx, *dy),
-                Focus::Page => {}
+                Focus::Hints | Focus::Page => {}
             },
-            // Discrete D-pad press: in hint mode it types a combo symbol;
-            // everywhere else the D-pad already moves via the aim vector.
-            InputCommand::DpadPress(dx, dy) => {
-                if focus == Focus::Hints && self.config.controls.hint_badges {
-                    if let Some(sym) = dpad_sym(*dx, *dy) {
-                        self.hint_sym(sym);
-                    }
-                }
-            }
-            // A typed letter for a keyboard-driven hint round (the keyboard handler
-            // only emits it in that mode); resolve it like a gamepad combo symbol.
-            InputCommand::HintKey(c) => {
-                if focus == Focus::Hints && self.config.controls.hint_badges {
-                    self.hint_key(*c);
-                }
-            }
+            // Combo symbols and typed letters: hint mode's alone. Elsewhere the
+            // D-pad already moves via the aim vector.
+            InputCommand::DpadPress(..) | InputCommand::HintKey(_) => {}
             // Y / L3: a bookmark toggle, a space over the keyboard, or link
             // hints on the page.
             InputCommand::Hints => match focus {
@@ -265,11 +216,7 @@ impl App {
                 Focus::Prompt | Focus::Settings => {}
                 Focus::UpdateNotice => {}
                 Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
-                // In hint mode Y is a combo symbol (B exits instead); with combos
-                // off it keeps its old meaning of hiding the hints.
-                Focus::Hints if self.config.controls.hint_badges => self.hint_sym(Sym::Y),
-                Focus::Hints => self.ui.hints.hide(),
-                Focus::Page => {
+                Focus::Hints | Focus::Page => {
                     self.ui.hints_begin_collect();
                     self.browser.collect_hints();
                 }
@@ -287,11 +234,6 @@ impl App {
                     // Game Mode's screens would leave the game.
                     Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                     Focus::UpdateNotice => {}
-                    // In hint mode L1/R1 are combo symbols; with combos off they fall
-                    // through to the page back/forward below.
-                    Focus::Hints if self.config.controls.hint_badges => {
-                        self.hint_sym(if *delta < 0 { Sym::L1 } else { Sym::R1 })
-                    }
                     // On the start page they cycle the grid's filter.
                     Focus::Home => self.home_action(&HomeAction::StepFilter(*delta), out),
                     Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Page => {
@@ -356,71 +298,32 @@ impl App {
         self.ui.focus() == Focus::Osk && self.ui.osk_input(input, &self.browser, out)
     }
 
-    /// Hint-mode directional input: hop the selection, or scroll a chunk and
-    /// re-collect when it is already at a vertical edge. Horizontal edges stay
-    /// put — pages rarely scroll sideways.
-    fn hints_nav(&mut self, dx: i32, dy: i32) {
-        if self.ui.hints.move_sel((dx, dy)) || dy == 0 {
-            return;
-        }
-        let height = self.ui.browser_area_height();
-        if height <= 0.0 {
-            return;
-        }
-        // The scroll is hit-tested to pick its scroller: the hint's column, at
-        // mid-viewport, because an edge hint often sits in a sticky header.
-        let (sx, _) = self
-            .ui
-            .hints
-            .selected_center()
-            .unwrap_or_else(|| self.ui.cursor_browser_rel());
-        let width = self.ui.browser_area_width();
-        let sx = sx.clamp(1.0, (width - 1.0).max(1.0));
-        let sy = height / 2.0;
-        // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
-        // the selection to the bottom edge; up is the mirror.
-        let chunk = dy as f32 * height * HINT_EDGE_SCROLL_FRACTION;
-        self.ui.scroll_page(&self.browser, 0.0, chunk, sx, sy);
-        let edge_y = if dy > 0 { height } else { 0.0 };
-        self.ui.hints.mark_stale_at((sx, edge_y));
-    }
-
-    /// Feed a combo symbol to hint mode and, when it resolves to one hint, click
-    /// it. A dead end clears the buffer inside `push_sym`, where the faded badges
-    /// already show it went nowhere; a `Pending` combo waits for more.
-    fn hint_sym(&mut self, sym: Sym) {
-        // Stale rects carry no badges to read a code off, so a press types
-        // nothing.
-        if self.ui.hints.is_stale() {
-            return;
-        }
-        if let HintInput::Activate(idx) = self.ui.hints_push_sym(sym) {
-            self.ui.hints.select(idx);
-            self.activate_hint();
-        }
-    }
-
-    /// Feed a typed letter to a keyboard hint round; on a resolved code, click the
-    /// matched hint (shares `hint_sym`'s activation path — see [`HintInput`]).
-    fn hint_key(&mut self, c: char) {
-        if self.ui.hints.is_stale() {
-            return;
-        }
-        if let HintInput::Activate(idx) = self.ui.hints_push_key(c) {
-            self.ui.hints.select(idx);
-            self.activate_hint();
-        }
-    }
-
-    /// Click the selected hint: a synthetic mouse move + press + release at its
-    /// center (so JS click handlers fire like for a real click), then leave hint
-    /// mode — the click usually navigates, invalidating the rects anyway.
-    fn activate_hint(&mut self) {
-        let Some((x, y)) = self.ui.hints.selected_center() else {
-            self.ui.hints.hide();
-            return;
+    /// Offer hint mode an input intent and carry out what it asks; whether it
+    /// took it.
+    fn hints_input(&mut self, command: &InputCommand) -> bool {
+        let controls = &self.config.controls;
+        let cx = hints::Context {
+            badges: controls.hint_badges,
+            hold: Duration::from_millis(controls.hold_ms),
+            now: Instant::now(),
+            area: (self.ui.browser_area_width(), self.ui.browser_area_height()),
+            cursor: self.ui.cursor_browser_rel(),
         };
-        self.ui.hints.hide();
+        match self.ui.hints.read(command, &cx) {
+            hints::Reading::Pass => return false,
+            hints::Reading::Taken => {}
+            hints::Reading::Click((x, y)) => self.click_page(x, y),
+            hints::Reading::OpenInBackground(url) => self.browser.open_tab_background(&url),
+            hints::Reading::Scroll { dy, at: (x, y) } => {
+                self.ui.scroll_page(&self.browser, 0.0, dy, x, y);
+            }
+        }
+        true
+    }
+
+    /// Click the page at a browser-relative point: a synthetic mouse move + press +
+    /// release, so JS click handlers fire like for a real click.
+    fn click_page(&mut self, x: f32, y: f32) {
         self.browser.mouse_move(x, y);
         for pressed in [true, false] {
             self.browser
@@ -592,17 +495,6 @@ impl App {
         }
         false
     }
-}
-
-/// Map a discrete D-pad press direction to its combo symbol (hint mode).
-fn dpad_sym(dx: i32, dy: i32) -> Option<Sym> {
-    Some(match (dx, dy) {
-        (0, -1) => Sym::Up,
-        (0, 1) => Sym::Down,
-        (-1, 0) => Sym::Left,
-        (1, 0) => Sym::Right,
-        _ => return None,
-    })
 }
 
 /// Reduce a stick vector to a single discrete grid step along its dominant axis,

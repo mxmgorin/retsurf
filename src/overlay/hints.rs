@@ -8,12 +8,45 @@
 //! are stale nothing is drawn and nothing can be activated, because a badge
 //! would mark whatever moved into its place. Pushing the selection past the last
 //! hint at a vertical edge scrolls a chunk and re-collects, so one stick reaches
-//! the whole document (see the router).
+//! the whole document.
 
+use crate::command::InputCommand;
 use std::time::{Duration, Instant};
 
 /// How long after the last scroll input before the hints are re-collected.
 const REFRESH_DEBOUNCE: Duration = Duration::from_millis(150);
+
+/// How much of the viewport a hint-mode edge auto-scroll covers — a chunk shy of
+/// a full screen, so a strip of the old hints stays on-screen for continuity.
+const EDGE_SCROLL_FRACTION: f32 = 0.8;
+
+/// What hint mode makes of an [`InputCommand`].
+#[derive(PartialEq, Debug)]
+pub enum Reading {
+    /// Not hint mode's: the caller gives it the bare page's meaning.
+    Pass,
+    /// Taken with nothing left for the caller to do.
+    Taken,
+    /// Hint mode is left; click the page at this browser-relative point.
+    Click((f32, f32)),
+    /// Hint mode is left; load this link in a background tab.
+    OpenInBackground(String),
+    /// Scroll the page by `dy`, hit-tested at `at` (browser-relative).
+    Scroll { dy: f32, at: (f32, f32) },
+}
+
+/// The app state [`Hints::read`] consults.
+pub struct Context {
+    /// Whether presses type combo codes (`[controls] hint_badges`).
+    pub badges: bool,
+    /// How long A/Enter is held to open a link in the background.
+    pub hold: Duration,
+    pub now: Instant,
+    /// The browser area's width and height (logical px).
+    pub area: (f32, f32),
+    /// The cursor, browser-relative: the scroll anchor with no hint selected.
+    pub cursor: (f32, f32),
+}
 
 /// One clickable element, viewport-relative (browser-area logical px).
 pub struct Hint {
@@ -128,6 +161,10 @@ pub struct Hints {
     codes: Vec<Vec<Label>>,
     /// Symbols pressed so far toward a code; cleared on activate or re-collect.
     typed: Vec<Label>,
+    /// When A/Enter went down on a hint, for the tap-vs-hold split (tap clicks
+    /// the hint, hold opens its link in a background tab). `None` when no press
+    /// is in flight over a hint.
+    press_at: Option<Instant>,
 }
 
 impl Hints {
@@ -142,6 +179,7 @@ impl Hints {
             labels: HintLabels::Gamepad,
             codes: vec![],
             typed: vec![],
+            press_at: None,
         }
     }
 
@@ -190,6 +228,121 @@ impl Hints {
         self.codes.clear();
         self.typed.clear();
         self.selected = 0;
+        self.press_at = None;
+    }
+
+    /// Reads one input intent in hint mode; returns what the caller still has to do.
+    pub fn read(&mut self, command: &InputCommand, cx: &Context) -> Reading {
+        match command {
+            // Tap vs hold on the selected hint: the press starts the clock, and a
+            // hold opens the link in a background tab.
+            InputCommand::Confirm(true) => {
+                self.press_at = Some(cx.now);
+                Reading::Taken
+            }
+            InputCommand::Confirm(false) => self.release(cx),
+            // B drops a half-typed combo first, then exits hint mode.
+            InputCommand::Cancel => {
+                if self.has_typed() {
+                    self.clear_typed();
+                } else {
+                    self.hide();
+                }
+                Reading::Taken
+            }
+            InputCommand::Nav(dx, dy) => self.nav((*dx, *dy), cx),
+            // With combos on, X, Y, L1/R1 and the D-pad type symbols; with them
+            // off, Y leaves hint mode and the rest pass to the page.
+            InputCommand::ToggleOsk if cx.badges => self.push(Label::Sym(Sym::X)),
+            InputCommand::Hints if cx.badges => self.push(Label::Sym(Sym::Y)),
+            InputCommand::Hints => {
+                self.hide();
+                Reading::Taken
+            }
+            InputCommand::Shoulder(delta) if cx.badges => {
+                self.push(Label::Sym(if *delta < 0 { Sym::L1 } else { Sym::R1 }))
+            }
+            InputCommand::DpadPress(dx, dy) if cx.badges => match dpad_sym(*dx, *dy) {
+                Some(sym) => self.push(Label::Sym(sym)),
+                None => Reading::Taken,
+            },
+            InputCommand::HintKey(c) if cx.badges => self.push(Label::Key(*c)),
+            InputCommand::ToggleOsk
+            | InputCommand::Shoulder(_)
+            | InputCommand::DpadPress(..)
+            | InputCommand::HintKey(_)
+            | InputCommand::Trigger { .. }
+            | InputCommand::Zoom(_)
+            | InputCommand::Osk(_)
+            | InputCommand::CycleTab(_)
+            | InputCommand::Click { .. }
+            | InputCommand::OskButton(_)
+            | InputCommand::Analog(_) => Reading::Pass,
+        }
+    }
+
+    /// A/Enter released: a tap clicks the selected hint, a hold opens its link.
+    fn release(&mut self, cx: &Context) -> Reading {
+        let pressed_at = self.press_at.take();
+        // Nothing is on screen to have aimed at, and the selection no longer sits
+        // where the page does.
+        if self.is_stale() {
+            return Reading::Taken;
+        }
+        let held_long = pressed_at.is_some_and(|t| cx.now.saturating_duration_since(t) >= cx.hold);
+        match self.selected_url().filter(|_| held_long).map(str::to_owned) {
+            Some(url) => {
+                self.hide();
+                Reading::OpenInBackground(url)
+            }
+            None => self.activate(),
+        }
+    }
+
+    /// Hint-mode directional input: hop the selection, or scroll a chunk and
+    /// re-collect when it is already at a vertical edge. Horizontal edges stay
+    /// put — pages rarely scroll sideways.
+    fn nav(&mut self, dir: (i32, i32), cx: &Context) -> Reading {
+        let (width, height) = cx.area;
+        if self.move_sel(dir) || dir.1 == 0 || height <= 0.0 {
+            return Reading::Taken;
+        }
+        // The scroll is hit-tested to pick its scroller: the hint's column, at
+        // mid-viewport, because an edge hint often sits in a sticky header.
+        let (sx, _) = self.selected_center().unwrap_or(cx.cursor);
+        let sx = sx.clamp(1.0, (width - 1.0).max(1.0));
+        // dy > 0 = down: reveal lower content (positive Servo dy) and re-anchor
+        // the selection to the bottom edge; up is the mirror.
+        let dy = dir.1 as f32 * height * EDGE_SCROLL_FRACTION;
+        let edge_y = if dir.1 > 0 { height } else { 0.0 };
+        self.mark_stale_at((sx, edge_y));
+        Reading::Scroll {
+            dy,
+            at: (sx, height / 2.0),
+        }
+    }
+
+    /// Feeds one combo symbol or typed letter; a code it completes clicks its hint.
+    fn push(&mut self, label: Label) -> Reading {
+        // Stale rects carry no badges to read a code off, so a press types
+        // nothing.
+        if self.is_stale() {
+            return Reading::Taken;
+        }
+        match self.push_label(label) {
+            HintInput::Activate(idx) => {
+                self.select(idx);
+                self.activate()
+            }
+            HintInput::Pending | HintInput::NoMatch => Reading::Taken,
+        }
+    }
+
+    /// Leaves hint mode; returns the click on the selected hint, if there is one.
+    fn activate(&mut self) -> Reading {
+        let center = self.selected_center();
+        self.hide();
+        center.map_or(Reading::Taken, Reading::Click)
     }
 
     pub fn hints(&self) -> &[Hint] {
@@ -209,8 +362,8 @@ impl Hints {
         self.hints.get(self.selected)?.url.as_deref()
     }
 
-    /// Point the selection at `idx` (a combo resolved to this hint) so the shared
-    /// click path ([`crate::app`]'s `activate_hint`) targets it. No-op if stale.
+    /// Point the selection at `idx` (a combo resolved to this hint) so the click
+    /// targets it. No-op if stale.
     pub fn select(&mut self, idx: usize) {
         if idx < self.hints.len() {
             self.selected = idx;
@@ -269,7 +422,7 @@ impl Hints {
 
     /// Hop the selection to the nearest hint in direction `dir` (a dominant-axis
     /// step from the router, e.g. `(0, -1)` = up). Returns whether it moved;
-    /// `false` means the edge (no hint further that way) — the router turns a
+    /// `false` means the edge (no hint further that way) — [`Self::read`] turns a
     /// vertical edge into a page scroll.
     pub fn move_sel(&mut self, dir: (i32, i32)) -> bool {
         let Some(from) = self.selected_center() else {
@@ -345,6 +498,17 @@ impl Hints {
         self.refresh_at
             .map(|t| t.saturating_duration_since(Instant::now()))
     }
+}
+
+/// Map a discrete D-pad press direction to its combo symbol (hint mode).
+fn dpad_sym(dx: i32, dy: i32) -> Option<Sym> {
+    Some(match (dx, dy) {
+        (0, -1) => Sym::Up,
+        (0, 1) => Sym::Down,
+        (-1, 0) => Sym::Left,
+        (1, 0) => Sym::Right,
+        _ => return None,
+    })
 }
 
 /// Index of the hint whose center is closest to `p`.
@@ -545,5 +709,164 @@ mod tests {
         h.push_label(Label::Sym(Sym::X));
         assert!(h.matches_prefix(0)); // code `XX` still matches `X`
         assert!(!h.matches_prefix(8)); // code `YX` no longer matches
+    }
+
+    const HOLD: Duration = Duration::from_millis(500);
+
+    fn cx(now: Instant, badges: bool) -> Context {
+        Context {
+            badges,
+            hold: HOLD,
+            now,
+            area: (800.0, 600.0),
+            cursor: (0.0, 0.0),
+        }
+    }
+
+    fn link_at(x: f32, y: f32) -> Hints {
+        let mut h = Hints::new();
+        h.begin_collect(HintLabels::Gamepad);
+        let link = Hint {
+            url: Some("https://a.test/".to_string()),
+            ..at(x, y)
+        };
+        h.show(vec![link], (0.0, 0.0), (0.0, 0.0));
+        h
+    }
+
+    #[test]
+    fn a_tap_clicks_the_selected_hint_and_leaves() {
+        let mut h = link_at(10.0, 20.0);
+        let t = Instant::now();
+        assert_eq!(
+            h.read(&InputCommand::Confirm(true), &cx(t, true)),
+            Reading::Taken
+        );
+        assert_eq!(
+            h.read(&InputCommand::Confirm(false), &cx(t, true)),
+            Reading::Click((10.0, 20.0))
+        );
+        assert!(!h.visible);
+    }
+
+    #[test]
+    fn a_hold_on_a_link_opens_it_in_the_background() {
+        let mut h = link_at(10.0, 20.0);
+        let t = Instant::now();
+        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        assert_eq!(
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            Reading::OpenInBackground("https://a.test/".to_string())
+        );
+        assert!(!h.visible);
+    }
+
+    #[test]
+    fn a_hold_on_a_button_still_clicks() {
+        let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
+        let t = Instant::now();
+        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        assert_eq!(
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            Reading::Click((10.0, 20.0))
+        );
+    }
+
+    #[test]
+    fn a_press_from_an_exited_round_is_no_hold() {
+        let t = Instant::now();
+        let mut h = link_at(10.0, 20.0);
+        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        h.read(&InputCommand::Cancel, &cx(t, true));
+        let link = Hint {
+            url: Some("https://a.test/".to_string()),
+            ..at(10.0, 20.0)
+        };
+        h.begin_collect(HintLabels::Gamepad);
+        h.show(vec![link], (0.0, 0.0), (0.0, 0.0));
+        assert_eq!(
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            Reading::Click((10.0, 20.0))
+        );
+    }
+
+    #[test]
+    fn b_drops_a_half_typed_combo_before_leaving() {
+        // 10 hints -> length-2 codes, so one X is a live prefix.
+        let mut h = shown(
+            &(0..10).map(|i| (i as f32, 0.0)).collect::<Vec<_>>(),
+            (0.0, 0.0),
+        );
+        let t = Instant::now();
+        assert_eq!(
+            h.read(&InputCommand::ToggleOsk, &cx(t, true)),
+            Reading::Taken
+        );
+        assert!(h.has_typed());
+        h.read(&InputCommand::Cancel, &cx(t, true));
+        assert!(h.visible && !h.has_typed());
+        h.read(&InputCommand::Cancel, &cx(t, true));
+        assert!(!h.visible);
+    }
+
+    #[test]
+    fn a_typed_letter_code_clicks_its_hint() {
+        let mut h = Hints::new();
+        h.begin_collect(HintLabels::Keyboard);
+        h.show(vec![at(10.0, 20.0)], (0.0, 0.0), (0.0, 0.0));
+        let Label::Key(c) = h.code(0)[0] else {
+            panic!("a keyboard round assigns letter codes");
+        };
+        assert_eq!(
+            h.read(&InputCommand::HintKey(c), &cx(Instant::now(), true)),
+            Reading::Click((10.0, 20.0))
+        );
+    }
+
+    #[test]
+    fn stale_rects_take_presses_without_clicking() {
+        // One hint: its code is the single symbol X.
+        let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
+        h.mark_stale();
+        let t = Instant::now();
+        assert_eq!(
+            h.read(&InputCommand::ToggleOsk, &cx(t, true)),
+            Reading::Taken
+        );
+        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        assert_eq!(
+            h.read(&InputCommand::Confirm(false), &cx(t, true)),
+            Reading::Taken
+        );
+        assert!(h.visible);
+    }
+
+    #[test]
+    fn nav_past_the_last_hint_down_scrolls_a_chunk() {
+        let mut h = shown(&[(100.0, 300.0)], (0.0, 0.0));
+        let reading = h.read(&InputCommand::Nav(0, 1), &cx(Instant::now(), true));
+        assert!(matches!(
+            reading,
+            Reading::Scroll { dy, at: (100.0, 300.0) } if dy > 0.0 && dy < 600.0
+        ));
+        assert!(h.is_stale());
+    }
+
+    #[test]
+    fn nav_past_the_last_hint_sideways_stays_put() {
+        let mut h = shown(&[(100.0, 300.0)], (0.0, 0.0));
+        let reading = h.read(&InputCommand::Nav(1, 0), &cx(Instant::now(), true));
+        assert_eq!(reading, Reading::Taken);
+        assert!(!h.is_stale());
+    }
+
+    #[test]
+    fn with_combos_off_x_and_shoulders_pass_to_the_page() {
+        let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
+        let off = cx(Instant::now(), false);
+        assert_eq!(h.read(&InputCommand::ToggleOsk, &off), Reading::Pass);
+        assert_eq!(h.read(&InputCommand::Shoulder(1), &off), Reading::Pass);
+        assert_eq!(h.read(&InputCommand::Hints, &off), Reading::Taken);
+        assert!(!h.visible);
     }
 }

@@ -48,10 +48,6 @@ pub struct App {
     /// Whether the last frame asked for the system keyboard.
     #[cfg(target_os = "android")]
     system_keyboard_up: bool,
-    /// When A/Enter went down on a hint, for the tap-vs-hold split (tap clicks
-    /// the hint, hold opens its link in a background tab). `None` when no press
-    /// is in flight over a hint.
-    hint_press_at: Option<Instant>,
     /// A bookmark with settings asked to be removed, by id, and when: a second
     /// ask while its notice shows removes it.
     bookmark_remove_armed: Option<(String, Instant)>,
@@ -220,7 +216,6 @@ impl App {
             last_download_page: None,
             #[cfg(target_os = "android")]
             system_keyboard_up: false,
-            hint_press_at: None,
             bookmark_remove_armed: None,
             config_dirty: false,
             applied_site: None,

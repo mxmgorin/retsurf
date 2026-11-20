@@ -7,7 +7,7 @@ use crate::{
     browser::AppBrowser,
     command::{AppCommand, SettingsAction},
     config::{AppConfig, OskStyle, PadLayout},
-    overlay::hints::{Hint, HintInput, HintLabels, Label, Sym},
+    overlay::hints::{Hint, HintLabels},
     overlay::osk::{OskCommand, OskTarget, PadInput, Reading},
 };
 use egui_sdl2::egui;
@@ -396,18 +396,6 @@ impl AppUi {
         // so the nearest-to-top hints get the shortest codes.
         let top_center = (self.webview_rect.width() / 2.0, 0.0);
         self.hints.show(rects, near, top_center);
-    }
-
-    /// Feed one gamepad combo symbol into hint mode (see [`HintInput`]).
-    #[inline]
-    pub fn hints_push_sym(&mut self, s: Sym) -> HintInput {
-        self.hints.push_label(Label::Sym(s))
-    }
-
-    /// Feed one typed keyboard letter into hint mode (see [`HintInput`]).
-    #[inline]
-    pub fn hints_push_key(&mut self, c: char) -> HintInput {
-        self.hints.push_label(Label::Key(c))
     }
 
     pub fn focus_address_bar(&mut self) {
