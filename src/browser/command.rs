@@ -123,7 +123,7 @@ impl AppBrowser {
             d if d > 0 => *ZOOM_LADDER
                 .iter()
                 .find(|z| **z > current + 0.005)
-                .unwrap_or(ZOOM_LADDER.last().unwrap()),
+                .unwrap_or(ZOOM_LADDER.last().expect("ZOOM_LADDER is non-empty")),
             _ => *ZOOM_LADDER
                 .iter()
                 .rev()

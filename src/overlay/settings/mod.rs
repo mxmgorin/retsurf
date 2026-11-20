@@ -81,7 +81,10 @@ impl SettingsSection {
     }
 
     fn index(self) -> usize {
-        Self::ALL.iter().position(|s| *s == self).unwrap()
+        Self::ALL
+            .iter()
+            .position(|s| *s == self)
+            .expect("ALL lists every section")
     }
 }
 

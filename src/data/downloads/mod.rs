@@ -257,10 +257,19 @@ impl Downloads {
             let Some(shared) = &d.shared else { continue };
             // Result first: the worker stores its last count before it, so a
             // finished entry reads the final size.
-            let result = shared.result.lock().unwrap().take();
+            let result = shared
+                .result
+                .lock()
+                .expect("no panics under this lock")
+                .take();
             d.received = shared.received.load(Ordering::Relaxed);
             d.total = shared.total.load(Ordering::Relaxed);
-            if let Some(path) = shared.path.lock().unwrap().take() {
+            if let Some(path) = shared
+                .path
+                .lock()
+                .expect("no panics under this lock")
+                .take()
+            {
                 d.filename = file_name_of(&path);
                 d.path = path;
             }
@@ -272,7 +281,11 @@ impl Downloads {
                     finished.push(Finished {
                         filename: d.filename.clone(),
                         error: result.clone().err(),
-                        page: shared.page.lock().unwrap().take(),
+                        page: shared
+                            .page
+                            .lock()
+                            .expect("no panics under this lock")
+                            .take(),
                     });
                 }
                 d.state = match result {

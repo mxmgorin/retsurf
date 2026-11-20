@@ -60,8 +60,9 @@ pub fn run_app() {
         app_config.performance.memory_profile,
     ));
 
-    let mut sdl = sdl2::init().unwrap();
-    let app = App::new(&mut sdl, app_config, args.local_site, args.kiosk).unwrap();
+    let mut sdl = sdl2::init().expect("Error initializing SDL");
+    let app = App::new(&mut sdl, app_config, args.local_site, args.kiosk)
+        .expect("Error initializing app");
 
     app.run(args.game_mode, args.open);
 }

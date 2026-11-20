@@ -14,6 +14,12 @@ homepage = "https://retsurf.app"
 [workspace]
 members = ["android/lib"]
 
+[workspace.lints.clippy]
+unwrap_used = "warn"
+
+[lints]
+workspace = true
+
 [lib]
 name = "retsurf"
 crate-type = ["lib"]

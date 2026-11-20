@@ -41,7 +41,10 @@ impl Section {
     }
 
     fn index(self) -> usize {
-        Section::ALL.iter().position(|s| *s == self).unwrap()
+        Section::ALL
+            .iter()
+            .position(|s| *s == self)
+            .expect("ALL lists every section")
     }
 }
 

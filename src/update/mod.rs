@@ -131,7 +131,10 @@ impl Updater {
     /// channel switch resets state to Idle so no stale offer from the old channel.
     pub fn set_config(&mut self, cfg: &UpdateConfig) {
         if self.channel != cfg.channel {
-            *self.state.lock().unwrap() = UpdateState::Idle;
+            *self
+                .state
+                .lock()
+                .expect("no update worker panics holding the state") = UpdateState::Idle;
         }
         self.channel = cfg.channel;
         self.auto_check = cfg.auto_check;
@@ -139,7 +142,10 @@ impl Updater {
 
     /// Snapshot the current state for the UI (lock, clone the small enum, release).
     pub fn snapshot(&self) -> UpdateState {
-        self.state.lock().unwrap().clone()
+        self.state
+            .lock()
+            .expect("no update worker panics holding the state")
+            .clone()
     }
 
     /// Whether the state moved since the last call.
@@ -156,7 +162,10 @@ impl Updater {
     /// kind (Manual just gets an "open the page" offer); a no-op while mid-flight.
     pub fn check(&self, sender: &UserEventSender) {
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self
+                .state
+                .lock()
+                .expect("no update worker panics holding the state");
             if matches!(
                 *state,
                 UpdateState::Checking | UpdateState::Downloading { .. } | UpdateState::Installing
@@ -219,7 +228,10 @@ impl Updater {
     /// valid from an [`Offer::Install`]; the manual "Download" path uses `OpenLink`.
     pub fn install(&self, sender: &UserEventSender) {
         let (version, url, sha256) = {
-            let state = self.state.lock().unwrap();
+            let state = self
+                .state
+                .lock()
+                .expect("no update worker panics holding the state");
             match &*state {
                 UpdateState::Available {
                     version,
@@ -240,7 +252,9 @@ impl Updater {
 
 /// Store a new state and wake the main loop so the About tab repaints.
 fn publish(state: &Mutex<UpdateState>, next: UpdateState, sender: &UserEventSender) {
-    *state.lock().unwrap() = next;
+    *state
+        .lock()
+        .expect("no update worker panics holding the state") = next;
     sender.send(UserEvent::UpdateProgress);
 }
 

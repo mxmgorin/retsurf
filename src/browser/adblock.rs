@@ -189,7 +189,7 @@ fn build_engine(lists: Vec<String>, cache: String, out: Arc<Mutex<Option<Vec<u8>
     if let Err(e) = std::fs::write(&cache, &dat) {
         log::warn!("adblock: could not write engine cache: {e}");
     }
-    *out.lock().unwrap() = Some(dat);
+    *out.lock().expect("no panics under this lock") = Some(dat);
 }
 
 fn fetch_list(url: &str) -> Result<String, String> {

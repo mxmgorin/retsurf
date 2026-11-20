@@ -103,7 +103,7 @@ fn finish(shared: &Shared, result: Result<(), String>, sender: &UserEventSender)
     if shared.done.swap(true, Ordering::Relaxed) {
         return;
     }
-    *shared.result.lock().unwrap() = Some(result);
+    *shared.result.lock().expect("no panics under this lock") = Some(result);
     sender.send(UserEvent::DownloadUpdate);
 }
 
@@ -151,12 +151,13 @@ fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), Str
     );
     // A `download` attribute asks for the file whatever it is.
     if job.suggested_name.is_none() && sent_a_page(response.headers(), &name) {
-        *shared.page.lock().unwrap() = Some(response.get_uri().to_string());
+        *shared.page.lock().expect("no panics under this lock") =
+            Some(response.get_uri().to_string());
         return Err("the site sent a web page instead".to_string());
     }
     let (path, part, file) = create_unique(&job.dir, &name)?;
     log::info!("downloading `{}` -> `{path}`", job.url);
-    *shared.path.lock().unwrap() = Some(path.clone());
+    *shared.path.lock().expect("no panics under this lock") = Some(path.clone());
     sender.send(UserEvent::DownloadUpdate);
 
     let reader = response.into_body().into_reader();
@@ -174,7 +175,7 @@ fn fetch(job: &Job, shared: &Shared, sender: &UserEventSender) -> Result<(), Str
     }
     if job.publish {
         shared.saved.store(true, Ordering::Relaxed);
-        *shared.path.lock().unwrap() = Some(super::hand_off(path));
+        *shared.path.lock().expect("no panics under this lock") = Some(super::hand_off(path));
     }
     Ok(())
 }
