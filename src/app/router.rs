@@ -11,6 +11,7 @@ use crate::browser::BrowserCommand;
 use crate::command::Analog;
 use crate::event::game::input_map::ClickButton;
 use crate::event::gamepad::cursor_curve;
+use crate::event::nav_repeat::Pace;
 use crate::overlay::hints;
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::ui::Focus;
@@ -371,6 +372,11 @@ impl App {
             cfg.edge_scroll,
         );
         let (deadzone, curve) = (cfg.deadzone, cfg.cursor_curve);
+        let pace = Pace {
+            threshold: nav_threshold,
+            initial: Duration::from_millis(cfg.osk_nav_initial_delay_ms),
+            repeat: Duration::from_millis(cfg.osk_nav_repeat_ms),
+        };
 
         // The right stick carries the keyboard at cursor speed, and scrolls the
         // page once it is pinned against an edge.
@@ -396,9 +402,8 @@ impl App {
             } else {
                 aim
             };
-            let dir = osk_nav_dir(nav_vec, nav_threshold);
-            if self.nav_repeat(dir, now) && dir != (0, 0) {
-                out.push(AppCommand::Input(InputCommand::Nav(dir.0, dir.1)));
+            if let Some((dx, dy)) = self.nav_repeat.step(nav_vec, &pace, now) {
+                out.push(AppCommand::Input(InputCommand::Nav(dx, dy)));
             }
             // In hint mode the right stick still scrolls the page; the scroll
             // itself schedules the re-collect its movement calls for.
@@ -468,36 +473,5 @@ impl App {
         self.ui
             .scroll_page(&self.browser, dx, dy, width / 2.0, height / 2.0);
         self.ui.set_edge_scroll(dir);
-    }
-
-    /// Auto-repeat gate for held-stick overlay navigation: latches the direction
-    /// and paces repeats, returning `true` on the frames a step should fire.
-    fn nav_repeat(&mut self, dir: (i32, i32), now: Instant) -> bool {
-        let cfg = &self.config.controls;
-        if dir != self.osk_nav_dir {
-            self.osk_nav_dir = dir;
-            if dir != (0, 0) {
-                self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_initial_delay_ms);
-                return true;
-            }
-            return false;
-        }
-        if dir != (0, 0) && now >= self.osk_nav_next {
-            self.osk_nav_next = now + Duration::from_millis(cfg.osk_nav_repeat_ms);
-            return true;
-        }
-        false
-    }
-}
-
-/// Reduce a stick vector to a single discrete grid step along its dominant axis,
-/// or `(0, 0)` when the stick is within the navigation dead zone (`threshold`).
-fn osk_nav_dir(v: (f32, f32), threshold: f32) -> (i32, i32) {
-    if v.0.abs().max(v.1.abs()) < threshold {
-        (0, 0)
-    } else if v.0.abs() >= v.1.abs() {
-        (v.0.signum() as i32, 0)
-    } else {
-        (0, v.1.signum() as i32)
     }
 }

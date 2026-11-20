@@ -15,6 +15,7 @@ use crate::command::{
 use crate::browser::{AppBrowser, Favicon, LocalSite};
 use crate::data::{page_icons, session::Session};
 use crate::event::handler::AppEventHandler;
+use crate::event::nav_repeat::NavRepeat;
 use crate::event::user::UserEventSender;
 use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
@@ -36,9 +37,8 @@ pub struct App {
     event_sender: UserEventSender,
     /// Router timing for analog motion (cursor-speed integration).
     last_tick: Instant,
-    /// Keyboard grid-navigation auto-repeat: latched direction and next fire time.
-    osk_nav_dir: (i32, i32),
-    osk_nav_next: Instant,
+    /// Held-stick steps over an overlay.
+    nav_repeat: NavRepeat,
     /// `[osk] auto_show` state: a text field focused last frame, and a page tap
     /// waiting out [`OSK_TAP_SETTLE`].
     osk_field_focused: bool,
@@ -209,8 +209,7 @@ impl App {
             event_sender,
             running: false,
             last_tick: Instant::now(),
-            osk_nav_dir: (0, 0),
-            osk_nav_next: Instant::now(),
+            nav_repeat: NavRepeat::new(),
             osk_field_focused: false,
             osk_tap_at: None,
             last_download_page: None,

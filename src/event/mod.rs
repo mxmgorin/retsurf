@@ -9,6 +9,7 @@ pub mod gamepad;
 pub mod gamepad_api;
 pub mod handler;
 pub mod keyboard;
+pub mod nav_repeat;
 pub(crate) mod sdl2_servo;
 pub mod touch;
 pub mod user;
