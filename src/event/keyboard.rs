@@ -210,7 +210,7 @@ fn on_key_down(
         let modified = key
             .keymod
             .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD);
-        if ui.hints.is_keyboard() && ui.hint_badges() && !key.repeat && !modified {
+        if ui.hints.is_keyboard() && ui.hints.badges && !key.repeat && !modified {
             if let Some(c) = letter_of(key.kc) {
                 commands.push(AppCommand::Input(InputCommand::HintKey(c)));
                 return;

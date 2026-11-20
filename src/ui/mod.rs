@@ -370,8 +370,6 @@ pub struct AppUi {
     pub prompt: Prompt,
     /// Per-axis direction the cursor is edge-scrolling, `(0, 0)` when not.
     edge_scroll: (i8, i8),
-    /// Whether hint mode draws combo badges; off = plain spatial hops.
-    hint_badges: bool,
     /// `[interface] button_hints`: what the buttons do, named under the menus.
     button_hints: bool,
     /// Which letters and colours the face buttons wear on screen.
@@ -460,10 +458,9 @@ impl AppUi {
             home_pad: false,
             banner: home::banner(),
             about_icon: settings::about_icon(),
-            hints: Hints::new(),
+            hints: Hints::new(controls.hint_badges),
             prompt: Prompt::new(),
             edge_scroll: (0, 0),
-            hint_badges: controls.hint_badges,
             button_hints: interface.button_hints,
             pad_layout: controls.pad_layout,
             last_input_keyboard: false,
@@ -1120,7 +1117,7 @@ impl AppUi {
                     // Rects the page has scrolled out from under are left
                     // undrawn: a badge would mark whatever took that place.
                     if !self.hints.is_stale() {
-                        let badges = self.hint_badges.then_some(face);
+                        let badges = self.hints.badges.then_some(face);
                         hints::add_hints(ctx, &self.hints, self.webview_rect, badges);
                     }
                 } else if cursor_visible.is_some()

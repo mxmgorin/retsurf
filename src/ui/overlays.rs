@@ -329,20 +329,6 @@ impl AppUi {
         }
     }
 
-    /// Whether hint mode draws combo badges (the app calls this on a live config
-    /// change). When off, hint mode is plain spatial hopping.
-    #[inline]
-    pub fn set_hint_badges(&mut self, on: bool) {
-        self.hint_badges = on;
-    }
-
-    /// Whether hint-mode combo badges are enabled (the router gates typed input
-    /// on the same flag).
-    #[inline]
-    pub fn hint_badges(&self) -> bool {
-        self.hint_badges
-    }
-
     /// The event handler notes which device produced the latest input, so hint
     /// mode can pick its badge alphabet (typed letters vs gamepad combos) when it
     /// opens. `true` = keyboard.

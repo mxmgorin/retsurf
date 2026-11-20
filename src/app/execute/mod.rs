@@ -536,7 +536,7 @@ impl App {
         self.ui.set_game_cursor(self.config.game_mode.view.cursor);
         self.ui
             .set_toolbar_autohide(self.config.interface.toolbar_autohide);
-        self.ui.set_hint_badges(self.config.controls.hint_badges);
+        self.ui.hints.badges = self.config.controls.hint_badges;
         self.ui.set_page_icons(self.config.interface.page_icons);
         self.ui.set_button_hints(self.config.interface.button_hints);
         self.ui.set_tab_layout(self.config.interface.tab_layout);

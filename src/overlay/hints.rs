@@ -37,8 +37,6 @@ pub enum Reading {
 
 /// The app state [`Hints::read`] consults.
 pub struct Context {
-    /// Whether presses type combo codes (`[controls] hint_badges`).
-    pub badges: bool,
     /// How long A/Enter is held to open a link in the background.
     pub hold: Duration,
     pub now: Instant,
@@ -142,6 +140,8 @@ pub enum HintInput {
 
 pub struct Hints {
     pub visible: bool,
+    /// Whether hint mode draws combo badges; off = plain spatial hops.
+    pub badges: bool,
     hints: Vec<Hint>,
     selected: usize,
     /// Whether a collection round is expected (L3 pressed, or a post-scroll
@@ -168,9 +168,10 @@ pub struct Hints {
 }
 
 impl Hints {
-    pub fn new() -> Self {
+    pub fn new(badges: bool) -> Self {
         Self {
             visible: false,
+            badges,
             hints: vec![],
             selected: 0,
             collecting: false,
@@ -253,20 +254,20 @@ impl Hints {
             InputCommand::Nav(dx, dy) => self.nav((*dx, *dy), cx),
             // With combos on, X, Y, L1/R1 and the D-pad type symbols; with them
             // off, Y leaves hint mode and the rest pass to the page.
-            InputCommand::ToggleOsk if cx.badges => self.push(Label::Sym(Sym::X)),
-            InputCommand::Hints if cx.badges => self.push(Label::Sym(Sym::Y)),
+            InputCommand::ToggleOsk if self.badges => self.push(Label::Sym(Sym::X)),
+            InputCommand::Hints if self.badges => self.push(Label::Sym(Sym::Y)),
             InputCommand::Hints => {
                 self.hide();
                 Reading::Taken
             }
-            InputCommand::Shoulder(delta) if cx.badges => {
+            InputCommand::Shoulder(delta) if self.badges => {
                 self.push(Label::Sym(if *delta < 0 { Sym::L1 } else { Sym::R1 }))
             }
-            InputCommand::DpadPress(dx, dy) if cx.badges => match dpad_sym(*dx, *dy) {
+            InputCommand::DpadPress(dx, dy) if self.badges => match dpad_sym(*dx, *dy) {
                 Some(sym) => self.push(Label::Sym(sym)),
                 None => Reading::Taken,
             },
-            InputCommand::HintKey(c) if cx.badges => self.push(Label::Key(*c)),
+            InputCommand::HintKey(c) if self.badges => self.push(Label::Key(*c)),
             InputCommand::ToggleOsk
             | InputCommand::Shoulder(_)
             | InputCommand::DpadPress(..)
@@ -594,7 +595,7 @@ mod tests {
     }
 
     fn shown(centers: &[(f32, f32)], anchor: (f32, f32)) -> Hints {
-        let mut h = Hints::new();
+        let mut h = Hints::new(true);
         h.begin_collect(HintLabels::Gamepad);
         let hints = centers.iter().map(|&(x, y)| at(x, y)).collect();
         h.show(hints, anchor, anchor);
@@ -719,9 +720,8 @@ mod tests {
 
     const HOLD: Duration = Duration::from_millis(500);
 
-    fn cx(now: Instant, badges: bool) -> Context {
+    fn cx(now: Instant) -> Context {
         Context {
-            badges,
             hold: HOLD,
             now,
             area: (800.0, 600.0),
@@ -730,7 +730,7 @@ mod tests {
     }
 
     fn link_at(x: f32, y: f32) -> Hints {
-        let mut h = Hints::new();
+        let mut h = Hints::new(true);
         h.begin_collect(HintLabels::Gamepad);
         let link = Hint {
             url: Some("https://a.test/".to_string()),
@@ -744,12 +744,9 @@ mod tests {
     fn a_tap_clicks_the_selected_hint_and_leaves() {
         let mut h = link_at(10.0, 20.0);
         let t = Instant::now();
+        assert_eq!(h.read(&InputCommand::Confirm(true), &cx(t)), Reading::Taken);
         assert_eq!(
-            h.read(&InputCommand::Confirm(true), &cx(t, true)),
-            Reading::Taken
-        );
-        assert_eq!(
-            h.read(&InputCommand::Confirm(false), &cx(t, true)),
+            h.read(&InputCommand::Confirm(false), &cx(t)),
             Reading::Click((10.0, 20.0))
         );
         assert!(!h.visible);
@@ -759,9 +756,9 @@ mod tests {
     fn a_hold_on_a_link_opens_it_in_the_background() {
         let mut h = link_at(10.0, 20.0);
         let t = Instant::now();
-        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        h.read(&InputCommand::Confirm(true), &cx(t));
         assert_eq!(
-            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD)),
             Reading::OpenInBackground("https://a.test/".to_string())
         );
         assert!(!h.visible);
@@ -771,9 +768,9 @@ mod tests {
     fn a_hold_on_a_button_still_clicks() {
         let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
         let t = Instant::now();
-        h.read(&InputCommand::Confirm(true), &cx(t, true));
+        h.read(&InputCommand::Confirm(true), &cx(t));
         assert_eq!(
-            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD)),
             Reading::Click((10.0, 20.0))
         );
     }
@@ -782,8 +779,8 @@ mod tests {
     fn a_press_from_an_exited_round_is_no_hold() {
         let t = Instant::now();
         let mut h = link_at(10.0, 20.0);
-        h.read(&InputCommand::Confirm(true), &cx(t, true));
-        h.read(&InputCommand::Cancel, &cx(t, true));
+        h.read(&InputCommand::Confirm(true), &cx(t));
+        h.read(&InputCommand::Cancel, &cx(t));
         let link = Hint {
             url: Some("https://a.test/".to_string()),
             ..at(10.0, 20.0)
@@ -791,7 +788,7 @@ mod tests {
         h.begin_collect(HintLabels::Gamepad);
         h.show(vec![link], (0.0, 0.0), (0.0, 0.0));
         assert_eq!(
-            h.read(&InputCommand::Confirm(false), &cx(t + HOLD, true)),
+            h.read(&InputCommand::Confirm(false), &cx(t + HOLD)),
             Reading::Click((10.0, 20.0))
         );
     }
@@ -804,27 +801,24 @@ mod tests {
             (0.0, 0.0),
         );
         let t = Instant::now();
-        assert_eq!(
-            h.read(&InputCommand::ToggleOsk, &cx(t, true)),
-            Reading::Taken
-        );
+        assert_eq!(h.read(&InputCommand::ToggleOsk, &cx(t)), Reading::Taken);
         assert!(h.has_typed());
-        h.read(&InputCommand::Cancel, &cx(t, true));
+        h.read(&InputCommand::Cancel, &cx(t));
         assert!(h.visible && !h.has_typed());
-        h.read(&InputCommand::Cancel, &cx(t, true));
+        h.read(&InputCommand::Cancel, &cx(t));
         assert!(!h.visible);
     }
 
     #[test]
     fn a_typed_letter_code_clicks_its_hint() {
-        let mut h = Hints::new();
+        let mut h = Hints::new(true);
         h.begin_collect(HintLabels::Keyboard);
         h.show(vec![at(10.0, 20.0)], (0.0, 0.0), (0.0, 0.0));
         let Label::Key(c) = h.code(0)[0] else {
             panic!("a keyboard round assigns letter codes");
         };
         assert_eq!(
-            h.read(&InputCommand::HintKey(c), &cx(Instant::now(), true)),
+            h.read(&InputCommand::HintKey(c), &cx(Instant::now())),
             Reading::Click((10.0, 20.0))
         );
     }
@@ -835,13 +829,10 @@ mod tests {
         let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
         h.mark_stale();
         let t = Instant::now();
+        assert_eq!(h.read(&InputCommand::ToggleOsk, &cx(t)), Reading::Taken);
+        h.read(&InputCommand::Confirm(true), &cx(t));
         assert_eq!(
-            h.read(&InputCommand::ToggleOsk, &cx(t, true)),
-            Reading::Taken
-        );
-        h.read(&InputCommand::Confirm(true), &cx(t, true));
-        assert_eq!(
-            h.read(&InputCommand::Confirm(false), &cx(t, true)),
+            h.read(&InputCommand::Confirm(false), &cx(t)),
             Reading::Taken
         );
         assert!(h.visible);
@@ -850,7 +841,7 @@ mod tests {
     #[test]
     fn nav_past_the_last_hint_down_scrolls_a_chunk() {
         let mut h = shown(&[(100.0, 300.0)], (0.0, 0.0));
-        let reading = h.read(&InputCommand::Nav(0, 1), &cx(Instant::now(), true));
+        let reading = h.read(&InputCommand::Nav(0, 1), &cx(Instant::now()));
         assert!(matches!(
             reading,
             Reading::Scroll { dy, at: (100.0, 300.0) } if dy > 0.0 && dy < 600.0
@@ -861,7 +852,7 @@ mod tests {
     #[test]
     fn nav_past_the_last_hint_sideways_stays_put() {
         let mut h = shown(&[(100.0, 300.0)], (0.0, 0.0));
-        let reading = h.read(&InputCommand::Nav(1, 0), &cx(Instant::now(), true));
+        let reading = h.read(&InputCommand::Nav(1, 0), &cx(Instant::now()));
         assert_eq!(reading, Reading::Taken);
         assert!(!h.is_stale());
     }
@@ -869,10 +860,11 @@ mod tests {
     #[test]
     fn with_combos_off_x_and_shoulders_pass_to_the_page() {
         let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
-        let off = cx(Instant::now(), false);
-        assert_eq!(h.read(&InputCommand::ToggleOsk, &off), Reading::Pass);
-        assert_eq!(h.read(&InputCommand::Shoulder(1), &off), Reading::Pass);
-        assert_eq!(h.read(&InputCommand::Hints, &off), Reading::Taken);
+        h.badges = false;
+        let ctx = cx(Instant::now());
+        assert_eq!(h.read(&InputCommand::ToggleOsk, &ctx), Reading::Pass);
+        assert_eq!(h.read(&InputCommand::Shoulder(1), &ctx), Reading::Pass);
+        assert_eq!(h.read(&InputCommand::Hints, &ctx), Reading::Taken);
         assert!(!h.visible);
     }
 }

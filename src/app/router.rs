@@ -301,10 +301,8 @@ impl App {
     /// Offer hint mode an input intent and carry out what it asks; whether it
     /// took it.
     fn hints_input(&mut self, command: &InputCommand) -> bool {
-        let controls = &self.config.controls;
         let cx = hints::Context {
-            badges: controls.hint_badges,
-            hold: Duration::from_millis(controls.hold_ms),
+            hold: Duration::from_millis(self.config.controls.hold_ms),
             now: Instant::now(),
             area: (self.ui.browser_area_width(), self.ui.browser_area_height()),
             cursor: self.ui.cursor_browser_rel(),
@@ -366,11 +364,10 @@ impl App {
         // Scalar copies: the config holds non-Copy data (the bindings map), so
         // it can't be borrowed across the `&mut self` calls below.
         let cfg = &self.config.controls;
-        let (cursor_speed, scroll_speed, nav_threshold, hint_badges, edge_scroll) = (
+        let (cursor_speed, scroll_speed, nav_threshold, edge_scroll) = (
             cfg.cursor_speed,
             cfg.scroll_speed,
             cfg.osk_nav_threshold,
-            cfg.hint_badges,
             cfg.edge_scroll,
         );
         let (deadzone, curve) = (cfg.deadzone, cfg.cursor_curve);
@@ -394,7 +391,7 @@ impl App {
         if self.ui.focus() != Focus::Page {
             // Hint mode with combos on hops on the stick alone: the D-pad is
             // reserved for combo symbols, so it must not also drive a hop.
-            let nav_vec = if self.ui.focus() == Focus::Hints && hint_badges {
+            let nav_vec = if self.ui.focus() == Focus::Hints && self.ui.hints.badges {
                 stick
             } else {
                 aim
