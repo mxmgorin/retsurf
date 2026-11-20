@@ -196,8 +196,9 @@ impl AppEventHandler {
 
         for id in 0..game_controller_subsystem.num_joysticks()? {
             if game_controller_subsystem.is_game_controller(id) {
-                let controller = game_controller_subsystem.open(id).unwrap();
-                game_controllers.push(controller);
+                if let Ok(controller) = game_controller_subsystem.open(id) {
+                    game_controllers.push(controller);
+                }
             }
         }
 
