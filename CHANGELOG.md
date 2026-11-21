@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `[controls]` keys renamed, old values reset to defaults: `osk_nav_threshold` is `nav_threshold`, `osk_nav_initial_delay_ms` is `nav_initial_delay_ms`, `osk_nav_repeat_ms` is `nav_repeat_ms`
+- Settings > Controls: Stick threshold, Repeat delay and Repeat rate are in their own Navigation group
 
 ## [0.11.0] - 2026-11-18
 
