@@ -1,11 +1,11 @@
-//! Toasts: a one-line notice over the page for something that happened with no
+//! Toasts: a one-line message over the page for something that happened with no
 //! visible effect of its own, gone again after a moment. One at a time; a new
 //! one replaces whatever is up. Every toast is a pill at the bottom centre: an
 //! icon, then words and key caps, fading out at the end of its time.
 
 use super::theme::{palette, ROW_FONT};
 use super::AppUi;
-use crate::browser::BrowserNotice;
+use crate::browser::BrowserToast;
 use crate::config::ToolbarPosition;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
@@ -22,14 +22,14 @@ pub(super) const FADE: Duration = Duration::from_millis(400);
 
 /// What a toast says: an icon, then words and key caps in reading order.
 #[derive(Clone, PartialEq, Debug)]
-pub struct Notice {
+pub struct Toast {
     icon: &'static str,
     /// Something went wrong or was refused, which the icon's colour says.
     warn: bool,
     pub(super) parts: Vec<Part>,
 }
 
-/// One run of a [`Notice`]'s line.
+/// One run of a [`Toast`]'s line.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Part {
     Text(String),
@@ -37,7 +37,7 @@ pub enum Part {
     Key(String),
 }
 
-impl Notice {
+impl Toast {
     /// `text` after `icon`.
     pub fn new(icon: &'static str, text: impl Into<String>) -> Self {
         Self::parts(icon, vec![Part::Text(text.into())])
@@ -62,8 +62,8 @@ impl Notice {
     }
 }
 
-pub(super) struct Toast {
-    notice: Notice,
+pub(super) struct ShownToast {
+    toast: Toast,
     until: Instant,
     /// Not drawn yet. A toast raised outside input needs forced passes of its
     /// own, or its first sizing frame is the only one it gets.
@@ -71,17 +71,17 @@ pub(super) struct Toast {
 }
 
 impl AppUi {
-    /// Show `notice` for [`TOAST`].
-    pub fn toast(&mut self, notice: Notice) {
-        self.toast_for(notice, TOAST);
+    /// Show `toast` for [`TOAST`].
+    pub fn toast(&mut self, toast: Toast) {
+        self.toast_for(toast, TOAST);
     }
 
-    pub fn toast_for(&mut self, notice: Notice, shown: Duration) {
+    pub fn toast_for(&mut self, toast: Toast, shown: Duration) {
         if self.kiosk {
             return;
         }
-        self.toast = Some(Toast {
-            notice,
+        self.toast = Some(ShownToast {
+            toast,
             until: Instant::now() + shown,
             fresh: true,
         });
@@ -105,7 +105,7 @@ impl AppUi {
     /// whatever holds the bottom edge (a bottom toolbar, the keyboard).
     /// Returns whether a toast was drawn.
     pub(super) fn add_toast(&self, ctx: &egui::Context) -> bool {
-        let (Some(toast), Some(left)) = (self.toast.as_ref(), self.toast_visible_for()) else {
+        let (Some(shown), Some(left)) = (self.toast.as_ref(), self.toast_visible_for()) else {
             return false;
         };
         // One layer fades at a time: translucent content over a translucent pill
@@ -130,14 +130,14 @@ impl AppUi {
             .interactable(false)
             .show(ctx, |ui| {
                 ui.set_opacity(pill);
-                add_pill(ui, &toast.notice, content);
+                add_pill(ui, &shown.toast, content);
             });
         true
     }
 }
 
 /// The pill with its line drawn at `content` opacity over it.
-fn add_pill(ui: &mut egui::Ui, notice: &Notice, content: f32) {
+fn add_pill(ui: &mut egui::Ui, toast: &Toast, content: f32) {
     egui::Frame::new()
         .fill(palette().panel_fill)
         .stroke(egui::Stroke::new(1.0, palette().border))
@@ -147,13 +147,13 @@ fn add_pill(ui: &mut egui::Ui, notice: &Notice, content: f32) {
             ui.multiply_opacity(content);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                let tint = if notice.warn {
+                let tint = if toast.warn {
                     palette().warn
                 } else {
                     palette().accent
                 };
-                ui.label(egui::RichText::new(notice.icon).color(tint).size(ROW_FONT));
-                for part in &notice.parts {
+                ui.label(egui::RichText::new(toast.icon).color(tint).size(ROW_FONT));
+                for part in &toast.parts {
                     match part {
                         Part::Text(text) => {
                             let text = egui::RichText::new(text)
@@ -168,13 +168,13 @@ fn add_pill(ui: &mut egui::Ui, notice: &Notice, content: f32) {
         });
 }
 
-/// How a [`BrowserNotice`] reads on screen.
-pub fn browser_notice(notice: BrowserNotice) -> Notice {
-    Notice::warn(match notice {
-        BrowserNotice::OldestTabClosed { cap } => {
+/// How a [`BrowserToast`] reads on screen.
+pub fn browser_toast(toast: BrowserToast) -> Toast {
+    Toast::warn(match toast {
+        BrowserToast::OldestTabClosed { cap } => {
             format!("Tab limit ({cap}): closed the oldest tab")
         }
-        BrowserNotice::PopupRefused { cap } => {
+        BrowserToast::PopupRefused { cap } => {
             format!("Tab limit ({cap}): the page could not open a tab")
         }
     })

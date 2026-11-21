@@ -85,7 +85,7 @@ const WEBGL_TEXTURE_UNITS_JS: &str = include_str!("assets/webgl_texture_units.js
 
 /// Something the browser did on its own that the user should hear about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BrowserNotice {
+pub enum BrowserToast {
     /// Opening a tab past the cap closed the oldest one not in view.
     OldestTabClosed { cap: usize },
     /// A page asked for a new tab at the cap and was refused.
@@ -252,7 +252,7 @@ struct AppBrowserInner {
     /// Page icons that arrived since the last drain, with the URL of the page
     /// that named them.
     new_icons: FrameQueue<(String, Favicon)>,
-    notices: FrameQueue<BrowserNotice>,
+    toasts: FrameQueue<BrowserToast>,
     /// Download navigations denied by [`delegate`], drained once per frame.
     download_requests: FrameQueue<DownloadRequest>,
     /// Webviews whose page signalled a captured blob download (see
@@ -418,7 +418,7 @@ impl AppBrowserInner {
             visited: FrameQueue::silent(event_sender.clone()),
             titled: FrameQueue::silent(event_sender.clone()),
             new_icons: FrameQueue::silent(event_sender.clone()),
-            notices: FrameQueue::new(UserEvent::BrowserFrameReady, event_sender.clone()),
+            toasts: FrameQueue::new(UserEvent::BrowserFrameReady, event_sender.clone()),
             download_requests: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_pings: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
             blob_downloads: FrameQueue::new(UserEvent::DownloadUpdate, event_sender.clone()),
@@ -765,10 +765,10 @@ impl AppBrowser {
         self.inner.titled.take()
     }
 
-    /// Take and clear the notices raised since the last call.
+    /// Take and clear the toasts raised since the last call.
     #[inline]
-    pub fn take_notices(&self) -> Vec<BrowserNotice> {
-        self.inner.notices.take()
+    pub fn take_toasts(&self) -> Vec<BrowserToast> {
+        self.inner.toasts.take()
     }
 
     /// Take and clear the page icons that arrived since the last call, each

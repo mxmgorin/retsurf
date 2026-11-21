@@ -37,7 +37,7 @@ pub use self::game_mode::game_mode_hint;
 pub use self::labels::{bookmark_label, site_label};
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
-pub use self::toast::{browser_notice, Notice, TOAST};
+pub use self::toast::{browser_toast, Toast, TOAST};
 
 use crate::{
     browser::{AppBrowser, Favicon},
@@ -293,8 +293,8 @@ pub struct AppUi {
     shader_resolution: crate::config::ShaderResolution,
     /// Last browser viewport size (physical px) we requested, to avoid churn.
     browser_viewport: (u32, u32),
-    /// The notice on screen, if any (see [`toast`]).
-    toast: Option<toast::Toast>,
+    /// The toast on screen, if any (see [`toast`]).
+    toast: Option<toast::ShownToast>,
     /// The toolbar's downloads button (see [`download_chip`]).
     download_chip: download_chip::DownloadChip,
     /// What the frame last built, and the one last drawn, show of the indicators.

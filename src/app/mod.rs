@@ -20,7 +20,7 @@ use crate::event::user::UserEventSender;
 use crate::overlay::osk::auto_show::{self, AutoShow};
 use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
-use crate::ui::{AppUi, Notice};
+use crate::ui::{AppUi, Toast};
 use crate::{config::AppConfig, platform::window::AppWindow};
 use egui_phosphor::bold;
 use sdl2::Sdl;
@@ -48,7 +48,7 @@ pub struct App {
     #[cfg(target_os = "android")]
     system_keyboard_up: bool,
     /// A bookmark with settings asked to be removed, by id, and when: a second
-    /// ask while its notice shows removes it.
+    /// ask while its toast shows removes it.
     bookmark_remove_armed: Option<(String, Instant)>,
     /// The config changed by a press and not yet written: the flush writes
     /// it, so a run of presses costs one write.
@@ -307,8 +307,8 @@ impl App {
             for (url, icon) in self.browser.take_new_icons() {
                 self.store_page_icon(&url, &icon);
             }
-            for notice in self.browser.take_notices() {
-                self.ui.toast(crate::ui::browser_notice(notice));
+            for toast in self.browser.take_toasts() {
+                self.ui.toast(crate::ui::browser_toast(toast));
             }
 
             // A closed document leaves its memory with the allocator rather than
@@ -391,7 +391,7 @@ impl App {
                     Some(failed) => self.ui.download_finished(&failed),
                     None => self
                         .ui
-                        .toast(Notice::new(bold::DOWNLOAD_SIMPLE, "Download started")),
+                        .toast(Toast::new(bold::DOWNLOAD_SIMPLE, "Download started")),
                 }
             }
             // Rumble a page asked for, played here because the main loop owns
@@ -551,14 +551,14 @@ impl App {
             .as_ref()
             .is_some_and(|(last, at)| last == url && at.elapsed() < DOWNLOAD_PAGE_LOOP);
         if looping {
-            self.ui.toast(Notice::warn(
+            self.ui.toast(Toast::warn(
                 "The site sent a page again instead of the file",
             ));
             return;
         }
         self.last_download_page = Some((url.to_string(), Instant::now()));
         self.browser.load_page(url);
-        self.ui.toast(Notice::new(
+        self.ui.toast(Toast::new(
             bold::GLOBE_SIMPLE,
             "The site sent a page instead of the file",
         ));

@@ -19,7 +19,7 @@ use crate::overlay::hub::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, Task};
 use crate::overlay::update_notice::Choice;
-use crate::ui::{Focus, Notice};
+use crate::ui::{Focus, Toast};
 use crate::update::UpdateState;
 use egui_phosphor::bold;
 use std::time::Instant;
@@ -60,7 +60,7 @@ impl App {
             AppCommand::FocusAddressBar => self.focus_address_bar(out),
             AppCommand::CloseTab => {
                 self.close_tab_at(self.browser.active_tab());
-                self.ui.toast(Notice::new(bold::X, "Tab closed"));
+                self.ui.toast(Toast::new(bold::X, "Tab closed"));
             }
             AppCommand::QuickAccess(action) => self.quick_access_action(action, out),
             AppCommand::GameInputMaps(action) => self.input_maps_action(action, out),
@@ -167,7 +167,7 @@ impl App {
         }
         if self.browser.launched().is_some() && self.ui.hub.is_bookmarked(&url) {
             self.ui
-                .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+                .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
             return;
         }
         self.toggle_bookmark(&url);
@@ -210,11 +210,11 @@ impl App {
         };
         self.ui.hub.bookmarks.add(url, name, launch);
         self.ui
-            .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+            .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
     }
 
     /// Remove the bookmark at `index`. One with settings or tags takes a second
-    /// ask while the first one's notice shows.
+    /// ask while the first one's toast shows.
     fn remove_bookmark(&mut self, index: usize) {
         let Some(bookmark) = self.ui.hub.bookmarks.all().get(index) else {
             return;
@@ -225,7 +225,7 @@ impl App {
             .is_some_and(|(id, at)| id == bookmark.id && at.elapsed() < crate::ui::TOAST);
         if bookmark.has_settings() && !confirmed {
             self.bookmark_remove_armed = Some((bookmark.id.clone(), Instant::now()));
-            self.ui.toast(Notice::new(
+            self.ui.toast(Toast::new(
                 bold::BOOKMARK_SIMPLE,
                 "Press again to remove it and its settings",
             ));
@@ -238,7 +238,7 @@ impl App {
     fn drop_bookmark(&mut self, index: usize) {
         self.ui.hub.bookmarks.remove(index);
         self.ui
-            .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));
+            .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));
     }
 
     /// Open the highlighted Hub entry (the **A** button / Enter). In Tabs this
@@ -402,8 +402,7 @@ impl App {
                 #[cfg(target_os = "android")]
                 Task::ShareLogs => {
                     if !crate::platform::android::share_logs() {
-                        self.ui
-                            .toast(Notice::warn("Could not open the share sheet"));
+                        self.ui.toast(Toast::warn("Could not open the share sheet"));
                     }
                 }
             }
@@ -414,7 +413,7 @@ impl App {
         }
     }
 
-    /// Press a notice button; Install and Retry keep the card up to follow the
+    /// Press an update notice button; Install and Retry keep the card up to follow the
     /// work they start.
     fn update_notice_action(&mut self, action: &UpdateNoticeAction, out: &mut Vec<AppCommand>) {
         let state = self.ui.update.snapshot();
@@ -452,7 +451,7 @@ impl App {
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.home.page);
         self.ui
-            .toast(Notice::new(bold::CHECK, "Browsing data cleared"));
+            .toast(Toast::new(bold::CHECK, "Browsing data cleared"));
         log::info!("cleared browsing data");
     }
 
@@ -465,7 +464,7 @@ impl App {
         if self.site_base.is_some() {
             self.site_base = Some(overlay::site_part(&AppConfig::default()));
         }
-        self.ui.toast(Notice::new(bold::CHECK, "Defaults restored"));
+        self.ui.toast(Toast::new(bold::CHECK, "Defaults restored"));
         log::info!("restored default settings and bindings");
     }
 
@@ -620,8 +619,8 @@ impl App {
                 let sort = self.config.home.bookmarks.sort.step(*delta);
                 self.set_home_view(|view| view.sort = sort);
                 // Nothing on the page names the order; the strip and Settings do.
-                let notice = Notice::new(bold::SORT_ASCENDING, format!("Sort: {}", sort.label()));
-                self.ui.toast(notice);
+                let toast = Toast::new(bold::SORT_ASCENDING, format!("Sort: {}", sort.label()));
+                self.ui.toast(toast);
             }
         }
     }
@@ -652,7 +651,7 @@ impl App {
             Some(true) => self.ui.hub.close(),
             Some(false) => {
                 let name = path.rsplit('/').next().unwrap_or(&path);
-                self.ui.toast(Notice::warn(format!("No app opens {name}")));
+                self.ui.toast(Toast::warn(format!("No app opens {name}")));
             }
             None => {
                 if let Some(url) = crate::data::downloads::file_url(&path) {

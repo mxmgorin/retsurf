@@ -6,7 +6,7 @@
 use super::App;
 use crate::browser::HOME_URL;
 use crate::data::session::TabInfo;
-use crate::ui::Notice;
+use crate::ui::Toast;
 use servo::profile_traits::mem::MemoryReportResult;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -78,7 +78,7 @@ impl App {
             .and_then(|u| u.host_str().map(str::to_string))
             .unwrap_or(url);
         self.ui.toast_for(
-            Notice::warn(format!("{host} needed more memory than this device has")),
+            Toast::warn(format!("{host} needed more memory than this device has")),
             NOTICE,
         );
     }

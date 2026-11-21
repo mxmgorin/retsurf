@@ -4,7 +4,7 @@
 //! more often than they wake the loop; the arc standing in for an unknown size
 //! steps only while bytes arrive, so a stalled transfer stands still.
 
-use super::toast::Notice;
+use super::toast::Toast;
 use super::AppUi;
 use crate::data::downloads::{Finished, Progress};
 use crate::net::NOTIFY_EVERY;
@@ -137,12 +137,12 @@ impl AppUi {
     /// the last one has. One that turned out a web page is the caller's to tell.
     pub fn download_finished(&mut self, finished: &Finished) {
         self.download_chip.note(finished);
-        let notice = match (&finished.page, &finished.error) {
+        let toast = match (&finished.page, &finished.error) {
             (Some(_), _) => return,
-            (None, None) => Notice::new(bold::CHECK, format!("Downloaded {}", finished.filename)),
-            (None, Some(e)) => Notice::warn(format!("Download failed: {e}")),
+            (None, None) => Toast::new(bold::CHECK, format!("Downloaded {}", finished.filename)),
+            (None, Some(e)) => Toast::warn(format!("Download failed: {e}")),
         };
-        self.toast(notice);
+        self.toast(toast);
     }
 }
 

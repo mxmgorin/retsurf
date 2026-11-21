@@ -1,7 +1,7 @@
 //! Game Mode's slice of the chrome: the screens that shrink the browser's
 //! vocabulary, the entry hint, and the map name the Gaming tab shows.
 
-use super::toast::{Notice, Part};
+use super::toast::{Part, Toast};
 use super::{drop_egui_focus, AppUi};
 use crate::overlay::game::map_edit::pad_label;
 use crate::overlay::quick_access::Strip;
@@ -24,7 +24,7 @@ impl AppUi {
     /// Enter Game Mode, showing `hint` (see [`game_mode_hint`]). Dropping
     /// egui's keyboard focus is part of it: egui is offered every key before
     /// we are, so a focused address bar would go on eating them.
-    pub fn enter_game_mode(&mut self, hint: Notice) {
+    pub fn enter_game_mode(&mut self, hint: Toast) {
         self.toast_for(hint, GAME_MODE_TOAST);
         drop_egui_focus(&self.egui_ctx);
     }
@@ -48,7 +48,7 @@ pub fn game_mode_hint(
     pad: &[(PadGesture, Strip)],
     keys: &[(String, Strip)],
     keyboard: bool,
-) -> Notice {
+) -> Toast {
     let pad: Vec<_> = pad
         .iter()
         .map(|&(gesture, strip)| (pad_caps(gesture), strip))
@@ -63,7 +63,7 @@ pub fn game_mode_hint(
     };
     let ways = if first.is_empty() { second } else { first };
     if ways.is_empty() {
-        return Notice::new(bold::GAME_CONTROLLER, "Game mode");
+        return Toast::new(bold::GAME_CONTROLLER, "Game mode");
     }
     // One verb for all when they share it: `Hold [Start] for ..., [Select] for ...`.
     let shared = ways.iter().all(|((verb, _), _)| *verb == ways[0].0 .0);
@@ -82,7 +82,7 @@ pub fn game_mode_hint(
         let comma = if i < last { "," } else { "" };
         parts.push(Part::Text(format!("for {}{comma}", strip.name())));
     }
-    Notice::parts(bold::GAME_CONTROLLER, parts)
+    Toast::parts(bold::GAME_CONTROLLER, parts)
 }
 
 /// [`pad_caps`]'s verb for a held gesture.
@@ -133,8 +133,8 @@ mod tests {
         Part::Key(key.to_string())
     }
 
-    fn hint(parts: Vec<Part>) -> Notice {
-        Notice::parts(bold::GAME_CONTROLLER, parts)
+    fn hint(parts: Vec<Part>) -> Toast {
+        Toast::parts(bold::GAME_CONTROLLER, parts)
     }
 
     /// The hint is the only thing on screen once the chrome hides, so it names
@@ -188,7 +188,7 @@ mod tests {
         );
         assert_eq!(
             game_mode_hint(&[], &[], false),
-            Notice::new(bold::GAME_CONTROLLER, "Game mode")
+            Toast::new(bold::GAME_CONTROLLER, "Game mode")
         );
     }
 }

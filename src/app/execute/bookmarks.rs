@@ -20,7 +20,7 @@ use crate::config::{js_preset, overlay, AppConfig, HomeSort};
 use crate::data::bookmarks::{self, Launch};
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::{Entry, HomeTile, OptionsRow, OptionsText, Strip};
-use crate::ui::{bookmark_label, Notice};
+use crate::ui::{bookmark_label, Toast};
 use egui_phosphor::bold;
 
 /// What names a bookmark's overrides in a log line.
@@ -65,7 +65,7 @@ impl App {
         }
         self.browser.set_active_zoom(self.config.browser.page_zoom);
         let label = js_preset::label(&self.config.performance.js_preset);
-        self.ui.toast(Notice::new(
+        self.ui.toast(Toast::new(
             bold::LIGHTNING,
             format!("Reopened with {label} JS"),
         ));
@@ -185,7 +185,7 @@ impl App {
         if !self.browser.state().is_loading() {
             self.browser.set_reader(false);
         }
-        self.ui.toast(Notice::new(
+        self.ui.toast(Toast::new(
             bold::ARROW_COUNTER_CLOCKWISE,
             "Site settings reset",
         ));
