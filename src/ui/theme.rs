@@ -73,9 +73,9 @@ pub struct Palette {
 
 /// The wheel keyboard's colors; its face buttons keep the pad's own.
 pub struct Wheel {
-    /// The ring the groups sit on, and the hub at its center.
+    /// The ring the groups sit on, and the core at its center.
     pub rim: egui::Color32,
-    pub hub: egui::Color32,
+    pub core: egui::Color32,
     /// A group of four characters, and the one the stick aims at.
     pub group: egui::Color32,
     pub aimed: egui::Color32,
@@ -84,8 +84,8 @@ pub struct Wheel {
     /// A tab's fill, and its action, dimmer than its button so the two read as a pair.
     pub tab: egui::Color32,
     pub tab_action: egui::Color32,
-    /// Hub marks while a group is aimed.
-    pub hub_dim: egui::Color32,
+    /// Core marks while a group is aimed.
+    pub core_dim: egui::Color32,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> egui::Color32 {
@@ -131,13 +131,13 @@ const NIGHT: Palette = Palette {
     light: false,
     wheel: Wheel {
         rim: egui::Color32::from_rgba_premultiplied(0x1c, 0x1c, 0x1e, 0xe0),
-        hub: egui::Color32::from_rgba_premultiplied(0x34, 0x34, 0x36, 0xa0),
+        core: egui::Color32::from_rgba_premultiplied(0x34, 0x34, 0x36, 0xa0),
         group: gray(0x48),
         aimed: gray(0x62),
         face_idle: gray(0x2c),
         tab: gray(0x36),
         tab_action: gray(0xa8),
-        hub_dim: gray(0x80),
+        core_dim: gray(0x80),
     },
 };
 
@@ -179,13 +179,13 @@ const DUSK: Palette = Palette {
     sun_drop: 0.12,
     wheel: Wheel {
         rim: egui::Color32::from_rgba_premultiplied(0x1c, 0x15, 0x1e, 0xe0),
-        hub: egui::Color32::from_rgba_premultiplied(0x23, 0x1d, 0x24, 0xa0),
+        core: egui::Color32::from_rgba_premultiplied(0x23, 0x1d, 0x24, 0xa0),
         group: rgb(0x4c, 0x40, 0x4e),
         aimed: rgb(0x66, 0x58, 0x68),
         face_idle: rgb(0x30, 0x26, 0x32),
         tab: rgb(0x3a, 0x2f, 0x3c),
         tab_action: rgb(0xae, 0xa0, 0xa8),
-        hub_dim: rgb(0x86, 0x78, 0x82),
+        core_dim: rgb(0x86, 0x78, 0x82),
     },
     ..NIGHT
 };
@@ -226,13 +226,13 @@ const SAND: Palette = Palette {
     light: true,
     wheel: Wheel {
         rim: egui::Color32::from_rgba_premultiplied(0xd2, 0xcb, 0xbf, 0xe0),
-        hub: egui::Color32::from_rgba_premultiplied(0x87, 0x80, 0x74, 0xa0),
+        core: egui::Color32::from_rgba_premultiplied(0x87, 0x80, 0x74, 0xa0),
         group: rgb(0xd8, 0xcd, 0xb9),
         aimed: rgb(0xc4, 0xb7, 0x9f),
         face_idle: rgb(0xe8, 0xe0, 0xd2),
         tab: rgb(0xdd, 0xd2, 0xbf),
         tab_action: rgb(0x5c, 0x5f, 0x66),
-        hub_dim: rgb(0x8a, 0x80, 0x70),
+        core_dim: rgb(0x8a, 0x80, 0x70),
     },
 };
 
@@ -271,13 +271,13 @@ const DMG: Palette = Palette {
     light: true,
     wheel: Wheel {
         rim: egui::Color32::from_rgba_premultiplied(0x2a, 0x56, 0x2a, 0xe0),
-        hub: egui::Color32::from_rgba_premultiplied(0x09, 0x23, 0x09, 0xa0),
+        core: egui::Color32::from_rgba_premultiplied(0x09, 0x23, 0x09, 0xa0),
         group: rgb(0x8b, 0xac, 0x0f),
         aimed: rgb(0x9b, 0xbc, 0x0f),
         face_idle: rgb(0x9b, 0xbc, 0x0f),
         tab: rgb(0x8b, 0xac, 0x0f),
         tab_action: rgb(0x30, 0x62, 0x30),
-        hub_dim: rgb(0x8b, 0xac, 0x0f),
+        core_dim: rgb(0x8b, 0xac, 0x0f),
     },
 };
 

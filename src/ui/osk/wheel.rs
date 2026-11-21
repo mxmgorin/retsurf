@@ -1,5 +1,5 @@
 //! Rendering of the wheel: a translucent disc with the character groups on
-//! a ring, the hub's centred-stick actions (clipboard ones under Shift), and the
+//! a ring, the core's centred-stick actions (clipboard ones under Shift), and the
 //! other buttons' tabs on the rim. Colours and sides follow the pad layout.
 
 use super::osk_area;
@@ -32,18 +32,18 @@ const SHOULDER_TAB: f32 = TAU * 0.1;
 const TRIGGER_TAB: f32 = TAU * 0.2;
 /// Select's and Start's tabs, either side of the bottom.
 const BOTTOM_TAB: f32 = TAU * 0.05;
-/// The hub disk, clear of the groups, and its marks' distance from the centre.
-const HUB_GAP: f32 = 6.0;
-const HUB_RADIUS: f32 = WHEEL_RADIUS - GROUP_RADIUS - HUB_GAP;
-const HUB_MARK_OFFSET: f32 = 21.0;
-/// The aimed-group pointer: a triangle just inside the hub's edge.
+/// The core disk, clear of the groups, and its marks' distance from the centre.
+const CORE_GAP: f32 = 6.0;
+const CORE_RADIUS: f32 = WHEEL_RADIUS - GROUP_RADIUS - CORE_GAP;
+const CORE_MARK_OFFSET: f32 = 21.0;
+/// The aimed-group pointer: a triangle just inside the core's edge.
 const POINTER_INSET: f32 = 8.0;
 const POINTER_LENGTH: f32 = 7.0;
 const POINTER_HALF_WIDTH: f32 = 4.5;
 const GROUP_FONT: f32 = 11.0;
 const AIMED_FONT: f32 = 13.0;
 const TAB_FONT: f32 = 9.0;
-const HUB_ICON: f32 = 14.0;
+const CORE_ICON: f32 = 14.0;
 /// The drawn space mark, a bracket open upward.
 const SPACE_MARK_W: f32 = 12.0;
 const SPACE_MARK_H: f32 = 4.0;
@@ -167,7 +167,7 @@ pub(super) fn add_wheel(
         };
 
         painter.circle_filled(centre, RIM_RADIUS, palette().wheel.rim);
-        painter.circle_filled(centre, HUB_RADIUS, palette().wheel.hub);
+        painter.circle_filled(centre, CORE_RADIUS, palette().wheel.core);
 
         let sector_angle = |sector: usize| sector as f32 / WHEEL_SECTORS as f32 * TAU;
         for sector in 0..WHEEL_SECTORS {
@@ -195,7 +195,7 @@ pub(super) fn add_wheel(
 
         if let Some(sector) = osk.sector() {
             let dir = clock(sector_angle(sector));
-            let tip = centre + dir * (HUB_RADIUS - POINTER_INSET);
+            let tip = centre + dir * (CORE_RADIUS - POINTER_INSET);
             let side = egui::vec2(-dir.y, dir.x) * POINTER_HALF_WIDTH;
             let base = tip - dir * POINTER_LENGTH;
             painter.add(egui::Shape::convex_polygon(
@@ -207,25 +207,25 @@ pub(super) fn add_wheel(
 
         // The centred stick's actions, coloured while they are what a press does.
         let places = layout.places();
-        let at = |face| centre + face_dir(face) * HUB_MARK_OFFSET;
+        let at = |face| centre + face_dir(face) * CORE_MARK_OFFSET;
         let color = |face| match osk.sector() {
             None => face_color(layout, face),
-            Some(_) => palette().wheel.hub_dim,
+            Some(_) => palette().wheel.core_dim,
         };
-        text(at(places.b), bold::X, HUB_ICON, color(places.b));
+        text(at(places.b), bold::X, CORE_ICON, color(places.b));
         if osk.shift() {
             text(
                 at(places.y),
                 bold::CLIPBOARD_TEXT,
-                HUB_ICON,
+                CORE_ICON,
                 color(places.y),
             );
-            text(at(places.x), bold::SCISSORS, HUB_ICON, color(places.x));
-            text(at(places.a), bold::COPY, HUB_ICON, color(places.a));
+            text(at(places.x), bold::SCISSORS, CORE_ICON, color(places.x));
+            text(at(places.a), bold::COPY, CORE_ICON, color(places.a));
         } else {
             paint_space_mark(painter, at(places.y), color(places.y));
-            text(at(places.x), bold::BACKSPACE, HUB_ICON, color(places.x));
-            text(at(places.a), bold::KEY_RETURN, HUB_ICON, color(places.a));
+            text(at(places.x), bold::BACKSPACE, CORE_ICON, color(places.x));
+            text(at(places.a), bold::KEY_RETURN, CORE_ICON, color(places.a));
         }
 
         // Triggers outside, shoulders inside, each on its own side of the pad.
