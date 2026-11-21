@@ -530,7 +530,7 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
         row.top(),
         egui::Stroke::new(LINE_W, palette().border),
     );
-    let hints: Vec<keys::Hint> = footer
+    let hints: Vec<keys::ButtonHint> = footer
         .iter()
         .map(|hint| (hint.caps.as_slice(), hint.label))
         .collect();
@@ -538,7 +538,7 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
     let inner = egui::Rect::from_min_max(row.min + egui::vec2(0.0, FOOTER_RULE_GAP), row.max);
     let h = ui
         .scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-            keys::centered_hints(ui, &hints, width)
+            keys::centered_button_hints(ui, &hints, width)
         })
         .inner;
     h + FOOTER_RULE_GAP

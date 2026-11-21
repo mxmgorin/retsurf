@@ -18,7 +18,7 @@ use crate::overlay::settings::Settings;
 use crate::ui::brand;
 use crate::ui::favicon::PageIcons;
 use crate::ui::hub;
-use crate::ui::keys::{self, HINT_FONT};
+use crate::ui::keys::{self, BUTTON_HINT_FONT};
 use crate::ui::panel::{
     self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, HEAD_FONT, HEAD_LEAD,
     ROW_GAP, ROW_H,
@@ -213,7 +213,7 @@ fn add_rows(
 /// The footer's height before it is first measured: one line of hints under
 /// its rule.
 fn footer_guess(ui: &egui::Ui) -> f32 {
-    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(HINT_FONT)));
+    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(BUTTON_HINT_FONT)));
     DIVIDER_H + ROW_GAP + line
 }
 
@@ -224,7 +224,7 @@ fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabe
     let (a, b, x, sideways) = ([face.a], [face.b], [face.x], [sideways.as_str()]);
     let at = panel.selected();
     let steps = panel.row().steps() && panel.flag(at).is_none();
-    let mut hints: Vec<keys::Hint> = vec![(&a, panel.press().verb())];
+    let mut hints: Vec<keys::ButtonHint> = vec![(&a, panel.press().verb())];
     if steps {
         hints.push((&sideways, "change"));
     }
@@ -234,7 +234,7 @@ fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabe
     hints.push((&b, "back"));
     ui.scope(|ui| {
         panel::divider(ui, width);
-        keys::centered_hints(ui, &hints, width);
+        keys::centered_button_hints(ui, &hints, width);
     })
     .response
     .rect

@@ -538,9 +538,9 @@ pub(super) fn add_settings(
         let (upright, sideways) = keys::dpad_caps();
         let (upright, sideways) = ([upright.as_str()], [sideways.as_str()]);
         let (ok, back) = ([face.a], [face.b]);
-        let section: keys::Hint = (&keys::SHOULDERS, "section");
-        let mv: keys::Hint = (&upright, "move");
-        let hints: Vec<keys::Hint> = if settings.capturing() {
+        let section: keys::ButtonHint = (&keys::SHOULDERS, "section");
+        let mv: keys::ButtonHint = (&upright, "move");
+        let hints: Vec<keys::ButtonHint> = if settings.capturing() {
             vec![(&[], "Press a button or key to bind"), (&["Esc"], "cancel")]
         } else if settings.is_info_section() {
             vec![section, mv, (&ok, "select"), (&back, "back")]

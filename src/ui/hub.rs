@@ -393,7 +393,7 @@ pub(super) fn add_hub(
             let (_, sideways) = keys::dpad_caps();
             let [a, x, y] = row_verbs(hub, tabs);
             let caps = [[face.a], [face.x], [face.y]];
-            let mut hints: Vec<keys::Hint> = caps
+            let mut hints: Vec<keys::ButtonHint> = caps
                 .iter()
                 .zip([a, x, y])
                 .filter_map(|(cap, verb)| Some((&cap[..], verb?)))

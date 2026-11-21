@@ -82,7 +82,7 @@ fn add_select(
     let multiple = select.allow_select_multiple();
     let row_w = (screen.width() - 96.0).min(448.0);
     match multiple {
-        true => keys::hint_row(
+        true => keys::button_hint_row(
             ui,
             &[
                 (&[], "Select options"),

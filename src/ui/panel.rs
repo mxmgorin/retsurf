@@ -1,7 +1,7 @@
 //! Shared chrome for the Hub and settings overlays: panel metrics, the pinned
 //! frame with its close button, the section bar, the bounded section scroll.
 
-use super::keys::{centered_hints, Hint, HINT_FONT};
+use super::keys::{centered_button_hints, ButtonHint, BUTTON_HINT_FONT};
 use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
@@ -368,7 +368,7 @@ pub(super) fn head(ui: &mut egui::Ui, head: &str) {
 }
 
 /// [`head`]s draw and measure in this font.
-pub(super) const HEAD_FONT: egui::FontId = egui::FontId::proportional(HINT_FONT);
+pub(super) const HEAD_FONT: egui::FontId = egui::FontId::proportional(BUTTON_HINT_FONT);
 
 /// The space a [`head`] leaves above itself.
 pub(super) const HEAD_LEAD: f32 = ROW_GAP;
@@ -525,14 +525,14 @@ pub(super) fn section_scroll(ui: &egui::Ui, screen: egui::Rect, foot: f32) -> eg
 /// The room a panel's [`footer`] keeps under the list above it: its height as
 /// last drawn, one line of hints under its rule before then.
 pub(super) fn footer_room(ui: &egui::Ui, id: &str) -> f32 {
-    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(HINT_FONT)));
+    let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(BUTTON_HINT_FONT)));
     let measured = ui.ctx().data(|d| d.get_temp(footer_key(id)));
     measured.unwrap_or(DIVIDER_H + line) + ROW_GAP
 }
 
 /// `hints` centred at the panel's foot under a rule. Laid out after the list
 /// it sits under, so a change of height shows on the next frame.
-pub(super) fn footer(ui: &mut egui::Ui, screen: egui::Rect, id: &str, hints: &[Hint]) {
+pub(super) fn footer(ui: &mut egui::Ui, screen: egui::Rect, id: &str, hints: &[ButtonHint]) {
     let width = screen.width() - SIDES;
     let bottom = screen.bottom() - PAD_Y;
     let drawn = ui.ctx().data(|d| d.get_temp::<f32>(footer_key(id)));
@@ -545,7 +545,7 @@ pub(super) fn footer(ui: &mut egui::Ui, screen: egui::Rect, id: &str, hints: &[H
         .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             divider(ui, width);
-            centered_hints(ui, hints, width);
+            centered_button_hints(ui, hints, width);
         })
         .response
         .rect
