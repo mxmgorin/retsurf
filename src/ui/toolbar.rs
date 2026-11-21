@@ -2,7 +2,7 @@
 //! address bar, bookmark toggle, and the chips that jump into Hub sections.
 
 use super::download_chip::Chip;
-use super::search_menu::{search_button, SearchEngines};
+use super::search_picker::{search_button, SearchEngines};
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};

@@ -10,7 +10,7 @@ use super::favicon::{Icon, PageIcons};
 use super::keys;
 use super::labels::{bookmark_label, site_label};
 use super::panel::{fade, scroll_offset, scrolls_on, settle, EPSILON, FADE};
-use super::search_menu::{search_button, SearchEngines};
+use super::search_picker::{search_button, SearchEngines};
 use super::svg::SvgTexture;
 use super::theme::{palette, ROW_FONT};
 use super::wordmark;

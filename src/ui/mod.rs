@@ -22,7 +22,7 @@ mod panel;
 mod prompt;
 mod quick_access;
 mod scale;
-mod search_menu;
+mod search_picker;
 mod settings;
 mod splash;
 mod svg;
@@ -310,7 +310,7 @@ pub struct AppUi {
     /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
     /// What the search glyphs offer and the empty fields name.
-    search_engines: search_menu::SearchEngines,
+    search_engines: search_picker::SearchEngines,
     /// Gamepad cursor position (logical px). The UI owns it — it draws the
     /// overlay — and the gamepad moves it via `move_cursor` (see [`cursor`]).
     cursor: (f32, f32),
@@ -427,7 +427,7 @@ impl AppUi {
             input_maps: InputMaps::new(),
             map_edit: MapEdit::new(),
             input_map_name: String::new(),
-            search_engines: search_menu::SearchEngines::default(),
+            search_engines: search_picker::SearchEngines::default(),
             cursor: {
                 // Points, like every rect it is tested against.
                 let (w, h) = window.size();
