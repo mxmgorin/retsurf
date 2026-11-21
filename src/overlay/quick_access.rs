@@ -1,6 +1,6 @@
 //! The edge strips: Quick Access, the actions at the right edge, and Quick
 //! Menu, the places to go at the left. Each has one table per thing it opens
-//! over (a page, a game, the start page), so what one hides from another is
+//! over (a page, a game, Home), so what one hides from another is
 //! data rather than branches. Over a tab Quick Access runs what acts on it,
 //! then what sets it, then the way out, so a row keeps its place whatever
 //! applies; where a bookmark's site settings do, its reader view stands in for
@@ -21,7 +21,7 @@ use crate::overlay::settings::{self, Kind, Settings};
 /// Which strip is up.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Strip {
-    /// Actions on the page, the game or the start page, at the right edge.
+    /// Actions on the page, the game or Home, at the right edge.
     QuickAccess,
     /// Places to go, at the left edge.
     Menu,
@@ -71,7 +71,7 @@ impl OptionsText {
     }
 }
 
-/// The start-page tile whose rows lead Quick Access.
+/// The Home tile whose rows lead Quick Access.
 pub struct HomeTile {
     pub id: String,
     pub title: String,
@@ -102,7 +102,7 @@ struct OptionsBookmark {
     naming: Option<(OptionsText, String)>,
 }
 
-/// What a strip opens over: a tab in its mode, or the start page.
+/// What a strip opens over: a tab in its mode, or Home.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Over {
     Tab(TabMode),
@@ -110,7 +110,7 @@ pub enum Over {
 }
 
 /// Where a quick row shows: over a browser tab (a page or its reader view),
-/// over a game, or over the start page.
+/// over a game, or over Home.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Modes {
     Browser,
@@ -149,7 +149,7 @@ pub enum Entry {
     Reload,
     /// Turn Game Mode off.
     Exit,
-    /// Stop running the tab's bookmark and go back to the start page.
+    /// Stop running the tab's bookmark and go back to Home.
     Leave,
     /// Drop the shown site's setting overrides, on a second press.
     ResetSite,
@@ -159,7 +159,7 @@ pub enum Entry {
     Options(OptionsRow),
     /// An open tab, by its index: A shows it, X closes it.
     Tab(usize),
-    /// Open a tab on the start page.
+    /// Open a tab on Home.
     NewTab,
 }
 
@@ -206,7 +206,7 @@ const ACCESS_GAME: Layout = &[
     &[Slot::QuickRows, Slot::Row(Entry::InputMap)],
 ];
 
-/// Quick Access over the start page: how it shows its bookmarks.
+/// Quick Access over Home: how it shows its bookmarks.
 const ACCESS_HOME: Layout = &[&[Slot::QuickRows]];
 /// Put before the JS engine or font size row's value while A would reopen the
 /// page.
@@ -390,7 +390,7 @@ impl Press {
     }
 }
 
-/// The runs of entries `strip` shows `over` a tab or the start page, in its
+/// The runs of entries `strip` shows `over` a tab or Home, in its
 /// table's order, with `tabs` as its open tabs and without the way out (see
 /// [`way_out`]).
 fn groups(strip: Strip, over: Over, tabs: &[usize]) -> Vec<Vec<Entry>> {
@@ -698,7 +698,7 @@ impl QuickAccess {
         self.rows = rows;
     }
 
-    /// Show Quick Access over the start page: `tile`'s rows under its name in
+    /// Show Quick Access over Home: `tile`'s rows under its name in
     /// the header, then the page's own rows headed as the page.
     pub fn open_home(
         &mut self,
@@ -1104,9 +1104,9 @@ mod tests {
         }
     }
 
-    /// The start page has no page to act on: its strip is its own settings.
+    /// Home has no page to act on: its strip is its own settings.
     #[test]
-    fn the_start_page_lists_only_its_quick_rows() {
+    fn home_lists_only_its_quick_rows() {
         let home = entries(Strip::QuickAccess, Over::Home, false);
         assert!(home.iter().all(|row| matches!(row, Entry::Quick(_))));
         assert!(home.iter().any(|row| row.label() == "Sort"));
@@ -1353,10 +1353,10 @@ mod tests {
         }
     }
 
-    /// Over the start page a focused tile's rows lead, each section headed,
+    /// Over Home a focused tile's rows lead, each section headed,
     /// and the page's rows close.
     #[test]
-    fn a_tile_leads_quick_access_over_the_start_page() {
+    fn a_tile_leads_quick_access_over_home() {
         let mut panel = QuickAccess::new();
         panel.open_home(Some(tile(true, false)), None, &AppConfig::default());
         let options = options_rows(true, false);

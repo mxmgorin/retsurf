@@ -1,4 +1,4 @@
-//! Rendering of the built-in start page overlay (state lives in
+//! Rendering of the Home overlay (state lives in
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
 //! none), a bar holding the search / URL field, a tab bar of filters and a grid
 //! of the bookmarks, scrolling as one stack over a footer naming what the
@@ -23,14 +23,14 @@ use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui;
 
-/// Typeface for the start-page body text: the UI face or `Hack`; swap the call
+/// Typeface for the Home body text: the UI face or `Hack`; swap the call
 /// below to flip between them. The wordmark stays on Hack via [`wordmark`]
 /// regardless.
 fn font(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
 }
 
-/// The banner scene without its plate; the start page supplies the background.
+/// The banner scene without its plate; Home supplies the background.
 static BANNER_SVG: &[u8] = include_bytes!("../../resources/retsurf-banner-bare.svg");
 /// The banner's sun diameter in its SVG's units: the icon's 256-unit sun at the
 /// scale the banner draws it.
@@ -58,7 +58,7 @@ const ICON_OVERHANG: f32 = 2.0;
 /// The search field's top with no mark above it (logical px).
 const COMPACT_TOP: f32 = 16.0;
 
-/// What heads the start page.
+/// What heads Home.
 #[derive(Clone, Copy)]
 pub(super) enum Mark<'a> {
     Banner(&'a egui::TextureHandle),
@@ -67,7 +67,7 @@ pub(super) enum Mark<'a> {
     None,
 }
 
-/// Everything the start page shows besides its own state.
+/// Everything Home shows besides its own state.
 pub(super) struct HomeView<'a> {
     pub tiles: Tiles<'a>,
     pub layout: HomeLayout,
@@ -305,7 +305,7 @@ fn span(cols: usize, w: f32, gap: f32) -> f32 {
 /// Clearance between the page's foot and the scrolling stack.
 const FOOT: f32 = 12.0;
 
-/// Draw the start-page overlay over the (blank) web view, confined to `area`,
+/// Draw the Home overlay over the (blank) web view, confined to `area`,
 /// the web view's rect, so the toolbar stays usable. Any activation is pushed
 /// as a command for the app to execute.
 pub(super) fn add_home(
@@ -948,7 +948,7 @@ const LABEL_FONT: f32 = 12.0;
 const LABEL_LINE_H: f32 = 15.0;
 const LABEL_GAP: f32 = 8.0;
 
-/// One speed-dial tile: a rounded "glyph" square holding the brand initial, with
+/// One tile: a rounded "glyph" square holding the brand initial, with
 /// the brand name beneath it. Custom-painted (not a Button) for the two-tier
 /// look.
 fn add_tile(

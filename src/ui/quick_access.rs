@@ -159,7 +159,7 @@ fn add_rows(
         let entry = row.entry;
         let selected = index == panel.selected();
         let icon = match entry {
-            // The start page is no site: its tab keeps the tab glyph.
+            // Home is no site: its tab keeps the tab glyph.
             Entry::Tab(at) => tabs
                 .get(at)
                 .filter(|tab| tab.url != HOME_URL)

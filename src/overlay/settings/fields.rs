@@ -190,10 +190,10 @@ pub enum Door {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Task {
     /// Wipe history, site data, the HTTP cache, the saved session and the open
-    /// tabs. Bookmarks, pins and the settings themselves stay.
+    /// tabs. Bookmarks and the settings themselves stay.
     ClearData,
-    /// Every settings row, the speed-dial pins and the control bindings back to
-    /// how they ship. The user's own content is [`Task::ClearData`]'s business.
+    /// Every settings row and the control bindings back to how they ship. The
+    /// user's own content is [`Task::ClearData`]'s business.
     RestoreDefaults,
     /// Hand the log files to the system share sheet.
     #[cfg(target_os = "android")]
@@ -442,7 +442,7 @@ const SHADER: Kind = Kind::Choice {
     set: |c, v| c.game_mode.view.shader = v.to_string(),
 };
 
-/// The start page's bookmark filter; a tag set in the file shows verbatim and
+/// Home's bookmark filter; a tag set in the file shows verbatim and
 /// cycles back into the list when adjusted.
 const HOME_FILTER: Kind = Kind::Choice {
     opts: Opts::Fixed(crate::data::bookmarks::FILTER_CHOICES),

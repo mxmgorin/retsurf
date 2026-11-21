@@ -1,5 +1,5 @@
 //! Page icons on disk: one PNG per host under `page_icons/` in the user data
-//! dir, so bookmarks, history and the speed dial show a site's icon without the
+//! dir, so bookmarks, history and Home show a site's icon without the
 //! page being open. Keyed by host, not URL, because a site's pages share one
 //! icon. The set of files mirrors visited hosts, so it is pruned to the hosts
 //! still referenced and wiped along with the browsing data.

@@ -604,7 +604,7 @@ impl App {
     }
 
     /// Cache `url`'s site icon for the saved lists. With history off only the
-    /// bookmarked and pinned sites are kept, or the cache would be a history.
+    /// bookmarked sites are kept, or the cache would be a history.
     fn store_page_icon(&self, url: &str, icon: &Favicon) {
         let Some(host) = page_icons::host_key(url) else {
             return;

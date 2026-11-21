@@ -1,7 +1,7 @@
 //! Command dispatch: turning an [`AppCommand`] into effects on the browser, UI,
 //! and config. The main loop ([`super::App::run`]) drains its command queue
 //! through [`App::execute_command`]; the per-overlay action helpers it fans out
-//! to (Hub / settings / start page / bookmarks) live here too. Input intents are
+//! to (Hub / settings / Home / bookmarks) live here too. Input intents are
 //! mapped earlier, in [`super::router`].
 
 mod bookmarks;
@@ -47,7 +47,7 @@ impl App {
                 self.sync_screen_geometry();
                 self.ui.resize_browser(&self.window, &self.browser);
             }
-            // Home leaves a running bookmark too: the start page is no place to run one.
+            // The Home action leaves a running bookmark too: the home page is no place to run one.
             AppCommand::Browser(BrowserCommand::Home) => {
                 self.end_launch();
                 self.load(&BrowserCommand::Home, out);
@@ -564,8 +564,8 @@ impl App {
         self.window.set_max_fps(self.config.performance.max_fps);
     }
 
-    /// Put the caret where an address is typed, over the page or the start page
-    /// only; the start page's search field stands in for the address bar there.
+    /// Put the caret where an address is typed, over the page or Home
+    /// only; Home's search field stands in for the address bar there.
     fn focus_address_bar(&mut self, out: &mut Vec<AppCommand>) {
         // A launched bookmark has no address bar to type into.
         if self.browser.launched().is_some() {
@@ -584,7 +584,7 @@ impl App {
         }
     }
 
-    /// Open the start page's focused bookmark, or with its search field
+    /// Open Home's focused bookmark, or with its search field
     /// focused, the OSK to type into it.
     pub(super) fn home_confirm(&mut self, out: &mut Vec<AppCommand>) {
         match self.ui.home_focused_bookmark() {
@@ -596,7 +596,7 @@ impl App {
         }
     }
 
-    /// Open a tile or its options, or change the start page's filter or sort.
+    /// Open a tile or its options, or change Home's filter or sort.
     pub(super) fn home_action(&mut self, action: &HomeAction, out: &mut Vec<AppCommand>) {
         match action {
             HomeAction::Options(tile) => {
@@ -633,7 +633,7 @@ impl App {
         self.ui.set_search_engines(&self.config.browser);
     }
 
-    /// Change how the start page shows its bookmarks: applied live, and kept
+    /// Change how Home shows its bookmarks: applied live, and kept
     /// in `[home]`, written with the next flush.
     fn set_home_view(&mut self, change: impl FnOnce(&mut HomeBookmarksConfig)) {
         change(&mut self.config.home.bookmarks);

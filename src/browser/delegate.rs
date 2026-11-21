@@ -311,7 +311,7 @@ impl servo::WebViewDelegate for AppBrowserInner {
         self.event_sender.send(UserEvent::BrowserFrameReady);
     }
 
-    /// Intercept resource loads: the built-in start page is answered with local
+    /// Intercept resource loads: Home is answered with local
     /// HTML, and a load the ad blocker refuses gets an empty 200 so it fails soft.
     /// Dropping the load means "do not intercept".
     fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {

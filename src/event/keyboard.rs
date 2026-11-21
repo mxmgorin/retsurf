@@ -218,7 +218,7 @@ fn on_key_down(
         }
     }
 
-    // The start page routes the gamepad's own intents. While its search field
+    // Home routes the gamepad's own intents. While its search field
     // holds focus the editor keeps them, and the arrow toward the grid leaves it.
     if ui.focus() == Focus::Home {
         if ui.home_field_editing() {

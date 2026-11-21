@@ -45,7 +45,7 @@ use Key::*;
 pub enum OskTarget<'a> {
     AddressBar,
     Prompt(&'a mut String),
-    /// The start page's search field (see [`crate::overlay::home`]); Enter
+    /// Home's search field (see [`crate::overlay::home`]); Enter
     /// submits it as a navigation in the active tab.
     Home(&'a mut String),
     /// A settings-overlay text field (see [`crate::overlay::settings`]); Enter
@@ -620,7 +620,7 @@ impl Osk {
         match target {
             OskTarget::AddressBar => commands.push(AppCommand::Browser(BrowserCommand::Load)),
             OskTarget::Prompt(_) => commands.push(AppCommand::Prompt(PromptAction::ClickSlot(0))),
-            // Submit the start-page search as a navigation in the active tab —
+            // Submit the Home search as a navigation in the active tab —
             // the same path a tile uses; a non-URL falls back to a web search.
             OskTarget::Home(buf) => {
                 let text = buf.trim();

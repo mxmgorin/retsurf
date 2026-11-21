@@ -1,4 +1,4 @@
-//! Short names for what the Hub and the start page show: a site's brand name
+//! Short names for what the Hub and Home show: a site's brand name
 //! from its address, and a bookmark's name or, unnamed, its site.
 
 use crate::data::bookmarks::Bookmark;

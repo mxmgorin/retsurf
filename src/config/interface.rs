@@ -9,7 +9,7 @@ pub struct InterfaceConfig {
     /// UI zoom over the scale the panel's own size asks for, so one setting means
     /// the same thing on a handheld and on a desktop window. The page follows it.
     pub scale: f32,
-    /// The chrome's colors: the start page, the toolbar and every overlay.
+    /// The chrome's colors: Home, the toolbar and every overlay.
     pub theme: UiTheme,
     /// How long the virtual cursor stays visible after the last movement, in ms.
     /// It hides when idle (nothing to hover) but lingers so you can see where it
@@ -21,11 +21,11 @@ pub struct InterfaceConfig {
     /// over the page on either edge: a strip that came and went would resize the
     /// web view, reflowing the page mid-scroll.
     pub toolbar_autohide: bool,
-    /// Show site icons on tabs, bookmarks, history and the start page. Servo
+    /// Show site icons on tabs, bookmarks, history and Home. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
     /// Name what the buttons do at the foot of the Hub, the settings, the
-    /// start page and the edge strips, and the shoulders beside its filters.
+    /// Home and the edge strips, and the shoulders beside its filters.
     pub button_hints: bool,
     /// How the Hub shows the open tabs: rows, or cards with a picture of each
     /// page, kept from when it was last on screen.

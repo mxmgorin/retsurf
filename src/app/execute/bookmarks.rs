@@ -1,5 +1,5 @@
 //! Bookmarks in the app: opening one the way it asks, its options (the rows
-//! Quick Access leads with over the start page, and how it launches and its
+//! Quick Access leads with over Home, and how it launches and its
 //! reader view over its site's pages, see [`crate::overlay::quick_access`]),
 //! and the setting overrides of the one whose site the active tab is on. A
 //! site with reader view on enters it on each page that reads as an article.
@@ -232,7 +232,7 @@ impl App {
     }
 
     /// Stop running the bookmark: out of Game Mode, the global `[game_mode]`
-    /// back, and the tab on the start page, which frees the page.
+    /// back, and the tab on Home, which frees the page.
     pub(super) fn exit_launch(&mut self, out: &mut Vec<AppCommand>) {
         self.ui.quick_access.close();
         self.end_launch();
@@ -269,7 +269,7 @@ impl App {
         self.open_strip(Strip::QuickAccess);
     }
 
-    /// Open Quick Access on the start-page tile at `tile`, the grid's own
+    /// Open Quick Access on the Home tile at `tile`, the grid's own
     /// index; `false` when the grid has no such tile.
     pub(in crate::app) fn open_options(&mut self, tile: usize) -> bool {
         let Some(at) = self.ui.home_bookmark_at(tile) else {
@@ -280,7 +280,7 @@ impl App {
         true
     }
 
-    /// Open Quick Access over the start page: the rows of the bookmark at
+    /// Open Quick Access over Home: the rows of the bookmark at
     /// `at`, when one is given, then the page's own, with their values.
     pub(in crate::app) fn open_home_access(&mut self, at: Option<usize>) {
         let tile = at.map(|at| self.home_tile(at));

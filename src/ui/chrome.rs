@@ -123,7 +123,7 @@ impl AppUi {
         // so an overlay of its own must not bring the bar back over the game.
         let address = self.address_bar_focused() || (self.osk.visible && self.osk_on_address_bar);
         let typing = match chrome_hidden.home {
-            // A start page without a bar has its own field; only the address brings the bar.
+            // Home without a bar has its own field; only the address brings the bar.
             true => address,
             // Nor do the edge strips, nor a launched bookmark, which has no bar.
             false => {

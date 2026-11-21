@@ -18,7 +18,7 @@ pub struct Frame {
     pub page: bool,
     /// The keyboard has focus.
     pub osk_open: bool,
-    /// The start page has focus.
+    /// Home has focus.
     pub home: bool,
     /// No other keyboard types for the user (physical, or Android's own).
     pub needed: bool,
@@ -71,7 +71,7 @@ impl AutoShow {
             Some(_) => (false, true),
             None => (false, false),
         };
-        // The start page's field is selected like its tiles: Confirm opens the
+        // Home's field is selected like its tiles: Confirm opens the
         // keyboard, or it would cover the grid on every visit.
         let show = frame.needed
             && ((rose && !frame.home) || (frame.tapped && frame.chrome) || (settled && frame.page));
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn the_start_page_field_waits_for_confirm() {
+    fn the_home_field_waits_for_confirm() {
         let (mut auto, t) = (AutoShow::new(), Instant::now());
         let focused = Frame {
             chrome: true,

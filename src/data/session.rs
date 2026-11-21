@@ -82,7 +82,7 @@ impl Session {
 
 /// The session-worthy tabs: those with a loaded URL (a tab still on its first
 /// load has none), with the active index remapped past the ones dropped. A
-/// launched bookmark is recorded as the start page, so it cannot start itself.
+/// launched bookmark is recorded as Home, so it cannot start itself.
 fn snapshot(tabs: &[TabInfo]) -> Store {
     let mut urls = Vec::with_capacity(tabs.len());
     let mut active = 0;
@@ -133,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn a_launched_tab_comes_back_as_the_start_page() {
+    fn a_launched_tab_comes_back_as_home() {
         let mut game = tab("https://game.example/", true);
         game.launched = true;
         let store = snapshot(&[tab("https://a", false), game]);

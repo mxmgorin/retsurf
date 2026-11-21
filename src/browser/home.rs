@@ -1,4 +1,4 @@
-//! The built-in start page's *backing* URL, `retsurf:home`. The start page UI
+//! Home's *backing* URL, `retsurf:home`. Home UI
 //! itself is drawn natively by egui (see [`crate::ui::home`] /
 //! [`crate::overlay::home`]) so it's navigable with the gamepad like the other
 //! overlays; this module only keeps `retsurf:home` a real, navigable URL so the
@@ -7,20 +7,20 @@
 //! and answered with a blank dark page — never fetched — over which the egui
 //! overlay is composited.
 
-/// The internal URL the start page lives at. Used as the default `[home] page`
+/// The internal URL Home lives at. Used as the default `[home] page`
 /// (see [`crate::config`]); navigations here are intercepted, never fetched, and
 /// [`crate::browser::AppBrowser::on_home_page`] matches on it.
 pub const HOME_URL: &str = "retsurf:home";
 
-/// What a tab on the start page is called: it has no document to title it.
-pub const HOME_TITLE: &str = "Start page";
+/// What a tab on Home is called: it has no document to title it.
+pub const HOME_TITLE: &str = "Home";
 
-/// Whether `url` is the start-page sentinel.
+/// Whether `url` is the Home sentinel.
 pub fn is_home(url: &url::Url) -> bool {
     url.as_str() == HOME_URL
 }
 
-/// The blank dark page served behind the egui start-page overlay (so there's no
+/// The blank dark page served behind the egui Home overlay (so there's no
 /// white flash and no network request).
 pub fn render() -> String {
     include_str!("assets/home.html").to_string()

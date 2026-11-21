@@ -1,4 +1,4 @@
-//! The built-in start page, rendered as an egui overlay (not a web page) so it
+//! Home, rendered as an egui overlay (not a web page) so it
 //! navigates with the gamepad exactly like the other overlays. It's shown over
 //! the active tab whenever that tab is on `retsurf:home` — a blank page; see
 //! [`crate::browser::home`]. State here is which item holds focus (via the
@@ -17,7 +17,7 @@ pub struct Home {
 }
 
 impl Home {
-    /// A start page focused on its search field on `search`'s side of the
+    /// Home focused on its search field on `search`'s side of the
     /// grid, or on its first tile when it shows none.
     pub fn new(search: Option<FieldAt>) -> Self {
         Self {
@@ -27,7 +27,7 @@ impl Home {
     }
 
     /// Reset to the entry state (search field focused, empty buffer) — called
-    /// when the start page becomes active.
+    /// when Home becomes active.
     pub fn reset(&mut self) {
         self.nav.focus_first();
         self.input.clear();

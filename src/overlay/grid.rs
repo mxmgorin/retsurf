@@ -1,4 +1,4 @@
-//! Grid-with-a-field navigation for the start page: a tile grid with a text
+//! Grid-with-a-field navigation for Home: a tile grid with a text
 //! field above or below it, or with none.
 
 /// Which side of the grid the field sits on.

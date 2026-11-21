@@ -82,7 +82,7 @@ impl App {
                         self.settings_confirm(out);
                     }
                 }
-                // The start page: A opens the OSK to type into its search field,
+                // Home: A opens the OSK to type into its search field,
                 // or opens the focused bookmark (see [`App::home_confirm`]).
                 Focus::Home => {
                     if *pressed {
@@ -114,7 +114,7 @@ impl App {
                         self.settings_close(out);
                     }
                 }
-                // B on the start page goes back like a normal page — except that
+                // B on Home goes back like a normal page — except that
                 // it is also the only way out of a page holding fullscreen.
                 Focus::Hints | Focus::Home | Focus::Page => {
                     let command = match self.browser.is_fullscreen() {
@@ -141,12 +141,12 @@ impl App {
                 Focus::Hints | Focus::Prompt | Focus::Home | Focus::Page => {
                     // The keyboard takes over the stick and A — leave hint mode.
                     self.ui.hints.hide();
-                    // On a start-page tile X opens its options instead.
+                    // On a Home tile X opens its options instead.
                     let tile = self.ui.home.tile().filter(|_| focus == Focus::Home);
                     if tile.is_some_and(|tile| self.open_options(tile)) {
                         return;
                     }
-                    // On the start page, X types into the search field, or into
+                    // On Home, X types into the search field, or into
                     // the address bar when the page shows none.
                     if focus == Focus::Home {
                         match self.config.home.search.shown() {
@@ -212,7 +212,7 @@ impl App {
                 Focus::Osk => {
                     self.osk_input(PadInput::Y, out);
                 }
-                // Y on the start page cycles the grid's sort.
+                // Y on Home cycles the grid's sort.
                 Focus::Home => self.home_action(&HomeAction::StepSort(1), out),
                 Focus::Prompt | Focus::Settings => {}
                 Focus::UpdateNotice => {}
@@ -235,7 +235,7 @@ impl App {
                     // Game Mode's screens would leave the game.
                     Focus::QuickAccess | Focus::GameInputMaps | Focus::GameMapEdit => {}
                     Focus::UpdateNotice => {}
-                    // On the start page they cycle the grid's filter.
+                    // On Home they cycle the grid's filter.
                     Focus::Home => self.home_action(&HomeAction::StepFilter(*delta), out),
                     Focus::Osk | Focus::Prompt | Focus::Hints | Focus::Page => {
                         // Page navigation is parked while the modal prompt is up (it

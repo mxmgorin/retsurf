@@ -20,7 +20,7 @@ pub struct Palette {
     pub scrim: egui::Color32,
     /// A refused or destructive action: the success teal cannot read as either.
     pub warn: egui::Color32,
-    // The start-page palette, shared by the dial editor (its tiles must match).
+    // The Home palette.
     pub bg: egui::Color32,
     pub surface: egui::Color32,
     pub border: egui::Color32,

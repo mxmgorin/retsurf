@@ -1,7 +1,7 @@
 //! The brand wordmark, painted: "ret" in ink, "surf" in the brand gradient,
 //! over the brand wave. egui has no gradient text fill, so the `surf` glyphs
 //! are tagged with a marker colour, tessellated here, and recoloured by height.
-//! The start page and the splash draw it; the layout needs its size first.
+//! Home and the splash draw it; the layout needs its size first.
 
 use super::theme::{lerp_color, palette};
 use egui_sdl2::egui;

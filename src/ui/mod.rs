@@ -172,7 +172,7 @@ struct FrameInputs {
 }
 
 /// The sites whose icons this frame draws: the tabs of the `strip` up, the
-/// Hub's current section and the start page's bookmarks when `home_shown`,
+/// Hub's current section and Home's bookmarks when `home_shown`,
 /// each tab with its live icon.
 fn page_icon_wants<'a>(
     hub: &'a Hub,
@@ -211,7 +211,7 @@ fn page_icon_wants<'a>(
     wanted
 }
 
-/// The start page's bookmarks as a frame shows them: the filter in force, the
+/// Home's bookmarks as a frame shows them: the filter in force, the
 /// filters offered as tabs, and the tiles as indices into the bookmarks.
 struct HomeList {
     visible: Vec<usize>,
@@ -227,7 +227,7 @@ struct ChromeHidden {
     game_mode: bool,
     /// The tab runs a bookmark as an app or a game.
     launched: bool,
-    /// The start page, set to show no toolbar.
+    /// Home, set to show no toolbar.
     home: bool,
 }
 
@@ -346,14 +346,14 @@ pub struct AppUi {
     pub update: Updater,
     /// The startup notice of what [`Updater::take_startup_offer`] found.
     pub update_notice: UpdateNotice,
-    /// The built-in start page overlay's selection / search-field state.
+    /// The Home overlay's selection / search-field state.
     pub home: Home,
-    /// Whether the active tab is on the start page (mirrored each frame from
+    /// Whether the active tab is on Home (mirrored each frame from
     /// [`crate::browser::AppBrowser::on_home_page`]); drives [`Focus::Home`].
     home_active: bool,
     /// `[home]`, and the banner it may draw, rasterized on first use.
     home_config: HomeConfig,
-    /// Whether the start page's footer names pad buttons.
+    /// Whether Home's footer names pad buttons.
     home_pad: bool,
     banner: svg::SvgTexture,
     /// The About tab's icon, rasterized on first use.
@@ -659,12 +659,12 @@ impl AppUi {
         self.home.set_search(search_field(home.search));
     }
 
-    /// Whether the start page names pad buttons: its footer, the sort's.
+    /// Whether Home names pad buttons: its footer, the sort's.
     pub fn set_home_pad(&mut self, pad: bool) {
         self.home_pad = pad;
     }
 
-    /// The start page's footer for its focus: what the confirm and options
+    /// Home's footer for its focus: what the confirm and options
     /// buttons do there, then the shoulders over the filter choices and the
     /// sort; nothing without a pad.
     fn home_footer(&self, list: &HomeList, face: FaceLabels) -> Vec<home::FooterHint> {
@@ -704,24 +704,24 @@ impl AppUi {
         out
     }
 
-    /// The start page's bookmark filter.
+    /// Home's bookmark filter.
     fn home_filter(&self) -> Filter {
         Filter::parse(&self.home_config.bookmarks.filter)
     }
 
-    /// The filters the start page offers.
+    /// The filters Home offers.
     pub fn home_filters(&self) -> Vec<Filter> {
         bookmarks::filters(self.hub.bookmarks.all(), &self.home_filter())
     }
 
-    /// Indices into the bookmarks of the start page's tiles, in their order.
+    /// Indices into the bookmarks of Home's tiles, in their order.
     pub fn home_visible(&self) -> Vec<usize> {
         let sort = self.home_config.bookmarks.sort;
         let all = self.hub.bookmarks.all();
         bookmarks::view(all, &self.home_filter(), sort, bookmark_label)
     }
 
-    /// The start page's list as of now: the filter, what it offers, what it shows.
+    /// Home's list as of now: the filter, what it offers, what it shows.
     fn home_list(&self) -> HomeList {
         let filter = self.home_filter();
         let all = self.hub.bookmarks.all();
@@ -737,13 +737,13 @@ impl AppUi {
         }
     }
 
-    /// The index in the bookmarks of the start-page tile at `tile`, the grid's
+    /// The index in the bookmarks of the Home tile at `tile`, the grid's
     /// own index.
     pub fn home_bookmark_at(&self, tile: usize) -> Option<usize> {
         self.home_visible().get(tile).copied()
     }
 
-    /// The index in the bookmarks of the start page's focused tile.
+    /// The index in the bookmarks of Home's focused tile.
     pub fn home_focused_bookmark(&self) -> Option<usize> {
         self.home
             .tile()
@@ -1198,7 +1198,7 @@ fn browser_rel((x, y): (f32, f32), webview: egui::Rect) -> (f32, f32) {
     (x - webview.left(), y - webview.top())
 }
 
-/// The side of the grid `search` puts the start page's field on, if any.
+/// The side of the grid `search` puts Home's field on, if any.
 fn search_field(search: HomeSearch) -> Option<FieldAt> {
     match search {
         HomeSearch::Top => Some(FieldAt::Above),

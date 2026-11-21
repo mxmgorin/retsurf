@@ -60,13 +60,13 @@ impl App {
         self.close_for_memory(index.unwrap_or_else(|| self.browser.active_tab()));
     }
 
-    /// Close the tab at `index`, except the start page, which would only reopen.
+    /// Close the tab at `index`, except Home, which would only reopen.
     fn close_for_memory(&mut self, index: usize) {
         let Some(url) = self.browser.tabs().get(index).map(|t| t.url.clone()) else {
             return;
         };
         if url == HOME_URL {
-            log::warn!("memory guard: the start page is the tab to close; left open");
+            log::warn!("memory guard: Home is the tab to close; left open");
             return;
         }
         log::warn!("memory guard: closing tab {index} ({url})");

@@ -1,5 +1,5 @@
 //! The search-engine picker: the search glyph of the address bar and of the
-//! start page's field as a button that opens the engine list beside it.
+//! Home's field as a button that opens the engine list beside it.
 
 use super::panel::ROW_H;
 use super::theme::{palette, ROW_FONT};

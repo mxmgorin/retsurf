@@ -39,7 +39,7 @@ pub enum AppCommand {
     Prompt(PromptAction),
     /// An action on the settings overlay (see [`crate::overlay::settings`]).
     Settings(SettingsAction),
-    /// A change to the start page's view.
+    /// A change to Home's view.
     Home(HomeAction),
     /// Search with the engine at this index of `[browser] search_engines`.
     UseSearchEngine(usize),
@@ -107,7 +107,7 @@ impl AppCommand {
     }
 }
 
-/// Changes to the start page's view, saved to `[home]` as they are made.
+/// Changes to Home's view, saved to `[home]` as they are made.
 #[derive(Clone)]
 pub enum HomeAction {
     /// Show the filter `delta` places along the offered ones, wrapping.

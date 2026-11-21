@@ -21,7 +21,7 @@ const DIR: &str = "bookmarks";
 /// The stem of a bookmark whose name and host keep no letter or digit.
 const FALLBACK_ID: &str = "bookmark";
 
-/// Seeded on a first run, so the start page is not empty.
+/// Seeded on a first run, so Home is not empty.
 const DEFAULTS: &[(&str, &str)] = &[
     ("Wikipedia", "https://en.wikipedia.org"),
     ("Retro Handhelds", "https://retrohandhelds.gg"),

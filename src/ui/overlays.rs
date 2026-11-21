@@ -1,6 +1,6 @@
 //! [`AppUi`]'s overlay coordinators: the [`Focus`] precedence the router matches
 //! on, OSK input routing, and the per-overlay passthroughs (Hub, settings,
-//! start page, hints) the router and app drive.
+//! Home, hints) the router and app drive.
 
 use super::{settings, AppUi, OskField};
 use crate::{
@@ -36,7 +36,7 @@ pub enum Focus {
     Settings,
     /// Link-hint navigation.
     Hints,
-    /// The built-in start page overlay (active tab is on `retsurf:home`).
+    /// The Home overlay (active tab is on `retsurf:home`).
     Home,
     /// No overlay: input goes to the page or the toolbar.
     Page,
@@ -145,7 +145,7 @@ impl AppUi {
             Focus::GameMapEdit if self.map_edit.naming().is_some() => OskDest::LayerName,
             Focus::Settings if self.settings.engine_typing() => OskDest::SearchEngine,
             Focus::Settings if self.settings.selected_is_text() => OskDest::Settings,
-            // On the start page, typed text goes to its own search field, not
+            // On Home, typed text goes to its own search field, not
             // the address bar (which only ever shows `retsurf:home` there).
             Focus::Home if self.home_config.search.shown() => OskDest::Home,
             _ if self.address_bar_focused() => OskDest::AddressBar,
@@ -337,7 +337,7 @@ impl AppUi {
         self.last_input_keyboard = keyboard;
     }
 
-    /// Mirror whether the active tab is on the start page (each frame); entry
+    /// Mirror whether the active tab is on Home (each frame); entry
     /// resets the overlay to an empty search field. Returns whether it changed —
     /// without a follow-up repaint the idle loop never paints the fresh overlay.
     #[inline]
@@ -350,7 +350,7 @@ impl AppUi {
         changed
     }
 
-    /// Move the start-page selection by one dominant-axis step across the
+    /// Move the Home selection by one dominant-axis step across the
     /// bookmark grid.
     #[inline]
     pub fn home_move(&mut self, dx: i32, dy: i32) {
@@ -397,9 +397,9 @@ impl AppUi {
         self.field_focused(super::ids::LOCATION)
     }
 
-    /// Whether the start page's search field holds egui keyboard focus (a desktop
+    /// Whether Home's search field holds egui keyboard focus (a desktop
     /// click into it). While it does, arrow keys edit text rather than moving the
-    /// start-page selection, and plain-key shortcuts are muted.
+    /// Home selection, and plain-key shortcuts are muted.
     pub fn home_field_editing(&self) -> bool {
         self.field_focused(super::ids::HOME_SEARCH)
     }

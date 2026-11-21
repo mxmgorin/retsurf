@@ -503,7 +503,7 @@ const CARD_MIN_W: f32 = 180.0;
 const CARD_GAP: f32 = 12.0;
 /// The close button in a card's header.
 const CARD_CLOSE: f32 = 24.0;
-/// The glyph a card without a picture shows, for the start page or a new tab.
+/// The glyph a card without a picture shows, for Home or a new tab.
 const CARD_GLYPH: f32 = 40.0;
 /// A card's corner, shared by its header's top and its picture's bottom.
 const CARD_CORNER: u8 = ROW_RADIUS as u8;
@@ -665,7 +665,7 @@ const CROSS_ARM: f32 = 0.18;
 const CROSS_STROKE: f32 = 2.0;
 
 /// Paint `tab`'s picture into a card's lower `rect`: its kept frame, else a
-/// stand-in for the start page or its site.
+/// stand-in for Home or its site.
 fn paint_tab_picture(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -770,7 +770,7 @@ enum CardIcon {
 }
 
 /// `tab`'s icon on its card, as on its row: the site's, a globe without one,
-/// the tab glyph for the start page; `None` with icons off.
+/// the tab glyph for Home; `None` with icons off.
 fn card_icon(icons: &PageIcons, tab: &TabInfo) -> Option<CardIcon> {
     if !icons.enabled() {
         return None;
@@ -782,7 +782,7 @@ fn card_icon(icons: &PageIcons, tab: &TabInfo) -> Option<CardIcon> {
     })
 }
 
-/// A tab row's leading icon: its site's, but the tab glyph for the start page,
+/// A tab row's leading icon: its site's, but the tab glyph for Home,
 /// which is no site; `None` with icons off.
 fn tab_icon(icons: &PageIcons, tab: &TabInfo) -> Option<egui::Atom<'static>> {
     match tab.url == HOME_URL {

@@ -2,13 +2,13 @@ use super::Brand;
 use crate::config::token_enum::token_enum;
 use serde::{Deserialize, Serialize};
 
-/// The start page (`[home]`): where Home leads and which widgets it shows.
+/// Home's settings (`[home]`): the home page and the widgets Home shows.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HomeConfig {
-    /// What Home and a new tab open: the built-in start page or any URL.
+    /// What the Home button and a new tab open: Home or any URL.
     pub page: String,
-    /// Show the toolbar on the start page.
+    /// Show the toolbar on Home.
     pub toolbar: bool,
     /// The brand mark at the top.
     pub brand: Brand,
@@ -18,7 +18,7 @@ pub struct HomeConfig {
     pub bookmarks: HomeBookmarksConfig,
 }
 
-/// Which bookmarks the start page's grid shows, and in what order.
+/// Which bookmarks Home's grid shows, and in what order.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HomeBookmarksConfig {
@@ -54,7 +54,7 @@ impl Default for HomeBookmarksConfig {
 }
 
 token_enum! {
-    /// The order of the start page's bookmarks.
+    /// The order of Home's bookmarks.
     pub enum HomeSort {
         default Manual;
         /// The bookmarks' own order.
@@ -74,7 +74,7 @@ mod layout {
     use crate::config::token_enum::token_enum;
 
     token_enum! {
-        /// How the start page draws its bookmarks.
+        /// How Home draws its bookmarks.
         pub enum HomeLayout {
             default Grid;
             /// Icon tiles with a label.
@@ -89,7 +89,7 @@ mod size {
     use crate::config::token_enum::token_enum;
 
     token_enum! {
-        /// The size of the start page's tiles and rows.
+        /// The size of Home's tiles and rows.
         pub enum HomeSize {
             default Medium;
             Small => "small", "Small",
@@ -103,7 +103,7 @@ mod search {
     use crate::config::token_enum::token_enum;
 
     token_enum! {
-        /// Where the start page's search field sits.
+        /// Where Home's search field sits.
         pub enum HomeSearch {
             default Bottom;
             /// Under the brand, scrolling with the page.

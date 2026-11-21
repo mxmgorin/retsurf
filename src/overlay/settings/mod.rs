@@ -474,8 +474,8 @@ impl Settings {
         None
     }
 
-    /// Config and bindings back to their defaults ([`Task::RestoreDefaults`]; the
-    /// pins are the app's). Draft edits like any other, so the close saves them.
+    /// Config and bindings back to their defaults ([`Task::RestoreDefaults`]).
+    /// Draft edits like any other, so the close saves them.
     pub fn restore_defaults(&mut self) {
         let Some(draft) = self.draft_mut() else {
             return;

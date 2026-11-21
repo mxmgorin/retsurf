@@ -202,7 +202,7 @@ struct Tab {
     /// Whether the rendering context holds a frame of it: painted since it was
     /// last shown.
     painted: Cell<bool>,
-    /// Whether its webview was built fetching the start page.
+    /// Whether its webview was built fetching Home.
     opened_home: bool,
 }
 
@@ -221,7 +221,7 @@ impl Tab {
         }
     }
 
-    /// Whether it shows the start page: loaded there, or opened at it with no
+    /// Whether it shows Home: loaded there, or opened at it with no
     /// URL committed yet.
     fn on_home(&self) -> bool {
         match self.state.page_url.as_str() {
@@ -537,7 +537,7 @@ impl AppBrowserInner {
     }
 
     /// Keep the shown tab's frame as its thumbnail, while thumbnails are on and
-    /// the rendering context holds its frame; the start page keeps none.
+    /// the rendering context holds its frame; Home keeps none.
     fn capture_active(&self) {
         if !self.thumbnails.get() {
             return;
@@ -698,7 +698,7 @@ impl AppBrowser {
             .is_some_and(|t| t.state.fullscreen)
     }
 
-    /// Whether the active tab is showing the built-in start page (see [`home`]).
+    /// Whether the active tab is showing Home (see [`home`]).
     /// The router uses this to steer the D-pad as focus navigation on that page.
     #[inline]
     pub fn on_home_page(&self) -> bool {

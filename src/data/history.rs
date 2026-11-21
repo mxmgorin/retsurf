@@ -113,7 +113,7 @@ impl History {
     /// top and re-stamps its time), capped at `max_entries`. Only marks the store
     /// dirty; the disk write is deferred to [`Self::flush`].
     pub fn record(&mut self, url: &str) {
-        // The start page is no visit.
+        // Home is no visit.
         if !self.enabled || url.is_empty() || url == HOME_URL {
             return;
         }
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn the_start_page_is_no_visit() {
+    fn home_is_no_visit() {
         let mut history = history();
         history.record(HOME_URL);
         assert!(history.entries().is_empty());

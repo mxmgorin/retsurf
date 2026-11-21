@@ -101,7 +101,7 @@ fn add_field_button(ui: &mut egui::Ui, glyph: egui::RichText, lit: bool) -> egui
     ui.add(button)
 }
 
-/// The glyph before the address: search while editing and on the start page
+/// The glyph before the address: search while editing and on Home
 /// (whose field is a search), else what the loaded page is.
 fn site_glyph(page_url: &str, editing: bool) -> (&'static str, egui::Color32) {
     match page_url {
@@ -116,7 +116,7 @@ fn site_glyph(page_url: &str, editing: bool) -> (&'static str, egui::Color32) {
 
 /// An address as read at rest: the host without scheme or `www.`, then the rest
 /// of the URL. Anything that is not an http(s) URL reads as written, and the
-/// start page as nothing, so the field shows its hint.
+/// Home as nothing, so the field shows its hint.
 fn display_address(location: &str) -> (String, String) {
     if location == crate::browser::HOME_URL {
         return (String::new(), String::new());
@@ -505,7 +505,7 @@ fn paint_loading_edge(
 }
 
 /// The loading edge while the toolbar is hidden: along the screen's edge on the
-/// toolbar's side, in a layer above the page and the start page. The caller
+/// toolbar's side, in a layer above the page and Home. The caller
 /// keeps it off while an overlay is up, which that layer would cover.
 pub(super) fn paint_screen_loading_edge(ctx: &egui::Context, position: ToolbarPosition) {
     let screen = ctx.content_rect();
@@ -626,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn the_start_page_reads_as_nothing() {
+    fn home_reads_as_nothing() {
         assert_eq!(
             shown(crate::browser::HOME_URL),
             (String::new(), String::new())
