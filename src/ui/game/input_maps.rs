@@ -1,7 +1,7 @@
 //! Rendering of Game Mode's map screens (state in
 //! [`crate::overlay::game::input_maps`]): the list of maps, one map's own
 //! rows, and the confirmation over a removal — each over the shared panel
-//! chrome, so a long list scrolls the way the menu's and settings' do.
+//! chrome, so a long list scrolls the way the Hub's and settings' do.
 
 use crate::command::{AppCommand, GameInputMapsAction};
 use crate::overlay::game::input_maps::{InputMaps, MapAction, NameFor, NEW_MAP_LABEL};

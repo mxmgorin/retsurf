@@ -2,7 +2,7 @@
 //! [`crate::overlay::game::map_edit`]): a row per bound source with the row that
 //! adds one after them, then the layers on the base or a layer's own verbs, and
 //! the list of what the focused row can send, all over the shared panel
-//! chrome, so a long list scrolls the way the menu's and settings' do.
+//! chrome, so a long list scrolls the way the Hub's and settings' do.
 
 use crate::command::{AppCommand, GameMapEditAction};
 use crate::overlay::game::map_edit::{

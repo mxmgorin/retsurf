@@ -48,7 +48,7 @@ pub(super) fn add_prompt(
         _ => None,
     };
 
-    // Tooltip order puts the modal above the Foreground overlays (menu, OSK,
+    // Tooltip order puts the modal above the Foreground overlays (Hub, OSK,
     // the dim layer painted above), so `osk_lift` recenters it clear of the keys.
     let offset = egui::vec2(0.0, -osk_lift / 2.0);
     egui::Area::new(egui::Id::new("prompt"))

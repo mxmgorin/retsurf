@@ -1,10 +1,10 @@
 //! The full-screen settings overlay: the config fields that [`crate::config::AppConfig`]
 //! exposes, editable with the gamepad, grouped into the same kind of tabbed
-//! sections as the menu ([`crate::overlay::menu`]). It owns a *draft* config — a
+//! sections as the Hub ([`crate::overlay::hub`]). It owns a *draft* config — a
 //! clone of the live one taken on open — that the rows mutate; closing saves the
 //! draft to disk and the app re-applies what can change live (see [`crate::app`]).
 //!
-//! Controls mirror the menu but free up dpad for editing: L1/R1 (shoulders) switch
+//! Controls mirror the Hub but free up dpad for editing: L1/R1 (shoulders) switch
 //! section, up/down move between rows, left adjust the focused value, A edits, B saves
 //! and closes — all reachable without an analog stick. The binding list, behind
 //! the Controls tab's door row, is the exception: an action list where A *adds* a
@@ -34,7 +34,7 @@ use crate::event::bindings::{self, Action, GROUPS, SURFACES};
 use inputbind::editor::Controls;
 use inputbind::Store;
 
-/// A settings section — one tab in the bar, mirroring [`crate::overlay::menu`]'s
+/// A settings section — one tab in the bar, mirroring [`crate::overlay::hub`]'s
 /// sections. A few [`config`](crate::config) groups are folded together so the
 /// bar stays narrow; within those the field's `cat` becomes a sub-header.
 #[derive(Clone, Copy, PartialEq, Eq)]

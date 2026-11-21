@@ -50,7 +50,7 @@ impl App {
         match fresh && self.browser.reopen_active(&url) {
             true => {
                 self.browser.set_active_zoom(self.config.browser.page_zoom);
-                self.ui.menu.close();
+                self.ui.hub.close();
             }
             false => self.open_url(url, out),
         }
@@ -78,9 +78,9 @@ impl App {
         at: usize,
         out: &mut Vec<AppCommand>,
     ) -> Option<String> {
-        let bookmark = self.ui.menu.bookmarks.all().get(at)?;
+        let bookmark = self.ui.hub.bookmarks.all().get(at)?;
         let (id, url, launch) = (bookmark.id.clone(), bookmark.url.clone(), bookmark.launch);
-        self.ui.menu.bookmarks.opened(&url);
+        self.ui.hub.bookmarks.opened(&url);
         match launch {
             // A site takes the tab back, chrome and all.
             Launch::Browser => self.end_launch(),
@@ -97,7 +97,7 @@ impl App {
     pub(in crate::app) fn site_reader(&self) -> bool {
         self.applied_site
             .as_deref()
-            .and_then(|id| self.ui.menu.bookmarks.get(id))
+            .and_then(|id| self.ui.hub.bookmarks.get(id))
             .is_some_and(|b| b.reader)
     }
 
@@ -106,7 +106,7 @@ impl App {
     fn site_for(&self, url: &str) -> Option<String> {
         self.browser
             .launched()
-            .or_else(|| self.ui.menu.bookmarks.for_url(url).map(|b| b.id.clone()))
+            .or_else(|| self.ui.hub.bookmarks.for_url(url).map(|b| b.id.clone()))
     }
 
     /// Switch to the site of `url` ahead of loading it in the active tab.
@@ -122,7 +122,7 @@ impl App {
             tab: self.browser.active_tab(),
             launched: self.browser.launched(),
             url: self.browser.state().site_url().to_string(),
-            bookmarks: self.ui.menu.bookmarks.all().len(),
+            bookmarks: self.ui.hub.bookmarks.all().len(),
         };
         if self.site_seen.as_ref() == Some(&seen) {
             return;
@@ -155,7 +155,7 @@ impl App {
         }
         let over = site
             .as_deref()
-            .and_then(|id| self.ui.menu.bookmarks.get(id))
+            .and_then(|id| self.ui.hub.bookmarks.get(id))
             .map(|b| b.settings.clone());
         if let Some(over) = over {
             self.site_base = Some(overlay::site_part(&self.config));
@@ -175,9 +175,9 @@ impl App {
         let Some(id) = self.applied_site.clone() else {
             return;
         };
-        self.ui.menu.bookmarks.set_settings(&id, toml::Table::new());
-        if let Some(at) = self.ui.menu.bookmarks.position(&id) {
-            self.ui.menu.bookmarks.set_reader(at, false);
+        self.ui.hub.bookmarks.set_settings(&id, toml::Table::new());
+        if let Some(at) = self.ui.hub.bookmarks.position(&id) {
+            self.ui.hub.bookmarks.set_reader(at, false);
         }
         self.applied_site = None;
         self.switch_site(Some(id), true, out);
@@ -227,7 +227,7 @@ impl App {
             return;
         };
         let changes = overlay::changes(&overlay::site_part(&self.config), base);
-        self.ui.menu.bookmarks.set_settings(id, changes);
+        self.ui.hub.bookmarks.set_settings(id, changes);
         overlay::apply(&self.config, base, SITE_PATH).save();
     }
 
@@ -258,7 +258,7 @@ impl App {
         if self.browser.in_game_mode() && !game {
             self.leave_game_mode();
         }
-        let id = self.ui.menu.bookmarks.all()[at].id.clone();
+        let id = self.ui.hub.bookmarks.all()[at].id.clone();
         self.browser
             .set_launched((launch != Launch::Browser).then_some(id));
         if game && !self.browser.in_game_mode() {
@@ -297,7 +297,7 @@ impl App {
         let id = self.applied_site.as_deref()?;
         Some(
             self.ui
-                .menu
+                .hub
                 .bookmarks
                 .get(id)
                 .map_or_else(String::new, bookmark_label),
@@ -306,7 +306,7 @@ impl App {
 
     /// The bookmark at `at` as the tile Quick Access leads with.
     fn home_tile(&self, at: usize) -> HomeTile {
-        let bookmark = &self.ui.menu.bookmarks.all()[at];
+        let bookmark = &self.ui.hub.bookmarks.all()[at];
         HomeTile {
             id: bookmark.id.clone(),
             title: bookmark_label(bookmark),
@@ -319,7 +319,7 @@ impl App {
     /// The index in the store of the bookmark the options are open on.
     fn options_bookmark(&self) -> Option<usize> {
         let id = self.ui.quick_access.bookmark_id()?;
-        self.ui.menu.bookmarks.position(id)
+        self.ui.hub.bookmarks.position(id)
     }
 
     /// Show the bookmark's values beside their rows.
@@ -327,7 +327,7 @@ impl App {
         let Some(at) = self.options_bookmark() else {
             return;
         };
-        let bookmark = &self.ui.menu.bookmarks.all()[at];
+        let bookmark = &self.ui.hub.bookmarks.all()[at];
         let (tags, launch, reader) = (
             bookmark.tags.join(", "),
             bookmark.launch.label(),
@@ -345,12 +345,12 @@ impl App {
         let Some(at) = self.options_bookmark() else {
             return;
         };
-        let bookmark = &self.ui.menu.bookmarks.all()[at];
+        let bookmark = &self.ui.hub.bookmarks.all()[at];
         let on_home = self.browser.on_home_page();
         match row {
             OptionsRow::LaunchAs => {
                 let next = bookmark.launch.step(dx);
-                self.ui.menu.bookmarks.set_launch(at, next);
+                self.ui.hub.bookmarks.set_launch(at, next);
                 match on_home {
                     // The reader row comes and goes with the game; the panel stays
                     // on this bookmark even once the filter no longer shows it.
@@ -364,7 +364,7 @@ impl App {
             }
             OptionsRow::Reader => {
                 let reader = !bookmark.reader;
-                self.ui.menu.bookmarks.set_reader(at, reader);
+                self.ui.hub.bookmarks.set_reader(at, reader);
                 if !on_home {
                     self.browser.set_reader(reader);
                 }
@@ -385,7 +385,7 @@ impl App {
             self.ui.quick_access.close();
             return;
         };
-        let bookmark = &self.ui.menu.bookmarks.all()[at];
+        let bookmark = &self.ui.hub.bookmarks.all()[at];
         match row {
             OptionsRow::Open => {
                 self.ui.quick_access.close();
@@ -424,12 +424,12 @@ impl App {
         else {
             return;
         };
-        let store = &mut self.ui.menu.bookmarks;
+        let store = &mut self.ui.hub.bookmarks;
         match what {
             OptionsText::Name => {
                 store.rename(at, text.to_string());
                 if let Some(at) = self.options_bookmark() {
-                    let title = bookmark_label(&self.ui.menu.bookmarks.all()[at]);
+                    let title = bookmark_label(&self.ui.hub.bookmarks.all()[at]);
                     self.ui.quick_access.set_title(title);
                 }
             }
@@ -458,7 +458,7 @@ impl App {
         let Some(&other) = visible.get(target) else {
             return;
         };
-        self.ui.menu.bookmarks.swap(at, other);
+        self.ui.hub.bookmarks.swap(at, other);
         self.ui.home.select_tile(target);
     }
 }

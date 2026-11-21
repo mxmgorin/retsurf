@@ -125,7 +125,7 @@ impl AppUi {
             .pivot(egui::Align2::CENTER_BOTTOM)
             .fixed_pos(egui::pos2(screen.center().x, floor - LIFT))
             // Above every overlay: within one order egui raises whichever area
-            // was last clicked, which would bury a toast under the menu.
+            // was last clicked, which would bury a toast under the Hub.
             .order(egui::Order::Tooltip)
             .interactable(false)
             .show(ctx, |ui| {

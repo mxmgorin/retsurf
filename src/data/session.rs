@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 
 const FILE: &str = "session.toml";
 
-/// A read-only snapshot of a tab: what the session records, and what the menu's
+/// A read-only snapshot of a tab: what the session records, and what the Hub's
 /// Tabs section shows.
 pub struct TabInfo {
     /// Page title, falling back to the URL (then "New tab") when unknown.
     pub title: String,
-    /// The tab's current location (the bookmark target for Y in the menu); may
+    /// The tab's current location (the bookmark target for Y in the Hub); may
     /// be empty for a freshly opened tab that hasn't navigated yet.
     pub url: String,
     /// Whether this is the currently shown tab.

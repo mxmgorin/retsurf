@@ -1,4 +1,4 @@
-//! Short names for what the lists and the start page show: a site's brand name
+//! Short names for what the Hub and the start page show: a site's brand name
 //! from its address, and a bookmark's name or, unnamed, its site.
 
 use crate::data::bookmarks::Bookmark;
@@ -84,7 +84,7 @@ pub fn bookmark_label(bookmark: &Bookmark) -> String {
     }
 }
 
-/// A short label for a tile or a menu URL row (memoized wrapper over
+/// A short label for a tile or a Hub URL row (memoized wrapper over
 /// [`compute_brand_label`]).
 pub(super) fn brand_label(url: &str) -> String {
     BRAND_LABELS.with(|cache| {

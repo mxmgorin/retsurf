@@ -44,7 +44,7 @@ impl MapLibrary {
         Some(self.maps[at].name.clone())
     }
 
-    /// Rename what the menu shows (the write is [`Self::save`]'s). The id stays
+    /// Rename what Quick Access shows (the write is [`Self::save`]'s). The id stays
     /// what it was: it is the file's stem, and `[game_mode] input_map` names it.
     pub fn set_name(&mut self, id: &str, name: String) {
         if let Some(map) = self.get_mut(id) {

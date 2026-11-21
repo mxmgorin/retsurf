@@ -241,7 +241,7 @@ struct Layer {
 pub struct InputMap {
     /// The file stem, or the built-in's id; `[game_mode] input_map` names this.
     pub id: String,
-    /// What the menu shows.
+    /// The name shown on screen.
     pub name: String,
     /// Whether the binary carries this id, so deleting its file restores the
     /// original rather than removing the map.
@@ -511,7 +511,7 @@ impl InputMap {
             .chain(sticks)
     }
 
-    /// Rename what the menu shows. The id stays: it is the file's stem, and
+    /// Rename what is shown on screen. The id stays: it is the file's stem, and
     /// `[game_mode] input_map` names it.
     pub fn set_name(&mut self, name: String) {
         self.raw.name = Some(name.clone());

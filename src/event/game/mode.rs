@@ -159,7 +159,7 @@ impl GameInput {
         self.hold = Duration::from_millis(cfg.hold_ms);
     }
 
-    /// Switch map without leaving Game Mode (the menu's InputMap row): what
+    /// Switch map without leaving Game Mode (Quick Access's input map row): what
     /// the page holds under the old one is released before the new one starts.
     pub fn set_map(&mut self, map: InputMap, browser: &AppBrowser, commands: &mut Vec<AppCommand>) {
         self.release(browser, commands);

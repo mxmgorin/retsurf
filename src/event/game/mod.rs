@@ -62,7 +62,7 @@ impl GameMode {
         }
     }
 
-    /// The live map's id and name, as the menu shows them.
+    /// The live map's id and name, as Quick Access shows them.
     pub fn live(&self) -> (String, String) {
         let map = self.maps.pick(&self.live);
         (map.id.clone(), map.name.clone())
@@ -119,7 +119,7 @@ impl GameMode {
         name
     }
 
-    /// Rename what the menu shows and write it.
+    /// Rename what Quick Access shows and write it.
     pub fn rename(
         &mut self,
         id: &str,

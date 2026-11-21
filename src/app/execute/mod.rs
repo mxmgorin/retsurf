@@ -1,7 +1,7 @@
 //! Command dispatch: turning an [`AppCommand`] into effects on the browser, UI,
 //! and config. The main loop ([`super::App::run`]) drains its command queue
 //! through [`App::execute_command`]; the per-overlay action helpers it fans out
-//! to (menu / settings / start page / bookmarks) live here too. Input intents are
+//! to (Hub / settings / start page / bookmarks) live here too. Input intents are
 //! mapped earlier, in [`super::router`].
 
 mod bookmarks;
@@ -9,13 +9,13 @@ pub(super) use bookmarks::SiteSeen;
 mod game;
 
 use super::{
-    App, AppCommand, HomeAction, InputCommand, MenuAction, PromptAction, SettingsAction,
+    App, AppCommand, HomeAction, HubAction, InputCommand, PromptAction, SettingsAction,
     UpdateNoticeAction,
 };
 use crate::browser::BrowserCommand;
 use crate::config::{overlay, AppConfig, HomeBookmarksConfig};
 use crate::data::bookmarks::{Filter, Launch};
-use crate::overlay::menu::Section;
+use crate::overlay::hub::Section;
 use crate::overlay::osk::OskCommand;
 use crate::overlay::settings::{Door, Task};
 use crate::overlay::update_notice::Choice;
@@ -55,7 +55,7 @@ impl App {
             AppCommand::Browser(BrowserCommand::Load) => self.load(&BrowserCommand::Load, out),
             AppCommand::Browser(command) => self.browser.execute_command(command, &self.config),
             AppCommand::Input(command) => self.route_input(command, out),
-            AppCommand::Menu(action) => self.menu_action(action, out),
+            AppCommand::Hub(action) => self.hub_action(action, out),
             AppCommand::ToggleBookmark => self.toggle_current_bookmark(),
             AppCommand::FocusAddressBar => self.focus_address_bar(out),
             AppCommand::CloseTab => {
@@ -92,70 +92,70 @@ impl App {
         }
     }
 
-    /// Apply a menu action (Tabs / Bookmarks / History / Downloads overlay).
-    fn menu_action(&mut self, action: &MenuAction, out: &mut Vec<AppCommand>) {
+    /// Apply a Hub action.
+    fn hub_action(&mut self, action: &HubAction, out: &mut Vec<AppCommand>) {
         match action {
-            // The gesture toggles the menu; the menu button only ever opens it (it's
-            // hidden behind the menu once shown).
-            MenuAction::Open => {
-                if self.ui.menu.visible {
-                    self.ui.menu.close();
+            // The gesture toggles the Hub; the toolbar button only ever opens it (it's
+            // hidden behind the Hub once shown).
+            HubAction::Open => {
+                if self.ui.hub.visible {
+                    self.ui.hub.close();
                 } else {
-                    self.open_lists();
+                    self.open_hub();
                 }
             }
-            MenuAction::Close => self.ui.menu.close(),
-            MenuAction::SetSection(section) => self.ui.menu.set_section(*section),
-            MenuAction::Select(index) => self.ui.menu.select(*index),
-            MenuAction::OpenSelected => self.menu_open_selected(out),
-            MenuAction::RemoveSelected => self.delete_menu_selection(),
-            MenuAction::Clear => self.ui.menu.clear_or_arm(),
-            MenuAction::OpenUrl(url) => self.open_url(url.clone(), out),
-            MenuAction::OpenDownload(at) => self.open_download(*at, out),
-            MenuAction::OpenBookmark(at) => self.open_bookmark(*at, out),
-            MenuAction::ToggleBookmark(url) => self.toggle_bookmark(url),
-            MenuAction::RemoveAt(index) => match self.ui.menu.section() {
+            HubAction::Close => self.ui.hub.close(),
+            HubAction::SetSection(section) => self.ui.hub.set_section(*section),
+            HubAction::Select(index) => self.ui.hub.select(*index),
+            HubAction::OpenSelected => self.hub_open_selected(out),
+            HubAction::RemoveSelected => self.delete_hub_selection(),
+            HubAction::Clear => self.ui.hub.clear_or_arm(),
+            HubAction::OpenUrl(url) => self.open_url(url.clone(), out),
+            HubAction::OpenDownload(at) => self.open_download(*at, out),
+            HubAction::OpenBookmark(at) => self.open_bookmark(*at, out),
+            HubAction::ToggleBookmark(url) => self.toggle_bookmark(url),
+            HubAction::RemoveAt(index) => match self.ui.hub.section() {
                 Section::Bookmarks => self.remove_bookmark(*index),
-                _ => self.ui.menu.remove_at(*index),
+                _ => self.ui.hub.remove_at(*index),
             },
-            MenuAction::OpenTab(index) => self.open_tab_at(*index),
-            MenuAction::CloseTab(index) => self.close_tab_at(*index),
-            MenuAction::NewTab => self.new_tab(),
+            HubAction::OpenTab(index) => self.open_tab_at(*index),
+            HubAction::CloseTab(index) => self.close_tab_at(*index),
+            HubAction::NewTab => self.new_tab(),
         }
     }
 
-    /// Open the lists on the shown tab, taking its picture for the tab grid
+    /// Open the Hub on the shown tab, taking its picture for the tab grid
     /// first.
-    pub(super) fn open_lists(&mut self) {
+    pub(super) fn open_hub(&mut self) {
         self.browser.capture_thumbnail();
-        self.ui.menu_open(self.browser.active_tab());
+        self.ui.hub_open(self.browser.active_tab());
     }
 
     /// The browser tab the Tabs section's highlight points at, or `None` on the
     /// "+ New tab" row, which occupies index 0 ahead of the tabs.
     fn selected_tab_index(&self) -> Option<usize> {
-        self.ui.menu.tab_selected().checked_sub(1)
+        self.ui.hub.tab_selected().checked_sub(1)
     }
 
-    /// Focus the tab at `index` and close the menu.
+    /// Focus the tab at `index` and close the Hub.
     fn open_tab_at(&mut self, index: usize) {
         self.browser.switch_to(index);
-        self.ui.menu.close();
+        self.ui.hub.close();
     }
 
-    /// Close the tab at `index`, resync the menu's row count, and reclaim what
+    /// Close the tab at `index`, resync the Hub's row count, and reclaim what
     /// the torn-down document frees.
     pub(super) fn close_tab_at(&mut self, index: usize) {
         self.browser.close_tab(index, &self.config.home.page);
-        self.ui.menu.set_tab_count(self.browser.tab_count());
+        self.ui.hub.set_tab_count(self.browser.tab_count());
         self.schedule_heap_trim();
     }
 
-    /// Open a new tab at the home page and close the menu.
+    /// Open a new tab at the home page and close the Hub.
     fn new_tab(&mut self) {
         let home = self.config.home.page.clone();
         self.browser.open_tab(&home);
-        self.ui.menu.close();
+        self.ui.hub.close();
     }
 
     /// Bookmark the current page, or remove its bookmark; never the start
@@ -165,7 +165,7 @@ impl App {
         if url.is_empty() || url == crate::browser::HOME_URL {
             return;
         }
-        if self.browser.launched().is_some() && self.ui.menu.is_bookmarked(&url) {
+        if self.browser.launched().is_some() && self.ui.hub.is_bookmarked(&url) {
             self.ui
                 .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
             return;
@@ -181,7 +181,7 @@ impl App {
         let state = self.browser.state();
         let url = state.page_url();
         self.ui
-            .menu
+            .hub
             .bookmarks
             .all()
             .iter()
@@ -190,7 +190,7 @@ impl App {
 
     /// Bookmark `url` under its open tab's title, or remove its bookmark.
     fn toggle_bookmark(&mut self, url: &str) {
-        let bookmarks = &self.ui.menu.bookmarks;
+        let bookmarks = &self.ui.hub.bookmarks;
         if let Some(index) = bookmarks.all().iter().position(|b| b.url == url) {
             self.remove_bookmark(index);
             return;
@@ -208,7 +208,7 @@ impl App {
             true => Launch::Game,
             false => Launch::Browser,
         };
-        self.ui.menu.bookmarks.add(url, name, launch);
+        self.ui.hub.bookmarks.add(url, name, launch);
         self.ui
             .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
     }
@@ -216,7 +216,7 @@ impl App {
     /// Remove the bookmark at `index`. One with settings or tags takes a second
     /// ask while the first one's notice shows.
     fn remove_bookmark(&mut self, index: usize) {
-        let Some(bookmark) = self.ui.menu.bookmarks.all().get(index) else {
+        let Some(bookmark) = self.ui.hub.bookmarks.all().get(index) else {
             return;
         };
         let confirmed = self
@@ -236,68 +236,68 @@ impl App {
 
     /// Remove the bookmark at `index` at once.
     fn drop_bookmark(&mut self, index: usize) {
-        self.ui.menu.bookmarks.remove(index);
+        self.ui.hub.bookmarks.remove(index);
         self.ui
             .toast(Notice::new(bold::BOOKMARK_SIMPLE, "Bookmark removed"));
     }
 
-    /// Open the highlighted menu entry (the **A** button / Enter). In Tabs this
+    /// Open the highlighted Hub entry (the **A** button / Enter). In Tabs this
     /// switches to the tab (or opens a new one on the "+ New tab" row); in the URL
-    /// lists it loads the entry. Closes the menu either way.
-    pub(super) fn menu_open_selected(&mut self, out: &mut Vec<AppCommand>) {
-        if self.ui.menu.section() == Section::Tabs {
+    /// sections it loads the entry. Closes the Hub either way.
+    pub(super) fn hub_open_selected(&mut self, out: &mut Vec<AppCommand>) {
+        if self.ui.hub.section() == Section::Tabs {
             match self.selected_tab_index() {
                 Some(index) => self.open_tab_at(index),
                 None => self.new_tab(),
             }
-        } else if self.ui.menu.clear_selected() {
+        } else if self.ui.hub.clear_selected() {
             // The section's clear row (index 0): arms, then wipes; stays open.
-            self.ui.menu.clear_or_arm();
+            self.ui.hub.clear_or_arm();
         } else if let Some(at) = self
             .ui
-            .menu
+            .hub
             .bookmarks
             .selected_index()
-            .filter(|_| self.ui.menu.section() == Section::Bookmarks)
+            .filter(|_| self.ui.hub.section() == Section::Bookmarks)
         {
             self.open_bookmark(at, out);
-        } else if self.ui.menu.section() == Section::Downloads {
-            // A on an active/failed download has nothing to open — keep the menu
+        } else if self.ui.hub.section() == Section::Downloads {
+            // A on an active/failed download has nothing to open — keep the Hub
             // up so the user can watch the progress; other sections close.
-            if let Some(at) = self.ui.menu.downloads.selected_entry() {
+            if let Some(at) = self.ui.hub.downloads.selected_entry() {
                 self.open_download(at, out);
             }
-        } else if let Some(url) = self.ui.menu.selected_url() {
+        } else if let Some(url) = self.ui.hub.selected_url() {
             self.open_url(url, out);
         } else {
-            self.ui.menu.close();
+            self.ui.hub.close();
         }
     }
 
-    /// Delete the highlighted menu entry (the **X** button / Delete). In Tabs this
-    /// closes the tab; in the URL lists it removes the bookmark / history entry.
-    pub(super) fn delete_menu_selection(&mut self) {
-        match self.ui.menu.section() {
+    /// Delete the highlighted Hub entry (the **X** button / Delete). In Tabs this
+    /// closes the tab; in the URL sections it removes the bookmark / history entry.
+    pub(super) fn delete_hub_selection(&mut self) {
+        match self.ui.hub.section() {
             Section::Tabs => {
                 if let Some(index) = self.selected_tab_index() {
                     self.close_tab_at(index);
                 }
             }
             Section::Bookmarks => {
-                if let Some(index) = self.ui.menu.bookmarks.selected_index() {
+                if let Some(index) = self.ui.hub.bookmarks.selected_index() {
                     self.remove_bookmark(index);
                 }
             }
-            Section::History | Section::Downloads => self.ui.menu.remove_selected(),
+            Section::History | Section::Downloads => self.ui.hub.remove_selected(),
         }
     }
 
     /// The selected entry's second action: bookmark it in History or Tabs, or
     /// fetch a failed download again.
-    pub(super) fn menu_y_action(&mut self) {
-        match self.ui.menu.section() {
+    pub(super) fn hub_y_action(&mut self) {
+        match self.ui.hub.section() {
             Section::History => {
-                if let Some(url) = self.ui.menu.selected_url() {
+                if let Some(url) = self.ui.hub.selected_url() {
                     self.toggle_bookmark(&url);
                 }
             }
@@ -305,12 +305,12 @@ impl App {
                 let tab = self
                     .selected_tab_index()
                     .and_then(|index| self.browser.tabs().into_iter().nth(index));
-                if let Some(tab) = tab.filter(|tab| self.ui.menu.can_toggle_bookmark(tab)) {
+                if let Some(tab) = tab.filter(|tab| self.ui.hub.can_toggle_bookmark(tab)) {
                     self.toggle_bookmark(&tab.url);
                 }
             }
             Section::Downloads => {
-                let downloads = &self.ui.menu.downloads;
+                let downloads = &self.ui.hub.downloads;
                 let Some(at) = downloads.selected_entry() else {
                     return;
                 };
@@ -318,7 +318,7 @@ impl App {
                     return;
                 };
                 if self.browser.download(&url) {
-                    self.ui.menu.downloads.remove(at);
+                    self.ui.hub.downloads.remove(at);
                 }
             }
             Section::Bookmarks => {}
@@ -328,7 +328,7 @@ impl App {
     /// Apply a settings-overlay action (see [`crate::overlay::settings`]).
     fn settings_action(&mut self, action: &SettingsAction, out: &mut Vec<AppCommand>) {
         match action {
-            // Re-triggering the gesture while it is open closes it, like the menu.
+            // Re-triggering the gesture while it is open closes it, like the Hub.
             SettingsAction::Open => {
                 if self.ui.settings.visible() {
                     self.settings_close(out);
@@ -342,7 +342,7 @@ impl App {
             SettingsAction::Activate => self.settings_confirm(out),
             SettingsAction::Adjust(dx) => self.ui.settings.adjust(*dx),
             // A link on the About tab: save & close like a normal exit, then load
-            // it in the focused tab (open_url also tidies the menu, harmless here).
+            // it in the focused tab (open_url also tidies the Hub, harmless here).
             SettingsAction::OpenLink(url) => {
                 self.settings_close(out);
                 self.open_url(url.clone(), out);
@@ -445,9 +445,9 @@ impl App {
     /// finished downloads, the saved session and the open tabs, plus Servo's
     /// cookies, web storage and HTTP cache. Bookmarks and the settings stay.
     fn clear_browsing_data(&mut self) {
-        self.ui.menu.history_mut().clear();
-        crate::data::page_icons::prune(&self.ui.menu.icon_hosts(false));
-        self.ui.menu.downloads.clear_finished();
+        self.ui.hub.history_mut().clear();
+        crate::data::page_icons::prune(&self.ui.hub.icon_hosts(false));
+        self.ui.hub.downloads.clear_finished();
         self.session.discard();
         self.browser.clear_site_data();
         self.browser.reset_tabs(&self.config.home.page);
@@ -507,7 +507,7 @@ impl App {
     /// Push the config into everything that holds a copy of it.
     pub(super) fn apply_live(&mut self, out: &mut Vec<AppCommand>) {
         // Restoring the defaults can move the pad map under a live Game
-        // Mode, so push it the same way the menu does.
+        // Mode, so push it the same way the map screens do.
         self.adopt_input_map(out);
         let view = &self.config.game_mode.view;
         let (scaling, texture_limit) = match self.browser.in_game_mode() {
@@ -545,14 +545,14 @@ impl App {
         self.ui.set_search_engines(&self.config.browser);
         self.ui.set_osk_style(self.config.osk.style);
         self.ui.set_pad_layout(self.config.controls.pad_layout);
-        self.ui.menu.history_mut().set_config(&self.config.history);
+        self.ui.hub.history_mut().set_config(&self.config.history);
         self.ui.set_memory_debug(
             self.config.debug.memory_overlay,
             self.config.debug.memory_log,
         );
         self.ui.update.set_config(&self.config.update);
         self.browser.apply_config(&self.config);
-        self.ui.menu.downloads.user_agent =
+        self.ui.hub.downloads.user_agent =
             crate::browser::effective_user_agent(&self.config.browser);
         // Off drops the stored session now, not on the next launch.
         if !self.config.browser.restore_tabs {
@@ -645,11 +645,11 @@ impl App {
     /// Open the finished download at `at` of the list: with the app the system
     /// picks for its kind where there is one, else in the focused tab.
     fn open_download(&mut self, at: usize, out: &mut Vec<AppCommand>) {
-        let Some(path) = self.ui.menu.downloads.saved_path(at).map(str::to_string) else {
+        let Some(path) = self.ui.hub.downloads.saved_path(at).map(str::to_string) else {
             return;
         };
         match crate::platform::open_with_system(&path) {
-            Some(true) => self.ui.menu.close(),
+            Some(true) => self.ui.hub.close(),
             Some(false) => {
                 let name = path.rsplit('/').next().unwrap_or(&path);
                 self.ui.toast(Notice::warn(format!("No app opens {name}")));
@@ -662,11 +662,11 @@ impl App {
         }
     }
 
-    /// Load `url` in the focused tab and close the menu.
+    /// Load `url` in the focused tab and close the Hub.
     fn open_url(&mut self, url: String, out: &mut Vec<AppCommand>) {
         self.browser.get_state_mut().location = url;
         self.load(&BrowserCommand::Load, out);
-        self.ui.menu.close();
+        self.ui.hub.close();
     }
 
     /// Run a `command` that loads a page, its site's settings switched in first.

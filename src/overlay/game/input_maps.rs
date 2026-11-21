@@ -428,7 +428,7 @@ mod tests {
     }
 
     /// B walks back out one screen at a time, and says when there is nothing
-    /// left — that is what hands the menu back.
+    /// left — that is what hands back to what opened it.
     #[test]
     fn back_pops_one_level_at_a_time() {
         let mut screens = opened("my-game");

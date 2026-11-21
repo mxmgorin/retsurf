@@ -1,5 +1,5 @@
-//! The full-screen menu opened with the `menu` action (or the menu toolbar button): a tabbed
-//! overlay over the page with Tabs / Bookmarks / History / Downloads sections.
+//! The Hub: a full-screen overlay over the page with Tabs / Bookmarks / History /
+//! Downloads sections, opened from Menu's rows and the toolbar's chips.
 //! It owns the overlay state (whether it's shown, which section is active) and the
 //! Bookmarks, History, and Downloads stores. The central router ([`crate::app`])
 //! maps gamepad / keyboard / mouse input to section switches, selection moves,
@@ -48,14 +48,14 @@ impl Section {
     }
 }
 
-pub struct Menu {
+pub struct Hub {
     pub visible: bool,
     section: Section,
     pub bookmarks: Bookmarks,
     history: History,
     pub downloads: Downloads,
     /// Highlighted row in the Tabs section. The tab list lives in the browser, so
-    /// this index is clamped against `tab_count`, refreshed each frame the menu is
+    /// this index is clamped against `tab_count`, refreshed each frame the Hub is
     /// shown. The row at index `tab_count` is the "+ New tab" entry.
     tab_selected: usize,
     tab_count: usize,
@@ -67,7 +67,7 @@ pub struct Menu {
     clear_armed: bool,
 }
 
-impl Menu {
+impl Hub {
     pub fn new(
         history_cfg: &HistoryConfig,
         downloads_cfg: &DownloadsConfig,
@@ -86,7 +86,7 @@ impl Menu {
         }
     }
 
-    /// Show the menu, resetting every section's highlight to the top, but Tabs'
+    /// Show the Hub, resetting every section's highlight to the top, but Tabs'
     /// to the tab at `active_tab`.
     pub fn open(&mut self, active_tab: usize) {
         self.visible = true;
@@ -219,7 +219,7 @@ impl Menu {
     }
 
     /// Refresh the known tab count (the tab list lives in the browser), keeping the
-    /// Tabs selection in range. Called each frame the menu is shown.
+    /// Tabs selection in range. Called each frame the Hub is shown.
     pub fn set_tab_count(&mut self, count: usize) {
         self.tab_count = count;
         if self.tab_selected > count {

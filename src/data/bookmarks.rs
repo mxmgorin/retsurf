@@ -342,7 +342,7 @@ impl Bookmark {
 pub struct Bookmarks {
     /// In manual order (see [`manual_order`]).
     items: Vec<Bookmark>,
-    /// Highlighted row in the menu's Bookmarks section.
+    /// Highlighted row in the Hub's Bookmarks section.
     cursor: super::ListCursor,
 }
 
@@ -528,7 +528,7 @@ impl Bookmarks {
         self.cursor.entry_index().filter(|&i| i < self.items.len())
     }
 
-    /// Reset the highlight to the top (called when the menu opens).
+    /// Reset the highlight to the top (called when the Hub opens).
     pub fn reset(&mut self) {
         self.cursor.reset(self.items.len());
     }

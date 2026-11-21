@@ -18,8 +18,8 @@
 
 use crate::browser::{AppBrowser, BrowserCommand};
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, MenuAction, PromptAction,
-    QuickAccessAction, SettingsAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, HubAction, PromptAction, QuickAccessAction,
+    SettingsAction,
 };
 use crate::config::{Face, OskConfig, OskStyle, PadLayout};
 use crate::event::sdl2_servo::{char_keyboard_event, code_for_named, named_keyboard_event};
@@ -625,7 +625,7 @@ impl Osk {
             OskTarget::Home(buf) => {
                 let text = buf.trim();
                 if !text.is_empty() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
+                    commands.push(AppCommand::Hub(HubAction::OpenUrl(text.to_string())));
                 }
             }
             // A settings text field already holds the typed value in the draft;

@@ -17,7 +17,7 @@
 //! holds focus; see [`crate::event::keyboard`].
 
 use crate::browser::BrowserCommand;
-use crate::command::{AppCommand, InputCommand, MenuAction, QuickAccessAction, SettingsAction};
+use crate::command::{AppCommand, HubAction, InputCommand, QuickAccessAction, SettingsAction};
 use crate::config::{self, StickRole};
 use crate::overlay::osk::OskCommand;
 use crate::overlay::quick_access::Strip;
@@ -73,7 +73,7 @@ action_table! {
         Confirm => "confirm", "Confirm",
         /// Cancel: close the open overlay, otherwise one step back.
         Cancel => "cancel", "Cancel",
-        /// Open / close Menu; also closes the lists menu it opened.
+        /// Open / close Menu; also closes the Hub it opened.
         Menu => "menu", "Menu",
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
@@ -86,10 +86,10 @@ action_table! {
         Quit => "quit", "Quit",
     }
     "Navigation" => {
-        /// Previous: menu section to the left while the menu is open, otherwise
+        /// Previous: Hub section to the left while the Hub is open, otherwise
         /// history back.
         Prev => "prev", "Back / prev",
-        /// Next: menu section to the right while the menu is open, otherwise
+        /// Next: Hub section to the right while the Hub is open, otherwise
         /// history forward.
         Next => "next", "Forward / next",
         /// Navigate the active tab to the configured home page.
@@ -98,7 +98,7 @@ action_table! {
         Address => "address", "Address bar",
         /// Toggle link-hint navigation.
         Hints => "hints", "Link hints",
-        /// Overlay navigation by one step: menu rows /
+        /// Overlay navigation by one step: overlay rows /
         /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
         /// through to the page when none is.
         NavUp => "nav_up", "Nav up",
@@ -313,7 +313,7 @@ impl Action {
             }
             Action::TabNext => AppCommand::Input(InputCommand::CycleTab(1)),
             Action::TabPrev => AppCommand::Input(InputCommand::CycleTab(-1)),
-            Action::NewTab => AppCommand::Menu(MenuAction::NewTab),
+            Action::NewTab => AppCommand::Hub(HubAction::NewTab),
             Action::CloseTab => AppCommand::CloseTab,
             Action::ZoomIn => AppCommand::Input(InputCommand::Zoom(1)),
             Action::ZoomOut => AppCommand::Input(InputCommand::Zoom(-1)),
@@ -375,7 +375,7 @@ fn default_gamepad_bindings() -> inputbind::Table {
         // X's hold stays with typing.
         ("hold:x", Action::Address),
         ("hold:y", Action::Bookmark),
-        // Defers: the menu opens on release.
+        // Defers: Menu opens on release.
         ("select", Action::Menu),
         ("select+l1", Action::TabPrev),
         ("select+r1", Action::TabNext),

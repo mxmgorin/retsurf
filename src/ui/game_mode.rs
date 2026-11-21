@@ -33,7 +33,7 @@ impl AppUi {
         self.toast = None;
     }
 
-    /// Adopt the name of a map chosen in the menu, or set by an edited
+    /// Adopt the name of a map chosen on screen, or set by an edited
     /// config.
     #[inline]
     pub fn set_input_map_name(&mut self, name: String) {

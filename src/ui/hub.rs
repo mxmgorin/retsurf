@@ -1,4 +1,4 @@
-//! Rendering of the full-screen menu overlay (state lives in [`crate::overlay::menu`]):
+//! Rendering of the Hub (state lives in [`crate::overlay::hub`]):
 //! the section bar with the close action, and the four section lists
 //! (Tabs / Bookmarks / History / Downloads).
 
@@ -12,12 +12,12 @@ use super::tab_thumbs::TabThumbs;
 use super::theme::{self, palette, ROW_FONT};
 use crate::browser::HOME_URL;
 use crate::clock;
-use crate::command::{AppCommand, MenuAction};
+use crate::command::{AppCommand, HubAction};
 use crate::config::{FaceLabels, TabLayout};
 use crate::data::bookmarks::Launch;
 use crate::data::downloads::{format_progress, format_size, State};
 use crate::data::session::TabInfo;
-use crate::overlay::menu::{Menu, Section};
+use crate::overlay::hub::{Hub, Section};
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, AtomExt as _};
 
@@ -25,7 +25,7 @@ use egui_sdl2::egui::{self, AtomExt as _};
 const DEL_W: f32 = 26.0;
 
 /// The panel's id, which its footer is kept under too.
-const PANEL_ID: &str = "menu";
+const PANEL_ID: &str = "hub";
 
 /// A row's trailing delete button, framed and accent on the selected row.
 fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui::Response {
@@ -78,7 +78,7 @@ fn follow_pointer(
     commands: &mut Vec<AppCommand>,
 ) {
     if !selected && panel::pointer_moved_onto(area, row) {
-        commands.push(AppCommand::Menu(MenuAction::Select(index)));
+        commands.push(AppCommand::Hub(HubAction::Select(index)));
     }
 }
 
@@ -234,7 +234,7 @@ fn clear_row(
     }
     follow_pointer(&resp, &resp, selected, 0, commands);
     if resp.clicked() {
-        commands.push(AppCommand::Menu(MenuAction::Clear));
+        commands.push(AppCommand::Hub(HubAction::Clear));
     }
 }
 
@@ -254,7 +254,7 @@ fn url_tail(url: &str) -> &str {
     }
 }
 
-/// A lists-menu tab's icon, the same as the Menu row that opens it.
+/// A Hub section's icon, the same as the Menu row that opens it.
 fn section_icon(section: Section) -> &'static str {
     match section {
         Section::Tabs => bold::TABS,
@@ -266,10 +266,10 @@ fn section_icon(section: Section) -> &'static str {
 
 /// What a section's tab shows after its label: how many tabs are open, how
 /// far the downloads in flight are.
-fn section_badge(menu: &Menu, tabs: &[TabInfo], section: Section) -> Option<String> {
+fn section_badge(hub: &Hub, tabs: &[TabInfo], section: Section) -> Option<String> {
     match section {
         Section::Tabs => Some(tabs.len().to_string()),
-        Section::Downloads => menu.downloads.progress().map(|p| p.label()),
+        Section::Downloads => hub.downloads.progress().map(|p| p.label()),
         Section::Bookmarks | Section::History => None,
     }
 }
@@ -278,26 +278,26 @@ fn section_badge(menu: &Menu, tabs: &[TabInfo], section: Section) -> Option<Stri
 type RowVerbs = [Option<&'static str>; 3];
 
 /// The verbs of the highlighted row in the active section.
-fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
-    let bookmark = |url: &str| match menu.is_bookmarked(url) {
+fn row_verbs(hub: &Hub, tabs: &[TabInfo]) -> RowVerbs {
+    let bookmark = |url: &str| match hub.is_bookmarked(url) {
         true => "unbookmark",
         false => "bookmark",
     };
-    let clear = || match menu.clear_armed() {
+    let clear = || match hub.clear_armed() {
         true => "confirm",
         false => "clear",
     };
-    match menu.section() {
-        Section::Tabs => match menu.tab_selected().checked_sub(1).and_then(|i| tabs.get(i)) {
+    match hub.section() {
+        Section::Tabs => match hub.tab_selected().checked_sub(1).and_then(|i| tabs.get(i)) {
             Some(tab) => {
-                let y = menu.can_toggle_bookmark(tab).then(|| bookmark(&tab.url));
+                let y = hub.can_toggle_bookmark(tab).then(|| bookmark(&tab.url));
                 [Some("switch"), Some("close"), y]
             }
             None => [Some("new tab"), None, None],
         },
-        Section::Bookmarks => match menu.bookmarks.selected_index() {
+        Section::Bookmarks => match hub.bookmarks.selected_index() {
             Some(at) => {
-                let open = match menu.bookmarks.all()[at].launch {
+                let open = match hub.bookmarks.all()[at].launch {
                     Launch::Browser => "open",
                     Launch::App | Launch::Game => "launch",
                 };
@@ -305,23 +305,23 @@ fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
             }
             None => [None; 3],
         },
-        Section::History if menu.clear_selected() => [Some(clear()), None, None],
-        Section::History => match menu.selected_url() {
+        Section::History if hub.clear_selected() => [Some(clear()), None, None],
+        Section::History => match hub.selected_url() {
             Some(url) => [Some("open"), Some("remove"), Some(bookmark(&url))],
             None => [None; 3],
         },
-        Section::Downloads if menu.clear_selected() => {
-            let a = menu.downloads.has_finished().then(clear);
+        Section::Downloads if hub.clear_selected() => {
+            let a = hub.downloads.has_finished().then(clear);
             [a, None, None]
         }
-        Section::Downloads => match menu.downloads.selected_entry() {
+        Section::Downloads => match hub.downloads.selected_entry() {
             Some(at) => {
-                let a = menu.downloads.saved_path(at).map(|_| "open");
-                let x = match menu.downloads.items()[at].is_active() {
+                let a = hub.downloads.saved_path(at).map(|_| "open");
+                let x = match hub.downloads.items()[at].is_active() {
                     true => "cancel",
                     false => "remove",
                 };
-                let y = menu.downloads.failed_url(at).map(|_| "retry");
+                let y = hub.downloads.failed_url(at).map(|_| "retry");
                 [a, Some(x), y]
             }
             None => [None; 3],
@@ -329,8 +329,8 @@ fn row_verbs(menu: &Menu, tabs: &[TabInfo]) -> RowVerbs {
     }
 }
 
-/// What the lists draw besides their own state.
-pub(super) struct ListsView<'a> {
+/// What the Hub draws besides its own state.
+pub(super) struct HubView<'a> {
     pub tabs: &'a [TabInfo],
     pub icons: &'a PageIcons,
     pub thumbs: &'a TabThumbs,
@@ -340,16 +340,16 @@ pub(super) struct ListsView<'a> {
     pub button_hints: bool,
 }
 
-/// Draw the menu overlay: the section bar over the active section's list, and
+/// Draw the Hub: the section bar over the active section's list, and
 /// with `button_hints` a footer naming what the buttons do on the highlighted
 /// row. Left/Right switch section, Up/Down move, A open, X delete, B close.
-pub(super) fn add_menu(
+pub(super) fn add_hub(
     ctx: &egui::Context,
-    menu: &mut Menu,
-    view: &ListsView,
+    hub: &mut Hub,
+    view: &HubView,
     commands: &mut Vec<AppCommand>,
 ) {
-    let ListsView {
+    let HubView {
         tabs,
         icons,
         face,
@@ -362,13 +362,13 @@ pub(super) fn add_menu(
             ui,
             screen,
             &Section::ALL,
-            menu.section(),
+            hub.section(),
             Section::label,
             section_icon,
-            |section| section_badge(menu, tabs, section),
+            |section| section_badge(hub, tabs, section),
         );
         if let Some(section) = clicked {
-            commands.push(AppCommand::Menu(MenuAction::SetSection(section)));
+            commands.push(AppCommand::Hub(HubAction::SetSection(section)));
         }
         ui.add_space(ROW_GAP * 2.0);
         let foot = match button_hints {
@@ -376,24 +376,22 @@ pub(super) fn add_menu(
             false => 0.0,
         };
 
-        match (menu.section(), view.tab_layout) {
+        match (hub.section(), view.tab_layout) {
             (Section::Tabs, TabLayout::List) => {
-                menu.set_tab_cols(1);
-                add_tabs_section(ui, screen, foot, menu, tabs, icons, commands);
+                hub.set_tab_cols(1);
+                add_tabs_section(ui, screen, foot, hub, tabs, icons, commands);
             }
-            (Section::Tabs, TabLayout::Grid) => {
-                add_tab_grid(ui, screen, foot, menu, view, commands)
-            }
+            (Section::Tabs, TabLayout::Grid) => add_tab_grid(ui, screen, foot, hub, view, commands),
             (Section::Bookmarks, _) => {
-                add_bookmarks_section(ui, screen, foot, menu, icons, commands)
+                add_bookmarks_section(ui, screen, foot, hub, icons, commands)
             }
-            (Section::History, _) => add_history_section(ui, screen, foot, menu, icons, commands),
-            (Section::Downloads, _) => add_downloads_section(ui, screen, foot, menu, commands),
+            (Section::History, _) => add_history_section(ui, screen, foot, hub, icons, commands),
+            (Section::Downloads, _) => add_downloads_section(ui, screen, foot, hub, commands),
         }
 
         if button_hints {
             let (_, sideways) = keys::dpad_caps();
-            let [a, x, y] = row_verbs(menu, tabs);
+            let [a, x, y] = row_verbs(hub, tabs);
             let caps = [[face.a], [face.x], [face.y]];
             let mut hints: Vec<keys::Hint> = caps
                 .iter()
@@ -401,7 +399,7 @@ pub(super) fn add_menu(
                 .filter_map(|(cap, verb)| Some((&cap[..], verb?)))
                 .collect();
             // A grid takes Left/Right across its columns.
-            let sections: &[&str] = match menu.section() == Section::Tabs && menu.tab_grid() {
+            let sections: &[&str] = match hub.section() == Section::Tabs && hub.tab_grid() {
                 true => &keys::SHOULDERS,
                 false => &[sideways.as_str()],
             };
@@ -412,7 +410,7 @@ pub(super) fn add_menu(
         }
     });
     if closed {
-        commands.push(AppCommand::Menu(MenuAction::Close));
+        commands.push(AppCommand::Hub(HubAction::Close));
     }
 }
 
@@ -422,13 +420,13 @@ fn add_tabs_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     foot: f32,
-    menu: &Menu,
+    hub: &Hub,
     tabs: &[TabInfo],
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = palette().dim;
-    let selected = menu.tab_selected();
+    let selected = hub.tab_selected();
     // Title width, less the two trailing buttons and the spacing before each.
     let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
     section_scroll(ui, screen, foot).show(ui, |ui| {
@@ -448,7 +446,7 @@ fn add_tabs_section(
         }
         follow_pointer(&new_tab, &new_tab, selected == 0, 0, commands);
         if new_tab.clicked() {
-            commands.push(AppCommand::Menu(MenuAction::NewTab));
+            commands.push(AppCommand::Hub(HubAction::NewTab));
         }
 
         for (i, tab) in tabs.iter().enumerate() {
@@ -472,11 +470,11 @@ fn add_tabs_section(
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenTab(i)));
+                    commands.push(AppCommand::Hub(HubAction::OpenTab(i)));
                 }
                 // Close sits at the far right, so the toggle's slot stays when it can't act.
-                let marked = menu.is_bookmarked(&tab.url);
-                if !menu.can_toggle_bookmark(tab) {
+                let marked = hub.is_bookmarked(&tab.url);
+                if !hub.can_toggle_bookmark(tab) {
                     let star = theme::icon_fill(fill::STAR).color(palette().accent);
                     let shown = egui::Label::new(star).selectable(false);
                     match marked {
@@ -487,12 +485,10 @@ fn add_tabs_section(
                         }
                     };
                 } else if bookmark_button(ui, sel, marked, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
-                        tab.url.clone(),
-                    )));
+                    commands.push(AppCommand::Hub(HubAction::ToggleBookmark(tab.url.clone())));
                 }
                 if delete_button(ui, sel, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
+                    commands.push(AppCommand::Hub(HubAction::CloseTab(i)));
                 }
                 resp
             });
@@ -532,15 +528,15 @@ fn add_tab_grid(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     foot: f32,
-    menu: &mut Menu,
-    view: &ListsView,
+    hub: &mut Hub,
+    view: &HubView,
     commands: &mut Vec<AppCommand>,
 ) {
     let full_w = screen.width() - SIDES;
     let cols = ((full_w + CARD_GAP) / (CARD_MIN_W + CARD_GAP))
         .floor()
         .max(1.0) as usize;
-    menu.set_tab_cols(cols);
+    hub.set_tab_cols(cols);
     let card_w = (full_w - (cols - 1) as f32 * CARD_GAP) / cols as f32;
     // The pictures' shape, else the screen's, which the page's is near.
     let aspect = view
@@ -551,7 +547,7 @@ fn add_tab_grid(
             thumb.height as f32 / thumb.width as f32
         });
     let size = egui::vec2(card_w, ROW_H + (card_w * aspect).round());
-    let selected = menu.tab_selected();
+    let selected = hub.tab_selected();
     let count = view.tabs.len() + 1;
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing = egui::vec2(CARD_GAP, CARD_GAP);
@@ -574,7 +570,7 @@ fn add_tab_card(
     size: egui::Vec2,
     tab: Option<(usize, &TabInfo)>,
     selected: bool,
-    view: &ListsView,
+    view: &HubView,
     commands: &mut Vec<AppCommand>,
 ) {
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -614,15 +610,15 @@ fn add_tab_card(
     follow_pointer(&resp, &resp, selected, index, commands);
     if resp.clicked() {
         let action = match tab {
-            Some((i, _)) => MenuAction::OpenTab(i),
-            None => MenuAction::NewTab,
+            Some((i, _)) => HubAction::OpenTab(i),
+            None => HubAction::NewTab,
         };
-        commands.push(AppCommand::Menu(action));
+        commands.push(AppCommand::Hub(action));
     }
     if let Some((i, _)) = tab {
         let id = egui::Id::new(("tab_card_close", i));
         if close_cross(ui, close, id, selected).clicked() {
-            commands.push(AppCommand::Menu(MenuAction::CloseTab(i)));
+            commands.push(AppCommand::Hub(HubAction::CloseTab(i)));
         }
     }
 }
@@ -674,7 +670,7 @@ fn paint_tab_picture(
     ui: &egui::Ui,
     rect: egui::Rect,
     tab: &TabInfo,
-    view: &ListsView,
+    view: &HubView,
     selected: bool,
 ) {
     let texture = tab
@@ -821,12 +817,12 @@ fn add_bookmarks_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     foot: f32,
-    menu: &Menu,
+    hub: &Hub,
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = palette().dim;
-    let bookmarks = &menu.bookmarks;
+    let bookmarks = &hub.bookmarks;
     if bookmarks.all().is_empty() {
         ui.label(
             egui::RichText::new("No bookmarks yet. Bookmark a page from Quick Access.").color(dim),
@@ -869,10 +865,10 @@ fn add_bookmarks_section(
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenBookmark(i)));
+                    commands.push(AppCommand::Hub(HubAction::OpenBookmark(i)));
                 }
                 if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
                 }
                 resp
             });
@@ -888,11 +884,11 @@ fn add_downloads_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     foot: f32,
-    menu: &Menu,
+    hub: &Hub,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = palette().dim;
-    let downloads = &menu.downloads;
+    let downloads = &hub.downloads;
     if downloads.items().is_empty() {
         ui.label(egui::RichText::new("No downloads yet.").color(dim));
         return;
@@ -908,7 +904,7 @@ fn add_downloads_section(
             screen.width() - SIDES,
             "Clear finished",
             downloads.selected() == 0,
-            menu.clear_armed(),
+            hub.clear_armed(),
             downloads.has_finished(),
             commands,
         );
@@ -954,12 +950,12 @@ fn add_downloads_section(
                     center_selected(&resp);
                 }
                 if resp.clicked() && downloads.saved_path(i).is_some() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenDownload(i)));
+                    commands.push(AppCommand::Hub(HubAction::OpenDownload(i)));
                 }
                 let status = egui::RichText::new(status).color(status_color);
                 ui.add_sized([status_w, ROW_H], egui::Label::new(status).truncate());
                 if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
                 }
                 resp
             });
@@ -1012,12 +1008,12 @@ fn add_history_section(
     ui: &mut egui::Ui,
     screen: egui::Rect,
     foot: f32,
-    menu: &Menu,
+    hub: &Hub,
     icons: &PageIcons,
     commands: &mut Vec<AppCommand>,
 ) {
     let dim = palette().dim;
-    let hist = menu.history();
+    let hist = hub.history();
     if hist.entries().is_empty() {
         ui.label(egui::RichText::new("No history yet.").color(dim));
         return;
@@ -1036,7 +1032,7 @@ fn add_history_section(
             screen.width() - SIDES,
             "Clear all",
             hist.selected() == 0,
-            menu.clear_armed(),
+            hub.clear_armed(),
             true,
             commands,
         );
@@ -1062,19 +1058,19 @@ fn add_history_section(
                     center_selected(&resp);
                 }
                 if resp.clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::OpenUrl(entry.url.clone())));
+                    commands.push(AppCommand::Hub(HubAction::OpenUrl(entry.url.clone())));
                 }
                 let time = egui::RichText::new(labels::time_label(entry.time)).color(dim);
                 ui.add_sized([TIME_W, ROW_H], egui::Label::new(time).truncate());
                 // Trailing actions: the bookmark toggle (same as Y), then delete.
-                let marked = menu.is_bookmarked(&entry.url);
+                let marked = hub.is_bookmarked(&entry.url);
                 if bookmark_button(ui, selected, marked, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::ToggleBookmark(
+                    commands.push(AppCommand::Hub(HubAction::ToggleBookmark(
                         entry.url.clone(),
                     )));
                 }
                 if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Menu(MenuAction::RemoveAt(i)));
+                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
                 }
                 resp
             });

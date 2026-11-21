@@ -4,7 +4,7 @@
 //! [`crate::browser::home`]. State here is which item holds focus (via the
 //! shared [`GridNav`], field above or below the grid) and the search field's edit
 //! buffer; the central router moves the selection and activates, and
-//! [`crate::ui::home`] renders it (reading the tile list from the menu's live
+//! [`crate::ui::home`] renders it (reading the tile list from the Hub's live
 //! bookmarks).
 
 use super::grid::{FieldAt, GridNav};

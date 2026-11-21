@@ -30,7 +30,7 @@ impl AppBrowser {
         order
     }
 
-    /// A snapshot of the open tabs for the menu's Tabs section.
+    /// A snapshot of the open tabs for the Hub's Tabs section.
     pub fn tabs(&self) -> Vec<TabInfo> {
         let active = self.inner.active.get();
         self.inner

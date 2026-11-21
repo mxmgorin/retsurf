@@ -2,11 +2,11 @@
 //! counterpart of [`crate::event::gamepad`]. It applies the firing rules over
 //! the `[keyboard]` table: `nav_*` steps need an open overlay (and auto-repeat
 //! while held), plain shortcuts (no Ctrl/Alt) are muted while anything editable
-//! has focus, and the menu / hint overlays get their fixed keys first. Whatever
+//! has focus, and the Hub and link hints get their fixed keys first. Whatever
 //! isn't consumed is forwarded to the page as a Servo keyboard event.
 
 use crate::browser::{AppBrowser, BrowserCommand};
-use crate::command::{AppCommand, InputCommand, MenuAction};
+use crate::command::{AppCommand, HubAction, InputCommand};
 use crate::event::bindings::Action;
 use crate::ui::{AppUi, Focus};
 use inputbind::sdl::{key_code, mods_for};
@@ -61,11 +61,11 @@ pub fn on_key(
         return;
     }
 
-    // While the menu is open it captures the keyboard wholesale — both edges, so
+    // While the Hub is open it captures the keyboard wholesale — both edges, so
     // no stray release reaches the page either.
-    if ui.menu.visible {
+    if ui.hub.visible {
         if key.pressed {
-            on_menu_key(key, bindings, commands);
+            on_hub_key(key, bindings, commands);
         }
         return;
     }
@@ -90,10 +90,10 @@ pub fn on_key(
     }
 }
 
-/// The menu owns the keyboard: Esc closes, Enter opens, Delete removes;
+/// The Hub owns the keyboard: Esc closes, Enter opens, Delete removes;
 /// navigation and shortcuts go through the bindings.
-fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
-    // The menu overlay covers everything, so nothing editable can hold focus —
+fn on_hub_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<AppCommand>) {
+    // The Hub covers everything, so nothing editable can hold focus —
     // `typing` is moot here.
     if let Some(action) = lookup(key, bindings, true, false) {
         action.push_tap(commands);
@@ -110,12 +110,12 @@ fn on_menu_key(key: &KeyEvent, bindings: &Bindings<Action>, commands: &mut Vec<A
                 1
             })));
         }
-        Keycode::Escape => commands.push(AppCommand::Menu(MenuAction::Close)),
+        Keycode::Escape => commands.push(AppCommand::Hub(HubAction::Close)),
         Keycode::Return | Keycode::KpEnter => {
-            commands.push(AppCommand::Menu(MenuAction::OpenSelected))
+            commands.push(AppCommand::Hub(HubAction::OpenSelected))
         }
         Keycode::Delete | Keycode::Backspace => {
-            commands.push(AppCommand::Menu(MenuAction::RemoveSelected))
+            commands.push(AppCommand::Hub(HubAction::RemoveSelected))
         }
         // P is Y's role: bookmark the selected History or Tabs entry.
         Keycode::P => commands.push(AppCommand::Input(InputCommand::Hints)),

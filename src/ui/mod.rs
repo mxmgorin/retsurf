@@ -11,10 +11,10 @@ mod game;
 mod game_mode;
 mod hints;
 mod home;
+mod hub;
 mod keys;
 mod labels;
 mod memory;
-mod menu;
 mod osk;
 mod overlays;
 mod page_shader;
@@ -54,7 +54,7 @@ use crate::{
     overlay::grid::FieldAt,
     overlay::hints::Hints,
     overlay::home::Home,
-    overlay::menu::{Menu, Section},
+    overlay::hub::{Hub, Section},
     overlay::osk::Osk,
     overlay::prompt::Prompt,
     overlay::quick_access::{QuickAccess, Strip},
@@ -163,7 +163,7 @@ struct FrameInputs {
     tab_count: usize,
     /// Page-zoom chip percentage (`None` at the default zoom).
     zoom_pct: Option<u16>,
-    /// Tab snapshots for the menu's Tabs section (empty unless the menu is open).
+    /// Tab snapshots for the Hub's Tabs section (empty unless the Hub is open).
     tab_infos: Vec<TabInfo>,
     osk_field: OskField,
     /// Where the OSK's caret sits, mirrored into each `TextEdit`.
@@ -172,10 +172,10 @@ struct FrameInputs {
 }
 
 /// The sites whose icons this frame draws: the tabs of the `strip` up, the
-/// menu's current section and the start page's bookmarks when `home_shown`,
+/// Hub's current section and the start page's bookmarks when `home_shown`,
 /// each tab with its live icon.
 fn page_icon_wants<'a>(
-    menu: &'a Menu,
+    hub: &'a Hub,
     home_shown: bool,
     strip: Option<Strip>,
     tabs: &'a [TabInfo],
@@ -188,16 +188,16 @@ fn page_icon_wants<'a>(
         Some(Strip::QuickAccess) => wanted.extend(tabs.iter().filter(|t| t.active).map(tab)),
         None => {}
     }
-    if menu.visible {
-        match menu.section() {
+    if hub.visible {
+        match hub.section() {
             Section::Tabs => {
                 wanted.extend(tabs.iter().map(|t| (t.url.as_str(), t.favicon.as_ref())))
             }
             Section::Bookmarks => {
-                wanted.extend(menu.bookmarks.all().iter().map(|b| (b.url.as_str(), None)))
+                wanted.extend(hub.bookmarks.all().iter().map(|b| (b.url.as_str(), None)))
             }
             Section::History => wanted.extend(
-                menu.history()
+                hub.history()
                     .entries()
                     .iter()
                     .map(|e| (e.url.as_str(), None)),
@@ -206,7 +206,7 @@ fn page_icon_wants<'a>(
         }
     }
     if home_shown {
-        wanted.extend(menu.bookmarks.all().iter().map(|b| (b.url.as_str(), None)));
+        wanted.extend(hub.bookmarks.all().iter().map(|b| (b.url.as_str(), None)));
     }
     wanted
 }
@@ -336,9 +336,9 @@ pub struct AppUi {
     /// toolbar flips visibility once it crosses a threshold (debounces jitter).
     scroll_accum: f32,
     osk: Osk,
-    /// The full-screen menu (Tabs / Bookmarks / History / Downloads); open it
-    /// via [`AppUi::menu_open`] so competing overlays close.
-    pub menu: Menu,
+    /// The Hub (Tabs / Bookmarks / History / Downloads); open it
+    /// via [`AppUi::hub_open`] so competing overlays close.
+    pub hub: Hub,
     /// The full-screen settings overlay (edits a config draft).
     pub settings: Settings,
     /// Self-update manager (About tab): in-place on PortMaster / desktop
@@ -370,7 +370,7 @@ pub struct AppUi {
     pub prompt: Prompt,
     /// Per-axis direction the cursor is edge-scrolling, `(0, 0)` when not.
     edge_scroll: (i8, i8),
-    /// `[interface] button_hints`: what the buttons do, named under the menus.
+    /// `[interface] button_hints`: what the buttons do, named at the foot of the overlays.
     button_hints: bool,
     /// Which letters and colours the face buttons wear on screen.
     pad_layout: PadLayout,
@@ -445,7 +445,7 @@ impl AppUi {
             toolbar_shown: true,
             scroll_accum: 0.0,
             osk: Osk::new(osk, controls.pad_layout),
-            menu: Menu::new(history, downloads, user_agent),
+            hub: Hub::new(history, downloads, user_agent),
             settings: Settings::new(),
             update: Updater::new(update),
             update_notice: UpdateNotice::default(),
@@ -632,8 +632,8 @@ impl AppUi {
     fn frame_snapshot(&mut self, browser: &mut AppBrowser) -> FrameInputs {
         let tab_count = browser.tab_count();
         let zoom_pct = browser.zoom_chip();
-        let tab_infos = if self.menu.visible || self.quick_access.visible {
-            self.menu.set_tab_count(browser.tab_count());
+        let tab_infos = if self.hub.visible || self.quick_access.visible {
+            self.hub.set_tab_count(browser.tab_count());
             browser.tabs()
         } else {
             Vec::new()
@@ -678,7 +678,7 @@ impl AppUi {
         }
         match self.home.tile().and_then(|tile| list.visible.get(tile)) {
             Some(&at) => {
-                let open = match self.menu.bookmarks.all()[at].launch {
+                let open = match self.hub.bookmarks.all()[at].launch {
                     Launch::Browser => "Open",
                     Launch::App | Launch::Game => "Launch",
                 };
@@ -711,20 +711,20 @@ impl AppUi {
 
     /// The filters the start page offers.
     pub fn home_filters(&self) -> Vec<Filter> {
-        bookmarks::filters(self.menu.bookmarks.all(), &self.home_filter())
+        bookmarks::filters(self.hub.bookmarks.all(), &self.home_filter())
     }
 
     /// Indices into the bookmarks of the start page's tiles, in their order.
     pub fn home_visible(&self) -> Vec<usize> {
         let sort = self.home_config.bookmarks.sort;
-        let all = self.menu.bookmarks.all();
+        let all = self.hub.bookmarks.all();
         bookmarks::view(all, &self.home_filter(), sort, bookmark_label)
     }
 
     /// The start page's list as of now: the filter, what it offers, what it shows.
     fn home_list(&self) -> HomeList {
         let filter = self.home_filter();
-        let all = self.menu.bookmarks.all();
+        let all = self.hub.bookmarks.all();
         HomeList {
             visible: bookmarks::view(
                 all,
@@ -787,10 +787,10 @@ impl AppUi {
         self.sync_scale(browser);
         // Before the idle wakes are scheduled: an ending mark adds one.
         self.download_chip
-            .refresh(self.menu.downloads.progress(), Instant::now());
+            .refresh(self.hub.downloads.progress(), Instant::now());
         if self.quick_access.visible {
             self.quick_access
-                .set_downloads(self.menu.downloads.progress());
+                .set_downloads(self.hub.downloads.progress());
         }
 
         // The cursor draws only while it lingers; wake at the end of the linger
@@ -945,10 +945,10 @@ impl AppUi {
                     state.is_loading() && (self.toolbar_rect.is_positive() || edge_alone);
 
                 let strip = self.quick_access.visible.then(|| self.quick_access.strip());
-                let wanted = page_icon_wants(&self.menu, self.home_active, strip, &tab_infos);
+                let wanted = page_icon_wants(&self.hub, self.home_active, strip, &tab_infos);
                 self.page_icons.sync(ctx, wanted);
-                let tab_grid = self.menu.visible
-                    && self.menu.section() == Section::Tabs
+                let tab_grid = self.hub.visible
+                    && self.hub.section() == Section::Tabs
                     && self.tab_layout == TabLayout::Grid;
                 let thumbs = tab_infos.iter().filter(|_| tab_grid);
                 self.tab_thumbs
@@ -975,7 +975,7 @@ impl AppUi {
                     };
                     let home_caret = caret_for(OskField::Home);
                     let tiles = home::Tiles {
-                        bookmarks: self.menu.bookmarks.all(),
+                        bookmarks: self.hub.bookmarks.all(),
                         visible: &list.visible,
                         icons: &self.page_icons,
                     };
@@ -1001,7 +1001,7 @@ impl AppUi {
                     );
                 }
 
-                // Before the menu/OSK chain, so the OSK can open on top of a field.
+                // Before the Hub/OSK chain, so the OSK can open on top of a field.
                 if self.settings.visible() {
                     // The overlay owns its row selection; an egui-focused row
                     // would take Enter a second time and activate twice.
@@ -1067,9 +1067,9 @@ impl AppUi {
                 }
 
                 self.transients_built.cursor = false;
-                if self.menu.visible {
+                if self.hub.visible {
                     drop_egui_focus(ctx);
-                    let view = menu::ListsView {
+                    let view = hub::HubView {
                         tabs: &tab_infos,
                         icons: &self.page_icons,
                         thumbs: &self.tab_thumbs,
@@ -1077,10 +1077,10 @@ impl AppUi {
                         face,
                         button_hints: self.button_hints,
                     };
-                    menu::add_menu(ctx, &mut self.menu, &view, commands);
+                    hub::add_hub(ctx, &mut self.hub, &view, commands);
                 } else if self.quick_access.visible || self.osk.visible {
                     if self.quick_access.visible {
-                        // Same as the menu's: a focused row would activate twice.
+                        // Same as the Hub's: a focused row would activate twice.
                         drop_egui_focus(ctx);
                         quick_access::add_quick_access(
                             ctx,

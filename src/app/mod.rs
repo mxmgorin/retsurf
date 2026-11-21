@@ -8,7 +8,7 @@ mod memory_guard;
 mod router;
 
 use crate::command::{
-    AppCommand, GameInputMapsAction, GameMapEditAction, HomeAction, InputCommand, MenuAction,
+    AppCommand, GameInputMapsAction, GameMapEditAction, HomeAction, HubAction, InputCommand,
     PromptAction, QuickAccessAction, SettingsAction, UpdateNoticeAction,
 };
 
@@ -252,22 +252,22 @@ impl App {
         // The first tab is built on the bookmark's page: a load sent to a tab
         // still on its first one is lost.
         let bookmark = open.as_deref().and_then(|id| {
-            let at = self.ui.menu.bookmarks.position(id);
+            let at = self.ui.hub.bookmarks.position(id);
             if at.is_none() {
                 log::warn!("bookmark `{id}` did not load; opening the usual tabs");
             }
             at
         });
         let first = bookmark
-            .map(|at| self.ui.menu.bookmarks.all()[at].url.clone())
+            .map(|at| self.ui.hub.bookmarks.all()[at].url.clone())
             .or_else(|| self.launch_url.clone());
         let mut commands = Vec::with_capacity(4);
         // Before the first load, which reads the user agent and the engine prefs.
         let site = match bookmark {
-            Some(at) => Some(self.ui.menu.bookmarks.all()[at].id.clone()),
+            Some(at) => Some(self.ui.hub.bookmarks.all()[at].id.clone()),
             None => first
                 .as_deref()
-                .and_then(|url| self.ui.menu.bookmarks.for_url(url))
+                .and_then(|url| self.ui.hub.bookmarks.for_url(url))
                 .map(|b| b.id.clone()),
         };
         self.switch_site(site, false, &mut commands);
@@ -297,12 +297,12 @@ impl App {
             // Record any pages the focused webview navigated to this frame. Sourced
             // from real navigations (not address-bar text), so typing doesn't log.
             for url in self.browser.take_visited() {
-                self.ui.menu.record_history(&url);
-                self.ui.menu.bookmarks.opened(&url);
+                self.ui.hub.record_history(&url);
+                self.ui.hub.bookmarks.opened(&url);
                 self.schedule_heap_trim();
             }
             for (url, title) in self.browser.take_titles() {
-                self.ui.menu.history_mut().set_title(&url, &title);
+                self.ui.hub.history_mut().set_title(&url, &title);
             }
             for (url, icon) in self.browser.take_new_icons() {
                 self.store_page_icon(&url, &icon);
@@ -321,7 +321,7 @@ impl App {
             // Recording only marks history dirty; the throttled flush collapses a
             // browsing burst to one write, and never schedules an idle wake.
             if self.last_flush.elapsed() >= FLUSH_INTERVAL {
-                self.ui.menu.flush_history();
+                self.ui.hub.flush_history();
                 self.save_session();
                 self.flush_config();
                 self.last_flush = Instant::now();
@@ -380,14 +380,14 @@ impl App {
 
             // Apply background download progress/finishes before building the UI,
             // and start any downloads the browser denied navigation for.
-            for finished in self.ui.menu.downloads.poll() {
+            for finished in self.ui.hub.downloads.poll() {
                 if let Some(page) = &finished.page {
                     self.open_download_page(page);
                 }
                 self.ui.download_finished(&finished);
             }
             for request in self.browser.take_download_requests() {
-                match self.ui.menu.downloads.start(request, &self.event_sender) {
+                match self.ui.hub.downloads.start(request, &self.event_sender) {
                     Some(failed) => self.ui.download_finished(&failed),
                     None => self
                         .ui
@@ -404,7 +404,7 @@ impl App {
             // pages for them, then save whatever earlier reads returned.
             self.browser.poll_blob_downloads();
             for item in self.browser.take_blob_downloads() {
-                let finished = self.ui.menu.downloads.save_captured(item);
+                let finished = self.ui.hub.downloads.save_captured(item);
                 self.ui.download_finished(&finished);
             }
 
@@ -484,7 +484,7 @@ impl App {
         // run (we `process::exit` below), so this must be explicit.
         self.save_window_size();
         self.flush_user_data();
-        self.ui.menu.downloads.discard_partials();
+        self.ui.hub.downloads.discard_partials();
         // `process::exit` below skips every `Drop`, and the governor is
         // machine-wide.
         crate::platform::cpufreq::restore();
@@ -609,15 +609,15 @@ impl App {
         let Some(host) = page_icons::host_key(url) else {
             return;
         };
-        if self.config.history.enabled || self.ui.menu.icon_hosts(false).contains(&host) {
+        if self.config.history.enabled || self.ui.hub.icon_hosts(false).contains(&host) {
             page_icons::save(&host, icon);
         }
     }
 
-    /// Drop the icons of hosts nothing references any more: the lists trim
+    /// Drop the icons of hosts nothing references any more: the Hub's stores trim
     /// themselves, the cache does not.
     fn prune_page_icons(&self) {
-        let mut keep = self.ui.menu.icon_hosts(true);
+        let mut keep = self.ui.hub.icon_hosts(true);
         keep.extend(
             self.session
                 .urls()
@@ -635,7 +635,7 @@ impl App {
 
     /// Write retsurf's own buffered state (history, tab session, config) to disk.
     fn flush_user_data(&mut self) {
-        self.ui.menu.flush_history();
+        self.ui.hub.flush_history();
         self.save_session();
         self.flush_config();
     }

@@ -1,5 +1,5 @@
 //! [`AppUi`]'s overlay coordinators: the [`Focus`] precedence the router matches
-//! on, OSK input routing, and the per-overlay passthroughs (menu, settings,
+//! on, OSK input routing, and the per-overlay passthroughs (Hub, settings,
 //! start page, hints) the router and app drive.
 
 use super::{settings, AppUi, OskField};
@@ -23,11 +23,11 @@ pub enum Focus {
     Prompt,
     /// The startup notice of a newer build.
     UpdateNotice,
-    /// The full-screen menu (Tabs / Bookmarks / History / Downloads).
-    Menu,
+    /// The Hub (Tabs / Bookmarks / History / Downloads).
+    Hub,
     /// Quick Access, beside the page or the still-running game.
     QuickAccess,
-    /// Its map list and one map's rows, opened from that menu.
+    /// Its map list and one map's rows, opened from it.
     GameInputMaps,
     /// Its map editor, opened from a map.
     GameMapEdit,
@@ -43,7 +43,7 @@ pub enum Focus {
 }
 
 impl Focus {
-    /// One of Game Mode's own screens: the menu, the map list, the map editor.
+    /// One of Game Mode's own screens: Quick Access, the map list, the map editor.
     /// Exhaustive so a new variant must place itself.
     pub fn is_game_screen(self) -> bool {
         match self {
@@ -51,7 +51,7 @@ impl Focus {
             Focus::Osk
             | Focus::Prompt
             | Focus::UpdateNotice
-            | Focus::Menu
+            | Focus::Hub
             | Focus::Settings
             | Focus::Hints
             | Focus::Home
@@ -68,7 +68,7 @@ impl Focus {
             | Focus::QuickAccess
             | Focus::GameInputMaps
             | Focus::GameMapEdit => true,
-            Focus::Osk | Focus::Prompt | Focus::Menu | Focus::Hints | Focus::Home | Focus::Page => {
+            Focus::Osk | Focus::Prompt | Focus::Hub | Focus::Hints | Focus::Home | Focus::Page => {
                 false
             }
         }
@@ -110,8 +110,8 @@ impl AppUi {
             Focus::Prompt
         } else if self.update_notice.visible() {
             Focus::UpdateNotice
-        } else if self.menu.visible {
-            Focus::Menu
+        } else if self.hub.visible {
+            Focus::Hub
         } else if self.quick_access.visible {
             Focus::QuickAccess
         } else if self.input_maps.visible() {
@@ -271,23 +271,23 @@ impl AppUi {
         }
     }
 
-    /// Open the menu on the tab at `active_tab`. It takes over the stick and A,
+    /// Open the Hub on the tab at `active_tab`. It takes over the stick and A,
     /// so the other user overlays close — input focus and draw order can never
     /// disagree.
     #[inline]
-    pub fn menu_open(&mut self, active_tab: usize) {
+    pub fn hub_open(&mut self, active_tab: usize) {
         self.osk.hide();
         self.hints.hide();
-        self.menu.open(active_tab);
+        self.hub.open(active_tab);
     }
 
     /// Open the settings overlay, seeding its draft from the live config. Like
-    /// the menu it takes over the stick and A, so the other user overlays close.
+    /// the Hub it takes over the stick and A, so the other user overlays close.
     #[inline]
     pub fn settings_open(&mut self, config: &AppConfig) {
         self.osk.hide();
         self.hints.hide();
-        self.menu.close();
+        self.hub.close();
         self.settings.open(config);
     }
 

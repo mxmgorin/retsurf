@@ -26,7 +26,7 @@ pub fn grid_step(selected: usize, dx: i32, dy: i32, cols: usize, len: usize) -> 
     }
 }
 
-/// Highlighted row in a menu list. `reserved` counts the leading non-entry rows
+/// Highlighted row in a Hub section. `reserved` counts the leading non-entry rows
 /// (e.g. history's "Clear all"), so one arithmetic serves plain and offset lists;
 /// the entry count is passed per call — the owning store holds the data.
 pub struct ListCursor {

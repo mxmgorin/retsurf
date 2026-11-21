@@ -15,7 +15,7 @@ use super::svg::SvgTexture;
 use super::theme::{palette, ROW_FONT};
 use super::wordmark;
 use super::OskCaret;
-use crate::command::{AppCommand, HomeAction, InputCommand, MenuAction, QuickAccessAction};
+use crate::command::{AppCommand, HomeAction, HubAction, InputCommand, QuickAccessAction};
 use crate::config::{HomeLayout, HomeSearch, HomeSize};
 use crate::data::bookmarks::{Bookmark, Filter, Launch};
 use crate::overlay::home::Home;
@@ -662,7 +662,7 @@ fn add_search(
     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         let text = home.input().trim();
         if !text.is_empty() {
-            commands.push(AppCommand::Menu(MenuAction::OpenUrl(text.to_string())));
+            commands.push(AppCommand::Hub(HubAction::OpenUrl(text.to_string())));
         }
     }
     if resp.has_focus() {

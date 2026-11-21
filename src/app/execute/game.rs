@@ -38,8 +38,8 @@ impl App {
             return;
         }
         // The lists are what Menu opens, so its gesture also closes them.
-        if strip == Strip::Menu && self.ui.menu.visible {
-            self.ui.menu.close();
+        if strip == Strip::Menu && self.ui.hub.visible {
+            self.ui.hub.close();
             return;
         }
         self.open_strip(strip);
@@ -96,7 +96,7 @@ impl App {
             page: &page,
             page_js: Some(page_js.as_str()).filter(|p| !p.is_empty()),
             page_font_size: Some(self.browser.page_font_size()).filter(|&size| size != 0),
-            saved: !url.is_empty() && self.ui.menu.is_bookmarked(&url),
+            saved: !url.is_empty() && self.ui.hub.is_bookmarked(&url),
             tabs: self.browser.tab_count(),
             input_map: input_map.as_deref(),
             recent_tabs: &recent_tabs,
@@ -173,7 +173,7 @@ impl App {
         self.browser
             .set_game_textures(view.texture_limit, view.texture_filter);
         self.ui.osk(OskCommand::Hide, &self.browser, out);
-        self.ui.menu.close();
+        self.ui.hub.close();
         self.ui.hints.hide();
         if self.ui.settings.visible() {
             self.settings_close(out);
@@ -288,7 +288,7 @@ impl App {
             }
             // Direct, not queued: the mode's command filter drops the browser's.
             Entry::Run(Action::Bookmark) => {
-                let bookmarks = &self.ui.menu.bookmarks;
+                let bookmarks = &self.ui.hub.bookmarks;
                 let guarded = self
                     .current_bookmark()
                     .filter(|&at| bookmarks.all()[at].has_settings());
@@ -321,8 +321,8 @@ impl App {
             }
             Entry::List(section) => {
                 self.ui.quick_access.close();
-                self.open_lists();
-                self.ui.menu.set_section(section);
+                self.open_hub();
+                self.ui.hub.set_section(section);
             }
             Entry::Quit => {
                 if self.ui.quick_access.confirm(Entry::Quit) {
@@ -513,7 +513,7 @@ impl App {
         log::info!("input map: {}", self.config.game_mode.input_map);
     }
 
-    /// Re-snapshot the map list, and the live name the menu shows with it —
+    /// Re-snapshot the map list, and the live name Quick Access shows with it —
     /// every change to a map goes through here.
     fn refresh_input_maps(&mut self) {
         let (live, name) = self.game_mode().live();

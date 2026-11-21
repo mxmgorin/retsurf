@@ -1,10 +1,10 @@
 //! Everything the UI, gamepad, keyboard, and mouse can
-//! ask the app to do. Producers (toolbar clicks, menu rows, gamepad buttons)
+//! ask the app to do. Producers (toolbar clicks, overlay rows, gamepad buttons)
 //! push these into the per-frame queue; [`crate::app`] executes them, sending
 //! contextual [`InputCommand`]s through its central router.
 
 use crate::browser::BrowserCommand;
-use crate::overlay::menu::Section;
+use crate::overlay::hub::Section;
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::overlay::quick_access::Strip;
 use crate::overlay::settings::SettingsSection;
@@ -21,7 +21,7 @@ pub enum AppCommand {
     Resize,
     Browser(BrowserCommand),
     Input(InputCommand),
-    Menu(MenuAction),
+    Hub(HubAction),
     UpdateNotice(UpdateNoticeAction),
     ToggleBookmark,
     /// Put the caret in the address bar, with the keyboard up for a pad.
@@ -60,7 +60,7 @@ impl AppCommand {
             | AppCommand::GameInputMaps(_)
             | AppCommand::GameMapEdit(_) => true,
             AppCommand::Browser(_)
-            | AppCommand::Menu(_)
+            | AppCommand::Hub(_)
             | AppCommand::ToggleBookmark
             | AppCommand::FocusAddressBar
             | AppCommand::CloseTab
@@ -80,7 +80,7 @@ impl AppCommand {
             | AppCommand::Input(_)
             | AppCommand::Prompt(_) => true,
             AppCommand::Browser(_)
-            | AppCommand::Menu(_)
+            | AppCommand::Hub(_)
             | AppCommand::UpdateNotice(_)
             | AppCommand::ToggleBookmark
             | AppCommand::FocusAddressBar
@@ -240,11 +240,11 @@ pub enum UpdateNoticeAction {
     Cancel,
 }
 
-/// Actions on the full-screen menu (Tabs / Bookmarks / History / Downloads).
+/// Actions on the Hub (Tabs / Bookmarks / History / Downloads).
 /// Absolute variants carry their target; relative ones act on the focus.
 #[derive(Clone)]
-pub enum MenuAction {
-    /// Toggle the menu open/closed.
+pub enum HubAction {
+    /// Toggle the Hub open/closed.
     Open,
     Close,
     /// Jump to a specific section. Relative movement comes through
@@ -252,7 +252,7 @@ pub enum MenuAction {
     SetSection(Section),
     /// Highlight row `index` of the active section.
     Select(usize),
-    /// Open the highlighted entry and close the menu.
+    /// Open the highlighted entry and close the Hub.
     OpenSelected,
     /// Remove the highlighted entry.
     RemoveSelected,
@@ -266,11 +266,11 @@ pub enum MenuAction {
     ToggleBookmark(String),
     /// Remove the entry at `index` in the active section.
     RemoveAt(usize),
-    /// Switch to the tab at `index` and close the menu.
+    /// Switch to the tab at `index` and close the Hub.
     OpenTab(usize),
     /// Close the tab at `index`.
     CloseTab(usize),
-    /// Open a new tab and close the menu.
+    /// Open a new tab and close the Hub.
     NewTab,
 }
 
@@ -285,7 +285,7 @@ pub enum InputCommand {
     Cancel,
     /// Toggle the on-screen keyboard, or backspace while it's open.
     ToggleOsk,
-    /// Shoulder by direction (-1 left, +1 right): switch the menu's section
+    /// Shoulder by direction (-1 left, +1 right): switch the Hub's section
     /// while it's open, otherwise navigate the page back / forward.
     Shoulder(i32),
     /// Trigger (L2 = left, R2 = right) with its press state.
@@ -303,7 +303,7 @@ pub enum InputCommand {
     CycleTab(i32),
     /// One overlay-navigation step — keyboard arrows (`nav_*` bindings) or the
     /// stick shaped by the router's threshold + auto-repeat. Acts on whichever
-    /// overlay is open (menu / OSK / hints); a no-op with none.
+    /// overlay is open (Hub / OSK / link hints); a no-op with none.
     Nav(i32, i32),
     /// A discrete D-pad press edge (-1/0/1 per axis), on top of the D-pad's own
     /// contribution to the aim vector.
@@ -343,12 +343,12 @@ pub struct Analog {
 mod tests {
     use super::*;
 
-    /// The reserved Select must not open the browser's menu over a game, and no
+    /// The reserved Select must not open the Hub over a game, and no
     /// shortcut resolved under Game Mode's overlays may navigate out of one.
     #[test]
     fn game_mode_drops_the_browser_vocabulary_and_keeps_its_own() {
         for command in [
-            AppCommand::Menu(MenuAction::Open),
+            AppCommand::Hub(HubAction::Open),
             AppCommand::Settings(SettingsAction::Open),
             AppCommand::Browser(BrowserCommand::Back),
             AppCommand::ToggleBookmark,

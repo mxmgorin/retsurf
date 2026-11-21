@@ -1,5 +1,5 @@
 //! The central input router: decides what a contextual [`InputCommand`] does
-//! given the current state. This is where the "keyboard open? menu open? cursor
+//! given the current state. This is where the "keyboard open? Hub open? cursor
 //! over the page or toolbar?" branches live — the gamepad itself stays
 //! state-agnostic and only emits intents.
 
@@ -53,9 +53,9 @@ impl App {
                         out.push(AppCommand::UpdateNotice(UpdateNoticeAction::Activate));
                     }
                 }
-                Focus::Menu => {
+                Focus::Hub => {
                     if *pressed {
-                        self.menu_open_selected(out);
+                        self.hub_open_selected(out);
                     }
                 }
                 Focus::QuickAccess => {
@@ -99,10 +99,10 @@ impl App {
                 Focus::UpdateNotice => {
                     out.push(AppCommand::UpdateNotice(UpdateNoticeAction::Cancel))
                 }
-                Focus::Menu => self.ui.menu.close(),
+                Focus::Hub => self.ui.hub.close(),
                 // B resumes the game; leaving Game Mode is a row of its own.
                 Focus::QuickAccess => self.ui.quick_access.close(),
-                // B backs out one screen; the list hands the menu back.
+                // B backs out one screen; the list hands back to what opened it.
                 Focus::GameInputMaps => {
                     out.push(AppCommand::GameInputMaps(GameInputMapsAction::Close))
                 }
@@ -126,7 +126,7 @@ impl App {
             },
             InputCommand::ToggleOsk => match focus {
                 // X deletes the highlighted entry (closes a tab in the Tabs section).
-                Focus::Menu => self.delete_menu_selection(),
+                Focus::Hub => self.delete_hub_selection(),
                 // X is unused in settings (rows edit with A and Left/Right) and
                 // on Game Mode's screens (the keyboard has a row of its own).
                 Focus::Settings | Focus::UpdateNotice => {}
@@ -175,7 +175,7 @@ impl App {
                     let state = self.ui.update.snapshot();
                     self.ui.update_notice.move_sel(*dx, &state);
                 }
-                Focus::Menu => self.ui.menu.nav(*dx, *dy),
+                Focus::Hub => self.ui.hub.nav(*dx, *dy),
                 Focus::QuickAccess => {
                     if *dy != 0 {
                         self.ui.quick_access.move_sel(*dy);
@@ -208,7 +208,7 @@ impl App {
             // Y / L3: a bookmark toggle, a space over the keyboard, or link
             // hints on the page.
             InputCommand::Hints => match focus {
-                Focus::Menu => self.menu_y_action(),
+                Focus::Hub => self.hub_y_action(),
                 Focus::Osk => {
                     self.osk_input(PadInput::Y, out);
                 }
@@ -228,7 +228,7 @@ impl App {
                     return;
                 }
                 match focus {
-                    Focus::Menu => self.ui.menu.switch_section(*delta),
+                    Focus::Hub => self.ui.hub.switch_section(*delta),
                     // L1/R1 switch the settings section (Left/Right edits values).
                     Focus::Settings => self.ui.settings.switch_section(*delta),
                     // No sections to switch here — and page navigation under one of

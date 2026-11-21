@@ -12,7 +12,7 @@ use std::sync::{PoisonError, RwLock};
 pub struct Palette {
     /// The brand accent (teal-green) — selected/active emphasis across the UI.
     pub accent: egui::Color32,
-    /// Dark chrome panel fill, shared by the menu / settings / prompt overlays.
+    /// Dark chrome panel fill, shared by the Hub / settings / prompt overlays.
     pub panel_fill: egui::Color32,
     /// Secondary / label text: hints, dates, statuses, mouse-only actions.
     pub dim: egui::Color32,
@@ -300,8 +300,8 @@ pub fn palette() -> &'static Palette {
     }
 }
 
-/// The centered floating card (modal prompt, game menu): one frame, so the two
-/// read as the same surface.
+/// The floating card (modal prompt, update notice, the strips): one frame, so
+/// they read as the same surface.
 pub fn card_frame() -> egui::Frame {
     egui::Frame::default()
         .fill(palette().panel_fill)

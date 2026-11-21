@@ -24,10 +24,10 @@ pub struct InterfaceConfig {
     /// Show site icons on tabs, bookmarks, history and the start page. Servo
     /// fetches them either way; this keeps a 32 px copy per tab and per host.
     pub page_icons: bool,
-    /// Name what the buttons do at the foot of the menus, the settings, the
-    /// start page and the edge strips, and the shoulders beside its filter tabs.
+    /// Name what the buttons do at the foot of the Hub, the settings, the
+    /// start page and the edge strips, and the shoulders beside its filters.
     pub button_hints: bool,
-    /// How the lists show the open tabs: rows, or cards with a picture of each
+    /// How the Hub shows the open tabs: rows, or cards with a picture of each
     /// page, kept from when it was last on screen.
     pub tab_layout: TabLayout,
 }
@@ -77,7 +77,7 @@ mod tab_layout {
     use crate::config::token_enum::token_enum;
 
     token_enum! {
-        /// How the lists show the open tabs. Serializes to its lowercase name in
+        /// How the Hub shows the open tabs. Serializes to its lowercase name in
         /// TOML; an unknown value falls back to `List`.
         pub enum TabLayout {
             default List;

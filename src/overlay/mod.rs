@@ -1,4 +1,4 @@
-//! State machines of the full-screen / modal overlays: the [`menu`], the
+//! State machines of the full-screen / modal overlays: the [`hub`], the
 //! [`quick_access`] panel, Game Mode's own screens ([`game`]), the on-screen
 //! keyboard ([`osk`]), link-hint navigation ([`hints`]), the modal page prompts
 //! ([`prompt`]) and the startup [`update_notice`]. They hold state and input
@@ -10,7 +10,7 @@ pub mod game;
 pub mod grid;
 pub mod hints;
 pub mod home;
-pub mod menu;
+pub mod hub;
 pub mod osk;
 pub mod prompt;
 pub mod quick_access;

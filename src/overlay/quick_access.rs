@@ -15,7 +15,7 @@ use crate::browser::TabMode;
 use crate::config::AppConfig;
 use crate::data::downloads::Progress;
 use crate::event::bindings::Action;
-use crate::overlay::menu::Section;
+use crate::overlay::hub::Section;
 use crate::overlay::settings::{self, Kind, Settings};
 
 /// Which strip is up.
@@ -137,7 +137,7 @@ pub enum Entry {
     Quick(usize),
     /// Run a bindable action, as its gesture would.
     Run(Action),
-    /// Open the lists menu on a section.
+    /// Open the Hub on a section.
     List(Section),
     /// The input map the game runs.
     InputMap,
@@ -217,7 +217,7 @@ const REOPEN_HINT: &str = "Reopen: ";
 const HOME_HEAD: &str = "Home";
 
 /// Menu in the browser: where to go, so home leads, then the tabs, then
-/// the lists and the way out of retsurf.
+/// the Hub and the way out of retsurf.
 const MENU_BROWSER: Layout = &[
     &[
         Slot::Row(Entry::Run(Action::Home)),

@@ -12,13 +12,13 @@ use crate::command::{AppCommand, QuickAccessAction};
 use crate::config::FaceLabels;
 use crate::data::session::TabInfo;
 use crate::event::bindings::Action;
-use crate::overlay::menu::Section;
+use crate::overlay::hub::Section;
 use crate::overlay::quick_access::{Break, Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
 use crate::ui::favicon::PageIcons;
+use crate::ui::hub;
 use crate::ui::keys::{self, HINT_FONT};
-use crate::ui::menu;
 use crate::ui::panel::{
     self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, HEAD_FONT, HEAD_LEAD,
     ROW_GAP, ROW_H,
@@ -163,7 +163,7 @@ fn add_rows(
             Entry::Tab(at) => tabs
                 .get(at)
                 .filter(|tab| tab.url != HOME_URL)
-                .and_then(|tab| menu::site_icon(icons, &tab.url))
+                .and_then(|tab| hub::site_icon(icons, &tab.url))
                 .map(RowIcon::Image),
             _ => None,
         };

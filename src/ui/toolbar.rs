@@ -1,14 +1,14 @@
 //! The toolbar (top or bottom, per the display config): navigation buttons, the
-//! address bar, bookmark toggle, and the chips that jump into menu sections.
+//! address bar, bookmark toggle, and the chips that jump into Hub sections.
 
 use super::download_chip::Chip;
 use super::search_menu::{search_button, SearchEngines};
 use super::theme;
 use super::OskCaret;
 use crate::browser::{BrowserCommand, BrowserState};
-use crate::command::{AppCommand, MenuAction, QuickAccessAction};
+use crate::command::{AppCommand, HubAction, QuickAccessAction};
 use crate::config::ToolbarPosition;
-use crate::overlay::menu::Section;
+use crate::overlay::hub::Section;
 use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui::{self, Vec2};
@@ -420,7 +420,7 @@ pub(super) struct ToolbarInputs<'a> {
     pub search_engines: &'a SearchEngines,
 }
 
-/// The toolbar row — nav buttons, address-bar field, and the menu/tab/download
+/// The toolbar row — nav buttons, address-bar field, and the Menu/tab/download
 /// chips — laid out left-to-right. Shared by the space-reserving panel
 /// ([`add_toolbar`]) and the auto-hide overlay ([`add_toolbar_overlay`]).
 fn toolbar_contents(
@@ -470,13 +470,13 @@ fn toolbar_contents(
                     if inputs.downloads != Chip::Hidden
                         && add_downloads_button(ui, inputs.downloads).clicked()
                     {
-                        commands.push(AppCommand::Menu(MenuAction::Open));
-                        commands.push(AppCommand::Menu(MenuAction::SetSection(Section::Downloads)));
+                        commands.push(AppCommand::Hub(HubAction::Open));
+                        commands.push(AppCommand::Hub(HubAction::SetSection(Section::Downloads)));
                     }
                     // Shown even at one tab, so the slot never moves.
                     if add_tabs_button(ui, inputs.tab_count).clicked() {
-                        commands.push(AppCommand::Menu(MenuAction::Open));
-                        commands.push(AppCommand::Menu(MenuAction::SetSection(Section::Tabs)));
+                        commands.push(AppCommand::Hub(HubAction::Open));
+                        commands.push(AppCommand::Hub(HubAction::SetSection(Section::Tabs)));
                     }
                     add_address_field(ui, state, commands, inputs);
                 },

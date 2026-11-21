@@ -1,5 +1,5 @@
-//! Shared chrome for the menu and settings overlays: panel metrics, the pinned
-//! frame with its close button, the section tab bar, the bounded section scroll.
+//! Shared chrome for the Hub and settings overlays: panel metrics, the pinned
+//! frame with its close button, the section bar, the bounded section scroll.
 
 use super::keys::{centered_hints, Hint, HINT_FONT};
 use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};

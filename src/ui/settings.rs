@@ -1,5 +1,5 @@
 //! Rendering of the full-screen settings overlay (state lives in
-//! [`crate::overlay::settings`]): a section bar like the menu's over the active
+//! [`crate::overlay::settings`]): a section bar like the Hub's over the active
 //! section's field rows. L1/R1 switch section, Up/Down move, Left/Right adjust,
 //! A edit, B save & close — all of it without an analog stick.
 

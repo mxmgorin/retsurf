@@ -3,7 +3,7 @@
 //! browser denies navigations to file-like URLs (see [`crate::browser`]) and the main loop
 //! hands them here. Fetching runs on background threads (see [`worker`]); finished entries
 //! persist to `downloads.toml` (see [`store`]), active ones don't survive a restart. Owns
-//! the entry list and the menu's highlighted row; [`crate::ui`] renders it.
+//! the entry list and the Hub's highlighted row; [`crate::ui`] renders it.
 
 mod naming;
 mod store;
@@ -47,7 +47,7 @@ pub enum State {
 
 pub struct Download {
     pub url: String,
-    /// Name shown in the menu; URL-derived until the response picks the real one.
+    /// Name shown in the Hub; URL-derived until the response picks the real one.
     pub filename: String,
     /// Destination path; empty until the response headers picked the name.
     pub path: String,
@@ -106,7 +106,7 @@ pub struct Downloads {
     publish: bool,
     /// The browser's UA string, sent by the workers' fetches.
     pub user_agent: String,
-    /// Highlighted row in the menu's Downloads section.
+    /// Highlighted row in the Hub's Downloads section.
     cursor: crate::data::ListCursor,
     /// Bytes saved by downloads that ended while others still ran; [`Progress`]
     /// counts them until the last one ends.
@@ -341,7 +341,7 @@ impl Downloads {
         self.cursor.on_reserved_row(self.items.len())
     }
 
-    /// Reset the highlight to the top (called when the menu opens).
+    /// Reset the highlight to the top (called when the Hub opens).
     pub fn reset(&mut self) {
         self.cursor.reset(self.items.len());
     }
@@ -440,7 +440,7 @@ fn file_name_of(path: &str) -> String {
 }
 
 /// `NN% · a / b` while the total is known, else just what has arrived so far.
-/// Shared by the menu's download rows and the About tab's update row.
+/// Shared by the Hub's download rows and the About tab's update row.
 pub fn format_progress(received: u64, total: u64) -> String {
     match (received * 100).checked_div(total) {
         Some(pct) => format!(

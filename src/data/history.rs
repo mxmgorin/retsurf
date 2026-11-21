@@ -1,7 +1,7 @@
 //! Visit history: a capped, most-recent-first list of visited URLs (each with a
 //! visit timestamp) persisted to `history.toml` in the user data dir. Recording
 //! can be disabled and the cap configured via `[history]` in the config file (see
-//! [`crate::config`]). The full-screen menu (see [`crate::overlay::menu`]) renders it; the
+//! [`crate::config`]). The Hub (see [`crate::overlay::hub`]) renders it; the
 //! central router drives selection / open / delete / clear.
 
 use crate::browser::HOME_URL;
@@ -35,7 +35,7 @@ pub struct History {
     enabled: bool,
     /// Cap on retained entries; oldest are dropped past this.
     max_entries: usize,
-    /// Highlighted row in the menu's History section. Row 0 is the "Clear all"
+    /// Highlighted row in the Hub's History section. Row 0 is the "Clear all"
     /// reserved row, so the cursor carries a reserve of 1.
     cursor: super::ListCursor,
     /// Set by [`Self::record`], cleared by a successful [`Self::save`]. Lets the
@@ -84,7 +84,7 @@ impl History {
         }
     }
 
-    /// Write pending changes to disk if any. Called on menu close, on a periodic
+    /// Write pending changes to disk if any. Called on Hub close, on a periodic
     /// throttle while the loop is already awake, and at shutdown (see
     /// [`crate::app`]) — `record` itself only marks `dirty`.
     pub fn flush(&mut self) {
@@ -97,7 +97,7 @@ impl History {
         &self.entries
     }
 
-    /// The highlighted row in the menu's History section. Index 0 is the
+    /// The highlighted row in the Hub's History section. Index 0 is the
     /// "Clear all" top row; the entries follow at `1..=entries.len()`.
     pub fn selected(&self) -> usize {
         self.cursor.selected()
@@ -151,7 +151,7 @@ impl History {
         }
     }
 
-    /// Reset the highlight when the menu opens: land on the first entry (index
+    /// Reset the highlight when the Hub opens: land on the first entry (index
     /// 1), not the destructive "Clear all" row at index 0 — mirrors how the Tabs
     /// section starts on the first tab rather than "+ New tab".
     pub fn reset(&mut self) {
