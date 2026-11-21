@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `[controls]` keys renamed, old values reset to defaults: `osk_nav_threshold` is `nav_threshold`, `osk_nav_initial_delay_ms` is `nav_initial_delay_ms`, `osk_nav_repeat_ms` is `nav_repeat_ms`
+
 ## [0.11.0] - 2026-11-18
 
 ### Added

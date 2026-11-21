@@ -201,19 +201,19 @@ impl AppConfig {
             b::TRIGGER_THRESHOLD,
         );
         fix_f32(
-            "controls.osk_nav_threshold",
-            &mut i.osk_nav_threshold,
-            b::OSK_NAV_THRESHOLD,
+            "controls.nav_threshold",
+            &mut i.nav_threshold,
+            b::NAV_THRESHOLD,
         );
         fix_u64(
-            "controls.osk_nav_initial_delay_ms",
-            &mut i.osk_nav_initial_delay_ms,
-            b::OSK_NAV_INITIAL_DELAY_MS,
+            "controls.nav_initial_delay_ms",
+            &mut i.nav_initial_delay_ms,
+            b::NAV_INITIAL_DELAY_MS,
         );
         fix_u64(
-            "controls.osk_nav_repeat_ms",
-            &mut i.osk_nav_repeat_ms,
-            b::OSK_NAV_REPEAT_MS,
+            "controls.nav_repeat_ms",
+            &mut i.nav_repeat_ms,
+            b::NAV_REPEAT_MS,
         );
         fix_u64("controls.hold_ms", &mut i.hold_ms, b::HOLD_MS);
 

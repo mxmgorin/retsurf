@@ -278,8 +278,8 @@ fn hold_of(cfg: &ControlsConfig) -> Duration {
 
 fn cadence_of(cfg: &ControlsConfig) -> Cadence {
     Cadence {
-        initial_delay: Duration::from_millis(cfg.osk_nav_initial_delay_ms),
-        interval: Duration::from_millis(cfg.osk_nav_repeat_ms),
+        initial_delay: Duration::from_millis(cfg.nav_initial_delay_ms),
+        interval: Duration::from_millis(cfg.nav_repeat_ms),
     }
 }
 

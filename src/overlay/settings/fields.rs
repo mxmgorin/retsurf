@@ -567,9 +567,9 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Controls, "Keyboard",    "On-screen keyboard",     choice!(osk.style: OskStyle), false),
     #[cfg(target_os = "android")]
     f(S::Controls, "Keyboard",    "System keyboard",        flag!(controls.system_keyboard), false),
-    f(S::Controls, "Keyboard",    "Stick threshold",        float!(controls.osk_nav_threshold as f32, bounds::OSK_NAV_THRESHOLD, 0.05, 2), false),
-    f(S::Controls, "Keyboard",    "Repeat delay (ms)",      int!(controls.osk_nav_initial_delay_ms as u64, bounds::OSK_NAV_INITIAL_DELAY_MS, 50), false),
-    f(S::Controls, "Keyboard",    "Repeat rate (ms)",       int!(controls.osk_nav_repeat_ms as u64, bounds::OSK_NAV_REPEAT_MS, 10), false),
+    f(S::Controls, "Keyboard",    "Stick threshold",        float!(controls.nav_threshold as f32, bounds::NAV_THRESHOLD, 0.05, 2), false),
+    f(S::Controls, "Keyboard",    "Repeat delay (ms)",      int!(controls.nav_initial_delay_ms as u64, bounds::NAV_INITIAL_DELAY_MS, 50), false),
+    f(S::Controls, "Keyboard",    "Repeat rate (ms)",       int!(controls.nav_repeat_ms as u64, bounds::NAV_REPEAT_MS, 10), false),
 
     f(S::Content,  "History",     "Record history",         flag!(history.enabled), false),
     f(S::Content,  "History",     "Max entries",            int!(history.max_entries as usize, bounds::HISTORY_MAX, 5), false),

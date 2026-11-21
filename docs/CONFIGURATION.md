@@ -92,9 +92,9 @@ cursor_speed = 600.0       # cursor speed at full deflection
 cursor_curve = 2.0         # 1 to 6; 1 = linear, higher = slower small pushes, same top speed
 scroll_speed = 1600.0      # scroll speed at full deflection
 trigger_threshold = 0.5    # pull at which L2/R2 count as pressed
-osk_nav_threshold = 0.5    # stick deflection that moves the on-screen keyboard
-osk_nav_initial_delay_ms = 350   # delay before held navigation repeats
-osk_nav_repeat_ms = 140          # repeat interval
+nav_threshold = 0.5        # stick deflection that steps through an overlay
+nav_initial_delay_ms = 350 # delay before held navigation repeats
+nav_repeat_ms = 140        # repeat interval
 hold_ms = 400              # press length for a "hold:" gesture
 dpad = "cursor"            # on a page: "cursor", "scroll" or "none"
 left_stick = "cursor"      # on a page: "cursor", "scroll" or "none"

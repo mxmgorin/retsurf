@@ -19,13 +19,13 @@ pub struct ControlsConfig {
     pub scroll_speed: f32,
     /// Trigger pull (normalized) above which L2/R2 count as pressed.
     pub trigger_threshold: f32,
-    /// Stick deflection above which it counts as a directional OSK press.
-    pub osk_nav_threshold: f32,
+    /// Stick deflection above which it counts as a navigation step in an overlay.
+    pub nav_threshold: f32,
     /// Delay before the first auto-repeat of navigation, in ms. Applies to
-    /// stick-driven OSK navigation and to a held `nav_*` gesture.
-    pub osk_nav_initial_delay_ms: u64,
+    /// stick-driven overlay navigation and to a held `nav_*` gesture.
+    pub nav_initial_delay_ms: u64,
     /// Interval between navigation auto-repeats, in ms — same two uses.
-    pub osk_nav_repeat_ms: u64,
+    pub nav_repeat_ms: u64,
     /// Holding a bound button this long fires its `hold:` gesture. The
     /// bindings themselves live in `bindings.toml` — see
     /// [`crate::event::bindings`].
@@ -65,9 +65,9 @@ impl Default for ControlsConfig {
             cursor_curve: crate::config::bounds::CURSOR_CURVE.default as f32,
             scroll_speed: 1600.0,
             trigger_threshold: 0.5,
-            osk_nav_threshold: 0.5,
-            osk_nav_initial_delay_ms: 350,
-            osk_nav_repeat_ms: 140,
+            nav_threshold: 0.5,
+            nav_initial_delay_ms: 350,
+            nav_repeat_ms: 140,
             hold_ms: 400,
             dpad: StickRole::Cursor,
             left_stick: StickRole::Cursor,

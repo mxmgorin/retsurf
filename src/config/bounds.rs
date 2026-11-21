@@ -91,13 +91,13 @@ pub const TRIGGER_THRESHOLD: FloatBounds = FloatBounds {
     max: 0.9,
     default: 0.5,
 };
-pub const OSK_NAV_THRESHOLD: FloatBounds = FloatBounds {
+pub const NAV_THRESHOLD: FloatBounds = FloatBounds {
     min: 0.1,
     max: 0.9,
     default: 0.5,
 };
-pub const OSK_NAV_INITIAL_DELAY_MS: IntBounds = IntBounds { min: 50, max: 1000 };
-pub const OSK_NAV_REPEAT_MS: IntBounds = IntBounds { min: 20, max: 500 };
+pub const NAV_INITIAL_DELAY_MS: IntBounds = IntBounds { min: 50, max: 1000 };
+pub const NAV_REPEAT_MS: IntBounds = IntBounds { min: 20, max: 500 };
 pub const HOLD_MS: IntBounds = IntBounds {
     min: 100,
     max: 2000,

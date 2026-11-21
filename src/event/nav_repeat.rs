@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-/// Where held-stick steps start and how fast they repeat (`[controls] osk_nav_*`).
+/// Where held-stick steps start and how fast they repeat (`[controls] nav_*`).
 pub struct Pace {
     /// Deflection below which the stick counts as centred.
     pub threshold: f32,

@@ -368,14 +368,14 @@ impl App {
         let (cursor_speed, scroll_speed, nav_threshold, edge_scroll) = (
             cfg.cursor_speed,
             cfg.scroll_speed,
-            cfg.osk_nav_threshold,
+            cfg.nav_threshold,
             cfg.edge_scroll,
         );
         let (deadzone, curve) = (cfg.deadzone, cfg.cursor_curve);
         let pace = Pace {
             threshold: nav_threshold,
-            initial: Duration::from_millis(cfg.osk_nav_initial_delay_ms),
-            repeat: Duration::from_millis(cfg.osk_nav_repeat_ms),
+            initial: Duration::from_millis(cfg.nav_initial_delay_ms),
+            repeat: Duration::from_millis(cfg.nav_repeat_ms),
         };
 
         // The right stick carries the keyboard at cursor speed, and scrolls the
