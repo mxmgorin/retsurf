@@ -37,8 +37,8 @@ impl App {
             panel.close();
             return;
         }
-        // The lists are what Quick Menu opens, so its gesture also closes them.
-        if strip == Strip::QuickMenu && self.ui.menu.visible {
+        // The lists are what Menu opens, so its gesture also closes them.
+        if strip == Strip::Menu && self.ui.menu.visible {
             self.ui.menu.close();
             return;
         }
@@ -152,7 +152,7 @@ impl App {
         // gestures named have to be the ones the tables actually hold.
         let keys: Vec<(String, Strip)> = [
             (Action::QuickAccess, Strip::QuickAccess),
-            (Action::Menu, Strip::QuickMenu),
+            (Action::Menu, Strip::Menu),
         ]
         .into_iter()
         .filter_map(|(action, strip)| {
@@ -229,7 +229,7 @@ impl App {
         let (row, at, own) = (panel.row(), panel.selected(), panel.own(panel.selected()));
         if let Entry::Tab(index) = row {
             self.close_tab_at(index);
-            self.open_strip(Strip::QuickMenu);
+            self.open_strip(Strip::Menu);
             self.ui.quick_access.select(at);
             return;
         }

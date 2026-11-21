@@ -73,7 +73,7 @@ action_table! {
         Confirm => "confirm", "Confirm",
         /// Cancel: close the open overlay, otherwise one step back.
         Cancel => "cancel", "Cancel",
-        /// Open / close Quick Menu; also closes the lists menu it opened.
+        /// Open / close Menu; also closes the lists menu it opened.
         Menu => "menu", "Menu",
         /// Open the settings overlay (see [`crate::overlay::settings`]).
         Settings => "settings", "Settings",
@@ -305,7 +305,7 @@ impl Action {
             Action::Home => AppCommand::Browser(BrowserCommand::Home),
             Action::Address => AppCommand::FocusAddressBar,
             Action::Reader => AppCommand::Browser(BrowserCommand::Reader),
-            Action::Menu => AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::QuickMenu)),
+            Action::Menu => AppCommand::QuickAccess(QuickAccessAction::Toggle(Strip::Menu)),
             Action::Settings => AppCommand::Settings(SettingsAction::Open),
             Action::Quit => AppCommand::Shutdown,
             Action::QuickAccess => {
@@ -340,7 +340,7 @@ impl Action {
 pub const REQUIRED: &[Requirement<Action>] = &[
     ("Confirm", &[Action::Confirm]),
     ("Cancel", &[Action::Cancel]),
-    // Quick Menu carries a Settings row, so either way reaches it.
+    // Menu carries a Settings row, so either way reaches it.
     ("Opening settings", &[Action::Settings, Action::Menu]),
 ];
 

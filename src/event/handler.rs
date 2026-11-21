@@ -35,7 +35,7 @@ fn held(gesture: PadGesture) -> PadGesture {
 }
 
 /// The gestures Game Mode reserves against every map: Quick Access's, falling
-/// back so a session has a way out, then Quick Menu's unless it shares that pad,
+/// back so a session has a way out, then Menu's unless it shares that pad,
 /// then Quit's. A kiosk reserves Quit's alone, falling back to the stock ones.
 fn game_reserved(store: &Store, kiosk: bool) -> Vec<(PadGesture, Action)> {
     let quit = |store: &Store| {
@@ -281,7 +281,7 @@ impl AppEventHandler {
             .iter()
             .filter_map(|&(gesture, action)| match action {
                 Action::QuickAccess => Some((gesture, Strip::QuickAccess)),
-                Action::Menu => Some((gesture, Strip::QuickMenu)),
+                Action::Menu => Some((gesture, Strip::Menu)),
                 _ => None,
             })
             .collect()
@@ -1068,7 +1068,7 @@ mod tests {
         );
     }
 
-    /// Quick Menu on Quick Access's own pad would never fire: that one wins.
+    /// Menu on Quick Access's own pad would never fire: that one wins.
     #[test]
     fn a_shared_pad_reserves_quick_access_alone() {
         let mut store = bindings::default_store();

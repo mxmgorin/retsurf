@@ -24,14 +24,14 @@ pub enum Strip {
     /// Actions on the page, the game or the start page, at the right edge.
     QuickAccess,
     /// Places to go, at the left edge.
-    QuickMenu,
+    Menu,
 }
 
 impl Strip {
     pub fn name(self) -> &'static str {
         match self {
             Strip::QuickAccess => "Quick Access",
-            Strip::QuickMenu => "Menu",
+            Strip::Menu => "Menu",
         }
     }
 }
@@ -164,7 +164,7 @@ pub enum Entry {
 }
 
 /// A table row: an entry, a `quick` settings row by its quick label, the
-/// mode's remaining `quick` rows, or the tabs Quick Menu lists.
+/// mode's remaining `quick` rows, or the tabs Menu lists.
 #[derive(Clone, Copy)]
 enum Slot {
     Row(Entry),
@@ -173,7 +173,7 @@ enum Slot {
     Tabs,
 }
 
-/// The most open tabs Quick Menu lists itself; its Tabs row lists them all.
+/// The most open tabs Menu lists itself; its Tabs row lists them all.
 pub const MENU_TABS: usize = 3;
 
 /// A strip's table: runs of slots, a rule drawn between one and the next.
@@ -216,7 +216,7 @@ const REOPEN_HINT: &str = "Reopen: ";
 /// header without one.
 const HOME_HEAD: &str = "Home";
 
-/// Quick Menu in the browser: where to go, so home leads, then the tabs, then
+/// Menu in the browser: where to go, so home leads, then the tabs, then
 /// the lists and the way out of retsurf.
 const MENU_BROWSER: Layout = &[
     &[
@@ -237,7 +237,7 @@ const MENU_BROWSER: Layout = &[
     ],
 ];
 
-/// Quick Menu over a game: only what leaves the game where it is.
+/// Menu over a game: only what leaves the game where it is.
 const MENU_GAME: Layout = &[&[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)]];
 
 /// A bookmark's options; the moves show only where the order is the manual one.
@@ -398,8 +398,8 @@ fn groups(strip: Strip, over: Over, tabs: &[usize]) -> Vec<Vec<Entry>> {
         (Strip::QuickAccess, Over::Home) => ACCESS_HOME,
         (Strip::QuickAccess, Over::Tab(TabMode::Game)) => ACCESS_GAME,
         (Strip::QuickAccess, Over::Tab(_)) => ACCESS_BROWSER,
-        (Strip::QuickMenu, Over::Tab(TabMode::Game)) => MENU_GAME,
-        (Strip::QuickMenu, _) => MENU_BROWSER,
+        (Strip::Menu, Over::Tab(TabMode::Game)) => MENU_GAME,
+        (Strip::Menu, _) => MENU_BROWSER,
     };
     let quick = |i: usize| {
         let field = &Settings::fields()[i];
@@ -439,7 +439,7 @@ fn groups(strip: Strip, over: Over, tabs: &[usize]) -> Vec<Vec<Entry>> {
 /// in a game leaving Game Mode.
 fn way_out(strip: Strip, over: Over, launched: bool) -> Option<Entry> {
     match (strip, over, launched) {
-        (Strip::QuickMenu, ..) => None,
+        (Strip::Menu, ..) => None,
         (_, _, true) => Some(Entry::Leave),
         (_, Over::Tab(TabMode::Game), false) => Some(Entry::Exit),
         _ => None,
@@ -447,14 +447,14 @@ fn way_out(strip: Strip, over: Over, launched: bool) -> Option<Entry> {
 }
 
 /// What the header reads over a tab: in Quick Access its site's bookmark
-/// name, else `page`, else the strip's name; in Quick Menu the strip's name.
+/// name, else `page`, else the strip's name; in Menu the strip's name.
 fn header(strip: Strip, site: Option<SiteHead>, page: &str) -> String {
     let named = site.map(|site| site.name).filter(|name| !name.is_empty());
     match strip {
         Strip::QuickAccess => named
             .or(Some(page).filter(|page| !page.is_empty()))
             .unwrap_or(strip.name()),
-        Strip::QuickMenu => strip.name(),
+        Strip::Menu => strip.name(),
     }
     .to_string()
 }
@@ -543,12 +543,12 @@ pub struct Opening<'a> {
     pub tabs: usize,
     /// The name of the input map the game runs, over a game.
     pub input_map: Option<&'a str>,
-    /// The tabs Quick Menu lists, the latest shown first: the first is on
+    /// The tabs Menu lists, the latest shown first: the first is on
     /// screen.
     pub recent_tabs: &'a [TabRow<'a>],
 }
 
-/// An open tab as Quick Menu lists it.
+/// An open tab as Menu lists it.
 #[derive(Clone, Copy)]
 pub struct TabRow<'a> {
     pub index: usize,
@@ -591,7 +591,7 @@ pub struct QuickAccess {
     bookmark: Option<OptionsBookmark>,
     /// What the header reads: what the rows act on.
     title: String,
-    /// The tab on screen, while Quick Menu lists it.
+    /// The tab on screen, while Menu lists it.
     shown_tab: Option<usize>,
     /// The JS preset the page opened with, while one is known.
     page_js: Option<String>,
@@ -818,7 +818,7 @@ impl QuickAccess {
         self.set_value(Entry::List(Section::Downloads), value);
     }
 
-    /// The tab on screen, while Quick Menu lists it.
+    /// The tab on screen, while Menu lists it.
     pub fn shown_tab(&self) -> Option<usize> {
         self.shown_tab
     }
@@ -1075,7 +1075,7 @@ mod tests {
             matches!(row, Entry::List(_))
                 || matches!(row, Entry::Run(action) if *action != Action::Bookmark)
         }));
-        // Actions in Quick Access, places to go in Quick Menu.
+        // Actions in Quick Access, places to go in Menu.
         let door = |row: &Entry| {
             matches!(
                 row,
@@ -1088,12 +1088,12 @@ mod tests {
             )
         };
         assert!(!browser.iter().any(door));
-        let menu = entries(Strip::QuickMenu, Over::Tab(TabMode::Page), false);
+        let menu = entries(Strip::Menu, Over::Tab(TabMode::Page), false);
         assert!(menu.iter().all(door));
         let bookmark = options_rows(true, false);
         assert!(bookmark.iter().all(|row| matches!(row, Entry::Options(_))));
         assert_eq!(
-            entries(Strip::QuickMenu, Over::Tab(TabMode::Game), false),
+            entries(Strip::Menu, Over::Tab(TabMode::Game), false),
             [Entry::Settings, Entry::Quit]
         );
         assert!(!game.contains(&Entry::Settings));
@@ -1111,10 +1111,10 @@ mod tests {
         assert!(home.iter().all(|row| matches!(row, Entry::Quick(_))));
         assert!(home.iter().any(|row| row.label() == "Sort"));
         assert!(!home.iter().any(|row| row.label() == "Theme"));
-        // Quick Menu goes everywhere a page's does, short of where it already is.
-        let mut menu = entries(Strip::QuickMenu, Over::Tab(TabMode::Page), false);
+        // Menu goes everywhere a page's does, short of where it already is.
+        let mut menu = entries(Strip::Menu, Over::Tab(TabMode::Page), false);
         menu.retain(|row| *row != Entry::Run(Action::Home));
-        assert_eq!(entries(Strip::QuickMenu, Over::Home, false), menu);
+        assert_eq!(entries(Strip::Menu, Over::Home, false), menu);
     }
 
     #[test]
@@ -1142,7 +1142,7 @@ mod tests {
         assert!(game.contains(&Entry::Leave) && !game.contains(&Entry::Exit));
         let app = entries(Strip::QuickAccess, Over::Tab(TabMode::Page), true);
         assert_eq!(app.last(), Some(&Entry::Leave));
-        let menu = entries(Strip::QuickMenu, Over::Tab(TabMode::Page), true);
+        let menu = entries(Strip::Menu, Over::Tab(TabMode::Page), true);
         assert!(!menu.contains(&Entry::Leave));
     }
 
@@ -1274,11 +1274,11 @@ mod tests {
             &Opening {
                 site: Some(itch()),
                 launched: true,
-                ..Opening::bare(Strip::QuickMenu, over)
+                ..Opening::bare(Strip::Menu, over)
             },
             &AppConfig::default(),
         );
-        assert_eq!(panel.title(), Strip::QuickMenu.name());
+        assert_eq!(panel.title(), Strip::Menu.name());
         assert!(!entries_of(&panel)
             .iter()
             .any(|r| matches!(r, Entry::Options(_))));
@@ -1408,7 +1408,7 @@ mod tests {
     fn quitting_takes_a_second_press() {
         let mut panel = QuickAccess::new();
         panel.open(
-            &Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page)),
+            &Opening::bare(Strip::Menu, Over::Tab(TabMode::Page)),
             &AppConfig::default(),
         );
         panel.move_sel(-1);
@@ -1464,10 +1464,10 @@ mod tests {
         assert!(panel.confirm(row));
     }
 
-    /// [`crate::event::bindings::REQUIRED`] counts on Quick Menu to reach the
+    /// [`crate::event::bindings::REQUIRED`] counts on Menu to reach the
     /// settings wherever it opens.
     #[test]
-    fn quick_menu_reaches_the_settings_everywhere() {
+    fn menu_reaches_the_settings_everywhere() {
         let overs = [
             Over::Tab(TabMode::Page),
             Over::Tab(TabMode::Reader),
@@ -1476,14 +1476,14 @@ mod tests {
         ];
         for over in overs {
             for launched in [false, true] {
-                let menu = entries(Strip::QuickMenu, over, launched);
+                let menu = entries(Strip::Menu, over, launched);
                 assert!(menu.contains(&Entry::Settings), "{over:?}");
             }
         }
     }
 
-    /// A rule parts what acts on a tab from what sets it, and Quick Menu's
-    /// places from its tabs and its lists; over a game Quick Menu is one run.
+    /// A rule parts what acts on a tab from what sets it, and Menu's
+    /// places from its tabs and its lists; over a game Menu is one run.
     #[test]
     fn a_rule_parts_actions_from_settings() {
         for mode in [TabMode::Page, TabMode::Game] {
@@ -1501,7 +1501,7 @@ mod tests {
                 index: 0,
                 title: "A",
             }],
-            ..Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page))
+            ..Opening::bare(Strip::Menu, Over::Tab(TabMode::Page))
         };
         panel.open(&menu, &AppConfig::default());
         let tabs = entries_of(&panel)
@@ -1510,17 +1510,17 @@ mod tests {
         let lists = entries_of(&panel)
             .iter()
             .position(|row| *row == Entry::List(Section::Bookmarks));
-        let rules = [tabs, lists].map(|at| (at.expect("a page's Quick Menu row"), Break::Rule));
+        let rules = [tabs, lists].map(|at| (at.expect("a page's Menu row"), Break::Rule));
         assert_eq!(breaks_of(&panel), rules);
-        let game = Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Game));
+        let game = Opening::bare(Strip::Menu, Over::Tab(TabMode::Game));
         panel.open(&game, &AppConfig::default());
         assert!(breaks_of(&panel).is_empty());
     }
 
-    /// Quick Menu lists the latest shown tabs, the one on screen first and
+    /// Menu lists the latest shown tabs, the one on screen first and
     /// marked; A shows a tab, X closes it.
     #[test]
-    fn quick_menu_lists_the_latest_tabs() {
+    fn menu_lists_the_latest_tabs() {
         let tabs = [
             TabRow {
                 index: 2,
@@ -1535,11 +1535,11 @@ mod tests {
         let menu = Opening {
             recent_tabs: &tabs,
             tabs: 3,
-            ..Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page))
+            ..Opening::bare(Strip::Menu, Over::Tab(TabMode::Page))
         };
         panel.open(&menu, &AppConfig::default());
         let at = |entry| entries_of(&panel).iter().position(|row| *row == entry);
-        let listed = |entry| at(entry).expect("Quick Menu lists the tabs it was given");
+        let listed = |entry| at(entry).expect("Menu lists the tabs it was given");
         let (shown, before) = (listed(Entry::Tab(2)), listed(Entry::Tab(0)));
         assert_eq!(before, shown + 1);
         assert_eq!(at(Entry::NewTab), Some(before + 1));
@@ -1568,12 +1568,12 @@ mod tests {
     #[test]
     fn the_downloads_row_shows_what_is_in_flight() {
         let mut panel = QuickAccess::new();
-        let menu = Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page));
+        let menu = Opening::bare(Strip::Menu, Over::Tab(TabMode::Page));
         panel.open(&menu, &AppConfig::default());
         let at = entries_of(&panel)
             .iter()
             .position(|row| *row == Entry::List(Section::Downloads))
-            .expect("a page's Quick Menu lists the downloads");
+            .expect("a page's Menu lists the downloads");
         let progress = |active, received, total| Progress {
             active,
             received,
@@ -1587,7 +1587,7 @@ mod tests {
         assert_eq!(panel.value(at), "");
     }
 
-    /// The header names the page's site, else the strip; Quick Menu always
+    /// The header names the page's site, else the strip; Menu always
     /// names itself.
     #[test]
     fn the_header_names_what_the_rows_act_on() {
@@ -1621,11 +1621,11 @@ mod tests {
         panel.open(
             &Opening {
                 page: "example.com",
-                ..Opening::bare(Strip::QuickMenu, over)
+                ..Opening::bare(Strip::Menu, over)
             },
             &config,
         );
-        assert_eq!(panel.title(), Strip::QuickMenu.name());
+        assert_eq!(panel.title(), Strip::Menu.name());
     }
 
     /// What the footer says A does follows the focused row and its state.
@@ -1685,7 +1685,7 @@ mod tests {
         assert_eq!(value_of(&panel, Entry::InputMap), "Keyboard (WASD)");
         let menu = Opening {
             tabs: 3,
-            ..Opening::bare(Strip::QuickMenu, Over::Tab(TabMode::Page))
+            ..Opening::bare(Strip::Menu, Over::Tab(TabMode::Page))
         };
         panel.open(&menu, &AppConfig::default());
         assert_eq!(value_of(&panel, Entry::List(Section::Tabs)), "3");

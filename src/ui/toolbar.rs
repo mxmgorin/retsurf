@@ -436,11 +436,11 @@ fn toolbar_contents(
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.set_min_height(ROW_H);
-            // In the corner Quick Menu opens from, the easiest place for a
+            // In the corner Menu opens from, the easiest place for a
             // thumb to find.
             if ui.add(new_toolbar_button(icon(bold::LIST))).clicked() {
                 commands.push(AppCommand::QuickAccess(QuickAccessAction::Toggle(
-                    Strip::QuickMenu,
+                    Strip::Menu,
                 )));
             }
             if ui.add(new_toolbar_button(icon(bold::ARROW_LEFT))).clicked() {

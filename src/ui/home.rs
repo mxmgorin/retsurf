@@ -549,7 +549,7 @@ const STACK_SALT: &str = "home_stack";
 const TABS_SALT: &str = "home_tabs";
 
 /// The search bar: the field, between the toolbar's strip buttons when
-/// `buttons` (Quick Menu at the left, Quick Access at the right, as the toolbar
+/// `buttons` (Menu at the left, Quick Access at the right, as the toolbar
 /// has them), all in one frame that lights while the field is selected.
 fn add_search_bar(
     ui: &mut egui::Ui,
@@ -579,7 +579,7 @@ fn add_search_bar(
         ui.set_height(BAR_H);
         ui.horizontal_centered(|ui| {
             if buttons {
-                strip_button(ui, Strip::QuickMenu, commands);
+                strip_button(ui, Strip::Menu, commands);
                 divider(ui);
             }
             let glass = font(FIELD_FONT * GLASS_SHARE);
@@ -610,7 +610,7 @@ fn divider(ui: &mut egui::Ui) {
 /// The frameless button that opens `strip`, lit when hovered.
 fn strip_button(ui: &mut egui::Ui, strip: Strip, commands: &mut Vec<AppCommand>) {
     let icon = match strip {
-        Strip::QuickMenu => bold::LIST,
+        Strip::Menu => bold::LIST,
         Strip::QuickAccess => bold::DOTS_THREE,
     };
     let size = egui::vec2(STRIP_BUTTON, STRIP_BUTTON);
@@ -726,7 +726,7 @@ fn add_tabs(
                 |ui| {
                     ui.spacing_mut().item_spacing.x = TAB_GAP;
                     if buttons {
-                        strip_button(ui, Strip::QuickMenu, commands);
+                        strip_button(ui, Strip::Menu, commands);
                     }
                     if tabs.filters.len() > 1 {
                         add_filter_tabs(ui, tabs, commands);

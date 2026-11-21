@@ -254,7 +254,7 @@ fn url_tail(url: &str) -> &str {
     }
 }
 
-/// A lists-menu tab's icon, the same as the Quick Menu row that opens it.
+/// A lists-menu tab's icon, the same as the Menu row that opens it.
 fn section_icon(section: Section) -> &'static str {
     match section {
         Section::Tabs => bold::TABS,

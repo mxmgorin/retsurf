@@ -184,7 +184,7 @@ fn page_icon_wants<'a>(
     let tab = |t: &'a TabInfo| (t.url.as_str(), t.favicon.as_ref());
     // Menu lists the tabs; Quick Access heads with the shown one.
     match strip {
-        Some(Strip::QuickMenu) => wanted.extend(tabs.iter().map(tab)),
+        Some(Strip::Menu) => wanted.extend(tabs.iter().map(tab)),
         Some(Strip::QuickAccess) => wanted.extend(tabs.iter().filter(|t| t.active).map(tab)),
         None => {}
     }
@@ -300,7 +300,7 @@ pub struct AppUi {
     /// What the frame last built, and the one last drawn, show of the indicators.
     indicators_built: Indicators,
     indicators_drawn: Indicators,
-    /// The edge strips, Quick Access and Quick Menu.
+    /// The edge strips, Quick Access and Menu.
     pub quick_access: QuickAccess,
     /// Game Mode's map list and one map's rows.
     pub input_maps: InputMaps,

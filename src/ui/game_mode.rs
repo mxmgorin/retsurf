@@ -143,11 +143,11 @@ mod tests {
     fn the_hint_names_the_bound_gestures_of_the_device_in_hand() {
         let keys = vec![
             ("ctrl+alt+a".to_string(), Strip::QuickAccess),
-            ("ctrl+m".to_string(), Strip::QuickMenu),
+            ("ctrl+m".to_string(), Strip::Menu),
         ];
         let pad = [
             (PadGesture::Hold(Pad::Start), Strip::QuickAccess),
-            (PadGesture::Hold(Pad::Select), Strip::QuickMenu),
+            (PadGesture::Hold(Pad::Select), Strip::Menu),
         ];
         // A shared verb is said once.
         assert_eq!(
@@ -176,7 +176,7 @@ mod tests {
         assert_eq!(game_mode_hint(&pad[..1], &[], true).parts.len(), 3);
         let mixed = [
             (PadGesture::Hold(Pad::Start), Strip::QuickAccess),
-            (PadGesture::Chord(Pad::Select, Pad::Y), Strip::QuickMenu),
+            (PadGesture::Chord(Pad::Select, Pad::Y), Strip::Menu),
         ];
         let parts = game_mode_hint(&mixed, &[], false).parts;
         assert_eq!(

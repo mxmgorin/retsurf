@@ -1,5 +1,5 @@
 //! Rendering of the edge strips (state lives in [`crate::overlay::quick_access`]):
-//! Quick Access at the right edge and Quick Menu at the left, each full height
+//! Quick Access at the right edge and Menu at the left, each full height
 //! with no backdrop dim, so the page or game beside it shows what a quick row
 //! just changed. Up/Down move, A / Left/Right act on the focused row, B or a tap
 //! beside the strip closes. The header names what the rows act on; with button
@@ -80,7 +80,7 @@ pub(in crate::ui) fn add_quick_access(
     // Each on the side of the button that opens it.
     let left = match panel.strip() {
         Strip::QuickAccess => screen.right() - outer,
-        Strip::QuickMenu => screen.left(),
+        Strip::Menu => screen.left(),
     };
     add_backdrop(ctx, screen, commands);
     let footer_id = egui::Id::new("quick_access_footer_h");
@@ -93,7 +93,7 @@ pub(in crate::ui) fn add_quick_access(
             frame.show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_min_height(screen.height() - margin.y);
-                let clock = (panel.strip() == Strip::QuickMenu).then(|| clock_text(ui.ctx()));
+                let clock = (panel.strip() == Strip::Menu).then(|| clock_text(ui.ctx()));
                 // Over a page Quick Access heads with its site's icon.
                 let site = tabs
                     .iter()
@@ -406,7 +406,7 @@ mod tests {
             Over::Tab(TabMode::Game),
             Over::Home,
         ];
-        for strip in [Strip::QuickAccess, Strip::QuickMenu] {
+        for strip in [Strip::QuickAccess, Strip::Menu] {
             for over in overs {
                 let global = AppConfig::default();
                 let site = SiteHead {
