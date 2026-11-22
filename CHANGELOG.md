@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- [Glossary](docs/GLOSSARY.md) of the screens, controls and modes
+
 ### Changed
 
+- The start page is Home and the full-screen tabs, bookmarks, history and downloads are the Hub, in the app and the docs
 - `[controls]` keys renamed, old values reset to defaults: `osk_nav_threshold` is `nav_threshold`, `osk_nav_initial_delay_ms` is `nav_initial_delay_ms`, `osk_nav_repeat_ms` is `nav_repeat_ms`, `hint_badges` is `hint_codes` (Settings > Controls > Hint codes)
 - Bookmark `launch = "browser"` is `launch = "site"`; files with the old value still open as a site
 - The `hints` action is `link_hints`; a binding to the old name is skipped and the action gets its defaults

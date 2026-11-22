@@ -9,7 +9,7 @@ retsurf [--game-mode | --kiosk] [PATH | --open ID]
 | `PATH` | Open a local game folder (its `index.html`) or an HTML file. |
 | `--open ID` | Open the bookmark `bookmarks/ID.toml` as it asks: a site, an app or a game. |
 | `--game-mode` | Start in Game Mode, before the page loads. |
-| `--kiosk` | Run PATH or the bookmark as a game alone: Game Mode with no browser menus or notices. Needs PATH or `--open`. |
+| `--kiosk` | Run PATH or the bookmark as a game alone: Game Mode with no strips, Hub or toasts. Needs PATH or `--open`. |
 | `-h`, `--help` / `-V`, `--version` | Print the usage or the version. |
 
 A folder is served as `http://<folder-name>.localhost/`, with its own saves (localStorage,
@@ -27,7 +27,7 @@ retsurf ~/games/hexgl                 # a game folder: opens its index.html
 retsurf --game-mode ~/games/hexgl     # the same, straight into Game Mode
 retsurf ~/games/carts/cart.html       # an HTML file inside a folder
 retsurf --game-mode                   # Game Mode over the usual first tabs
-retsurf --open vampire-survivors      # a bookmark, as it opens from the start page
+retsurf --open vampire-survivors      # a bookmark, as it opens from Home
 retsurf --kiosk ~/games/hexgl         # the game alone; Start + Select quits
 ```
 

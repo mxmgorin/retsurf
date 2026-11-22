@@ -2,7 +2,7 @@
 
 `bindings.toml` maps gamepad and keyboard gestures to browser actions; input maps in
 `input_maps/` decide what reaches a web game in Game Mode. Both live in the data dir next to
-`config.toml` and are editable in the settings overlay (Controls and Gaming tabs).
+`config.toml` and are editable in Settings (Controls and Gaming sections).
 
 ## Bindings (`bindings.toml`)
 
@@ -40,7 +40,7 @@ is on Ctrl, so pages get all plain keys:
 
 **Actions**: `confirm`, `cancel`, `menu` (Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`
-(list section or history), `home`, `address`, `link_hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
+(Hub section or history), `home`, `address`, `link_hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
 (a step in the open overlay, else the key goes to the page), `cursor_up` / `cursor_down` /
 `cursor_left` / `cursor_right` and `scroll_up` / `scroll_down` / `scroll_left` /
 `scroll_right` (move the cursor or scroll the page while held; unbound by default), `reload`, `reader`,
@@ -51,19 +51,19 @@ Invalid entries are logged and skipped. An action with nothing bound gets its de
 at startup, so actions added in a later release reach old files; to disable an action, bind
 it to a gesture you never press.
 
-## Start page
+## Home
 
 | Pad | Mouse | Effect |
 | --- | --- | --- |
 | A on a tile | click | open the bookmark |
 | X on a tile | right-click | Quick Access on the bookmark: open, launch as, reader view, rename, tags, move left / right, remove |
-| L1 / R1 | click a tab | previous / next filter |
+| L1 / R1 | click a filter | previous / next filter |
 | Y | the Sort row of Quick Access | next sort |
 
 Move left / right shows only in the manual sort. Tags are typed comma-separated. Quick
-Access on the start page lists the focused bookmark's rows, then the page's own settings
+Access on Home lists the focused bookmark's rows, then the page's own settings
 (Sort, Layout, Size). Without the toolbar
-(`[home] toolbar = false`) the ends of the search bar (of the filter tabs, with no search
+(`[home] toolbar = false`) the ends of the search bar (of the filters, with no search
 field) open Menu and Quick Access; with a pad, the footer names what the buttons do.
 
 ## Game Mode input maps (`input_maps/*.toml`)

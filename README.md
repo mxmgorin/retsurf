@@ -28,11 +28,11 @@ retsurf is a portable web browser built on [Servo](https://servo.org/), an indep
 <table>
   <tr>
     <td width="50%"><img src="resources/images/retsurf-game-mode.png" alt="Quick Access over the WebGL racer HexGL at the start through the zfast CRT shader, the browser chrome hidden: reload, the on-screen keyboard and bookmark, then scaling, shader, cursor, JS engine, the input map in use, launch mode and exit"></td>
-    <td width="50%"><img src="resources/images/retsurf-hints.png" alt="Vimium-style hints over a Wikipedia article, each link labeled with the gamepad buttons that open it"></td>
+    <td width="50%"><img src="resources/images/retsurf-hints.png" alt="Vimium-style link hints over a Wikipedia article, each link labeled with the gamepad buttons that open it"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="The built-in start page: the retsurf banner over filter tabs, a grid of bookmarks marked as sites, apps or games, and the search field and button hints at the bottom"></td>
-    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News, headed by its bookmark: reload, enter game mode and bookmark, then user agent, the ad blocker switch, the reader view switch, page theme and launch mode, with button hints below"></td>
+    <td width="50%"><img src="resources/images/retsurf-start-page.png" alt="Home: the retsurf banner over filters, a grid of bookmarks marked as sites, apps or games, and the search field and button hints at the bottom"></td>
+    <td width="50%"><img src="resources/images/retsurf-quick-access.png" alt="Quick Access at the right edge over Hacker News, headed by its bookmark: reload, enter Game Mode and bookmark, then user agent, the ad blocker switch, the reader view switch, page theme and launch mode, with button hints below"></td>
   </tr>
 </table>
 
@@ -55,7 +55,7 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
 - **Customizable browser controls**<br>
   Every browser action can be rebound in-app, with support for tap, hold, and chord.
 
-- **Game mode**<br>
+- **Game Mode**<br>
   Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input. `--kiosk` runs a game with no browser UI at all ([Command line](docs/CLI.md)).
 
 - **Game scaling and shaders**<br>
@@ -65,7 +65,7 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
   WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let Emscripten exports from itch.io run.
 
 - **Tabs, bookmarks, history, and downloads**<br>
-  Each is a list on one full-screen view. Downloads run in the background with progress and cancellation and a progress ring in the toolbar.
+  Each is a section of the Hub, one full-screen view. Downloads run in the background with progress and cancellation and a progress ring in the toolbar.
 
 - **Real page zoom**<br>
   Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
@@ -137,7 +137,7 @@ Android, and the handheld cross-builds.
 ## Configuration
 
 Files are stored in the user data directory (`SDL_GetPrefPath`, e.g. `~/.local/share/mxmgorin/retsurf/` on Linux).
-Templates with the defaults are written on first run. See **[Configuration](docs/CONFIGURATION.md)** for all options, **[Controls](docs/CONTROLS.md)** for bindings and Game Mode input maps, **[Command line](docs/CLI.md)** for arguments and environment variables, and **[Shaders](docs/SHADERS.md)** for Game Mode shaders.
+Templates with the defaults are written on first run. See **[Configuration](docs/CONFIGURATION.md)** for all options, **[Controls](docs/CONTROLS.md)** for bindings and Game Mode input maps, **[Command line](docs/CLI.md)** for arguments and environment variables, **[Shaders](docs/SHADERS.md)** for Game Mode shaders, and **[Glossary](docs/GLOSSARY.md)** for the names of screens and controls.
 
 ## How to help
 

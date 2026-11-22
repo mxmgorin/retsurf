@@ -3,7 +3,7 @@
 Settings live in `config.toml` in the user data dir (e.g. `~/.local/share/mxmgorin/retsurf/`
 on Linux), or wherever `RETSURF_CONFIG` points. A template with the defaults is written on
 first run; missing keys take their defaults, so a partial file is valid. Most settings are
-also in the in-app settings overlay.
+also in Settings in the app.
 
 Controls and Game Mode input maps are in [Controls](CONTROLS.md), environment variables in
 [Command line](CLI.md#environment-variables).
@@ -46,7 +46,7 @@ name = "DuckDuckGo Lite"
 url = "https://lite.duckduckgo.com/lite/?q=%s"   # %s = the query
 
 [experimental]
-# Web features Servo ships off. The settings overlay's "Web features" row sets them as a
+# Web features Servo ships off. Settings' "Web features" row sets them as a
 # preset: off, minimal, balanced (the default) or full. On 1 GB devices prefer minimal.
 # Applies on the next page load.
 columns = true                # CSS multi-column                 minimal
@@ -69,15 +69,15 @@ theme = "dusk"             # "dusk" (plum), "night", "oled" (black), "sand" (lig
 scale = 1.0                # UI size, 0.6 to 1.6
 toolbar_position = "top"   # "top" or "bottom"
 toolbar_autohide = false   # hide on scroll down, show on scroll up
-page_icons = true          # site icons in tabs, bookmarks, history and the start page
-button_hints = true        # name what the buttons do in the lists, settings, start page, Quick Access and Menu
-tab_layout = "list"        # open tabs in the lists: "list" (rows) or "grid" (cards with a picture of each page)
+page_icons = true          # site icons in tabs, bookmarks, history and Home
+button_hints = true        # name what the buttons do in the Hub, Settings, Home, Quick Access and Menu
+tab_layout = "list"        # open tabs in the Hub: "list" (rows) or "grid" (cards with a picture of each page)
 cursor_linger_ms = 1500    # how long the cursor stays visible after moving
 
 [home]
-page = "retsurf:home"      # what Home and a new tab open: the start page or any URL
-toolbar = false            # the toolbar on the start page
-brand = "banner"           # start page header: "banner", "wordmark", "icon" or "none"
+page = "retsurf:home"      # what the Home button and a new tab open: Home or any URL
+toolbar = false            # the toolbar on Home
+brand = "banner"           # Home's header: "banner", "wordmark", "icon" or "none"
 search = "bottom"          # the search field: "top", "bottom" (pinned above the footer) or "off"
 
 [home.bookmarks]
@@ -206,9 +206,9 @@ thread_cpu = false         # log CPU time per thread
 
 ## Search engines
 
-Text typed in the address bar or the start page's search field that is not an address is
+Text typed in the address bar or Home's search field that is not an address is
 searched with `search_engine`. **Settings > Browser > Search engine** or the search icon in
-the address bar and the start page's field picks one, **Search engines** adds, renames, edits
+the address bar and Home's field picks one, **Search engines** adds, renames, edits
 and deletes them.
 
 | Engine | URL |
@@ -241,14 +241,14 @@ when the GPU cannot be used.
 
 ## Bookmarks
 
-Bookmarks are the start page's tiles and the Bookmarks list. Each is one file,
+Bookmarks are Home's tiles and the Hub's Bookmarks. Each is one file,
 `bookmarks/<id>.toml` in the data dir:
 
 ```toml
 name = "Wikipedia"                       # shown on the tile; without it, the site
 url = "https://en.wikipedia.org"
 order = 1                                # position; lower first, unset after the rest
-tags = ["reference"]                     # groups for the start page's filter
+tags = ["reference"]                     # groups for Home's filter
 launch = "site"                          # "site", "app" (no toolbar) or "game" (Game Mode too)
 reader = false                           # open the site's articles in reader view; not for a game
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
@@ -261,7 +261,7 @@ scaling = "fit"
 ```
 
 An app or a game opens without the toolbar and keeps it hidden through its own links;
-Quick Access ends in **Close** and the bookmark's name, back to the start page. A bookmark
+Quick Access ends in **Close** and the bookmark's name, back to Home. A bookmark
 made in Game Mode is a game.
 
 ### Site settings
@@ -290,7 +290,7 @@ While they apply, Quick Access shows the bookmark's name at the top and these ro
 | these settings | a change here or in Settings is written to the bookmark, not to `config.toml`; a dot marks the site's own value, X sets it back to the global one |
 | **Reset site settings** | drops the overrides and turns Reader view off; names how many, shown only when there are some |
 
-On the start page L1 / R1 step the filter and Y steps the sort; both are
+On Home L1 / R1 step the filter and Y steps the sort; both are
 saved to `[home.bookmarks]`.
 
 The id is the file name and never changes. A file that does not parse is skipped. Removing
@@ -317,6 +317,6 @@ keys, with a new id it adds a preset that keeps the profile's value for the keys
 ## Page icons
 
 `page_icons` shows the icon a site declares (not `/favicon.ico`) beside its tab, bookmark and
-history row and on its start-page tile; sites without one get a globe. Icons are kept in
+history row and on its Home tile; sites without one get a globe. Icons are kept in
 `page_icons/` in the data dir for bookmarked, visited and open sites. SVG icons
 appear from the second visit in a session.
