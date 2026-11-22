@@ -580,7 +580,7 @@ mod tests {
         let mut cfg = AppConfig::default();
         cfg.home.page = "https://example.org/".to_string();
         cfg.interface.scale = 1.45;
-        cfg.controls.hint_badges = !cfg.controls.hint_badges;
+        cfg.controls.hint_codes = !cfg.controls.hint_codes;
 
         let row = row_of(Task::RestoreDefaults);
         let mut settings = Settings::new();
@@ -603,8 +603,8 @@ mod tests {
         assert_eq!(draft.config.home.page, defaults.home.page);
         assert_eq!(draft.config.interface.scale, defaults.interface.scale);
         assert_eq!(
-            draft.config.controls.hint_badges,
-            defaults.controls.hint_badges
+            draft.config.controls.hint_codes,
+            defaults.controls.hint_codes
         );
         assert_eq!(draft.bindings, bindings::default_store());
     }

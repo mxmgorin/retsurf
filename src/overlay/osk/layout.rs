@@ -55,7 +55,7 @@ pub enum Key {
 
 impl Key {
     /// The gamepad button that directly triggers this key (the router's
-    /// mapping), shown as a corner badge so the shortcuts are discoverable;
+    /// mapping), shown as a corner label so the shortcuts are discoverable;
     /// keys without a dedicated button use D-pad + **A**.
     pub fn button_hint(self, face: FaceLabels) -> Option<&'static str> {
         match self {

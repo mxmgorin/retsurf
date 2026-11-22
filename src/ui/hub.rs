@@ -264,12 +264,12 @@ fn section_icon(section: Section) -> &'static str {
     }
 }
 
-/// What a section's tab shows after its label: how many tabs are open, how
-/// far the downloads in flight are.
-fn section_badge(hub: &Hub, tabs: &[TabInfo], section: Section) -> Option<String> {
+/// A section's indicator: how many tabs are open, how far the downloads in
+/// flight are.
+fn section_indicator(hub: &Hub, tabs: &[TabInfo], section: Section) -> Option<String> {
     match section {
         Section::Tabs => Some(tabs.len().to_string()),
-        Section::Downloads => hub.downloads.progress().map(|p| p.label()),
+        Section::Downloads => hub.downloads.progress().map(|p| p.indicator()),
         Section::Bookmarks | Section::History => None,
     }
 }
@@ -365,7 +365,7 @@ pub(super) fn add_hub(
             hub.section(),
             Section::label,
             section_icon,
-            |section| section_badge(hub, tabs, section),
+            |section| section_indicator(hub, tabs, section),
         );
         if let Some(section) = clicked {
             commands.push(AppCommand::Hub(HubAction::SetSection(section)));

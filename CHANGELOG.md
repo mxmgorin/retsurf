@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `[controls]` keys renamed, old values reset to defaults: `osk_nav_threshold` is `nav_threshold`, `osk_nav_initial_delay_ms` is `nav_initial_delay_ms`, `osk_nav_repeat_ms` is `nav_repeat_ms`
+- `[controls]` keys renamed, old values reset to defaults: `osk_nav_threshold` is `nav_threshold`, `osk_nav_initial_delay_ms` is `nav_initial_delay_ms`, `osk_nav_repeat_ms` is `nav_repeat_ms`, `hint_badges` is `hint_codes` (Settings > Controls > Hint codes)
 - Bookmark `launch = "browser"` is `launch = "site"`; files with the old value still open as a site
 - The `hints` action is `link_hints`; a binding to the old name is skipped and the action gets its defaults
 - Settings > Controls: Stick threshold, Repeat delay and Repeat rate are in their own Navigation group

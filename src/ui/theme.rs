@@ -46,7 +46,7 @@ pub struct Palette {
     pub button_hover: egui::Color32,
     /// A key or chip raised off a panel: the on-screen keyboard's keys.
     pub key: egui::Color32,
-    /// A button badge's fill: dimmer than the words beside it, its label in `bg`.
+    /// A button cap's fill: dimmer than the words beside it, its label in `bg`.
     pub cap: egui::Color32,
     /// Ink over an accent fill: a link hint's code.
     pub on_accent: egui::Color32,

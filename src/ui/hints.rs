@@ -1,6 +1,6 @@
 //! Rendering of the link-hint overlay (state lives in [`crate::overlay::hints`]):
 //! a thin accent frame on every clickable element (the selected one filled and
-//! outlined brighter for the spatial stick hop), plus a Vimium-style code badge
+//! outlined brighter for the spatial stick hop), plus a Vimium-style hint code
 //! per element — the buttons/keys you press to jump straight to it. The alphabet
 //! follows whatever opened the mode: gamepad button combos, or typed letters
 //! when it was opened from the keyboard.
@@ -18,7 +18,7 @@ use crate::config::FaceLabels;
 use crate::overlay::hints::{Hints, Label, Sym};
 use egui_sdl2::egui;
 
-/// Height of one combo-symbol cell (logical px); the badge is a row of these.
+/// Height of one combo-symbol cell (logical px); a code is a row of these.
 const CELL_H: f32 = 13.0;
 /// Width of a single-glyph cell (a letter or a D-pad triangle).
 const CELL_W: f32 = 12.0;
@@ -27,12 +27,12 @@ const CELL_W_WIDE: f32 = 18.0;
 /// Outer-corner rounding of a code's pill row (cells abut with no gap).
 const CELL_RADIUS: u8 = 2;
 
-/// Draw the hint frames, and with `badges` their codes in those face labels.
+/// Draw the hint frames, and with `codes` the hint codes in those face labels.
 pub(super) fn add_hints(
     ctx: &egui::Context,
     hints: &Hints,
     webview: egui::Rect,
-    badges: Option<FaceLabels>,
+    codes: Option<FaceLabels>,
 ) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
@@ -80,10 +80,10 @@ pub(super) fn add_hints(
             );
         }
 
-        // Only the live targets carry a readable badge; faded hints drop it.
-        // With combos disabled, no badges at all — just the spatial frames.
-        if let Some(face) = badges.filter(|_| matched) {
-            draw_badge(&painter, rect, webview, hints.code(i), typed.len(), face);
+        // Only the live targets carry a readable code; faded hints drop it.
+        // With combos disabled, no codes at all — just the spatial frames.
+        if let Some(face) = codes.filter(|_| matched) {
+            draw_code(&painter, rect, webview, hints.code(i), typed.len(), face);
         }
     }
 }
@@ -91,7 +91,7 @@ pub(super) fn add_hints(
 /// Draw the hint code as a row of label cells just above the element's top-left
 /// corner, overlapping instead when it sits at the top of the view. `done` is how
 /// many leading cells are already typed (drawn muted).
-fn draw_badge(
+fn draw_code(
     painter: &egui::Painter,
     rect: egui::Rect,
     webview: egui::Rect,

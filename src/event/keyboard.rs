@@ -205,12 +205,12 @@ fn on_key_down(
             }
             _ => {}
         }
-        // Keyboard-opened hint mode types the badge code, so every letter is
+        // Keyboard-opened hint mode types the hint code, so every letter is
         // captured before the shortcut table; a modified key falls through.
         let modified = key
             .keymod
             .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LALTMOD | Mod::RALTMOD);
-        if ui.hints.is_keyboard() && ui.hints.badges && !key.repeat && !modified {
+        if ui.hints.is_keyboard() && ui.hints.show_codes && !key.repeat && !modified {
             if let Some(c) = letter_of(key.kc) {
                 commands.push(AppCommand::Input(InputCommand::HintKey(c)));
                 return;

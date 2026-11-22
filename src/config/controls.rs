@@ -36,11 +36,11 @@ pub struct ControlsConfig {
     pub left_stick: StickRole,
     /// What the right stick does on a page; the on-screen keyboard keeps it.
     pub right_stick: StickRole,
-    /// Whether link-hint mode shows typed combo badges and routes the gamepad
+    /// Whether link-hint mode shows hint codes and routes the gamepad
     /// buttons as combo symbols. Off restores plain spatial hopping: the D-pad
     /// (and stick) hop the selection again and the buttons keep their normal
     /// meaning. See [`crate::overlay::hints`].
-    pub hint_badges: bool,
+    pub hint_codes: bool,
     /// Whether pushing the cursor against a window edge scrolls the page that
     /// way. Never in Game Mode, where the cursor belongs to the game.
     pub edge_scroll: bool,
@@ -72,7 +72,7 @@ impl Default for ControlsConfig {
             dpad: StickRole::Cursor,
             left_stick: StickRole::Cursor,
             right_stick: StickRole::Scroll,
-            hint_badges: true,
+            hint_codes: true,
             edge_scroll: true,
             haptics: true,
             pad_layout: PadLayout::default(),

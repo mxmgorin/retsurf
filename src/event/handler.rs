@@ -619,7 +619,7 @@ impl AppEventHandler {
                 input.on_pad(pad, key.pressed, browser, commands);
                 return;
             }
-            // A pad press reclaims hint badges as button combos.
+            // A pad press reclaims hint codes as button combos.
             if key.pressed {
                 ui.note_input_keyboard(false);
             }
@@ -627,7 +627,7 @@ impl AppEventHandler {
             return;
         }
         // Remember the input came from the keyboard so hint mode picks
-        // typed-letter badges when it opens (see `AppUi::note_input_keyboard`).
+        // typed-letter codes when it opens (see `AppUi::note_input_keyboard`).
         if key.pressed {
             ui.note_input_keyboard(true);
         }
@@ -704,7 +704,7 @@ impl AppEventHandler {
             self.game_button(which, button, pressed, browser, commands);
             return;
         }
-        // A pad press reclaims hint badges as button combos (see the key path).
+        // A pad press reclaims hint codes as button combos (see the key path).
         if pressed {
             ui.note_input_keyboard(false);
         }

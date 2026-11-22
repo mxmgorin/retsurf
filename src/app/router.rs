@@ -397,7 +397,7 @@ impl App {
         if self.ui.focus() != Focus::Page {
             // Hint mode with combos on hops on the stick alone: the D-pad is
             // reserved for combo symbols, so it must not also drive a hop.
-            let nav_vec = if self.ui.focus() == Focus::Hints && self.ui.hints.badges {
+            let nav_vec = if self.ui.focus() == Focus::Hints && self.ui.hints.show_codes {
                 stick
             } else {
                 aim

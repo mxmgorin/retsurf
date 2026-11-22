@@ -99,7 +99,7 @@ hold_ms = 400              # press length for a "hold:" gesture
 dpad = "cursor"            # on a page: "cursor", "scroll" or "none"
 left_stick = "cursor"      # on a page: "cursor", "scroll" or "none"
 right_stick = "scroll"     # on a page: "cursor", "scroll" or "none"
-hint_badges = true         # link hints show button combos; off = move between them
+hint_codes = true          # link hints show button combos; off = move between them
 edge_scroll = true         # cursor at a window edge scrolls (not in Game Mode)
 pad_layout = "nintendo"    # button labels shown: "nintendo", "xbox" or "playstation"
 swap_face_buttons = false  # swap A/B and X/Y, for pads that report them swapped

@@ -374,7 +374,7 @@ pub struct AppUi {
     button_hints: bool,
     /// Which letters and colours the face buttons wear on screen.
     pad_layout: PadLayout,
-    /// Whether the last input came from the keyboard; picks the badge alphabet.
+    /// Whether the last input came from the keyboard; picks the code alphabet.
     last_input_keyboard: bool,
     /// Whether the debug memory overlay is enabled (`[debug] memory_overlay`).
     memory_overlay: bool,
@@ -458,7 +458,7 @@ impl AppUi {
             home_pad: false,
             banner: home::banner(),
             about_icon: settings::about_icon(),
-            hints: Hints::new(controls.hint_badges),
+            hints: Hints::new(controls.hint_codes),
             prompt: Prompt::new(),
             edge_scroll: (0, 0),
             button_hints: interface.button_hints,
@@ -1115,10 +1115,10 @@ impl AppUi {
                     }
                 } else if self.hints.visible {
                     // Rects the page has scrolled out from under are left
-                    // undrawn: a badge would mark whatever took that place.
+                    // undrawn: a hint would mark whatever took that place.
                     if !self.hints.is_stale() {
-                        let badges = self.hints.badges.then_some(face);
-                        hints::add_hints(ctx, &self.hints, self.webview_rect, badges);
+                        let codes = self.hints.show_codes.then_some(face);
+                        hints::add_hints(ctx, &self.hints, self.webview_rect, codes);
                     }
                 } else if cursor_visible.is_some()
                     && (self.game_cursor || !snapshot.chrome_hidden.game_mode)

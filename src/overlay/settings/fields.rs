@@ -562,7 +562,7 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Controls, "Cursor & scroll", "Cursor curve",       float!(controls.cursor_curve as f32, bounds::CURSOR_CURVE, 0.25, 2, Some(cursor_curve_label)), false),
     f(S::Controls, "Cursor & scroll", "Scroll speed",       float!(controls.scroll_speed as f32, bounds::SCROLL_SPEED, 100.0, 0), false),
     f(S::Controls, "Cursor & scroll", "Edge scrolling",     flag!(controls.edge_scroll), false),
-    f(S::Controls, "Cursor & scroll", "Hint badges",        flag!(controls.hint_badges), false),
+    f(S::Controls, "Cursor & scroll", "Hint codes",         flag!(controls.hint_codes), false),
 
     f(S::Controls, "Keyboard",    "On-screen keyboard",     choice!(osk.style: OskStyle), false),
     #[cfg(target_os = "android")]

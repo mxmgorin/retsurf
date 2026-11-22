@@ -1,11 +1,11 @@
 //! Link-hint navigation state — Vimium adapted for a gamepad. L3 asks the page
 //! for its visible clickable elements (collected via JavaScript, see
-//! [`crate::browser`]); badges are drawn over them ([`crate::ui`]) and the stick
+//! [`crate::browser`]); codes are drawn over them ([`crate::ui`]) and the stick
 //! hops the selection spatially (nearest element in the pressed direction)
 //! instead of typing hint letters. A clicks the selected element, B exits.
 //! Scrolling keeps working and schedules a re-collect once it settles, since
 //! the rects are viewport-relative and go stale as the page moves; while they
-//! are stale nothing is drawn and nothing can be activated, because a badge
+//! are stale nothing is drawn and nothing can be activated, because a hint
 //! would mark whatever moved into its place. Pushing the selection past the last
 //! hint at a vertical edge scrolls a chunk and re-collects, so one stick reaches
 //! the whole document.
@@ -67,7 +67,7 @@ impl Hint {
 /// The combo alphabet: gamepad controls usable as typed hint codes. A and B are
 /// reserved (click / cancel), so the symbols are drawn from the rest. The order
 /// here is the code-assignment order (low codes go to the nearest hints) and the
-/// on-screen badge order.
+/// on-screen code order.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Sym {
     X,
@@ -140,8 +140,8 @@ pub enum HintInput {
 
 pub struct Hints {
     pub visible: bool,
-    /// Whether hint mode draws combo badges; off = plain spatial hops.
-    pub badges: bool,
+    /// Whether hint mode draws codes; off = plain spatial hops.
+    pub show_codes: bool,
     hints: Vec<Hint>,
     selected: usize,
     /// Whether a collection round is expected (L3 pressed, or a post-scroll
@@ -168,10 +168,10 @@ pub struct Hints {
 }
 
 impl Hints {
-    pub fn new(badges: bool) -> Self {
+    pub fn new(show_codes: bool) -> Self {
         Self {
             visible: false,
-            badges,
+            show_codes,
             hints: vec![],
             selected: 0,
             collecting: false,
@@ -185,7 +185,7 @@ impl Hints {
     }
 
     /// A collection round was started; the results arrive asynchronously.
-    /// `labels` fixes the badge alphabet for the whole session (the input that
+    /// `labels` fixes the code alphabet for the whole session (the input that
     /// opened the mode) — a re-collect via [`Self::take_refresh_due`] keeps it.
     pub fn begin_collect(&mut self, labels: HintLabels) {
         self.collecting = true;
@@ -254,20 +254,20 @@ impl Hints {
             InputCommand::Nav(dx, dy) => self.nav((*dx, *dy), cx),
             // With combos on, X, Y, L1/R1 and the D-pad type symbols; with them
             // off, Y leaves hint mode and the rest pass to the page.
-            InputCommand::ToggleOsk if self.badges => self.push(Label::Sym(Sym::X)),
-            InputCommand::Hints if self.badges => self.push(Label::Sym(Sym::Y)),
+            InputCommand::ToggleOsk if self.show_codes => self.push(Label::Sym(Sym::X)),
+            InputCommand::Hints if self.show_codes => self.push(Label::Sym(Sym::Y)),
             InputCommand::Hints => {
                 self.hide();
                 Reading::Taken
             }
-            InputCommand::Shoulder(delta) if self.badges => {
+            InputCommand::Shoulder(delta) if self.show_codes => {
                 self.push(Label::Sym(if *delta < 0 { Sym::L1 } else { Sym::R1 }))
             }
-            InputCommand::DpadPress(dx, dy) if self.badges => match dpad_sym(*dx, *dy) {
+            InputCommand::DpadPress(dx, dy) if self.show_codes => match dpad_sym(*dx, *dy) {
                 Some(sym) => self.push(Label::Sym(sym)),
                 None => Reading::Taken,
             },
-            InputCommand::HintKey(c) if self.badges => self.push(Label::Key(*c)),
+            InputCommand::HintKey(c) if self.show_codes => self.push(Label::Key(*c)),
             InputCommand::ToggleOsk
             | InputCommand::Shoulder(_)
             | InputCommand::DpadPress(..)
@@ -325,8 +325,7 @@ impl Hints {
 
     /// Feeds one combo symbol or typed letter; a code it completes clicks its hint.
     fn push(&mut self, label: Label) -> Reading {
-        // Stale rects carry no badges to read a code off, so a press types
-        // nothing.
+        // Stale rects show no codes, so a press types nothing.
         if self.is_stale() {
             return Reading::Taken;
         }
@@ -463,7 +462,7 @@ impl Hints {
         false
     }
 
-    /// Scrolling shifts the page under the badges: schedule a re-collect for
+    /// Scrolling shifts the page under the hints: schedule a re-collect for
     /// when it settles (each call pushes the deadline out — a debounce).
     pub fn mark_stale(&mut self) {
         if self.visible {
@@ -860,7 +859,7 @@ mod tests {
     #[test]
     fn with_combos_off_x_and_shoulders_pass_to_the_page() {
         let mut h = shown(&[(10.0, 20.0)], (0.0, 0.0));
-        h.badges = false;
+        h.show_codes = false;
         let ctx = cx(Instant::now());
         assert_eq!(h.read(&InputCommand::ToggleOsk, &ctx), Reading::Pass);
         assert_eq!(h.read(&InputCommand::Shoulder(1), &ctx), Reading::Pass);

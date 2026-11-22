@@ -410,7 +410,7 @@ const TAB_GAP: f32 = 6.0;
 const ICON_TAB_W: f32 = 40.0;
 
 /// The top section bar: a tab per section (icon and label, or just the icon on
-/// an inactive tab where not all fit) with its `badge` after. Returns the
+/// an inactive tab where not all fit) with its `indicator` after. Returns the
 /// clicked one.
 pub(super) fn section_bar<T: Copy + PartialEq>(
     ui: &mut egui::Ui,
@@ -419,7 +419,7 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     active: T,
     label: fn(T) -> &'static str,
     icon: fn(T) -> &'static str,
-    badge: impl Fn(T) -> Option<String>,
+    indicator: impl Fn(T) -> Option<String>,
 ) -> Option<T> {
     let mut clicked = None;
     let full = |section: T| format!("{}  {}", icon(section), label(section));
@@ -430,11 +430,12 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
             .size()
             .x
     };
-    let badge_w =
-        |section: T| badge(section).map_or(0.0, |text| text_w(text) + ui.spacing().icon_spacing);
+    let indicator_w = |section: T| {
+        indicator(section).map_or(0.0, |text| text_w(text) + ui.spacing().icon_spacing)
+    };
     let wanted: f32 = sections
         .iter()
-        .map(|&s| text_w(full(s)) + badge_w(s) + pad)
+        .map(|&s| text_w(full(s)) + indicator_w(s) + pad)
         .sum();
     let fits = wanted <= screen.width() - SIDES - (CLOSE_SIZE + 8.0);
     ui.horizontal(|ui| {
@@ -450,9 +451,9 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
                     .color(palette().text)
                     .size(ROW_FONT),
             );
-            if let Some(badge) = badge(section) {
+            if let Some(indicator) = indicator(section) {
                 atoms.push_right(
-                    egui::RichText::new(badge)
+                    egui::RichText::new(indicator)
                         .color(palette().accent)
                         .size(ROW_FONT),
                 );

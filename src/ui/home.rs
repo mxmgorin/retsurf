@@ -161,7 +161,7 @@ impl TileStyle {
 }
 
 /// A glyph square: its side and corner, the site icon and monogram inside it,
-/// and the launch badge's radius.
+/// and the launch mark's radius.
 #[derive(Clone, Copy)]
 struct Glyph {
     side: f32,
@@ -693,12 +693,12 @@ fn add_search(
     }
 }
 
-/// How far the badge's center sits inside the glyph square's corner, as a
-/// share of its radius: under one, so the badge breaks the corner.
+/// How far the mark's center sits inside the glyph square's corner, as a
+/// share of its radius: under one, so the mark breaks the corner.
 const MARK_INSET: f32 = 0.5;
-/// The badge's size, as a share of the style's badge radius.
+/// The mark's size, as a share of the style's mark radius.
 const MARK_SCALE: f32 = 0.85;
-/// The badge's glyph, as a share of its radius.
+/// The mark's glyph, as a share of its radius.
 const MARK_GLYPH: f32 = 1.2;
 
 /// The tab bar: the filter tabs centred; with `buttons`, the strip buttons at
@@ -1182,7 +1182,7 @@ fn paint_glyph(
 }
 
 /// A site card's glyph: the large tile's icon and monogram, the card's own
-/// size, no badge.
+/// size, no mark.
 const CARD: Glyph = Glyph {
     side: 0.0,
     mark: 0.0,
@@ -1227,7 +1227,7 @@ fn monogram(label: &str) -> String {
     }
 }
 
-/// The badge over the glyph square's bottom-right corner naming how the
+/// The mark over the glyph square's bottom-right corner naming how the
 /// bookmark opens: a page-coloured disc, its glyph muted for a site, in the
 /// accent for an app and in the brand's warm end for a game.
 fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, launch: Launch) {
@@ -1250,7 +1250,7 @@ fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, la
     );
 }
 
-/// How a bookmark opens, as its badge names it: the glyph and its colour.
+/// How a bookmark opens, as its mark names it: the glyph and its colour.
 pub(super) fn launch_glyph(launch: Launch) -> (&'static str, egui::Color32) {
     match launch {
         Launch::Site => (bold::GLOBE, palette().muted),

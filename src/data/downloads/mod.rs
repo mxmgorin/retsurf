@@ -82,8 +82,9 @@ pub struct Progress {
 }
 
 impl Progress {
-    /// How far the downloads are while their size is known, else how many run.
-    pub fn label(&self) -> String {
+    /// The downloads' indicator: how far they are while their size is known,
+    /// else how many run.
+    pub fn indicator(&self) -> String {
         match self.total {
             Some(total) if total > 0 => format!("{}%", self.received.min(total) * 100 / total),
             _ => format!("{} active", self.active),

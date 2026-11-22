@@ -49,12 +49,12 @@ const RING_POINTS: f32 = 48.0;
 const UNKNOWN_SWEEP: f32 = TAU / 4.0;
 const UNKNOWN_STEP: f32 = TAU / 8.0;
 
-/// The downloads count badge on the ring's upper right, cut out of it by a
+/// The downloads count indicator on the ring's upper right, cut out of it by a
 /// rim in the toolbar's fill; counts past the cap read as the cap plus `+`.
-const BADGE_R: f32 = 6.25;
-const BADGE_RIM: f32 = 1.5;
-const BADGE_FONT: f32 = 9.0;
-const BADGE_CAP: usize = 9;
+const INDICATOR_R: f32 = 6.25;
+const INDICATOR_RIM: f32 = 1.5;
+const INDICATOR_FONT: f32 = 9.0;
+const INDICATOR_CAP: usize = 9;
 
 fn icon(glyph: &str) -> egui::RichText {
     theme::icon(glyph).size(ICON)
@@ -323,7 +323,7 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
 
 /// A frameless button painting the downloads as a ring around the download
 /// glyph, filled by the share done or stepping an arc while a size is unknown,
-/// then a check or a cross once they ended. A badge counts more than one.
+/// then a check or a cross once they ended. An indicator counts more than one.
 fn add_downloads_button(ui: &mut egui::Ui, chip: Chip) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(SLOT), egui::Sense::click());
     let palette = theme::palette();
@@ -367,19 +367,19 @@ fn add_downloads_button(ui: &mut egui::Ui, chip: Chip) -> egui::Response {
             let at = c + RING_R * FRAC_1_SQRT_2 * egui::vec2(1.0, -1.0);
             painter.circle(
                 at,
-                BADGE_R,
+                INDICATOR_R,
                 palette.accent,
-                egui::Stroke::new(BADGE_RIM, palette.window),
+                egui::Stroke::new(INDICATOR_RIM, palette.window),
             );
             let label = match count {
-                n if n > BADGE_CAP => format!("{BADGE_CAP}+"),
+                n if n > INDICATOR_CAP => format!("{INDICATOR_CAP}+"),
                 n => n.to_string(),
             };
             painter.text(
                 at,
                 egui::Align2::CENTER_CENTER,
                 label,
-                egui::FontId::proportional(BADGE_FONT),
+                egui::FontId::proportional(INDICATOR_FONT),
                 palette.on_accent,
             );
         }

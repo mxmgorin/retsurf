@@ -330,7 +330,7 @@ impl AppUi {
     }
 
     /// The event handler notes which device produced the latest input, so hint
-    /// mode can pick its badge alphabet (typed letters vs gamepad combos) when it
+    /// mode can pick its code alphabet (typed letters vs gamepad combos) when it
     /// opens. `true` = keyboard.
     #[inline]
     pub fn note_input_keyboard(&mut self, keyboard: bool) {
@@ -358,7 +358,7 @@ impl AppUi {
         self.home.move_sel(dx, dy, count);
     }
 
-    /// Hint mode opened: a collection round was started in the browser. The badge
+    /// Hint mode opened: a collection round was started in the browser. The code
     /// alphabet follows the device that triggered it (typed letters from the
     /// keyboard, button combos from the pad) — fixed for the whole session.
     #[inline]

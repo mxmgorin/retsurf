@@ -27,9 +27,9 @@ const ROW_GAP: f32 = 5.0;
 const PANEL_MARGIN: f32 = 12.0;
 const PANEL_RADIUS: f32 = 12.0;
 const SCREEN_MARGIN: f32 = 8.0;
-/// The corner badges' size and inset.
-const BADGE_FONT: f32 = 10.0;
-const BADGE_INSET: egui::Vec2 = egui::vec2(4.0, 2.0);
+/// The corner labels' size and inset.
+const CORNER_FONT: f32 = 10.0;
+const CORNER_INSET: egui::Vec2 = egui::vec2(4.0, 2.0);
 
 /// The grid panel's opacity over the page.
 const PANEL_ALPHA: u8 = 245;
@@ -186,22 +186,22 @@ pub(super) fn add_osk(
                             if !ch.is_alphabetic() && alt != main {
                                 ui.painter().text(
                                     response.rect.right_top()
-                                        + egui::vec2(-BADGE_INSET.x, BADGE_INSET.y) * fit,
+                                        + egui::vec2(-CORNER_INSET.x, CORNER_INSET.y) * fit,
                                     egui::Align2::RIGHT_TOP,
                                     alt,
-                                    egui::FontId::proportional(BADGE_FONT * fit),
+                                    egui::FontId::proportional(CORNER_FONT * fit),
                                     palette().dim,
                                 );
                             }
                         }
                         // The keys with a direct gamepad shortcut wear it
-                        // as a small badge in the top-left corner.
+                        // as a small label in the top-left corner.
                         if let Some(btn) = key.button_hint(face) {
                             ui.painter().text(
-                                response.rect.left_top() + BADGE_INSET * fit,
+                                response.rect.left_top() + CORNER_INSET * fit,
                                 egui::Align2::LEFT_TOP,
                                 btn,
-                                egui::FontId::proportional(BADGE_FONT * fit),
+                                egui::FontId::proportional(CORNER_FONT * fit),
                                 palette().dim,
                             );
                         }

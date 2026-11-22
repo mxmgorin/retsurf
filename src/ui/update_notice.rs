@@ -17,7 +17,7 @@ const BUTTON: egui::Vec2 = egui::vec2(110.0, 28.0);
 const CARD_W: f32 = 400.0;
 const SCREEN_MARGIN: f32 = 32.0;
 const TITLE_FONT: f32 = 17.0;
-const BADGE_SIZE: f32 = 30.0;
+const HEADER_ICON_SIZE: f32 = 30.0;
 /// Rows of release summary shown before it is cut with an ellipsis.
 const SUMMARY_ROWS: usize = 3;
 /// A nightly version's suffix ahead of its `YYYYMMDD` build date.
@@ -72,7 +72,7 @@ fn add_header(ui: &mut egui::Ui, version: &str, state: &UpdateState) {
     ui.horizontal(|ui| {
         ui.label(
             theme::icon(bold::ARROW_CIRCLE_UP)
-                .size(BADGE_SIZE)
+                .size(HEADER_ICON_SIZE)
                 .color(palette().accent),
         );
         ui.vertical(|ui| {

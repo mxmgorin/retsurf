@@ -811,10 +811,10 @@ impl QuickAccess {
         self.set_label(Entry::ResetSite, label);
     }
 
-    /// Show the downloads in flight beside the Downloads row: how far they
-    /// are while their size is known, else how many.
+    /// The Downloads row's indicator: how far the downloads in flight are while
+    /// their size is known, else how many.
     pub fn set_downloads(&mut self, progress: Option<Progress>) {
-        let value = progress.map(|p| p.label()).unwrap_or_default();
+        let value = progress.map(|p| p.indicator()).unwrap_or_default();
         self.set_value(Entry::List(Section::Downloads), value);
     }
 
