@@ -49,6 +49,13 @@ jobs:
           cache-targets: false
           shared-key: cargo-home
 
+      # bindgen parses the MSVC STL, which rejects any Clang older than the one shipped beside it.
+      - name: Use Visual Studio's libclang
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          "LIBCLANG_PATH=$vs\VC\Tools\Llvm\x64\bin" >> $env:GITHUB_ENV
+
       # SDL2 is built from source and linked statically (no system SDL2 on the
       # runner, and users shouldn't need a DLL either). SpiderMonkey comes as
       # mozjs' prebuilt archive for x86_64-pc-windows-msvc (jit+intl on, so its
