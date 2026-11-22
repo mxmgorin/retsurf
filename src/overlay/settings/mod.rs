@@ -1,5 +1,5 @@
 //! The full-screen settings overlay: the config fields that [`crate::config::AppConfig`]
-//! exposes, editable with the gamepad, grouped into the same kind of tabbed
+//! exposes, editable with the gamepad, grouped into the same kind of
 //! sections as the Hub ([`crate::overlay::hub`]). It owns a *draft* config — a
 //! clone of the live one taken on open — that the rows mutate; closing saves the
 //! draft to disk and the app re-applies what can change live (see [`crate::app`]).
@@ -7,15 +7,15 @@
 //! Controls mirror the Hub but free up dpad for editing: L1/R1 (shoulders) switch
 //! section, up/down move between rows, left adjust the focused value, A edits, B saves
 //! and closes — all reachable without an analog stick. The binding list, behind
-//! the Controls tab's door row, is the exception: an action list where A *adds* a
+//! the Controls section's door row, is the exception: an action list where A *adds* a
 //! binding (press the button or key you want — see
 //! [`Settings::controls_activate`]) or removes one; B goes back to the tab.
 //! [`crate::ui::settings`] renders it.
 //!
 //! The pieces live in submodules: [`fields`] (the static config-field table and
 //! its typed get/set), [`controls`] (the dynamic rebinding list),
-//! [`search_engines`] (the Browser tab's engine list) and [`about`] (the
-//! read-only About tab).
+//! [`search_engines`] (the Browser section's engine list) and [`about`] (the
+//! read-only About section).
 
 mod about;
 mod controls;
@@ -111,7 +111,7 @@ struct Draft {
     /// list keeps its own cursor inside [`Self::controls`], which spans the
     /// reset rows after the editor's own.
     selected: Sel,
-    /// The Controls tab's binding list is up in place of its fields.
+    /// The Controls section's binding list is up in place of its fields.
     bindings_open: bool,
     /// The bindings being edited (the binding list), a clone of the on-disk
     /// store taken on [`Settings::open`]. Kept independent of `config` so a
@@ -128,7 +128,7 @@ struct Draft {
     controls: Controls<Action>,
     /// Why the last binding edit was refused; cleared by the next one.
     controls_note: Option<String>,
-    /// The Browser tab's engine list, while it is up in place of its fields.
+    /// The Browser section's engine list, while it is up in place of its fields.
     engines: Option<search_engines::Engines>,
 }
 
@@ -170,7 +170,7 @@ impl Draft {
     }
 }
 
-/// The About tab's gamepad-focusable rows: the update block, whose `update_rows`
+/// The About section's gamepad-focusable rows: the update block, whose `update_rows`
 /// the caller computes from the live state, then the static links.
 fn about_row_count(update_rows: usize) -> usize {
     update_rows + about_info().focusable().count()
@@ -270,7 +270,7 @@ impl Settings {
             .map_or(SettingsSection::Browser, |draft| draft.section)
     }
 
-    /// Whether the binding list is up in place of the Controls tab's fields.
+    /// Whether the binding list is up in place of the Controls section's fields.
     pub fn bindings_open(&self) -> bool {
         self.draft().is_some_and(|draft| draft.bindings_open)
     }
@@ -371,7 +371,7 @@ impl Settings {
 
     /// Move the focus by `dy` rows within the active section (clamped, no wrap),
     /// skipping the binding list's non-selectable headers. `update_rows` is the
-    /// About tab's live update-block row count (ignored in other sections).
+    /// About section's live update-block row count (ignored in other sections).
     pub fn move_sel(&mut self, dy: i32, update_rows: usize) {
         let Some(draft) = self.draft_mut() else {
             return;
@@ -609,7 +609,7 @@ mod tests {
         assert_eq!(draft.bindings, bindings::default_store());
     }
 
-    /// The binding list opens from its row on the Controls tab and B lands back
+    /// The binding list opens from its row on the Controls section and B lands back
     /// on that row; switching tabs also leaves it.
     #[test]
     fn the_binding_list_is_a_door_on_the_controls_tab() {

@@ -143,7 +143,7 @@ pub enum Entry {
     InputMap,
     /// Summon the on-screen keyboard; it types into the page.
     Osk,
-    /// Open the settings screen, on the tab the mode suggests.
+    /// Open the settings screen, on the section the mode suggests.
     Settings,
     /// Reload the page; over a game, on a second press.
     Reload,

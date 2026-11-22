@@ -441,7 +441,7 @@ fn file_name_of(path: &str) -> String {
 }
 
 /// `NN% · a / b` while the total is known, else just what has arrived so far.
-/// Shared by the Hub's download rows and the About tab's update row.
+/// Shared by the Hub's download rows and the About section's update row.
 pub fn format_progress(received: u64, total: u64) -> String {
     match (received * 100).checked_div(total) {
         Some(pct) => format!(

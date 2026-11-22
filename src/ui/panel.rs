@@ -22,8 +22,8 @@ pub(super) const PAD_X: f32 = 30.0;
 pub(super) const PAD_Y: f32 = 16.0;
 pub(super) const SIDES: f32 = PAD_X * 2.0;
 
-/// Section-bar tab height.
-const TAB_H: f32 = 28.0;
+/// A section button's height.
+const SECTION_H: f32 = 28.0;
 
 /// Group headings sit under the rows they name, in size as in weight.
 const HEADING_FONT: f32 = ROW_FONT - 3.0;
@@ -402,15 +402,15 @@ fn heading(ui: &mut egui::Ui, text: &str) {
     });
 }
 
-/// Space between two tabs of a [`section_bar`].
-const TAB_GAP: f32 = 6.0;
+/// Space between two buttons of a [`section_bar`].
+const SECTION_GAP: f32 = 6.0;
 
-/// A [`section_bar`] tab down to its icon: wider than the glyph, so the icons
+/// A [`section_bar`] button down to its icon: wider than the glyph, so the icons
 /// stand apart and each is a target a thumb can hit.
-const ICON_TAB_W: f32 = 40.0;
+const ICON_SECTION_W: f32 = 40.0;
 
-/// The top section bar: a tab per section (icon and label, or just the icon on
-/// an inactive tab where not all fit) with its `indicator` after. Returns the
+/// The top section bar: a button per section (icon and label, or just the icon
+/// on an inactive one where not all fit) with its `indicator` after. Returns the
 /// clicked one.
 pub(super) fn section_bar<T: Copy + PartialEq>(
     ui: &mut egui::Ui,
@@ -424,7 +424,7 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     let mut clicked = None;
     let full = |section: T| format!("{}  {}", icon(section), label(section));
     let font = egui::FontId::proportional(ROW_FONT);
-    let pad = 2.0 * ui.spacing().button_padding.x + TAB_GAP;
+    let pad = 2.0 * ui.spacing().button_padding.x + SECTION_GAP;
     let text_w = |text: String| {
         ui.fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE))
             .size()
@@ -440,11 +440,11 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     let fits = wanted <= screen.width() - SIDES - (CLOSE_SIZE + 8.0);
     ui.horizontal(|ui| {
         // The gap turns the flush button row into a segmented control.
-        ui.spacing_mut().item_spacing.x = TAB_GAP;
+        ui.spacing_mut().item_spacing.x = SECTION_GAP;
         for &section in sections {
             let (text, min_w) = match fits || section == active {
                 true => (full(section), 0.0),
-                false => (icon(section).to_string(), ICON_TAB_W),
+                false => (icon(section).to_string(), ICON_SECTION_W),
             };
             let mut atoms = egui::Atoms::new(
                 egui::RichText::new(text)
@@ -460,7 +460,7 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
             }
             let tab = egui::Button::selectable(section == active, atoms)
                 .corner_radius(ROW_RADIUS)
-                .min_size(egui::vec2(min_w, TAB_H));
+                .min_size(egui::vec2(min_w, SECTION_H));
             if ui.add(tab).clicked() {
                 clicked = Some(section);
             }

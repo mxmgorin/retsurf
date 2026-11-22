@@ -341,7 +341,7 @@ impl App {
             SettingsAction::Select(index) => self.ui.settings.set_selected(*index),
             SettingsAction::Activate => self.settings_confirm(out),
             SettingsAction::Adjust(dx) => self.ui.settings.adjust(*dx),
-            // A link on the About tab: save & close like a normal exit, then load
+            // A link on the About section: save & close like a normal exit, then load
             // it in the focused tab (open_url also tidies the Hub, harmless here).
             SettingsAction::OpenLink(url) => {
                 self.settings_close(out);
@@ -380,7 +380,7 @@ impl App {
     /// (Left/Right does the rest).
     pub(super) fn settings_confirm(&mut self, out: &mut Vec<AppCommand>) {
         if self.ui.settings.is_info_section() {
-            // About tab: A activates the focused row (update action or a link);
+            // About section: A activates the focused row (update action or a link);
             // the resulting SettingsAction routes back through settings_action.
             if let Some(action) = self.ui.about_activate() {
                 out.push(AppCommand::Settings(action));

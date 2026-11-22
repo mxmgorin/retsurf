@@ -27,7 +27,7 @@ const RESETS: [&str; RESET_ROWS] = ["Restore gamepad defaults", "Restore keyboar
 const STEP_W: f32 = 26.0;
 /// The app icon, square.
 static ICON_SVG: &[u8] = include_bytes!("../../resources/retsurf.svg");
-/// The About tab's icon side (logical px).
+/// The About section's icon side (logical px).
 const ABOUT_ICON: f32 = 56.0;
 /// The shared row shape (see [`panel::row`]), taking this file's owned strings.
 fn setting_row(
@@ -54,7 +54,7 @@ fn step_button(
     )
 }
 
-/// The [`SettingsAction`] the About tab's update row triggers for `state`, or
+/// The [`SettingsAction`] the About section's update row triggers for `state`, or
 /// `None` while work is in progress. Shared by the renderer and the gamepad
 /// path ([`super::AppUi::about_activate`]), so the two never drift.
 pub(super) fn update_command(state: &UpdateState) -> Option<SettingsAction> {
@@ -88,13 +88,13 @@ pub(super) fn release_link(state: &UpdateState) -> Option<String> {
     }
 }
 
-/// How many gamepad-focusable rows the update block contributes to the About tab:
+/// How many gamepad-focusable rows the update block contributes to the About section:
 /// the action row, plus a "View release notes" link row when [`release_link`] exists.
 pub(super) fn update_row_count(state: &UpdateState) -> usize {
     1 + release_link(state).is_some() as usize
 }
 
-/// Trim release notes to a compact preview for the About tab (the full text is one
+/// Trim release notes to a compact preview for the About section (the full text is one
 /// tap away via the "View on GitHub" link): drop CRs, cap the length, and add an
 /// ellipsis on truncation.
 fn notes_preview(body: &str) -> String {
@@ -111,7 +111,7 @@ fn notes_preview(body: &str) -> String {
     format!("{}...", body[..end].trim_end())
 }
 
-/// `(label, value)` for the About tab's single update row, folding any status into
+/// `(label, value)` for the About section's single update row, folding any status into
 /// one line so the row stays one stable gamepad-focus target across states.
 fn update_row_text(state: &UpdateState) -> (String, String) {
     match state {
@@ -143,7 +143,7 @@ fn update_row_text(state: &UpdateState) -> (String, String) {
     }
 }
 
-/// Render the self-update block on the About tab and return how many focusable
+/// Render the self-update block on the About section and return how many focusable
 /// rows it drew (see [`update_row_count`]): the action row (focus index 0) and,
 /// when an update is available, the notes and a link row (focus index 1).
 fn add_update(
@@ -199,7 +199,7 @@ fn add_update(
     update_row_count(update)
 }
 
-/// A titled block on the About tab: the space above it and its accent title.
+/// A titled block on the About section: the space above it and its accent title.
 fn heading(ui: &mut egui::Ui, title: &str) {
     ui.add_space(10.0);
     ui.label(
@@ -210,19 +210,19 @@ fn heading(ui: &mut egui::Ui, title: &str) {
     );
 }
 
-/// What the About tab draws besides its compiled-in facts.
+/// What the About section draws besides its compiled-in facts.
 pub(super) struct AboutView<'a> {
     pub update: &'a UpdateState,
     /// The app icon; `None` when it does not rasterize.
     pub icon: Option<&'a egui::TextureHandle>,
 }
 
-/// The app icon heading the About tab, rasterized on first use.
+/// The app icon heading the About section, rasterized on first use.
 pub(super) fn about_icon() -> SvgTexture {
     SvgTexture::new("about-icon", ICON_SVG, ABOUT_ICON, None)
 }
 
-/// Render the read-only About tab (pulls its facts from
+/// Render the read-only About section (pulls its facts from
 /// [`crate::overlay::settings::about_info`]): the icon and build identity, the
 /// data folder, the update block, the project links and the legal notices.
 fn add_about(
@@ -491,7 +491,7 @@ fn add_engines(
     });
 }
 
-/// A settings tab's icon.
+/// A settings section's icon.
 fn section_icon(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Browser => bold::GLOBE,
@@ -574,7 +574,7 @@ pub(super) fn add_settings(
             }
         };
 
-        // The About tab is read-only info, not a FIELDS list.
+        // The About section is read-only info, not a FIELDS list.
         if settings.is_info_section() {
             add_about(ui, screen, foot, dim, settings.selected(), &about, commands);
             footer(ui);

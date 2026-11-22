@@ -1,5 +1,5 @@
 //! Game Mode's slice of the chrome: the screens that shrink the browser's
-//! vocabulary, the entry hint, and the map name the Gaming tab shows.
+//! vocabulary, the entry hint, and the map name the Gaming section shows.
 
 use super::toast::{Part, Toast};
 use super::{drop_egui_focus, AppUi};

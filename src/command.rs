@@ -197,7 +197,7 @@ pub enum SettingsAction {
     Activate,
     /// Step the focused field by a direction (-1 left, +1 right).
     Adjust(i32),
-    /// Follow a link on the read-only About tab: save & close the overlay, then
+    /// Follow a link on the read-only About section: save & close the overlay, then
     /// navigate the focused tab to `url`.
     OpenLink(String),
     /// While capturing a binding (the binding list): the gesture just performed,
@@ -208,11 +208,11 @@ pub enum SettingsAction {
     CaptureCancel,
     /// The keyboard submitted a search engine's name or URL.
     EngineText(String),
-    /// About tab: query GitHub for a newer release.
+    /// About section: query GitHub for a newer release.
     CheckUpdate,
-    /// About tab: download + verify + swap the available release in place.
+    /// About section: download + verify + swap the available release in place.
     InstallUpdate,
-    /// About tab: quit so the launcher re-execs the freshly swapped binary.
+    /// About section: quit so the launcher re-execs the freshly swapped binary.
     QuitForUpdate,
 }
 

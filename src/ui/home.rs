@@ -1,6 +1,6 @@
 //! Rendering of the Home overlay (state lives in
 //! [`crate::overlay::home`]): a brand mark (the banner scene, the wordmark, or
-//! none), a bar holding the search / URL field, a tab bar of filters and a grid
+//! none), a bar holding the search / URL field, a row of filters and a grid
 //! of the bookmarks, scrolling as one stack over a footer naming what the
 //! buttons do. Navigation is routed by [`crate::app`]; tiles open via
 //! [`HomeAction::Open`].
@@ -80,7 +80,7 @@ pub(super) struct HomeView<'a> {
     /// The keyboard's top edge while it types into the field: a field pinned
     /// at the bottom rises above it.
     pub keys_top: Option<f32>,
-    pub tabs: Tabs<'a>,
+    pub filter_row: FilterRow<'a>,
     /// Whether the page carries the toolbar's strip buttons, for a page
     /// without a toolbar.
     pub strip_buttons: bool,
@@ -88,9 +88,9 @@ pub(super) struct HomeView<'a> {
     pub footer: &'a [FooterHint],
 }
 
-/// The tab bar: the filters offered and the one shown.
+/// The filter row: the filters offered and the one shown.
 #[derive(Clone, Copy)]
-pub(super) struct Tabs<'a> {
+pub(super) struct FilterRow<'a> {
     pub filters: &'a [Filter],
     pub filter: &'a Filter,
 }
@@ -436,8 +436,8 @@ pub(super) fn add_home(
                                     );
                                     ui.add_space(ROW_GAP);
                                 }
-                                let tab_buttons = buttons && !view.search.shown();
-                                add_tabs(ui, view.tabs, block_w, tab_buttons, commands);
+                                let end_buttons = buttons && !view.search.shown();
+                                add_filter_row(ui, view.filter_row, block_w, end_buttons, commands);
                                 ui.add_space(ROW_GAP);
                                 let tiles = view.tiles;
                                 let look = (view.layout, view.size);
@@ -506,7 +506,7 @@ const BAR_RADIUS: f32 = 10.0;
 const BAR_MARGIN_X: i8 = 6;
 /// The search bar's widest stroke.
 const BAR_STROKE: f32 = 2.0;
-/// A strip button's side, inside the bar or at the tab bar's ends.
+/// A strip button's side, inside the bar or at the filter row's ends.
 const STRIP_BUTTON: f32 = 32.0;
 /// The bar's thin lines: its idle stroke and its dividers.
 const LINE_W: f32 = 1.0;
@@ -516,12 +516,12 @@ const DIVIDER_H: f32 = 22.0;
 const FIELD_FONT: f32 = 20.0;
 /// The magnifier's size, as a share of the field's type.
 const GLASS_SHARE: f32 = 0.8;
-/// A tab's height, its underline included.
-const TAB_H: f32 = 30.0;
-/// The active tab's underline.
+/// A filter's height, its underline included.
+const FILTER_H: f32 = 30.0;
+/// The active filter's underline.
 const UNDERLINE_W: f32 = 3.0;
-/// Space between tabs.
-const TAB_GAP: f32 = 6.0;
+/// Space between filters.
+const FILTER_GAP: f32 = 6.0;
 
 /// The footer in `row`: a rule, then its hints centred; returns its height.
 fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 {
@@ -544,9 +544,9 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
     h + FOOTER_RULE_GAP
 }
 
-/// The scroll areas' ids: the stack, and the tabs row when it overflows.
+/// The scroll areas' ids: the stack, and the filter row when it overflows.
 const STACK_SALT: &str = "home_stack";
-const TABS_SALT: &str = "home_tabs";
+const FILTERS_SALT: &str = "home_filters";
 
 /// The search bar: the field, between the toolbar's strip buttons when
 /// `buttons` (Menu at the left, Quick Access at the right, as the toolbar
@@ -701,35 +701,35 @@ const MARK_SCALE: f32 = 0.85;
 /// The mark's glyph, as a share of its radius.
 const MARK_GLYPH: f32 = 1.2;
 
-/// The tab bar: the filter tabs centred; with `buttons`, the strip buttons at
+/// The filter row: the filters centred; with `buttons`, the strip buttons at
 /// either end.
-fn add_tabs(
+fn add_filter_row(
     ui: &mut egui::Ui,
-    tabs: Tabs,
+    row: FilterRow,
     width: f32,
     buttons: bool,
     commands: &mut Vec<AppCommand>,
 ) {
-    // Painted under the tabs once the row's place is known.
+    // Painted under the filters once the row's place is known.
     let rule = ui.painter().add(egui::Shape::Noop);
     let row = ui.allocate_ui_with_layout(
-        egui::vec2(width, TAB_H),
+        egui::vec2(width, FILTER_H),
         egui::Layout::right_to_left(egui::Align::Center),
         |ui| {
-            ui.spacing_mut().item_spacing.x = TAB_GAP;
+            ui.spacing_mut().item_spacing.x = FILTER_GAP;
             if buttons {
                 strip_button(ui, Strip::QuickAccess, commands);
             }
             ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), TAB_H),
+                egui::vec2(ui.available_width(), FILTER_H),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
-                    ui.spacing_mut().item_spacing.x = TAB_GAP;
+                    ui.spacing_mut().item_spacing.x = FILTER_GAP;
                     if buttons {
                         strip_button(ui, Strip::Menu, commands);
                     }
-                    if tabs.filters.len() > 1 {
-                        add_filter_tabs(ui, tabs, commands);
+                    if row.filters.len() > 1 {
+                        add_filters(ui, row, commands);
                     }
                 },
             );
@@ -742,37 +742,37 @@ fn add_tabs(
         .set(rule, egui::Shape::hline(rect.x_range(), y, stroke));
 }
 
-/// The filter tabs in what is left of the row, a rule parting the kinds from
+/// The filters in what is left of the row, a rule parting the kinds from
 /// the tags: centred when they fit, else scrolled to keep the active one in
 /// view when it changes, the clipped end fading out.
-fn add_filter_tabs(ui: &mut egui::Ui, tabs: Tabs, commands: &mut Vec<AppCommand>) {
+fn add_filters(ui: &mut egui::Ui, row: FilterRow, commands: &mut Vec<AppCommand>) {
     let pad = 2.0 * ui.spacing().button_padding.x;
-    let labels: Vec<String> = tabs.filters.iter().map(Filter::label).collect();
+    let labels: Vec<String> = row.filters.iter().map(Filter::label).collect();
     let parted = |at: usize| {
         at > 0
-            && matches!(tabs.filters[at], Filter::Tag(_))
-            && !matches!(tabs.filters[at - 1], Filter::Tag(_))
+            && matches!(row.filters[at], Filter::Tag(_))
+            && !matches!(row.filters[at - 1], Filter::Tag(_))
     };
-    let tabs_w: f32 = labels
+    let filters_w: f32 = labels
         .iter()
         .enumerate()
         .map(|(at, label)| {
-            let rule = if parted(at) { LINE_W + TAB_GAP } else { 0.0 };
-            tab_text_width(ui, label) + pad + TAB_GAP + rule
+            let rule = if parted(at) { LINE_W + FILTER_GAP } else { 0.0 };
+            filter_text_width(ui, label) + pad + FILTER_GAP + rule
         })
         .sum::<f32>()
-        - TAB_GAP;
+        - FILTER_GAP;
     let room = ui.available_width();
-    let shown = egui::Id::new("home_tabs_active");
-    let token = tabs.filter.token();
+    let shown = egui::Id::new("home_filters_active");
+    let token = row.filter.token();
     let moved = ui.ctx().data(|d| d.get_temp::<String>(shown)) != Some(token.clone());
     let add = |ui: &mut egui::Ui, commands: &mut Vec<AppCommand>| {
-        for (at, (filter, label)) in tabs.filters.iter().zip(&labels).enumerate() {
+        for (at, (filter, label)) in row.filters.iter().zip(&labels).enumerate() {
             if parted(at) {
                 divider(ui);
             }
-            let active = filter == tabs.filter;
-            let resp = tab(ui, label, active);
+            let active = filter == row.filter;
+            let resp = filter_button(ui, label, active);
             if active && moved {
                 resp.scroll_to_me(None);
             }
@@ -781,18 +781,18 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: Tabs, commands: &mut Vec<AppCommand>
             }
         }
     };
-    if tabs_w <= room {
-        ui.add_space((room - tabs_w) / 2.0);
+    if filters_w <= room {
+        ui.add_space((room - filters_w) / 2.0);
         add(ui, commands);
     } else {
-        let drawn = scroll_offset(ui, TABS_SALT);
+        let drawn = scroll_offset(ui, FILTERS_SALT);
         let scroll = egui::ScrollArea::horizontal()
-            .id_salt(TABS_SALT)
+            .id_salt(FILTERS_SALT)
             .max_width(room)
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = TAB_GAP;
+                    ui.spacing_mut().item_spacing.x = FILTER_GAP;
                     add(ui, commands);
                 });
             });
@@ -815,11 +815,11 @@ fn add_filter_tabs(ui: &mut egui::Ui, tabs: Tabs, commands: &mut Vec<AppCommand>
     }
 }
 
-/// One tab: its name, muted unless active or hovered, the active one
-/// underlined in the accent along the tab bar's rule.
-fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
+/// One filter: its name, muted unless active or hovered, the active one
+/// underlined in the accent along the filter row's rule.
+fn filter_button(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let pad = 2.0 * ui.spacing().button_padding.x;
-    let size = egui::vec2(tab_text_width(ui, text) + pad, TAB_H);
+    let size = egui::vec2(filter_text_width(ui, text) + pad, FILTER_H);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let color = match (on, resp.hovered()) {
         (true, _) => palette().text,
@@ -838,7 +838,7 @@ fn tab(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     resp
 }
 
-fn tab_text_width(ui: &egui::Ui, text: &str) -> f32 {
+fn filter_text_width(ui: &egui::Ui, text: &str) -> f32 {
     let font = egui::FontId::proportional(ROW_FONT);
     ui.fonts_mut(|f| {
         f.layout_no_wrap(text.to_string(), font, palette().ink)

@@ -221,7 +221,7 @@ impl Task {
     }
 }
 
-/// A row in a settings tab. `cat` is its sub-header, drawn only in a tab with
+/// A row in a settings section. `cat` is its sub-header, drawn only in a section with
 /// several (empty: none); `restart` marks a field the running app can't apply
 /// live, flagged with `*`.
 pub struct Field {

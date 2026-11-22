@@ -28,14 +28,14 @@ pub struct UpdateConfig {
     pub channel: Channel,
     /// Check for a newer build in the background at startup (throttled to at most
     /// once a day; see [`crate::update::Updater::auto_check`]). On by default; set
-    /// `false` to only ever check from the Settings -> About tab.
+    /// `false` to only ever check from the Settings -> About section.
     pub auto_check: bool,
 }
 
 impl Default for UpdateConfig {
     fn default() -> Self {
         // `auto_check` defaults on — the whole point is discovery without a manual
-        // trip to the About tab; a derived `Default` would wrongly start it `false`.
+        // trip to the About section; a derived `Default` would wrongly start it `false`.
         Self {
             channel: Channel::default(),
             auto_check: true,

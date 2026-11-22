@@ -134,7 +134,7 @@ fn swap_pairs(kind: &Kind, staging: &Path) -> Vec<(PathBuf, PathBuf)> {
 
 /// Stream `url` into `dest` via a `.part` temp, returning the lowercase hex SHA-256
 /// of the bytes written. Publishes `Downloading{received,total}` on a throttle so
-/// the About tab shows progress.
+/// the About section shows progress.
 fn download(
     url: &str,
     dest: &Path,

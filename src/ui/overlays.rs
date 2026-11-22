@@ -299,7 +299,7 @@ impl AppUi {
         self.settings.close()
     }
 
-    /// Move the settings selection by `dy` rows. On the About tab the update block's
+    /// Move the settings selection by `dy` rows. On the About section the update block's
     /// row count depends on the live update state (a release-notes link appears when
     /// an update is available), so it's resolved here and handed to the nav.
     #[inline]

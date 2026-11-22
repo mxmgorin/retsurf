@@ -1,4 +1,4 @@
-//! The read-only About tab of the settings overlay: build identity, the
+//! The read-only About section of the settings overlay: build identity, the
 //! project's links and the GPL legal notices. The build facts are baked in at
 //! compile time by `build.rs`, the project facts come from `Cargo.toml`, and the
 //! copyright line from `NOTICE`. [`crate::ui::settings`] lays it out.
@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 /// The project's NOTICE: copyright, license grant and the additional terms.
 pub const NOTICE: &str = include_str!("../../../NOTICE");
 
-/// A selectable row on the About tab that loads `url`, with `value` shown at its
+/// A selectable row on the About section that loads `url`, with `value` shown at its
 /// trailing edge.
 pub struct AboutLink {
     pub label: &'static str,
@@ -42,7 +42,7 @@ impl AboutInfo {
     }
 }
 
-/// Build the About tab's content.
+/// Build the About section's content.
 pub fn about_info() -> AboutInfo {
     AboutInfo {
         version: env!("RETSURF_VERSION"),

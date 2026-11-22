@@ -1,4 +1,4 @@
-//! The search-engine list behind the Browser tab's door row, over the draft
+//! The search-engine list behind the Browser section's door row, over the draft
 //! config: a row that adds an engine, then the engines. One engine's own
 //! screen uses, renames, re-points or deletes it, a deletion only after a
 //! confirmation. Names and URLs are typed on the on-screen keyboard, and only
@@ -274,7 +274,7 @@ impl Engines {
 }
 
 impl Settings {
-    /// Whether the search-engine list is up in place of the Browser tab's fields.
+    /// Whether the search-engine list is up in place of the Browser section's fields.
     pub fn engines_open(&self) -> bool {
         self.draft().is_some_and(|draft| draft.engines.is_some())
     }

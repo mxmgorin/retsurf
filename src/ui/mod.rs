@@ -212,7 +212,7 @@ fn page_icon_wants<'a>(
 }
 
 /// Home's bookmarks as a frame shows them: the filter in force, the
-/// filters offered as tabs, and the tiles as indices into the bookmarks.
+/// filters offered, and the tiles as indices into the bookmarks.
 struct HomeList {
     visible: Vec<usize>,
     filters: Vec<Filter>,
@@ -306,7 +306,7 @@ pub struct AppUi {
     pub input_maps: InputMaps,
     /// Its map editor, opened from a map.
     pub map_edit: MapEdit,
-    /// The live map's name, for the Gaming tab's row. Empty until Settings opens:
+    /// The live map's name, for the Gaming section's row. Empty until Settings opens:
     /// naming it earlier would load every map for a row nobody has asked for.
     input_map_name: String,
     /// What the search glyphs offer and the empty fields name.
@@ -341,7 +341,7 @@ pub struct AppUi {
     pub hub: Hub,
     /// The full-screen settings overlay (edits a config draft).
     pub settings: Settings,
-    /// Self-update manager (About tab): in-place on PortMaster / desktop
+    /// Self-update manager (About section): in-place on PortMaster / desktop
     /// installs, "open the release page" elsewhere. See [`crate::update`].
     pub update: Updater,
     /// The startup notice of what [`Updater::take_startup_offer`] found.
@@ -356,7 +356,7 @@ pub struct AppUi {
     /// Whether Home's footer names pad buttons.
     home_pad: bool,
     banner: svg::SvgTexture,
-    /// The About tab's icon, rasterized on first use.
+    /// The About section's icon, rasterized on first use.
     about_icon: svg::SvgTexture,
     /// Site icons for whichever lists are on screen (see [`page_icon_wants`]).
     page_icons: favicon::PageIcons,
@@ -969,7 +969,7 @@ impl AppUi {
                         Brand::Icon => home::Mark::Icon,
                         Brand::None => home::Mark::None,
                     };
-                    let tabs = home::Tabs {
+                    let filter_row = home::FilterRow {
                         filters: &list.filters,
                         filter: &list.filter,
                     };
@@ -987,7 +987,7 @@ impl AppUi {
                         search: self.home_config.search,
                         search_engines: &self.search_engines,
                         keys_top: home_caret.map(|_| ctx.content_rect().bottom() - self.osk_height),
-                        tabs,
+                        filter_row,
                         strip_buttons: !self.home_config.toolbar,
                         footer: &footer,
                     };

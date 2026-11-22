@@ -1,4 +1,4 @@
-//! In-app self-update. A manual "Check for updates" on the Settings -> About tab
+//! In-app self-update. A manual "Check for updates" on the Settings -> About section
 //! queries GitHub for a newer build on the configured channel (stable releases,
 //! `beta` pre-releases, or the rolling `nightly` build); what it can then do depends
 //! on the detected install [`Kind`]:
@@ -43,7 +43,7 @@ pub enum UpdateState {
     },
     Available {
         version: String,
-        /// Release notes (the GitHub release body), shown read-only on the About tab.
+        /// Release notes (the GitHub release body), shown read-only on the About section.
         notes: Option<String>,
         /// The release's web page, offered as a "View on GitHub" link beside the notes.
         page: Option<String>,
@@ -60,7 +60,7 @@ pub enum UpdateState {
     Error(String),
 }
 
-/// How the About tab offers an available update.
+/// How the About section offers an available update.
 #[derive(Clone, PartialEq)]
 pub enum Offer {
     /// In-place install (PortMaster / single-binary desktop): the release asset.
@@ -87,7 +87,7 @@ pub(crate) enum Kind {
         bin: &'static str,
     },
     /// No in-place update path (Windows, macOS, Android, read-only installs): the
-    /// About tab can still check and open the release page.
+    /// About section can still check and open the release page.
     Manual,
 }
 
@@ -250,7 +250,7 @@ impl Updater {
     }
 }
 
-/// Store a new state and wake the main loop so the About tab repaints.
+/// Store a new state and wake the main loop so the About section repaints.
 fn publish(state: &Mutex<UpdateState>, next: UpdateState, sender: &UserEventSender) {
     *state
         .lock()

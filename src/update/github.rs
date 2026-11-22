@@ -16,7 +16,7 @@ struct Release {
     /// The release's web page — shown as a "View on GitHub" link beside the notes.
     #[serde(default)]
     html_url: String,
-    /// The release notes (markdown), shown read-only on the About tab.
+    /// The release notes (markdown), shown read-only on the About section.
     #[serde(default)]
     body: String,
     /// Unpublished draft (only ever visible to authenticated maintainers); skipped
@@ -110,7 +110,7 @@ fn classify(release: &Release, asset: Option<&str>) -> Result<UpdateState, Strin
 
 /// The `Available` state for `release`: an in-place install offer when `asset`
 /// is present (with its optional checksum sidecar), else the release page. The
-/// notes and page back the About tab's preview and "View on GitHub" link.
+/// notes and page back the About section's preview and "View on GitHub" link.
 fn available(release: &Release, asset: Option<&str>, version: String) -> UpdateState {
     let offer = match asset.and_then(|want| find_asset(release, want)) {
         Some(a) => Offer::Install {

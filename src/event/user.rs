@@ -57,7 +57,7 @@ pub enum UserEvent {
     HintsReady = 3,
     /// The embedder-control delegate; the loop drains pending/dismissed controls.
     ControlPending = 4,
-    /// The self-update worker; the About tab re-reads the snapshot each frame.
+    /// The self-update worker; the About section re-reads the snapshot each frame.
     UpdateProgress = 5,
     /// The gamepad delegate; the loop drains the queued haptic requests.
     HapticPending = 6,
