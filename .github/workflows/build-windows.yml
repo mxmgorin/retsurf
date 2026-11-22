@@ -55,6 +55,8 @@ jobs:
         run: |
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
           "LIBCLANG_PATH=$vs\VC\Tools\Llvm\x64\bin" >> $env:GITHUB_ENV
+          # bindgen takes its builtin headers from this clang, else from the first one on PATH.
+          "CLANG_PATH=$vs\VC\Tools\Llvm\x64\bin\clang.exe" >> $env:GITHUB_ENV
 
       # SDL2 is built from source and linked statically (no system SDL2 on the
       # runner, and users shouldn't need a DLL either). SpiderMonkey comes as
