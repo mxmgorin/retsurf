@@ -38,9 +38,9 @@ const TITLE_SEPARATORS: &[&str] = &[" | ", " - ", " — ", " – ", " · "];
 token_enum! {
     /// What opening a bookmark does.
     pub enum Launch {
-        default Browser;
+        default Site;
         /// Navigate the tab, chrome and all.
-        Browser => "browser", "Site",
+        Site => "site", "Site",
         /// Open it without the chrome, like a program.
         App => "app", "App",
         /// Open it without the chrome, in Game Mode.
@@ -78,7 +78,7 @@ pub const FILTER_CHOICES: &[(&str, &str)] = &[
     ("Games", "games"),
 ];
 /// What each filter after All admits.
-const FILTER_LAUNCHES: [Launch; 3] = [Launch::Browser, Launch::App, Launch::Game];
+const FILTER_LAUNCHES: [Launch; 3] = [Launch::Site, Launch::App, Launch::Game];
 const _: () = assert!(FILTER_CHOICES.len() == FILTER_LAUNCHES.len() + 1);
 
 impl Filter {
@@ -673,7 +673,7 @@ fn first_run() -> Vec<Bookmark> {
         cursor: super::ListCursor::new(0),
     };
     for (name, url) in DEFAULTS {
-        store.add(url, name.to_string(), Launch::Browser);
+        store.add(url, name.to_string(), Launch::Site);
     }
     store.items
 }
@@ -900,7 +900,7 @@ mod tests {
     #[test]
     fn only_narrowing_filters_are_offered() {
         let all = [
-            tagged("a", Launch::Browser, &["news"], 0),
+            tagged("a", Launch::Site, &["news"], 0),
             tagged("b", Launch::Game, &["arcade", "news"], 0),
             tagged("c", Launch::Game, &["arcade"], 0),
             tagged("d", Launch::Game, &["games"], 0),
@@ -910,7 +910,7 @@ mod tests {
             offered,
             [
                 Filter::All,
-                Filter::Launch(Launch::Browser),
+                Filter::Launch(Launch::Site),
                 Filter::Launch(Launch::Game),
                 Filter::Tag("arcade".to_string()),
                 Filter::Tag("news".to_string()),
@@ -925,7 +925,7 @@ mod tests {
     fn a_view_filters_then_sorts() {
         let all = [
             tagged("b", Launch::Game, &[], 5),
-            tagged("a", Launch::Browser, &[], 9),
+            tagged("a", Launch::Site, &[], 9),
             tagged("c", Launch::Game, &[], 7),
         ];
         let id = |b: &Bookmark| b.id.clone();
@@ -940,9 +940,9 @@ mod tests {
     #[test]
     fn a_tag_filter_ignores_case() {
         let all = [
-            tagged("a", Launch::Browser, &["News"], 0),
-            tagged("b", Launch::Browser, &["news"], 0),
-            tagged("c", Launch::Browser, &[], 0),
+            tagged("a", Launch::Site, &["News"], 0),
+            tagged("b", Launch::Site, &["news"], 0),
+            tagged("c", Launch::Site, &[], 0),
         ];
         let news = Filter::parse("NEWS");
         let id = |b: &Bookmark| b.id.clone();

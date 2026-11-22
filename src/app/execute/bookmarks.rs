@@ -83,7 +83,7 @@ impl App {
         self.ui.hub.bookmarks.opened(&url);
         match launch {
             // A site takes the tab back, chrome and all.
-            Launch::Browser => self.end_launch(),
+            Launch::Site => self.end_launch(),
             Launch::App | Launch::Game => self.browser.set_launched(Some(id)),
         }
         self.switch_site_for(&url, out);
@@ -260,7 +260,7 @@ impl App {
         }
         let id = self.ui.hub.bookmarks.all()[at].id.clone();
         self.browser
-            .set_launched((launch != Launch::Browser).then_some(id));
+            .set_launched((launch != Launch::Site).then_some(id));
         if game && !self.browser.in_game_mode() {
             self.enter_game_mode(out);
         }

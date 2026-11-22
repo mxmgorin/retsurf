@@ -298,7 +298,7 @@ fn row_verbs(hub: &Hub, tabs: &[TabInfo]) -> RowVerbs {
         Section::Bookmarks => match hub.bookmarks.selected_index() {
             Some(at) => {
                 let open = match hub.bookmarks.all()[at].launch {
-                    Launch::Browser => "open",
+                    Launch::Site => "open",
                     Launch::App | Launch::Game => "launch",
                 };
                 [Some(open), Some("remove"), None]
@@ -846,7 +846,7 @@ fn add_bookmarks_section(
                 };
                 let label = labels::bookmark_label(bookmark);
                 // Sites are the default and go unmarked.
-                let mark = (bookmark.launch != Launch::Browser).then(|| {
+                let mark = (bookmark.launch != Launch::Site).then(|| {
                     let (glyph, color) = super::home::launch_glyph(bookmark.launch);
                     egui::RichText::new(glyph).size(ROW_FONT).color(color)
                 });

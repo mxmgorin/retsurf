@@ -249,7 +249,7 @@ name = "Wikipedia"                       # shown on the tile; without it, the si
 url = "https://en.wikipedia.org"
 order = 1                                # position; lower first, unset after the rest
 tags = ["reference"]                     # groups for the start page's filter
-launch = "browser"                       # "browser", "app" (no toolbar) or "game" (Game Mode too)
+launch = "site"                          # "site", "app" (no toolbar) or "game" (Game Mode too)
 reader = false                           # open the site's articles in reader view; not for a game
 last_opened = 2026-10-21T09:12:00Z       # written by retsurf
 

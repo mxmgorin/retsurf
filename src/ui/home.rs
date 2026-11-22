@@ -1253,7 +1253,7 @@ fn paint_launch_mark(painter: &egui::Painter, glyph: egui::Rect, radius: f32, la
 /// How a bookmark opens, as its badge names it: the glyph and its colour.
 pub(super) fn launch_glyph(launch: Launch) -> (&'static str, egui::Color32) {
     match launch {
-        Launch::Browser => (bold::GLOBE, palette().muted),
+        Launch::Site => (bold::GLOBE, palette().muted),
         Launch::App => (bold::APP_WINDOW, palette().accent),
         Launch::Game => (bold::GAME_CONTROLLER, palette().surf_warm),
     }

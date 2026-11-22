@@ -679,7 +679,7 @@ impl AppUi {
         match self.home.tile().and_then(|tile| list.visible.get(tile)) {
             Some(&at) => {
                 let open = match self.hub.bookmarks.all()[at].launch {
-                    Launch::Browser => "Open",
+                    Launch::Site => "Open",
                     Launch::App | Launch::Game => "Launch",
                 };
                 out.push(hint(&[face.a], open));

@@ -206,7 +206,7 @@ impl App {
         // A page bookmarked in Game Mode is a game.
         let launch = match self.browser.in_game_mode() {
             true => Launch::Game,
-            false => Launch::Browser,
+            false => Launch::Site,
         };
         self.ui.hub.bookmarks.add(url, name, launch);
         self.ui
