@@ -17,9 +17,7 @@
   <a href="https://github.com/mxmgorin/retsurf/discussions">Discussions</a>
 </p>
 
-retsurf is a portable web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It runs on retro handhelds, Kindle e-readers, Android, Linux, Windows and macOS, on ARM and x86, from a Miyoo Mini with 128 MB of RAM up to desktops. It is driven by a gamepad, a keyboard or touch, with gaming features like remappable input, game scaling and shaders.
-
-**[Supported platforms and downloads](#install)**
+retsurf is a portable web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It features a console-like interface designed for gamepads and keyboards, with touch support, a virtual cursor and Vimium-style link hints. It also offers fullscreen mode, remappable controls, scaling and shaders for games. It runs on retro handhelds, Kindles, phones and desktops; see **[supported platforms](#install)**.
 
 > **Work in progress.** Early development — expect bugs. See [Limitations](#limitations).
 
