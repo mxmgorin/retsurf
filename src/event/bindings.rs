@@ -97,7 +97,7 @@ action_table! {
         /// Type a new address (see [`AppCommand::FocusAddressBar`]).
         Address => "address", "Address bar",
         /// Toggle link-hint navigation.
-        Hints => "hints", "Link hints",
+        LinkHints => "link_hints", "Link hints",
         /// Overlay navigation by one step: overlay rows /
         /// sections, the OSK grid, or hint hops — whatever overlay is open. Falls
         /// through to the page when none is.
@@ -248,7 +248,7 @@ impl Action {
             | Action::QuickAccess
             | Action::Home
             | Action::Address
-            | Action::Hints
+            | Action::LinkHints
             | Action::Reload
             | Action::Reader
             | Action::Bookmark
@@ -300,7 +300,7 @@ impl Action {
             Action::Reload => AppCommand::Input(InputCommand::Osk(OskCommand::Space)),
             Action::Prev => AppCommand::Input(InputCommand::Shoulder(-1)),
             Action::Next => AppCommand::Input(InputCommand::Shoulder(1)),
-            Action::Hints => AppCommand::Input(InputCommand::Hints),
+            Action::LinkHints => AppCommand::Input(InputCommand::Hints),
             Action::Bookmark => AppCommand::ToggleBookmark,
             Action::Home => AppCommand::Browser(BrowserCommand::Home),
             Action::Address => AppCommand::FocusAddressBar,
@@ -355,7 +355,7 @@ fn default_gamepad_bindings() -> inputbind::Table {
         ("a", Action::Confirm),
         ("b", Action::Cancel),
         ("x", Action::Osk),
-        ("y", Action::Hints),
+        ("y", Action::LinkHints),
         ("l1", Action::Prev),
         ("r1", Action::Next),
         // These defer their taps to release; back/forward survive that fine.
@@ -368,7 +368,7 @@ fn default_gamepad_bindings() -> inputbind::Table {
         // A two-trigger squeeze is not ordered, so both orders are bound.
         ("l2+r2", Action::ZoomReset),
         ("r2+l2", Action::ZoomReset),
-        ("l3", Action::Hints),
+        ("l3", Action::LinkHints),
         // Held inside the mode, where these tables are bypassed, so rebinding it
         // moves the way out with it; the game keeps Start's tap.
         ("start", Action::QuickAccess),
@@ -402,7 +402,7 @@ fn default_keyboard_bindings() -> inputbind::Table {
         ("ctrl+m", Action::Menu),
         ("ctrl+l", Action::Address),
         ("ctrl+,", Action::Settings),
-        ("ctrl+f", Action::Hints),
+        ("ctrl+f", Action::LinkHints),
         // A Ctrl+Alt chord because no game binds one, and inside Game Mode this
         // is the only key the browser still answers.
         ("ctrl+alt+a", Action::QuickAccess),

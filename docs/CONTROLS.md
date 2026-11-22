@@ -15,7 +15,7 @@ y = "none"                 # unbind
 
 [keyboard]
 "ctrl+r" = "reload"        # shortcuts with Ctrl or Alt always fire
-f = "hints"                # plain keys fire only while no text field has focus
+f = "link_hints"           # plain keys fire only while no text field has focus
 k = "nav_up"
 ```
 
@@ -40,7 +40,7 @@ is on Ctrl, so pages get all plain keys:
 
 **Actions**: `confirm`, `cancel`, `menu` (Menu), `quick_access` (Quick Access, the way
 in and out of Game Mode), `settings`, `osk` (on-screen keyboard), `quit`, `prev` / `next`
-(list section or history), `home`, `address`, `hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
+(list section or history), `home`, `address`, `link_hints`, `nav_up` / `nav_down` / `nav_left` / `nav_right`
 (a step in the open overlay, else the key goes to the page), `cursor_up` / `cursor_down` /
 `cursor_left` / `cursor_right` and `scroll_up` / `scroll_down` / `scroll_left` /
 `scroll_right` (move the cursor or scroll the page while held; unbound by default), `reload`, `reader`,
