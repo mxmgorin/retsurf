@@ -508,7 +508,6 @@ impl AppUi {
     }
 
     /// Take keyboard focus off the chrome's text fields.
-    #[cfg(target_os = "android")]
     pub fn drop_keyboard_focus(&self) {
         drop_egui_focus(&self.egui_ctx);
     }

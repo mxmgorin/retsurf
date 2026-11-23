@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `hints` action is `link_hints`; a binding to the old name is skipped and the action gets its defaults
 - Settings > Controls: Stick threshold, Repeat delay and Repeat rate are in their own Navigation group
 
+### Fixed
+
+- A pad or link-hint click into a page field types there instead of the address bar, and opens the keyboard
+
 ## [0.11.0] - 2026-11-18
 
 ### Added

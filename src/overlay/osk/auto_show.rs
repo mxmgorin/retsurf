@@ -36,8 +36,8 @@ pub struct Outcome {
 
 /// The state the decision carries between frames.
 pub struct AutoShow {
-    /// A text field had focus last frame.
-    focused: bool,
+    /// Whether a chrome and a page text field had focus last frame.
+    focused: (bool, bool),
     /// When a page tap began waiting out [`TAP_SETTLE`].
     tap_at: Option<Instant>,
 }
@@ -45,7 +45,7 @@ pub struct AutoShow {
 impl AutoShow {
     pub fn new() -> Self {
         Self {
-            focused: false,
+            focused: (false, false),
             tap_at: None,
         }
     }
@@ -53,8 +53,10 @@ impl AutoShow {
     /// Reads one frame; returns whether to raise the keyboard and whether a tap
     /// is still settling.
     pub fn read(&mut self, frame: &Frame) -> Outcome {
-        let focused = frame.chrome || frame.page;
-        let rose = focused && !std::mem::replace(&mut self.focused, focused);
+        // Per side: focus passing straight from the chrome's field to the page's
+        // leaves no frame without one.
+        let (chrome, page) = std::mem::replace(&mut self.focused, (frame.chrome, frame.page));
+        let rose = (frame.chrome && !chrome) || (frame.page && !page);
         if frame.osk_open {
             self.tap_at = None;
             return Outcome::default();
@@ -105,6 +107,20 @@ mod tests {
         };
         assert!(auto.read(&focused).show);
         assert!(!auto.read(&focused).show);
+    }
+
+    #[test]
+    fn focus_moving_from_the_chrome_to_the_page_raises_the_keyboard() {
+        let (mut auto, t) = (AutoShow::new(), Instant::now());
+        auto.read(&Frame {
+            chrome: true,
+            ..idle(t)
+        });
+        let moved = Frame {
+            page: true,
+            ..idle(t)
+        };
+        assert!(auto.read(&moved).show);
     }
 
     #[test]

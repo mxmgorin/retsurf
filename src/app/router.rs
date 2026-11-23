@@ -282,9 +282,7 @@ impl App {
             InputCommand::Click { button, pressed } => {
                 if self.ui.cursor_over_browser() {
                     let (x, y) = self.ui.cursor_browser_rel();
-                    self.browser.mouse_move(x, y);
-                    self.browser
-                        .mouse_button(sdl_button(*button), x, y, *pressed);
+                    self.page_button(sdl_button(*button), x, y, *pressed);
                 }
             }
             InputCommand::OskButton(input) => {
@@ -323,11 +321,20 @@ impl App {
     /// Click the page at a browser-relative point: a synthetic mouse move + press +
     /// release, so JS click handlers fire like for a real click.
     fn click_page(&mut self, x: f32, y: f32) {
-        self.browser.mouse_move(x, y);
         for pressed in [true, false] {
-            self.browser
-                .mouse_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
+            self.page_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
         }
+    }
+
+    /// Press or release `button` on the page at a browser-relative point. A
+    /// press also takes keyboard focus off the chrome's text fields.
+    fn page_button(&mut self, button: sdl2::mouse::MouseButton, x: f32, y: f32, pressed: bool) {
+        // egui drops a field's focus only on a pointer press it sees itself.
+        if pressed {
+            self.ui.drop_keyboard_focus();
+        }
+        self.browser.mouse_move(x, y);
+        self.browser.mouse_button(button, x, y, pressed);
     }
 
     /// The A button with no overlay up: click the page in Servo or the egui
@@ -335,9 +342,7 @@ impl App {
     fn primary_action(&mut self, pressed: bool) {
         if self.ui.cursor_over_browser() {
             let (x, y) = self.ui.cursor_browser_rel();
-            self.browser.mouse_move(x, y);
-            self.browser
-                .mouse_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
+            self.page_button(sdl2::mouse::MouseButton::Left, x, y, pressed);
         } else {
             self.ui.click_ui(pressed, &mut self.window);
         }
