@@ -17,6 +17,9 @@ const LIFT: f32 = 36.0;
 /// How long a toast stays up unless its caller asks for longer.
 pub const TOAST: Duration = Duration::from_secs(2);
 
+/// Outlasts a plain toast: nothing else explains the vanished tab.
+pub const NOTICE: Duration = Duration::from_secs(6);
+
 /// The tail of a toast's time over which it fades out.
 pub(super) const FADE: Duration = Duration::from_millis(400);
 

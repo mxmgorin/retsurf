@@ -6,7 +6,7 @@
 use super::App;
 use crate::browser::HOME_URL;
 use crate::data::session::TabInfo;
-use crate::ui::Toast;
+use crate::ui::{Toast, NOTICE};
 use servo::profile_traits::mem::MemoryReportResult;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -14,9 +14,6 @@ use std::time::{Duration, Instant};
 /// How long a trip waits for the memory report before closing the active tab.
 /// A debug build took 4.3 s on a heavy page.
 const REPORT_WAIT: Duration = Duration::from_secs(5);
-
-/// Outlasts a plain toast: nothing else explains the vanished tab.
-const NOTICE: Duration = Duration::from_secs(6);
 
 impl App {
     /// Act on a guard trip and on the report it asked for. Must run before the

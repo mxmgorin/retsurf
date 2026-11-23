@@ -37,7 +37,7 @@ pub use self::game_mode::game_mode_hint;
 pub use self::labels::{bookmark_label, site_label};
 pub use self::overlays::Focus;
 pub use self::splash::add_splash;
-pub use self::toast::{browser_toast, Toast, TOAST};
+pub use self::toast::{browser_toast, Toast, NOTICE, TOAST};
 
 use crate::{
     browser::{AppBrowser, Favicon},

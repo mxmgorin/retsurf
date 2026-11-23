@@ -20,7 +20,7 @@ use crate::event::user::UserEventSender;
 use crate::overlay::osk::auto_show::{self, AutoShow};
 use crate::overlay::osk::OskCommand;
 use crate::platform::clipboard::Clipboard;
-use crate::ui::{AppUi, Toast};
+use crate::ui::{AppUi, Toast, NOTICE};
 use crate::{config::AppConfig, platform::window::AppWindow};
 use egui_phosphor::bold;
 use sdl2::Sdl;
@@ -325,6 +325,7 @@ impl App {
                 self.save_session();
                 self.flush_config();
                 self.last_flush = Instant::now();
+                self.session.settle_restore(self.last_flush);
             }
 
             self.poll_memory_guard();
@@ -484,6 +485,7 @@ impl App {
         // run (we `process::exit` below), so this must be explicit.
         self.save_window_size();
         self.flush_user_data();
+        self.session.end_restore();
         self.ui.hub.downloads.discard_partials();
         // `process::exit` below skips every `Drop`, and the governor is
         // machine-wide.
@@ -586,19 +588,31 @@ impl App {
 
     /// Fill the empty tab list at startup: `first` when given, else the saved
     /// session, or the home page when there is none. `restore_tabs` off drops
-    /// the stored session instead.
+    /// the stored session instead, and a session the last launch died
+    /// restoring is skipped with a toast.
     fn open_first_tabs(&mut self, first: Option<&str>) {
         if let Some(url) = first {
             self.browser.open_tab(url);
             return;
         }
+        let failed = self.session.take_failed_restore();
         if !self.config.browser.restore_tabs {
             self.session.discard();
-        } else if self
-            .browser
-            .restore_tabs(self.session.urls(), self.session.active())
-        {
-            return;
+        } else if failed && !self.session.urls().is_empty() {
+            log::warn!("session: the last launch died restoring its tabs; not reopening them");
+            self.ui.toast_for(
+                Toast::warn("Tabs not reopened: the browser closed while loading them"),
+                NOTICE,
+            );
+        } else {
+            self.session.begin_restore();
+            if self
+                .browser
+                .restore_tabs(self.session.urls(), self.session.active())
+            {
+                return;
+            }
+            self.session.end_restore();
         }
         self.browser.open_tab(&self.config.home.page);
     }
@@ -643,6 +657,8 @@ impl App {
     /// Write everything kept across restarts to disk, site data included.
     fn persist(&mut self) {
         self.flush_user_data();
+        // The OS may kill the app from here on; that is not a failed restore.
+        self.session.end_restore();
         self.browser.persist_site_data();
         self.browser.store_http_cache();
     }

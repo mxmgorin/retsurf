@@ -2,10 +2,21 @@
 //! `session.toml` in the user data dir for `[browser] restore_tabs`.
 //! Snapshotted on the main loop's flush throttle and at exit, not per
 //! navigation.
+//!
+//! A restore leaves a mark file on disk until its tabs have run for
+//! [`RESTORE_SETTLE`] or the app leaves on purpose. A launch that finds the mark
+//! knows the last one died reopening those tabs, and skips them once.
 
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 const FILE: &str = "session.toml";
+
+/// The mark of a restore under way.
+const RESTORING: &str = "session.restoring";
+
+/// How long restored tabs run under the mark: a death within it is blamed on them.
+const RESTORE_SETTLE: Duration = Duration::from_secs(60);
 
 /// A read-only snapshot of a tab: what the session records, and what the Hub's
 /// Tabs section shows.
@@ -37,6 +48,8 @@ struct Store {
 pub struct Session {
     /// What is on disk, so an unchanged tab list writes nothing.
     saved: Store,
+    /// When the restore under way settles; `None` while no mark is ours.
+    settles_at: Option<Instant>,
 }
 
 impl Session {
@@ -44,6 +57,39 @@ impl Session {
     pub fn load() -> Self {
         Self {
             saved: super::load_toml::<Store>(FILE),
+            settles_at: None,
+        }
+    }
+
+    /// Whether the last launch died before its restored tabs settled. Takes the
+    /// mark off, so a failed restore skips one launch.
+    pub fn take_failed_restore(&mut self) -> bool {
+        let failed = std::path::Path::new(&super::data_path(RESTORING)).exists();
+        if failed {
+            super::remove(RESTORING, "restore mark");
+        }
+        failed
+    }
+
+    /// Leave the mark for a restore about to start.
+    pub fn begin_restore(&mut self) {
+        match std::fs::write(super::data_path(RESTORING), "") {
+            Ok(()) => self.settles_at = Some(Instant::now() + RESTORE_SETTLE),
+            Err(e) => log::warn!("could not write restore mark: {e}"),
+        }
+    }
+
+    /// Take the mark off if the restore has settled by `now`.
+    pub fn settle_restore(&mut self, now: Instant) {
+        if self.settles_at.is_some_and(|at| at <= now) {
+            self.end_restore();
+        }
+    }
+
+    /// Take the mark off now, settled or not.
+    pub fn end_restore(&mut self) {
+        if self.settles_at.take().is_some() {
+            super::remove(RESTORING, "restore mark");
         }
     }
 
