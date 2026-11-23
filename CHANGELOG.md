@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A pad or link-hint click into a page field types there instead of the address bar, and opens the keyboard
+- Keys typed into the address bar also reached the page on Android, and on desktop with the mouse over the page
 
 ## [0.11.0] - 2026-11-18
 

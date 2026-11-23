@@ -502,7 +502,6 @@ impl AppUi {
 
     /// Whether an egui widget (e.g. the address bar) currently wants keyboard
     /// input. Used on Android to show/hide the system soft keyboard.
-    #[allow(dead_code)] // only called on Android
     pub fn wants_keyboard(&self) -> bool {
         self.egui_ctx.egui_wants_keyboard_input()
     }
@@ -588,10 +587,29 @@ impl AppUi {
     }
 
     pub fn handle_event(&mut self, window: &mut AppWindow, event: &sdl2::event::Event) -> bool {
+        use sdl2::event::Event;
+        use sdl2::keyboard::Keycode;
         let resp = window.on_event(event);
         self.repaint_pending |= resp.repaint;
-        // egui reports pointer events consumed over the page too, which needs them.
-        resp.consumed & self.is_pointer_over_chrome(window)
+        match event {
+            // Android's Back is the app's, never a field's.
+            Event::KeyDown {
+                keycode: Some(Keycode::AcBack),
+                ..
+            }
+            | Event::KeyUp {
+                keycode: Some(Keycode::AcBack),
+                ..
+            } => false,
+            // A focused chrome field owns the keys wherever the pointer is; a
+            // lifted finger leaves none.
+            Event::KeyDown { .. }
+            | Event::KeyUp { .. }
+            | Event::TextInput { .. }
+            | Event::TextEditing { .. } => self.wants_keyboard(),
+            // egui reports pointer events consumed over the page too, which needs them.
+            _ => resp.consumed & self.is_pointer_over_chrome(window),
+        }
     }
 
     /// Fold the idle-repaint sources into `repaint_delay` so the blocking wait
