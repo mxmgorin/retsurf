@@ -38,53 +38,47 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
 
 ## Goals
 
-- **A browser for any device.** A full web engine on hardware that ships without a modern browser, like retro handhelds.
-- **A runner for web games and apps.** Runs a site or a local game folder full screen with its own controls and no browser UI, so a web game can ship as a port of its own.
-- **Help Servo grow.** Running Servo on real devices finds engine bugs, and the fixes go upstream.
+- **Bring the web to any device.** Provide a full browser on hardware that lacks a modern one, like retro handhelds.
+- **Run web games anywhere.** Run websites and local game folders in fullscreen, with dedicated controls and no browser UI.
+- **Help improve Servo.** Find and fix engine bugs on real devices, contributing those fixes upstream.
 
 ## Features
 
-- **Runs on almost anything**<br>
-  From a 128 MB handheld to desktops, and on e-ink Kindles. No X11 or Wayland required: SDL2 draws through whatever video backend the firmware ships. Renders on the GPU through OpenGL ES, or on the CPU on devices without one.
+- **Broad device support**<br>
+  Runs on devices ranging from 128 MB handhelds to desktops and e-ink Kindles. Uses SDL2's available video backend, without requiring X11 or Wayland. Renders through OpenGL ES or entirely on the CPU.
 
-- **Gamepad-first navigation**<br>
-  The browser is fully navigable with a gamepad or keyboard, with a virtual cursor, Vimium-style link hints, and an on-screen keyboard as a grid or a wheel.
-
-- **Customizable browser controls**<br>
-  Every browser action can be rebound in-app, with support for tap, hold, and chord.
+- **Console-like interface**<br>
+  Navigate the entire browser with a gamepad or keyboard. Use a virtual cursor, Vimium-style link hints, and an on-screen keyboard with grid and wheel layouts. Rebind browser actions with support for taps, holds, and button combinations.
 
 - **Game Mode**<br>
-  Hides the browser chrome and routes input to the page, with an in-app editor for input maps that turn buttons and sticks into keys, mouse, or raw gamepad input. `--kiosk` runs a game with no browser UI at all ([Command line](docs/CLI.md)).
+  Hide the browser UI and route input directly to the page. Remap buttons and sticks to keys, mouse, or raw gamepad input using the in-app editor. Launch games without browser UI using `--kiosk` ([Command line](docs/CLI.md)).
 
-- **Game scaling and shaders**<br>
-  Cuts the game out of its page and fits it to the screen, in whole pixels or stretched, then draws it through CRT, LCD, or upscaling shaders. Takes RetroArch's single-pass GLSL shaders, ten built in. See [Shaders](docs/SHADERS.md).
-
-- **Web games**<br>
-  WebGL 2, the Gamepad API, Web Audio, and IndexedDB, plus compatibility shims that let Emscripten exports from itch.io run.
+- **Scaling and shaders**<br>
+  Extract game content from its page and fit it to the screen using integer scaling or stretching. Apply CRT, LCD, and upscaling shaders, including RetroArch's single-pass GLSL shaders. Includes ten built-in shaders. See [Shaders](docs/SHADERS.md).
 
 - **Tabs, bookmarks, history, and downloads**<br>
-  Each is a section of the Hub, one full-screen view. Downloads run in the background with progress and cancellation and a progress ring in the toolbar.
+  Manage browsing sessions through the full-screen Hub. Download files in the background with progress tracking and cancellation.
 
 - **Real page zoom**<br>
-  Reflows the layout rather than simply magnifying it, with 50–300% zoom steps. Zoom is per-tab.
+  Reflow page layouts instead of simply magnifying them. Adjust zoom from 50% to 300%, independently for each tab.
 
 - **Reader view**<br>
-  Strips pages down to their articles using Mozilla's [Readability](https://github.com/mozilla/readability). Runs in place, so it also works with logged-in and dynamically rendered pages.
+  Strip pages down to their articles using Mozilla's [Readability](https://github.com/mozilla/readability). Apply it in place, including to logged-in and dynamically rendered pages.
 
-- **Dark web pages**<br>
-  Uses sites' own dark themes through `prefers-color-scheme`, or forces a dark appearance by inverting pages that don't provide one.
+- **Dark mode**<br>
+  Respect sites' own dark themes through `prefers-color-scheme`, or force a dark appearance on pages without one.
 
-- **Ad & tracker blocking**<br>
-  Network-level blocking powered by Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), using EasyList and EasyPrivacy.
+- **Ad and tracker blocking**<br>
+  Block network requests using Brave's [`adblock-rust`](https://github.com/brave/adblock-rust), with EasyList and EasyPrivacy filters.
+
+- **Media playback**<br>
+  Play audio and video through a custom Servo media backend, including direct media files and embedded players.
 
 - **In-app updates**<br>
-  Checks GitHub for updates, displays release notes, and installs updates in place on Linux. Supports stable, beta, and nightly channels.
-
-- **Audio and video**<br>
-  A custom Servo media backend provides audio and video playback. Supports direct media files and embedded players.
+  Check GitHub for updates, view release notes, and install updates in place on Linux. Choose between stable, beta, and nightly channels.
 
 - **No telemetry**<br>
-  The only requests retsurf makes on its own are the update check and the ad-block list refresh, and both can be turned off in Settings.
+  Avoid telemetry and unnecessary background requests. Automatically check for updates and refresh ad-block lists; both can be disabled in Settings.
 
 ## Limitations
 
