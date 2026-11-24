@@ -866,14 +866,7 @@ impl AppBrowser {
                 webview.notify_theme_change(engine::theme(theme));
             }
         }
-        let ua = effective_user_agent(&config.browser);
-        if *self.inner.user_agent.borrow() != ua {
-            self.inner
-                .servo
-                .set_preference("user_agent", servo::PrefValue::Str(ua.clone()));
-            self.inner.user_agent.replace(ua);
-            stale = true;
-        }
+        stale |= self.take_user_agent(&config.browser);
         self.set_page_font_size(config.browser.page_font_size);
         stale |= self.font_size_stale();
         if reload && stale {
@@ -951,18 +944,29 @@ impl AppBrowser {
     /// Apply `config`'s User-Agent to later requests and reload the shown tab;
     /// a no-op when unchanged.
     fn set_user_agent(&self, config: &BrowserConfig) {
+        if !self.take_user_agent(config) {
+            return;
+        }
+        if let Some(webview) = self.inner.active_webview() {
+            self.mark_loading();
+            webview.reload();
+        }
+    }
+
+    /// Make `config`'s User-Agent the one later requests send; returns whether
+    /// it changed.
+    fn take_user_agent(&self, config: &BrowserConfig) -> bool {
         let ua = effective_user_agent(config);
         if *self.inner.user_agent.borrow() == ua {
-            return;
+            return false;
         }
         self.inner
             .servo
             .set_preference("user_agent", servo::PrefValue::Str(ua.clone()));
         self.inner.user_agent.replace(ua);
-        if let Some(webview) = self.inner.active_webview() {
-            self.mark_loading();
-            webview.reload();
-        }
+        // A reload would otherwise get back the page served to the old one.
+        self.inner.servo.network_manager().clear_cache();
+        true
     }
 
     /// Take the select pickers / JS dialogs the pages opened since the last
