@@ -976,6 +976,13 @@ impl QuickAccess {
         self.rows.get(index).and_then(|row| row.flag)
     }
 
+    /// Whether row `index` steps a value rather than flipping a switch.
+    pub fn stepper(&self, index: usize) -> bool {
+        self.rows
+            .get(index)
+            .is_some_and(|row| row.entry.steps() && row.flag.is_none())
+    }
+
     pub fn row(&self) -> Entry {
         self.rows[self.selected].entry
     }
@@ -1435,6 +1442,22 @@ mod tests {
         );
         assert_eq!(flag_of("User agent"), None);
         assert_eq!(flag_of("Bookmark"), None);
+    }
+
+    /// A value row is a stepper; a switch and an action are not.
+    #[test]
+    fn only_value_rows_are_steppers() {
+        let panel = open(TabMode::Page);
+        let stepper = |label| {
+            let at = (0..panel.rows().len()).find(|&i| panel.label(i) == label);
+            panel.stepper(at.expect("a browser quick row"))
+        };
+        assert!(stepper("User agent"));
+        assert!(stepper("Font size"));
+        assert!(stepper("Zoom"));
+        assert!(!stepper("Ad blocker"));
+        assert!(!stepper("Reader view"));
+        assert!(!stepper("Reload"));
     }
 
     /// Reload arms like Quit, and arming one row never confirms another.

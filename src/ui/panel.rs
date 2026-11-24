@@ -130,11 +130,10 @@ const LABEL_KEEP: f32 = 1.0 / 3.0;
 /// A [`marked_row`]'s dot: small beside the label's type.
 const DOT_SIZE: f32 = ROW_FONT / 2.0;
 
-/// What a [`marked_row`] shows at its trailing edge: its value between glyphs
-/// that never give way, such as a stepper's carets.
+/// What a [`marked_row`] shows at its trailing edge: its value, then a glyph
+/// that never gives way.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Trail<'a> {
-    pub before: Option<&'a str>,
     pub value: &'a str,
     pub after: Option<&'a str>,
 }
@@ -170,20 +169,109 @@ pub(super) fn marked_row(
             .size()
             .x
     };
-    let shown: String = [trail.before, Some(trail.value), trail.after]
-        .into_iter()
-        .flatten()
-        .collect();
-    let trail_w = text_w(shown);
+    let trail_w = text_w(format!(
+        "{}{}",
+        trail.value,
+        trail.after.unwrap_or_default()
+    ));
     // An icon is square at the row's type size.
     let label_w = text_w(lead.label.to_string()) + ROW_FONT;
     let label_gives = (selected && trail_w <= width * (1.0 - LABEL_KEEP)) || label_w > trail_w;
-    let (label, value) = toned_texts(lead.label, trail.value, tone);
-    let mark = |glyph: &str| {
-        egui::RichText::new(glyph)
-            .color(palette().accent)
-            .size(ROW_FONT)
+    let value = value_text(trail.value);
+    let mut atoms = lead_atoms(lead, tone, label_gives);
+    atoms.push_right(egui::Atom::grow());
+    atoms.push_right(match label_gives {
+        true => value.into(),
+        false => value.atom_shrink(true),
+    });
+    if let Some(glyph) = trail.after {
+        atoms.push_right(
+            egui::RichText::new(glyph)
+                .color(palette().accent)
+                .size(ROW_FONT),
+        );
+    }
+    ui.add_sized(
+        [width, ROW_H],
+        egui::Button::selectable(selected, atoms)
+            .corner_radius(ROW_RADIUS)
+            .truncate(),
+    )
+}
+
+/// The share of a [`stepper_row`]'s width its stepper takes: each side a
+/// target a thumb can hit.
+const STEPPER_SHARE: f32 = 0.5;
+
+/// A row with `lead` at its leading edge and a stepper over its trailing
+/// [`STEPPER_SHARE`], `value` centred between carets. Returns the row's response
+/// and a click's step on the stepper: -1 left of the value's centre, +1 right.
+pub(super) fn stepper_row(
+    ui: &mut egui::Ui,
+    width: f32,
+    selected: bool,
+    lead: Lead,
+    value: &str,
+    tone: Tone,
+) -> (egui::Response, Option<i32>) {
+    let id = egui::Id::new("stepper");
+    let stepper_w = width * STEPPER_SHARE - ui.spacing().button_padding.x;
+    let mut atoms = lead_atoms(lead, tone, true);
+    atoms.push_right(egui::Atom::grow());
+    atoms.push_right(egui::Atom::custom(id, egui::vec2(stepper_w, ROW_FONT)));
+    let button = egui::Button::selectable(selected, atoms)
+        .corner_radius(ROW_RADIUS)
+        .truncate();
+    // `add_sized`'s layout by hand: only `atom_ui` reports the stepper's rect.
+    let layout = egui::Layout::centered_and_justified(ui.layout().main_dir());
+    let resp = ui
+        .allocate_ui_with_layout(egui::vec2(width, ROW_H), layout, |ui| button.atom_ui(ui))
+        .inner;
+    let Some(rect) = resp.rect(id) else {
+        return (resp.response, None);
     };
+    let painter = ui.painter();
+    let font = egui::FontId::proportional(ROW_FONT);
+    let accent = palette().accent;
+    let (left, right) = (
+        egui::pos2(rect.left(), rect.center().y),
+        egui::pos2(rect.right(), rect.center().y),
+    );
+    let before = painter.text(
+        left,
+        egui::Align2::LEFT_CENTER,
+        egui_phosphor::bold::CARET_LEFT,
+        font.clone(),
+        accent,
+    );
+    let after = painter.text(
+        right,
+        egui::Align2::RIGHT_CENTER,
+        egui_phosphor::bold::CARET_RIGHT,
+        font,
+        accent,
+    );
+    let room = (after.left() - before.right() - 2.0 * ui.spacing().icon_spacing).max(0.0);
+    let galley = egui::WidgetText::from(value_text(value)).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Truncate),
+        room,
+        egui::TextStyle::Body,
+    );
+    painter.galley(rect.center() - galley.size() / 2.0, galley, accent);
+    let step = resp
+        .clicked()
+        .then(|| resp.interact_pointer_pos())
+        .flatten()
+        .filter(|pos| pos.x >= rect.left())
+        .map(|pos| if pos.x < rect.center().x { -1 } else { 1 });
+    (resp.response, step)
+}
+
+/// `lead`'s icon, label and dot, its label in `tone`'s colour and, when
+/// `shrink`, giving way to what follows.
+fn lead_atoms<'a>(lead: Lead<'a>, tone: Tone, shrink: bool) -> egui::Atoms<'a> {
+    let label = label_text(lead.label, tone);
     let mut atoms = egui::Atoms::default();
     atoms.push_right(match lead.icon {
         RowIcon::Glyph(glyph) => egui::RichText::new(glyph)
@@ -192,7 +280,7 @@ pub(super) fn marked_row(
             .into(),
         RowIcon::Image(image) => image,
     });
-    atoms.push_right(match label_gives {
+    atoms.push_right(match shrink {
         true => label.atom_shrink(true),
         false => label.into(),
     });
@@ -202,23 +290,7 @@ pub(super) fn marked_row(
             .color(palette().accent);
         atoms.push_right(dot);
     }
-    atoms.push_right(egui::Atom::grow());
-    if let Some(glyph) = trail.before {
-        atoms.push_right(mark(glyph));
-    }
-    atoms.push_right(match label_gives {
-        true => value.into(),
-        false => value.atom_shrink(true),
-    });
-    if let Some(glyph) = trail.after {
-        atoms.push_right(mark(glyph));
-    }
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, atoms)
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
+    atoms
 }
 
 /// The colour of a label in `tone`.
@@ -232,14 +304,19 @@ pub(super) fn tone_color(tone: Tone) -> egui::Color32 {
 }
 
 fn toned_texts(label: &str, value: &str, tone: Tone) -> (egui::RichText, egui::RichText) {
-    (
-        egui::RichText::new(label)
-            .color(tone_color(tone))
-            .size(ROW_FONT),
-        egui::RichText::new(value)
-            .color(palette().accent)
-            .size(ROW_FONT),
-    )
+    (label_text(label, tone), value_text(value))
+}
+
+fn label_text(label: &str, tone: Tone) -> egui::RichText {
+    egui::RichText::new(label)
+        .color(tone_color(tone))
+        .size(ROW_FONT)
+}
+
+fn value_text(value: &str) -> egui::RichText {
+    egui::RichText::new(value)
+        .color(palette().accent)
+        .size(ROW_FONT)
 }
 
 /// How a row's label is coloured: a value to read, a verb, a verb that

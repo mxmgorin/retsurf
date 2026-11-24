@@ -132,7 +132,8 @@ pub enum QuickAccessAction {
     Close,
     /// Act on the focused row.
     Activate,
-    /// Focus row `index` and activate it.
+    /// Focus row `index` and activate it; an unfocused stepper row is only
+    /// focused.
     Click(usize),
     /// Left/Right on the focused row: step its value.
     Adjust(i32),

@@ -213,8 +213,12 @@ impl App {
                 _ => {}
             },
             QuickAccessAction::Click(index) => {
-                self.ui.quick_access.select(*index);
-                self.quick_access_activate(out);
+                let panel = &mut self.ui.quick_access;
+                let activate = panel.selected() == *index || !panel.stepper(*index);
+                panel.select(*index);
+                if activate {
+                    self.quick_access_activate(out);
+                }
             }
             QuickAccessAction::Remove => self.remove_quick_row(out),
             QuickAccessAction::Text(text) => self.options_text(text),

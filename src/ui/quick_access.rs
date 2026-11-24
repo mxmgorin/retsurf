@@ -170,15 +170,9 @@ fn add_rows(
         let icon = icon.unwrap_or(RowIcon::Glyph(glyph(entry)));
         let flag = panel.flag(index);
         let value = panel.value(index);
-        let trail = match (flag, selected && entry.steps()) {
-            (Some(_), _) => Trail::default(),
-            (None, true) => Trail {
-                before: Some(bold::CARET_LEFT),
-                value,
-                after: Some(bold::CARET_RIGHT),
-            },
-            (None, false) => Trail {
-                before: None,
+        let trail = match flag {
+            Some(_) => Trail::default(),
+            None => Trail {
                 value,
                 after: match entry {
                     // The caret says the row opens a screen rather than acting.
@@ -197,14 +191,22 @@ fn add_rows(
             label: panel.label(index),
             dot: panel.own(index),
         };
-        let resp = panel::marked_row(ui, width, selected, lead, trail, tone);
+        let (resp, step) = match selected && panel.stepper(index) {
+            true => panel::stepper_row(ui, width, selected, lead, value, tone),
+            false => (
+                panel::marked_row(ui, width, selected, lead, trail, tone),
+                None,
+            ),
+        };
         if let Some(on) = flag {
             panel::paint_switch(ui, resp.rect, on);
         }
         if selected {
             center_selected(&resp);
         }
-        if resp.clicked() {
+        if let Some(dx) = step {
+            commands.push(AppCommand::QuickAccess(QuickAccessAction::Adjust(dx)));
+        } else if resp.clicked() {
             commands.push(AppCommand::QuickAccess(QuickAccessAction::Click(index)));
         }
     }
@@ -222,8 +224,7 @@ fn footer_guess(ui: &egui::Ui) -> f32 {
 fn add_footer(ui: &mut egui::Ui, width: f32, panel: &QuickAccess, face: FaceLabels) -> f32 {
     let (_, sideways) = keys::dpad_caps();
     let (a, b, x, sideways) = ([face.a], [face.b], [face.x], [sideways.as_str()]);
-    let at = panel.selected();
-    let steps = panel.row().steps() && panel.flag(at).is_none();
+    let steps = panel.stepper(panel.selected());
     let mut hints: Vec<keys::ButtonHint> = vec![(&a, panel.press().verb())];
     if steps {
         hints.push((&sideways, "change"));
