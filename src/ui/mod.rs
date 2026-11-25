@@ -14,6 +14,7 @@ mod home;
 mod hub;
 mod keys;
 mod labels;
+mod mark;
 mod memory;
 mod osk;
 mod overlays;
@@ -1103,6 +1104,7 @@ impl AppUi {
                         icons: &self.page_icons,
                         thumbs: &self.tab_thumbs,
                         tab_layout: self.tab_layout,
+                        downloads: self.download_chip.shown(),
                         face,
                         button_hints: self.button_hints,
                     };

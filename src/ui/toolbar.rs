@@ -2,6 +2,7 @@
 //! address bar, bookmark toggle, and the chips that jump into Hub sections.
 
 use super::download_chip::Chip;
+use super::mark::{Mark, RING_R};
 use super::search_picker::{search_button, SearchEngines};
 use super::theme;
 use super::OskCaret;
@@ -12,7 +13,7 @@ use crate::overlay::hub::Section;
 use crate::overlay::quick_access::Strip;
 use egui_phosphor::bold;
 use egui_sdl2::egui::{self, Vec2};
-use std::f32::consts::{FRAC_1_SQRT_2, TAU};
+use std::f32::consts::FRAC_1_SQRT_2;
 
 /// Side of a toolbar icon slot (logical px), sized for a fingertip.
 pub(super) const SLOT: f32 = 36.0;
@@ -34,20 +35,6 @@ const FIELD_FONT: f32 = 14.0;
 /// The zoom pill's text and height, sized to sit inside the address field.
 const ZOOM_FONT: f32 = 12.0;
 const ZOOM_PILL_H: f32 = 20.0;
-
-/// The downloads ring's radius and stroke, inside a [`SLOT`].
-const RING_R: f32 = 13.0;
-const RING_W: f32 = 2.0;
-
-/// The ring's empty track: the muted ink, faded.
-const RING_TRACK_ALPHA: f32 = 0.35;
-
-/// Points on a full turn of the ring's arc.
-const RING_POINTS: f32 = 48.0;
-
-/// The arc standing in for an unknown size, and its turn per step.
-const UNKNOWN_SWEEP: f32 = TAU / 4.0;
-const UNKNOWN_STEP: f32 = TAU / 8.0;
 
 /// The downloads count indicator on the ring's upper right, cut out of it by a
 /// rim in the toolbar's fill; counts past the cap read as the cap plus `+`.
@@ -292,32 +279,7 @@ fn add_tabs_button(ui: &mut egui::Ui, count: usize) -> egui::Response {
         egui::Sense::click(),
     );
     let color = ui.style().interact(&resp).fg_stroke.color;
-    let painter = ui.painter();
-
-    // Snap the center onto a half-pixel so the 1px stroke lands on whole pixels.
-    let c = rect.center().floor() + egui::vec2(0.5, 0.5);
-    let half = 6.5 * scale; // square half-size
-    let square = egui::Rect::from_center_size(c, Vec2::splat(half * 2.0));
-    painter.rect_stroke(
-        square,
-        2.0,
-        egui::Stroke::new(1.5, color),
-        egui::StrokeKind::Inside,
-    );
-
-    // Counts past 99 won't fit — cap the label rather than overflow the square.
-    let label = if count > 99 {
-        "99".to_string()
-    } else {
-        count.to_string()
-    };
-    let galley = painter.layout_no_wrap(
-        label,
-        egui::FontId::proportional(scale * if count > 9 { 8.0 } else { 10.0 }),
-        color,
-    );
-    // Centered on the digits' ink: the font's line box leaves descender room below them.
-    painter.galley(c - galley.mesh_bounds.center().to_vec2(), galley, color);
+    Mark::Tabs(count).paint(ui.painter(), rect, ICON, color);
     resp
 }
 
@@ -329,39 +291,7 @@ fn add_downloads_button(ui: &mut egui::Ui, chip: Chip) -> egui::Response {
     let palette = theme::palette();
     let painter = ui.painter();
     let c = rect.center();
-    let (glyph, color, arc) = match chip {
-        Chip::Hidden => return resp,
-        Chip::Running { share, step, .. } => {
-            let arc = match share {
-                Some(share) => (0.0, TAU * f32::from(share) / f32::from(Chip::SHARE_FULL)),
-                None => (step as f32 * UNKNOWN_STEP, UNKNOWN_SWEEP),
-            };
-            (bold::DOWNLOAD_SIMPLE, palette.accent, arc)
-        }
-        Chip::Ended { failed: false } => (bold::CHECK, palette.accent, (0.0, TAU)),
-        Chip::Ended { failed: true } => (bold::X, palette.warn, (0.0, TAU)),
-    };
-    let track = palette.muted.gamma_multiply(RING_TRACK_ALPHA);
-    painter.circle_stroke(c, RING_R, egui::Stroke::new(RING_W, track));
-    let (start, sweep) = arc;
-    if sweep > 0.0 {
-        // Clockwise from twelve o'clock.
-        let n = (sweep / TAU * RING_POINTS).ceil().max(1.0) as usize;
-        let points = (0..=n)
-            .map(|i| {
-                let a = start + sweep * i as f32 / n as f32;
-                c + RING_R * egui::vec2(a.sin(), -a.cos())
-            })
-            .collect();
-        painter.add(egui::Shape::line(points, egui::Stroke::new(RING_W, color)));
-    }
-    painter.text(
-        c,
-        egui::Align2::CENTER_CENTER,
-        glyph,
-        egui::FontId::proportional(theme::ICON_SIZE),
-        color,
-    );
+    Mark::Downloads(chip).paint(painter, rect, ICON, palette.text);
     if let Chip::Running { count, .. } = chip {
         if count > 1 {
             let at = c + RING_R * FRAC_1_SQRT_2 * egui::vec2(1.0, -1.0);

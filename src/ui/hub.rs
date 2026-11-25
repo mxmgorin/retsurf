@@ -2,9 +2,11 @@
 //! the section bar with the close action, and the four section lists
 //! (Tabs / Bookmarks / History / Downloads).
 
+use super::download_chip::Chip;
 use super::favicon::PageIcons;
 use super::keys;
 use super::labels;
+use super::mark::Mark;
 use super::panel::{
     self, center_selected, section_scroll, Tone, ROW_GAP, ROW_H, ROW_RADIUS, SIDES,
 };
@@ -335,12 +337,12 @@ fn section_icon(section: Section) -> &'static str {
     }
 }
 
-/// A section's indicator: how many tabs are open, how far the downloads in
-/// flight are.
-fn section_indicator(hub: &Hub, tabs: &[TabInfo], section: Section) -> Option<String> {
+/// A section's painted icon: the open tabs counted, the downloads' ring while
+/// it shows; `None` keeps the section's glyph.
+fn section_mark(tabs: &[TabInfo], downloads: Chip, section: Section) -> Option<Mark> {
     match section {
-        Section::Tabs => Some(tabs.len().to_string()),
-        Section::Downloads => hub.downloads.progress().map(|p| p.indicator()),
+        Section::Tabs => Some(Mark::Tabs(tabs.len())),
+        Section::Downloads => (downloads != Chip::Hidden).then_some(Mark::Downloads(downloads)),
         Section::Bookmarks | Section::History => None,
     }
 }
@@ -406,6 +408,8 @@ pub(super) struct HubView<'a> {
     pub icons: &'a PageIcons,
     pub thumbs: &'a TabThumbs,
     pub tab_layout: TabLayout,
+    /// The downloads in flight or just ended.
+    pub downloads: Chip,
     pub face: FaceLabels,
     /// Whether a footer names what the buttons do.
     pub button_hints: bool,
@@ -423,6 +427,7 @@ pub(super) fn add_hub(
     let HubView {
         tabs,
         icons,
+        downloads,
         face,
         button_hints,
         ..
@@ -436,7 +441,7 @@ pub(super) fn add_hub(
             hub.section(),
             Section::label,
             section_icon,
-            |section| section_indicator(hub, tabs, section),
+            |section| section_mark(tabs, downloads, section),
         );
         if let Some(section) = clicked {
             commands.push(AppCommand::Hub(HubAction::SetSection(section)));

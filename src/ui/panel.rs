@@ -2,6 +2,7 @@
 //! frame with its close button, the section bar, the bounded section scroll.
 
 use super::keys::{centered_button_hints, ButtonHint, BUTTON_HINT_FONT};
+use super::mark::Mark;
 use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
@@ -487,8 +488,8 @@ const SECTION_GAP: f32 = 6.0;
 const ICON_SECTION_W: f32 = 40.0;
 
 /// The top section bar: a button per section (icon and label, or just the icon
-/// on an inactive one where not all fit) with its `indicator` after. Returns the
-/// clicked one.
+/// on an inactive one where not all fit), its icon painted where `mark` gives
+/// one. Returns the clicked one.
 pub(super) fn section_bar<T: Copy + PartialEq>(
     ui: &mut egui::Ui,
     screen: egui::Rect,
@@ -496,10 +497,11 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
     active: T,
     label: fn(T) -> &'static str,
     icon: fn(T) -> &'static str,
-    indicator: impl Fn(T) -> Option<String>,
+    mark: impl Fn(T) -> Option<Mark>,
 ) -> Option<T> {
     let mut clicked = None;
-    let full = |section: T| format!("{}  {}", icon(section), label(section));
+    // Split off its icon, so a painted one keeps the glyph's spacing.
+    let spaced = |section: T| format!("  {}", label(section));
     let font = egui::FontId::proportional(ROW_FONT);
     let pad = 2.0 * ui.spacing().button_padding.x + SECTION_GAP;
     let text_w = |text: String| {
@@ -507,38 +509,46 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
             .size()
             .x
     };
-    let indicator_w = |section: T| {
-        indicator(section).map_or(0.0, |text| text_w(text) + ui.spacing().icon_spacing)
+    let icon_w = |section: T| match mark(section) {
+        Some(mark) => mark.size(ROW_FONT).x,
+        None => text_w(icon(section).to_string()),
     };
     let wanted: f32 = sections
         .iter()
-        .map(|&s| text_w(full(s)) + indicator_w(s) + pad)
+        .map(|&s| icon_w(s) + text_w(spaced(s)) + pad)
         .sum();
     let fits = wanted <= screen.width() - SIDES - (CLOSE_SIZE + 8.0);
+    let text = |text: String| {
+        egui::RichText::new(text)
+            .color(palette().text)
+            .size(ROW_FONT)
+    };
+    let mark_id = egui::Id::new("section_mark");
     ui.horizontal(|ui| {
         // The gap turns the flush button row into a segmented control.
         ui.spacing_mut().item_spacing.x = SECTION_GAP;
         for &section in sections {
-            let (text, min_w) = match fits || section == active {
-                true => (full(section), 0.0),
-                false => (icon(section).to_string(), ICON_SECTION_W),
+            let mark = mark(section);
+            let mut atoms = egui::Atoms::new(match mark {
+                Some(mark) => egui::Atom::custom(mark_id, mark.size(ROW_FONT)),
+                None => text(icon(section).to_string()).into(),
+            });
+            let min_w = match fits || section == active {
+                true => {
+                    atoms.push_right(text(spaced(section)));
+                    0.0
+                }
+                false => ICON_SECTION_W,
             };
-            let mut atoms = egui::Atoms::new(
-                egui::RichText::new(text)
-                    .color(palette().text)
-                    .size(ROW_FONT),
-            );
-            if let Some(indicator) = indicator(section) {
-                atoms.push_right(
-                    egui::RichText::new(indicator)
-                        .color(palette().accent)
-                        .size(ROW_FONT),
-                );
-            }
             let tab = egui::Button::selectable(section == active, atoms)
                 .corner_radius(ROW_RADIUS)
-                .min_size(egui::vec2(min_w, SECTION_H));
-            if ui.add(tab).clicked() {
+                .min_size(egui::vec2(min_w, SECTION_H))
+                .gap(0.0)
+                .atom_ui(ui);
+            if let (Some(mark), Some(rect)) = (mark, tab.rect(mark_id)) {
+                mark.paint(ui.painter(), rect, ROW_FONT, palette().text);
+            }
+            if tab.response.clicked() {
                 clicked = Some(section);
             }
         }
