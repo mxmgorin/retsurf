@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A pad or link-hint click into a page field types there instead of the address bar, and opens the keyboard
 - Keys typed into the address bar also reached the page on Android, and on desktop with the mouse over the page
 - Restored tabs that crashed the browser crashed it again on every launch; the next launch opens Home with a notice instead
+- A crashed page froze its tab, and a reload from the crash page brought the page back without scripts; the crash page now shows at once and a reload restores the page
 
 ## [0.11.0] - 2026-11-18
 

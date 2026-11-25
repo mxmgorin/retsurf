@@ -14,7 +14,11 @@ use crate::{
 /// `servo/` subfolder of the user data dir, which Servo's net and storage
 /// threads read at startup and write back on a clean shutdown.
 pub(super) fn build_opts(config: &BrowserConfig) -> servo::Opts {
-    let mut opts = servo::Opts::default();
+    let mut opts = servo::Opts {
+        // Hard fail exits the process when any page's script thread panics.
+        hard_fail: false,
+        ..Default::default()
+    };
     if config.persist_site_data {
         opts.config_dir = Some(std::path::PathBuf::from(crate::config::servo_data_dir()));
     }
