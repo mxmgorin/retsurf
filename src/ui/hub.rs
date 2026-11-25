@@ -10,6 +10,7 @@ use super::panel::{
 };
 use super::tab_thumbs::TabThumbs;
 use super::theme::{self, palette, ROW_FONT};
+use super::toolbar::{ICON, SLOT};
 use crate::browser::HOME_URL;
 use crate::clock;
 use crate::command::{AppCommand, HubAction};
@@ -20,24 +21,26 @@ use crate::data::session::TabInfo;
 use crate::overlay::hub::{Hub, Section};
 use egui_phosphor::{bold, fill};
 use egui_sdl2::egui::{self, AtomExt as _};
-
-/// The square delete button leading each row.
-const DEL_W: f32 = 26.0;
+use std::sync::Arc;
 
 /// The panel's id, which its footer is kept under too.
 const PANEL_ID: &str = "hub";
 
-/// A row's trailing delete button, framed and accent on the selected row.
-fn delete_button(ui: &mut egui::Ui, selected: bool, dim: egui::Color32) -> egui::Response {
+/// A row's delete action at `slot`, accent on the selected row.
+fn delete_button(
+    ui: &mut egui::Ui,
+    slot: egui::Rect,
+    selected: bool,
+    dim: egui::Color32,
+) -> egui::Response {
     let color = if selected { palette().accent } else { dim };
-    row_action(ui, selected, theme::icon(bold::X).color(color))
+    row_action(ui, slot, theme::icon(bold::X).color(color))
 }
 
-/// A row's bookmark toggle (Tabs / History), sized like [`delete_button`] so the
-/// trailing buttons line up across rows.
+/// A row's bookmark toggle at `slot`.
 fn bookmark_button(
     ui: &mut egui::Ui,
-    selected: bool,
+    slot: egui::Rect,
     bookmarked: bool,
     dim: egui::Color32,
 ) -> egui::Response {
@@ -46,15 +49,31 @@ fn bookmark_button(
     } else {
         theme::icon(bold::STAR).color(dim)
     };
-    row_action(ui, selected, star)
+    row_action(ui, slot, star)
 }
 
-/// A row's trailing button: framed on the selected row, a bare glyph elsewhere.
-fn row_action(ui: &mut egui::Ui, selected: bool, glyph: egui::RichText) -> egui::Response {
-    let button = egui::Button::new(glyph)
+/// A row's action at `slot` inside the row: a bare glyph, framed under the
+/// pointer to show which action a click hits.
+fn row_action(ui: &mut egui::Ui, slot: egui::Rect, glyph: egui::RichText) -> egui::Response {
+    let button = egui::Button::new(glyph.size(ICON))
         .corner_radius(ROW_RADIUS)
-        .frame_when_inactive(selected);
-    ui.add_sized([DEL_W, ROW_H], unframed_unless(button, selected))
+        .frame_when_inactive(false);
+    ui.put(slot, button)
+}
+
+/// The `index`th action slot at `row`'s trailing end, counted from the far
+/// end: a toolbar-sized square.
+fn action_slot(row: egui::Rect, index: usize) -> egui::Rect {
+    let right = row.right() - ROW_GAP - index as f32 * SLOT;
+    egui::Rect::from_center_size(
+        egui::pos2(right - SLOT / 2.0, row.center().y),
+        egui::Vec2::splat(SLOT),
+    )
+}
+
+/// `row` short of its `count` trailing actions.
+fn actions_start(row: egui::Rect, count: usize) -> egui::Rect {
+    row.with_max_x(row.right() - ROW_GAP - count as f32 * SLOT)
 }
 
 /// `button` with no frame at all unless `selected`: the pointer selects the row
@@ -119,61 +138,124 @@ fn row_atoms<'a>(
     ui.add_sized([width, ROW_H], unframed_unless(button, selected))
 }
 
-/// A URL row's label: site name in white, `mark` after it, the rest of the URL
-/// dim and middle-elided to `width`. Leading with the name makes the list
-/// scannable; keeping both ends of the path keeps what differs between rows.
-fn url_atoms(
-    ui: &egui::Ui,
-    brand_text: String,
-    tail: &str,
-    icon: Option<egui::Atom<'static>>,
-    mark: Option<egui::RichText>,
-    width: f32,
-) -> egui::Atoms<'static> {
+/// A two-line row's step from its title line down to its detail line.
+const LINE_STEP: f32 = ROW_FONT + ROW_GAP;
+
+/// A two-line row: a one-line row's height plus a [`LINE_STEP`].
+const ROW2_H: f32 = ROW_H + LINE_STEP;
+
+/// A two-line row's icon, as tall as its two lines of type.
+const ROW_ICON: f32 = 2.0 * ROW_FONT;
+
+/// Air between a row's icon or trailing marks and its text.
+const TEXT_GAP: f32 = 2.0 * ROW_GAP;
+
+/// A selectable two-line row; the caller paints its content over it.
+fn two_line_row(ui: &mut egui::Ui, width: f32, selected: bool) -> egui::Response {
+    let button = egui::Button::selectable(selected, egui::Atom::grow()).corner_radius(ROW_RADIUS);
+    ui.add_sized([width, ROW2_H], unframed_unless(button, selected))
+}
+
+/// Where a two-line row's parts go: its icon at the leading edge, and beside it
+/// the title line over the detail line.
+struct RowSlots {
+    icon: egui::Rect,
+    title: egui::Rect,
+    detail: egui::Rect,
+}
+
+impl RowSlots {
+    /// The slots of `row`, with room for an icon when `icon`; with no `detail`
+    /// the title line is centred down the row.
+    fn of(ui: &egui::Ui, row: egui::Rect, icon: bool, detail: bool) -> Self {
+        let inner = row.shrink2(egui::vec2(ui.spacing().button_padding.x, 0.0));
+        let mid = inner.center().y;
+        let icon_rect = egui::Rect::from_center_size(
+            egui::pos2(inner.left() + ROW_ICON / 2.0, mid),
+            egui::Vec2::splat(ROW_ICON),
+        );
+        let left = match icon {
+            true => icon_rect.right() + TEXT_GAP,
+            false => inner.left(),
+        };
+        let line = |y: f32| {
+            let half = LINE_STEP / 2.0;
+            egui::Rect::from_x_y_ranges(left..=inner.right(), (y - half)..=(y + half))
+        };
+        let step = if detail { LINE_STEP / 2.0 } else { 0.0 };
+        Self {
+            icon: icon_rect,
+            title: line(mid - step),
+            detail: line(mid + step),
+        }
+    }
+}
+
+/// `text` in the row font and `color` on one line, cut to `max_w` with an ellipsis.
+fn one_line(
+    painter: &egui::Painter,
+    text: &str,
+    color: egui::Color32,
+    max_w: f32,
+) -> Arc<egui::Galley> {
     let font = egui::FontId::proportional(ROW_FONT);
-    // Row padding, the gap after the brand, and the icon and mark when present.
-    let mut budget = width - text_width(ui, &brand_text, &font) - 24.0;
-    let glyphs = usize::from(icon.is_some()) + usize::from(mark.is_some());
-    budget -= glyphs as f32 * (ROW_FONT + 4.0);
-    let brand = egui::RichText::new(brand_text)
-        .size(ROW_FONT)
-        .color(palette().text);
-    let tail = egui::RichText::new(elide_middle(ui, tail, &font, budget))
-        .size(ROW_FONT)
-        .color(palette().dim);
-    let mut atoms = egui::Atoms::new(brand);
-    if let Some(mark) = mark {
-        atoms.push_right(mark);
-    }
-    atoms.push_right(tail.atom_shrink(true));
-    atoms.push_right(egui::Atom::grow());
-    if let Some(icon) = icon {
-        atoms.push_left(icon);
-    }
-    atoms
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
+    job.wrap.max_width = max_w.max(0.0);
+    job.wrap.max_rows = 1;
+    job.wrap.break_anywhere = true;
+    painter.layout_job(job)
 }
 
-/// A titled page's row label: its title, cut first, then its `site` dim.
-fn titled_atoms(
-    title: &str,
-    site: String,
-    icon: Option<egui::Atom<'static>>,
-) -> egui::Atoms<'static> {
-    let title = egui::RichText::new(title)
-        .size(ROW_FONT)
-        .color(palette().text);
-    let site = egui::RichText::new(site)
-        .size(ROW_FONT)
-        .color(palette().dim);
-    let mut atoms = egui::Atoms::new((title.atom_shrink(true), site, egui::Atom::grow()));
-    if let Some(icon) = icon {
-        atoms.push_left(icon);
-    }
-    atoms
+/// Paint `text` in `color` on one line at `align`'s side of `slot`, centred down
+/// it and cut to its width; returns the rect the text took.
+fn paint_line(
+    painter: &egui::Painter,
+    slot: egui::Rect,
+    text: &str,
+    color: egui::Color32,
+    align: egui::Align,
+) -> egui::Rect {
+    let galley = one_line(painter, text, color, slot.width());
+    let size = galley.size();
+    let x = match align {
+        egui::Align::Min => slot.left(),
+        egui::Align::Center => slot.center().x - size.x / 2.0,
+        egui::Align::Max => slot.right() - size.x,
+    };
+    let at = egui::pos2(x, slot.center().y - size.y / 2.0);
+    painter.galley(at, galley, color);
+    egui::Rect::from_min_size(at, size)
 }
 
-/// Width of a row's time of day, `HH:MM`.
-const TIME_W: f32 = 48.0;
+/// Paint `url` past its scheme, dim in `slot`, cut in the middle to fit.
+fn paint_url(ui: &egui::Ui, slot: egui::Rect, url: &str) {
+    let font = egui::FontId::proportional(ROW_FONT);
+    let url = url_without_scheme(url).trim_end_matches('/');
+    let text = elide_middle(ui, url, &font, slot.width());
+    paint_line(ui.painter(), slot, &text, palette().dim, egui::Align::Min);
+}
+
+/// Paint `icon` to fill the square `rect`, a picture keeping its shape.
+fn paint_icon(painter: &egui::Painter, rect: egui::Rect, icon: ListIcon) {
+    match icon {
+        ListIcon::Image(texture) => {
+            let size = texture.size * (rect.size() / texture.size).min_elem();
+            let at = egui::Rect::from_center_size(rect.center(), size);
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            painter.image(texture.id, at, uv, egui::Color32::WHITE);
+        }
+        ListIcon::Glyph(glyph, color) => {
+            let font = egui::FontId::proportional(rect.height());
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                glyph,
+                font,
+                color,
+            );
+        }
+    }
+}
 
 /// Rendered width of `text` in `font` (logical px).
 fn text_width(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
@@ -241,17 +323,6 @@ fn clear_row(
 /// `url` past its scheme.
 fn url_without_scheme(url: &str) -> &str {
     url.split_once("://").map_or(url, |(_, rest)| rest)
-}
-
-/// Path, query and fragment of `url`; empty for a bare host.
-fn url_tail(url: &str) -> &str {
-    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
-    let tail = after_scheme.find('/').map_or("", |i| &after_scheme[i..]);
-    if tail == "/" {
-        ""
-    } else {
-        tail
-    }
 }
 
 /// A Hub section's icon, the same as the Menu row that opens it.
@@ -427,8 +498,6 @@ fn add_tabs_section(
 ) {
     let dim = palette().dim;
     let selected = hub.tab_selected();
-    // Title width, less the two trailing buttons and the spacing before each.
-    let row_w = screen.width() - SIDES - 2.0 * DEL_W - 12.0;
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         let full_w = screen.width() - SIDES;
@@ -451,48 +520,53 @@ fn add_tabs_section(
 
         for (i, tab) in tabs.iter().enumerate() {
             let sel = selected == i + 1; // index 0 is the "+ New tab" button
-            let line = ui.horizontal(|ui| {
-                let text = egui::RichText::new(&tab.title)
-                    .size(ROW_FONT)
-                    .color(palette().text);
-                let mut atoms = egui::Atoms::new((text.atom_shrink(true), egui::Atom::grow()));
-                if tab.active {
-                    let check = egui::RichText::new(bold::CHECK)
-                        .size(ROW_FONT)
+            let resp = two_line_row(ui, full_w, sel);
+            let icon = tab_icon(icons, tab);
+            let home = tab.url == HOME_URL;
+            let text = actions_start(resp.rect, 2);
+            let slots = RowSlots::of(ui, text, icon.is_some(), !home);
+            let painter = ui.painter();
+            if let Some(icon) = icon {
+                paint_icon(painter, slots.icon, icon);
+            }
+            let mut title = slots.title;
+            if tab.active {
+                let check = paint_line(
+                    painter,
+                    title,
+                    bold::CHECK,
+                    palette().accent,
+                    egui::Align::Max,
+                );
+                title.max.x = check.left() - TEXT_GAP;
+            }
+            paint_line(painter, title, &tab.title, palette().text, egui::Align::Min);
+            if !home {
+                paint_url(ui, slots.detail, &tab.url);
+            }
+            if sel {
+                center_selected(&resp);
+            }
+            if resp.clicked() {
+                commands.push(AppCommand::Hub(HubAction::OpenTab(i)));
+            }
+            // Close sits at the far right, so the toggle's slot stays when it can't act.
+            let marked = hub.is_bookmarked(&tab.url);
+            let star_slot = action_slot(resp.rect, 1);
+            if !hub.can_toggle_bookmark(tab) {
+                if marked {
+                    let star = theme::icon_fill(fill::STAR)
+                        .size(ICON)
                         .color(palette().accent);
-                    atoms.push_right(check);
+                    ui.put(star_slot, egui::Label::new(star).selectable(false));
                 }
-                if let Some(icon) = tab_icon(icons, tab) {
-                    atoms.push_left(icon);
-                }
-                let resp = row_atoms(ui, row_w, sel, atoms);
-                if sel {
-                    center_selected(&resp);
-                }
-                if resp.clicked() {
-                    commands.push(AppCommand::Hub(HubAction::OpenTab(i)));
-                }
-                // Close sits at the far right, so the toggle's slot stays when it can't act.
-                let marked = hub.is_bookmarked(&tab.url);
-                if !hub.can_toggle_bookmark(tab) {
-                    let star = theme::icon_fill(fill::STAR).color(palette().accent);
-                    let shown = egui::Label::new(star).selectable(false);
-                    match marked {
-                        true => ui.add_sized([DEL_W, ROW_H], shown),
-                        false => {
-                            ui.allocate_exact_size(egui::vec2(DEL_W, ROW_H), egui::Sense::hover())
-                                .1
-                        }
-                    };
-                } else if bookmark_button(ui, sel, marked, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::ToggleBookmark(tab.url.clone())));
-                }
-                if delete_button(ui, sel, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::CloseTab(i)));
-                }
-                resp
-            });
-            follow_pointer(&line.response, &line.inner, sel, i + 1, commands);
+            } else if bookmark_button(ui, star_slot, marked, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::ToggleBookmark(tab.url.clone())));
+            }
+            if delete_button(ui, action_slot(resp.rect, 0), sel, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::CloseTab(i)));
+            }
+            follow_pointer(&resp, &resp, sel, i + 1, commands);
         }
     });
 }
@@ -589,12 +663,12 @@ fn add_tab_card(
     match tab {
         None => {
             paint_card_glyph(ui.painter(), picture, bold::PLUS);
-            let plus = CardIcon::Glyph(bold::PLUS, palette().text);
+            let plus = ListIcon::Glyph(bold::PLUS, palette().text);
             paint_card_title(ui.painter(), head, Some(plus), "New tab", false);
         }
         Some((_, tab)) => {
             paint_tab_picture(ui, picture, tab, view, selected);
-            let icon = card_icon(view.icons, tab);
+            let icon = tab_icon(view.icons, tab);
             let title = head.with_max_x(close.left());
             paint_card_title(ui.painter(), title, icon, &tab.title, tab.active);
         }
@@ -719,81 +793,58 @@ fn paint_card_glyph(painter: &egui::Painter, rect: egui::Rect, glyph: &str) {
 fn paint_card_title(
     painter: &egui::Painter,
     rect: egui::Rect,
-    icon: Option<CardIcon>,
+    icon: Option<ListIcon>,
     title: &str,
     shown: bool,
 ) {
-    let font = egui::FontId::proportional(ROW_FONT);
-    let gap = ROW_GAP * 2.0;
     let mut left = rect.left() + ROW_GAP;
-    let side = egui::vec2(ROW_FONT, ROW_FONT);
-    match icon {
-        Some(CardIcon::Image(texture)) => {
-            let at =
-                egui::Rect::from_min_size(egui::pos2(left, rect.center().y - ROW_FONT / 2.0), side);
-            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            painter.image(texture, at, uv, egui::Color32::WHITE);
-            left += ROW_FONT + gap;
-        }
-        Some(CardIcon::Glyph(glyph, color)) => {
-            let at = egui::pos2(left, rect.center().y);
-            painter.text(at, egui::Align2::LEFT_CENTER, glyph, font.clone(), color);
-            left += ROW_FONT + gap;
-        }
-        None => {}
+    if let Some(icon) = icon {
+        let side = egui::Vec2::splat(ROW_FONT);
+        let at =
+            egui::Rect::from_center_size(egui::pos2(left + ROW_FONT / 2.0, rect.center().y), side);
+        paint_icon(painter, at, icon);
+        left = at.right() + TEXT_GAP;
     }
-    let mut right = rect.right() - ROW_GAP;
+    let mut line = rect.with_min_x(left).with_max_x(rect.right() - ROW_GAP);
     if shown {
-        let at = egui::pos2(right, rect.center().y);
-        let check = painter.text(
-            at,
-            egui::Align2::RIGHT_CENTER,
+        let check = paint_line(
+            painter,
+            line,
             bold::CHECK,
-            font.clone(),
             palette().accent,
+            egui::Align::Max,
         );
-        right = check.left() - gap;
+        line.max.x = check.left() - TEXT_GAP;
     }
-    let mut job = egui::text::LayoutJob::simple_singleline(title.to_string(), font, palette().text);
-    job.wrap.max_width = (right - left).max(0.0);
-    job.wrap.max_rows = 1;
-    job.wrap.break_anywhere = true;
-    let galley = painter.layout_job(job);
-    let at = egui::pos2(left, rect.center().y - galley.size().y / 2.0);
-    painter.galley(at, galley, palette().text);
+    paint_line(painter, line, title, palette().text, egui::Align::Min);
 }
 
-/// A card title's icon: the site's picture, or a glyph in its colour.
-enum CardIcon {
-    Image(egui::TextureId),
+/// A card's or row's icon: the site's picture, or a glyph in its colour.
+enum ListIcon {
+    Image(egui::load::SizedTexture),
     Glyph(&'static str, egui::Color32),
 }
 
 /// `tab`'s icon on its card, as on its row: the site's, a globe without one,
 /// the tab glyph for Home; `None` with icons off.
-fn card_icon(icons: &PageIcons, tab: &TabInfo) -> Option<CardIcon> {
+fn tab_icon(icons: &PageIcons, tab: &TabInfo) -> Option<ListIcon> {
+    match tab.url == HOME_URL {
+        true => icons
+            .enabled()
+            .then(|| ListIcon::Glyph(bold::BROWSER, palette().text)),
+        false => page_icon(icons, &tab.url),
+    }
+}
+
+/// A page's icon: its site's, or a globe without one; `None` with icons off.
+fn page_icon(icons: &PageIcons, url: &str) -> Option<ListIcon> {
     if !icons.enabled() {
         return None;
     }
-    Some(match (tab.url == HOME_URL, icons.icon(&tab.url)) {
-        (true, _) => CardIcon::Glyph(bold::BROWSER, palette().text),
-        (false, Some(icon)) => CardIcon::Image(icon.row.id()),
-        (false, None) => CardIcon::Glyph(bold::GLOBE, palette().dim),
+    Some(match icons.icon(url) {
+        Some(icon) => ListIcon::Image(egui::load::SizedTexture::from_handle(icon.row)),
+        None => ListIcon::Glyph(bold::GLOBE, palette().dim),
     })
-}
-
-/// A tab row's leading icon: its site's, but the tab glyph for Home,
-/// which is no site; `None` with icons off.
-fn tab_icon(icons: &PageIcons, tab: &TabInfo) -> Option<egui::Atom<'static>> {
-    match tab.url == HOME_URL {
-        true => icons.enabled().then(|| {
-            egui::RichText::new(bold::BROWSER)
-                .size(ROW_FONT)
-                .color(palette().text)
-                .into()
-        }),
-        false => site_icon(icons, &tab.url),
-    }
 }
 
 /// A row's leading site icon, or a globe so titles line up; `None` with icons off.
@@ -832,47 +883,56 @@ fn add_bookmarks_section(
 
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
-    let row_w = screen.width() - SIDES - DEL_W - 6.0; // frame margins + delete + spacing
+    let row_w = screen.width() - SIDES;
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         for (i, bookmark) in bookmarks.all().iter().enumerate() {
             let selected = i == bookmarks.selected();
             let url = &bookmark.url;
-            let line = ui.horizontal(|ui| {
-                let icon = site_icon(icons, url);
-                let tail = match bookmark.name.is_empty() {
-                    true => url_tail(url),
-                    false => url_without_scheme(url),
-                };
-                let label = labels::bookmark_label(bookmark);
+            let resp = two_line_row(ui, row_w, selected);
+            let icon = page_icon(icons, url);
+            let text = actions_start(resp.rect, 1);
+            let slots = RowSlots::of(ui, text, icon.is_some(), true);
+            let painter = ui.painter();
+            if let Some(icon) = icon {
+                paint_icon(painter, slots.icon, icon);
+            }
+            let mut title = slots.title;
+            let tags_budget = row_w * super::home::TAGS_SHARE;
+            let tags_w = super::home::tags_width(painter, &bookmark.tags, tags_budget);
+            if tags_w > 0.0 {
+                let y = title.center().y;
+                super::home::paint_tags(painter, &bookmark.tags, title.right(), y, tags_budget);
+                title.max.x -= tags_w + TEXT_GAP;
+            }
+            let label = labels::bookmark_label(bookmark);
+            let text = palette().text;
+            match bookmark.launch {
                 // Sites are the default and go unmarked.
-                let mark = (bookmark.launch != Launch::Site).then(|| {
-                    let (glyph, color) = super::home::launch_glyph(bookmark.launch);
-                    egui::RichText::new(glyph).size(ROW_FONT).color(color)
-                });
-                let tags_budget = row_w * super::home::TAGS_SHARE;
-                let tags_w = super::home::tags_width(ui.painter(), &bookmark.tags, tags_budget);
-                let tail = tail.trim_end_matches('/');
-                let mut atoms = url_atoms(ui, label, tail, icon, mark, row_w - tags_w);
-                if tags_w > 0.0 {
-                    atoms.push_right(egui::Atom::custom(egui::Id::NULL, egui::vec2(tags_w, 0.0)));
+                Launch::Site => {
+                    paint_line(painter, title, &label, text, egui::Align::Min);
                 }
-                let resp = row_atoms(ui, row_w, selected, atoms);
-                let right = resp.rect.right() - ui.spacing().button_padding.x;
-                let y = resp.rect.center().y;
-                super::home::paint_tags(ui.painter(), &bookmark.tags, right, y, tags_budget);
-                if selected {
-                    center_selected(&resp);
+                launch => {
+                    let (glyph, color) = super::home::launch_glyph(launch);
+                    let gap = ui.spacing().icon_spacing;
+                    let mark_w = one_line(painter, glyph, color, f32::INFINITY).size().x;
+                    let room = title.with_max_x(title.right() - mark_w - gap);
+                    let name = paint_line(painter, room, &label, text, egui::Align::Min);
+                    let at = title.with_min_x(name.right() + gap);
+                    paint_line(painter, at, glyph, color, egui::Align::Min);
                 }
-                if resp.clicked() {
-                    commands.push(AppCommand::Hub(HubAction::OpenBookmark(i)));
-                }
-                if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
-                }
-                resp
-            });
-            follow_pointer(&line.response, &line.inner, selected, i, commands);
+            }
+            paint_url(ui, slots.detail, url);
+            if selected {
+                center_selected(&resp);
+            }
+            if resp.clicked() {
+                commands.push(AppCommand::Hub(HubAction::OpenBookmark(i)));
+            }
+            if delete_button(ui, action_slot(resp.rect, 0), selected, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
+            }
+            follow_pointer(&resp, &resp, selected, i, commands);
         }
     });
 }
@@ -894,8 +954,7 @@ fn add_downloads_section(
         return;
     }
 
-    let status_w = 170.0; // fits "100% · 999.9 MB / 999.9 MB"-ish, truncated past that
-    let row_w = screen.width() - SIDES - DEL_W - status_w - 12.0;
+    let row_w = screen.width() - SIDES;
     let today = clock::local_day(clock::now_unix());
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
@@ -921,45 +980,51 @@ fn add_downloads_section(
             }
             last_day = day;
             let selected = downloads.selected() == i + 1; // index 0 is "Clear finished"
-            let line = ui.horizontal(|ui| {
-                let (name_color, status, status_color) = match &item.state {
-                    State::Active => (
-                        palette().text,
-                        format_progress(item.received, item.total),
-                        dim,
-                    ),
-                    State::Done => {
-                        let time = labels::time_label(item.time);
-                        let status = format!("{} · {time}", format_size(item.received));
-                        (palette().text, status, dim)
-                    }
-                    State::Failed(error) => (dim, error.clone(), palette().warn),
-                };
-                let text =
-                    |text: &str, color| egui::RichText::new(text).size(ROW_FONT).color(color);
-                let atoms = (
-                    text(file_glyph(&item.filename), dim),
-                    text(&item.filename, name_color).atom_shrink(true),
-                    egui::Atom::grow(),
-                );
-                let resp = row_atoms(ui, row_w, selected, atoms);
-                if item.is_active() {
-                    paint_progress(ui.painter(), resp.rect, item.received, item.total);
+            let (name_color, status, status_color) = match &item.state {
+                State::Active => (
+                    palette().text,
+                    format_progress(item.received, item.total),
+                    dim,
+                ),
+                State::Done => {
+                    let time = labels::time_label(item.time);
+                    let status = format!("{} · {time}", format_size(item.received));
+                    (palette().text, status, dim)
                 }
-                if selected {
-                    center_selected(&resp);
-                }
-                if resp.clicked() && downloads.saved_path(i).is_some() {
-                    commands.push(AppCommand::Hub(HubAction::OpenDownload(i)));
-                }
-                let status = egui::RichText::new(status).color(status_color);
-                ui.add_sized([status_w, ROW_H], egui::Label::new(status).truncate());
-                if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
-                }
-                resp
-            });
-            follow_pointer(&line.response, &line.inner, selected, i + 1, commands);
+                State::Failed(error) => (dim, error.clone(), palette().warn),
+            };
+            let resp = two_line_row(ui, row_w, selected);
+            if item.is_active() {
+                paint_progress(ui.painter(), resp.rect, item.received, item.total);
+            }
+            let slots = RowSlots::of(ui, actions_start(resp.rect, 1), true, true);
+            let painter = ui.painter();
+            let glyph = ListIcon::Glyph(file_glyph(&item.filename), dim);
+            paint_icon(painter, slots.icon, glyph);
+            paint_line(
+                painter,
+                slots.title,
+                &item.filename,
+                name_color,
+                egui::Align::Min,
+            );
+            paint_line(
+                painter,
+                slots.detail,
+                &status,
+                status_color,
+                egui::Align::Min,
+            );
+            if selected {
+                center_selected(&resp);
+            }
+            if resp.clicked() && downloads.saved_path(i).is_some() {
+                commands.push(AppCommand::Hub(HubAction::OpenDownload(i)));
+            }
+            if delete_button(ui, action_slot(resp.rect, 0), selected, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
+            }
+            follow_pointer(&resp, &resp, selected, i + 1, commands);
         }
     });
 }
@@ -1019,9 +1084,7 @@ fn add_history_section(
         return;
     }
 
-    // The page gets what's left after the time, the two trailing buttons, and
-    // their spacing.
-    let row_w = screen.width() - SIDES - 2.0 * DEL_W - TIME_W - 18.0;
+    let row_w = screen.width() - SIDES;
     let today = clock::local_day(clock::now_unix());
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
@@ -1044,37 +1107,53 @@ fn add_history_section(
             }
             last_day = day;
             let selected = hist.selected() == i + 1; // index 0 is "Clear all"
-            let line = ui.horizontal(|ui| {
-                let icon = site_icon(icons, &entry.url);
-                let atoms = match entry.title.is_empty() {
-                    true => {
-                        let brand = labels::brand_label(&entry.url);
-                        url_atoms(ui, brand, url_tail(&entry.url), icon, None, row_w)
-                    }
-                    false => titled_atoms(&entry.title, labels::site_label(&entry.url), icon),
-                };
-                let resp = row_atoms(ui, row_w, selected, atoms);
-                if selected {
-                    center_selected(&resp);
+            let resp = two_line_row(ui, row_w, selected);
+            let icon = page_icon(icons, &entry.url);
+            let text = actions_start(resp.rect, 2);
+            let slots = RowSlots::of(ui, text, icon.is_some(), true);
+            let painter = ui.painter();
+            if let Some(icon) = icon {
+                paint_icon(painter, slots.icon, icon);
+            }
+            let brand;
+            let title = match entry.title.is_empty() {
+                true => {
+                    brand = labels::brand_label(&entry.url);
+                    &brand
                 }
-                if resp.clicked() {
-                    commands.push(AppCommand::Hub(HubAction::OpenUrl(entry.url.clone())));
-                }
-                let time = egui::RichText::new(labels::time_label(entry.time)).color(dim);
-                ui.add_sized([TIME_W, ROW_H], egui::Label::new(time).truncate());
-                // Trailing actions: the bookmark toggle (same as Y), then delete.
-                let marked = hub.is_bookmarked(&entry.url);
-                if bookmark_button(ui, selected, marked, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::ToggleBookmark(
-                        entry.url.clone(),
-                    )));
-                }
-                if delete_button(ui, selected, dim).clicked() {
-                    commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
-                }
-                resp
-            });
-            follow_pointer(&line.response, &line.inner, selected, i + 1, commands);
+                false => &entry.title,
+            };
+            paint_line(
+                painter,
+                slots.title,
+                title,
+                palette().text,
+                egui::Align::Min,
+            );
+            let time = labels::time_label(entry.time);
+            let time = paint_line(painter, slots.detail, &time, dim, egui::Align::Max);
+            paint_url(
+                ui,
+                slots.detail.with_max_x(time.left() - TEXT_GAP),
+                &entry.url,
+            );
+            if selected {
+                center_selected(&resp);
+            }
+            if resp.clicked() {
+                commands.push(AppCommand::Hub(HubAction::OpenUrl(entry.url.clone())));
+            }
+            // Trailing actions: the bookmark toggle (same as Y), then delete.
+            let marked = hub.is_bookmarked(&entry.url);
+            if bookmark_button(ui, action_slot(resp.rect, 1), marked, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::ToggleBookmark(
+                    entry.url.clone(),
+                )));
+            }
+            if delete_button(ui, action_slot(resp.rect, 0), selected, dim).clicked() {
+                commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
+            }
+            follow_pointer(&resp, &resp, selected, i + 1, commands);
         }
     });
 }

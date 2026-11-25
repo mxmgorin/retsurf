@@ -15,10 +15,10 @@ use egui_sdl2::egui::{self, Vec2};
 use std::f32::consts::{FRAC_1_SQRT_2, TAU};
 
 /// Side of a toolbar icon slot (logical px), sized for a fingertip.
-const SLOT: f32 = 36.0;
+pub(super) const SLOT: f32 = 36.0;
 
 /// Toolbar glyph size, a step up from [`theme::ICON_SIZE`] to fill the slot.
-const ICON: f32 = 19.0;
+pub(super) const ICON: f32 = 19.0;
 
 /// The address field's height, a step inside the toolbar's slots.
 const FIELD_H: f32 = 28.0;

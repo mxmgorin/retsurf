@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `hints` action is `link_hints`; a binding to the old name is skipped and the action gets its defaults
 - Settings > Controls: Stick threshold, Repeat delay and Repeat rate are in their own Navigation group
 - Auto-hide toolbar slides in and out (at once with `software_render`); at the top it moves the page down instead of covering it
+- Hub rows are two lines: the title over the address, visit time or download status, beside a larger site icon
 
 ### Fixed
 
