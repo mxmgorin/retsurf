@@ -562,6 +562,7 @@ pub(super) fn add_toolbar(
 pub(super) fn add_toolbar_overlay(
     ctx: &egui::Context,
     width: f32,
+    past_edge: f32,
     state: &mut std::cell::RefMut<'_, BrowserState>,
     commands: &mut Vec<AppCommand>,
     inputs: &ToolbarInputs<'_>,
@@ -569,13 +570,16 @@ pub(super) fn add_toolbar_overlay(
     let frame = egui::Frame::default()
         .fill(ctx.global_style().visuals.window_fill)
         .inner_margin(4.0);
-    let align = match inputs.position {
-        ToolbarPosition::Top => egui::Align2::CENTER_TOP,
-        ToolbarPosition::Bottom => egui::Align2::CENTER_BOTTOM,
+    let (align, offset) = match inputs.position {
+        ToolbarPosition::Top => (egui::Align2::CENTER_TOP, -past_edge),
+        ToolbarPosition::Bottom => (egui::Align2::CENTER_BOTTOM, past_edge),
     };
+    // Unconstrained to slide past the edge, unfaded so the slide is its one transition.
     let area = egui::Area::new(egui::Id::new("toolbar_overlay"))
         .order(egui::Order::Foreground)
-        .anchor(align, egui::vec2(0.0, 0.0))
+        .anchor(align, egui::vec2(0.0, offset))
+        .constrain(false)
+        .fade_in(false)
         .show(ctx, |ui| {
             ui.set_width(width);
             frame

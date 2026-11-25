@@ -843,6 +843,8 @@ impl AppUi {
         }
 
         let mut loading_shown = false;
+        // How far down the page sits once the bar's slide ends.
+        let mut page_shift_settled = 0.0;
         {
             let mut state = browser.get_state_mut();
             // `caret_for` parks a `TextEdit`'s cursor at the OSK caret, for the
@@ -861,10 +863,22 @@ impl AppUi {
                 shown: toolbar_shown,
                 overlay: toolbar_overlay,
             } = self.toolbar_layout(chrome_hidden);
+            // A floating top bar pushes the page down by its showing part.
+            let pushes_page = toolbar_overlay && position == ToolbarPosition::Top;
+            if pushes_page && toolbar_shown {
+                page_shift_settled = self.toolbar_height;
+            }
             // The `self.update` borrow can't overlap the `self`-borrowing closure.
             let update = self.update.snapshot();
             window.run_ui(|ctx| {
                 let ppp = ctx.pixels_per_point();
+                let reveal = match toolbar_overlay {
+                    true => self.toolbar_reveal(ctx, toolbar_shown),
+                    false => 0.0,
+                };
+                // Whole pixels, so the pushed page meets the bar without a seam.
+                let bar_showing = (reveal * self.toolbar_height * ppp).round() / ppp;
+                let page_shift = if pushes_page { bar_showing } else { 0.0 };
                 let mut root = egui::Ui::new(
                     ctx.clone(),
                     egui::Id::new("root_ui"),
@@ -897,7 +911,9 @@ impl AppUi {
                     .frame(frame)
                     .show(&mut root, |ui| {
                         let rect = ui.max_rect();
-                        self.webview_rect = rect;
+                        // Moved, never resized: a viewport change reflows the page.
+                        let page = rect.translate(egui::vec2(0.0, page_shift));
+                        self.webview_rect = page;
                         // Panel mode: toolbar thickness is whatever the full content
                         // rect has that this doesn't. The overlay measures its own.
                         if !toolbar_overlay {
@@ -915,7 +931,7 @@ impl AppUi {
                         match (&self.page_shader, self.browser_tex_id) {
                             (Some(pass), _) if shaded => {
                                 let rows = self.shader_resolution.rows(&self.shader);
-                                pass.paint(ui, rect, &self.shader, game_geometry, rows);
+                                pass.paint(ui, page, &self.shader, game_geometry, rows);
                             }
                             (pass, Some(tex)) => {
                                 if let Some(pass) = pass {
@@ -926,7 +942,7 @@ impl AppUi {
                                     egui::pos2(0.0, 1.0),
                                     egui::pos2(1.0, 0.0),
                                 );
-                                ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+                                ui.painter().image(tex, page, uv, egui::Color32::WHITE);
                             }
                             _ => {}
                         }
@@ -937,10 +953,11 @@ impl AppUi {
                 if toolbar_overlay {
                     // Draw only while shown: a foreground `Area` costs a
                     // tessellation pass every frame even off-screen.
-                    if toolbar_shown {
+                    if reveal > 0.0 {
                         self.toolbar_rect = toolbar::add_toolbar_overlay(
                             ctx,
                             ctx.content_rect().width(),
+                            self.toolbar_height - bar_showing,
                             &mut state,
                             commands,
                             &inputs,
@@ -1008,14 +1025,9 @@ impl AppUi {
                         strip_buttons: !self.home_config.toolbar,
                         footer: &footer,
                     };
-                    home::add_home(
-                        ctx,
-                        &mut self.home,
-                        view,
-                        self.webview_rect,
-                        home_caret,
-                        commands,
-                    );
+                    // The on-screen share: a pushed page hangs off the bottom.
+                    let area = self.webview_rect.intersect(ctx.content_rect());
+                    home::add_home(ctx, &mut self.home, view, area, home_caret, commands);
                 }
 
                 // Before the Hub/OSK chain, so the OSK can open on top of a field.
@@ -1174,7 +1186,9 @@ impl AppUi {
 
         // Now that the keyboard's height is known, scroll the field clear of it.
         if self.osk_lift_pending && self.osk_height > 0.0 {
-            let covered = (self.osk_height / self.webview_rect.height()).clamp(0.0, 0.9);
+            // The strip a pushed page hangs off-screen is hidden too.
+            let hidden = self.osk_height + page_shift_settled;
+            let covered = (hidden / self.webview_rect.height()).clamp(0.0, 0.9);
             browser.lift_focus_above(covered);
             self.osk_lift_pending = false;
         }

@@ -8,6 +8,10 @@ use crate::config::ToolbarPosition;
 use crate::platform::window::AppWindow;
 use crate::ui::Focus;
 use egui_sdl2::egui;
+use std::time::Duration;
+
+/// How long the auto-hide bar takes to slide fully in or out.
+const TOOLBAR_SLIDE: Duration = Duration::from_millis(200);
 
 impl AppUi {
     /// The engines the search glyphs offer, and the one the empty fields name.
@@ -140,6 +144,22 @@ impl AppUi {
                 || (!chrome_hidden.any() && (!self.toolbar_autohide || self.toolbar_shown)),
             overlay: self.toolbar_autohide,
         }
+    }
+
+    /// How much of the auto-hide bar shows this frame, from `0.0` to `1.0`,
+    /// sliding toward `shown`. Jumps under software composition, where every
+    /// frame that moves the page is a full redraw.
+    pub(super) fn toolbar_reveal(&self, ctx: &egui::Context, shown: bool) -> f32 {
+        let time = match self.browser_tex_id {
+            Some(_) => TOOLBAR_SLIDE.as_secs_f32(),
+            None => 0.0,
+        };
+        ctx.animate_bool_with_time_and_easing(
+            egui::Id::new("toolbar_slide"),
+            shown,
+            time,
+            egui::emath::easing::cubic_out,
+        )
     }
 
     /// Whether the pointer is on the toolbar or an overlay rather than the page.

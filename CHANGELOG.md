@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bookmark `launch = "browser"` is `launch = "site"`; files with the old value still open as a site
 - The `hints` action is `link_hints`; a binding to the old name is skipped and the action gets its defaults
 - Settings > Controls: Stick threshold, Repeat delay and Repeat rate are in their own Navigation group
+- Auto-hide toolbar slides in and out (at once with `software_render`); at the top it moves the page down instead of covering it
 
 ### Fixed
 

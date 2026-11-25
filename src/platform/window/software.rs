@@ -166,13 +166,22 @@ impl SoftwareBackend {
         let mut timing = CompositeTiming::default();
         let at = Instant::now();
 
+        // A page moved on screen leaves nothing of the last frame in place:
+        // blit it whole and the chrome over it. The blit clamps its origin.
+        let moved =
+            page_rect.is_some_and(|r| (r.x(), r.y()) != (page_at.0.max(0), page_at.1.max(0)));
+        let page_painted = page_painted || moved;
+
         // Chrome already in the surface stands unless egui draws it differently
         // or this frame's page blit writes over it.
         let changed = chrome_damage(egui, chrome_shapes, *size);
         let erased = page_painted
             .then(|| covered_chrome(chrome_rects, *page_rect))
             .flatten();
-        let redraw = union(changed, erased);
+        let redraw = match moved {
+            true => Some(Rect::new(0, 0, size.0, size.1)),
+            false => union(changed, erased),
+        };
         // Blit on a new browser frame, and under redrawn chrome: departing
         // chrome may cover page pixels only the page can restore.
         let restore = (!page_painted).then_some(redraw).flatten();
