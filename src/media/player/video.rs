@@ -17,6 +17,7 @@ use std::time::Duration;
 use openh264::decoder::{DecodedYUV, Decoder, DecoderConfig, Flush};
 use openh264::formats::YUVSource;
 use openh264::OpenH264API;
+use servo_malloc_size_of::{MallocConditionalSizeOf, MallocSizeOf, MallocSizeOfOps};
 use servo_media::player::video::{Buffer, VideoFrame, VideoFrameData, VideoFrameRenderer};
 use servo_media::player::PlayerEvent;
 use yuv::{yuv420_to_bgra, YuvPlanarImage, YuvRange, YuvStandardMatrix};
@@ -312,6 +313,13 @@ impl Ord for Frame {
 }
 
 struct BgraBuffer(Arc<Vec<u8>>);
+
+impl MallocSizeOf for BgraBuffer {
+    /// Conditional: the frame data shares this allocation.
+    fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        self.0.conditional_size_of(ops)
+    }
+}
 
 impl Buffer for BgraBuffer {
     fn to_vec(&self) -> Option<VideoFrameData> {

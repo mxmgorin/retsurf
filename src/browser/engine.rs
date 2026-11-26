@@ -278,7 +278,7 @@ pub(super) fn font_size_pref_values(size: u32) -> [(&'static str, u64); 2] {
 
 /// `(Servo pref, enabled)` per feature. Every name must exist in the pinned
 /// `servo-config` — `set_preference` panics on an unknown pref.
-fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 14] {
+fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 13] {
     // Destructured without `..` so a new feature fails to compile here rather
     // than shipping unapplied.
     let ExperimentalConfig {
@@ -289,7 +289,6 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         container_queries,
         fontface,
         intersection_observer,
-        resize_observer,
         indexeddb,
         storage_manager,
         adopted_stylesheets,
@@ -305,7 +304,6 @@ fn experimental_pref_values(exp: &ExperimentalConfig) -> [(&'static str, bool); 
         ("layout_css_container_queries_enabled", *container_queries),
         ("dom_fontface_enabled", *fontface),
         ("dom_intersection_observer_enabled", *intersection_observer),
-        ("dom_resize_observer_enabled", *resize_observer),
         ("dom_indexeddb_enabled", *indexeddb),
         ("dom_storage_manager_api_enabled", *storage_manager),
         ("dom_adoptedstylesheet_enabled", *adopted_stylesheets),

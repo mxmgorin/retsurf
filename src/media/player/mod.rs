@@ -23,6 +23,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use servo_base::generic_channel::GenericCallback;
+use servo_malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_media::player::video::VideoFrameRenderer;
 use servo_media::player::{PlaybackState, Player, PlayerError, PlayerEvent, StreamType};
 use servo_media::streams::registry::MediaStreamId;
@@ -100,6 +101,12 @@ impl Drop for SdlAudioPlayer {
     /// drops our event. It exits on its own once the flags and channels say so.
     fn drop(&mut self) {
         self.shut_down();
+    }
+}
+
+impl MallocSizeOf for SdlAudioPlayer {
+    fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        self.shared.buffers_size_of(ops)
     }
 }
 

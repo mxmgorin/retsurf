@@ -4,6 +4,7 @@ use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Instant;
 
 use servo_base::generic_channel::GenericCallback;
+use servo_malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_media::player::PlayerEvent;
 
 use crate::media::device::CHANNELS;
@@ -182,6 +183,16 @@ impl Shared {
             }),
             events,
         }
+    }
+
+    /// Measures the buffered stream bytes and the queued PCM samples.
+    pub(super) fn buffers_size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        let stream = self
+            .stream
+            .lock()
+            .map_or(0, |stream| stream.data.size_of(ops));
+        let pcm = self.pcm.lock().map_or(0, |pcm| pcm.queue.size_of(ops));
+        stream + pcm
     }
 
     pub(crate) fn seek_pending(&self) -> bool {

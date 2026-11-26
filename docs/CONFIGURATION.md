@@ -53,7 +53,6 @@ columns = true                # CSS multi-column                 minimal
 container_queries = true      # CSS @container                   minimal
 fontface = true               # web fonts                        minimal
 intersection_observer = true  # IntersectionObserver             minimal
-resize_observer = true        # ResizeObserver                   minimal
 indexeddb = true              # IndexedDB                        minimal
 storage_manager = true        # navigator.storage                minimal
 adopted_stylesheets = true    # adoptedStyleSheets               minimal

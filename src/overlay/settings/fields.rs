@@ -510,7 +510,6 @@ pub(super) static FIELDS: &[Field] = &[
     f(S::Browser,  "Experimental", "Container queries",     flag!(experimental.container_queries), false),
     f(S::Browser,  "Experimental", "Web fonts",              flag!(experimental.fontface), false),
     f(S::Browser,  "Experimental", "IntersectionObserver",  flag!(experimental.intersection_observer), false),
-    f(S::Browser,  "Experimental", "ResizeObserver",        flag!(experimental.resize_observer), false),
     f(S::Browser,  "Experimental", "IndexedDB",             flag!(experimental.indexeddb), false),
     f(S::Browser,  "Experimental", "StorageManager",        flag!(experimental.storage_manager), false),
     f(S::Browser,  "Experimental", "Adopted stylesheets",   flag!(experimental.adopted_stylesheets), false),

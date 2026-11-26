@@ -20,8 +20,6 @@ pub struct ExperimentalConfig {
     pub fontface: bool,
     /// IntersectionObserver (`dom_intersection_observer_enabled`) — lazy-load / infinite scroll.
     pub intersection_observer: bool,
-    /// ResizeObserver (`dom_resize_observer_enabled`).
-    pub resize_observer: bool,
     /// IndexedDB (`dom_indexeddb_enabled`) — the store web apps and games keep
     /// their assets and saves in. Off in Servo, and absent rather than failing,
     /// so a page that needs it dies at startup.
@@ -56,7 +54,7 @@ pub enum ExperimentalPreset {
     /// All features off — most stable, but breaks most modern sites.
     Off,
     /// Layout + compatibility essentials only (columns, container queries,
-    /// web fonts, Intersection/ResizeObserver, IndexedDB, navigator.storage,
+    /// web fonts, IntersectionObserver, IndexedDB, navigator.storage,
     /// adoptedStyleSheets); graphics and niche DOM APIs off.
     Minimal,
     /// Handheld default: the essentials plus WebGL2 + OffscreenCanvas.
@@ -117,7 +115,6 @@ impl ExperimentalPreset {
             container_queries: on,
             fontface: on,
             intersection_observer: on,
-            resize_observer: on,
             indexeddb: on,
             storage_manager: on,
             adopted_stylesheets: on,
@@ -134,7 +131,6 @@ impl ExperimentalPreset {
                 container_queries: true,
                 fontface: true,
                 intersection_observer: true,
-                resize_observer: true,
                 indexeddb: true,
                 storage_manager: true,
                 adopted_stylesheets: true,
