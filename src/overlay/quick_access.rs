@@ -2,9 +2,10 @@
 //! Menu, the places to go at the left. Each has one table per thing it opens
 //! over (a page, a game, Home), so what one hides from another is
 //! data rather than branches. Over a tab Quick Access runs what acts on it,
-//! then what sets it, then the way out, so a row keeps its place whatever
-//! applies; where a bookmark's site settings do, its reader view stands in for
-//! the tab's and its launch and reset rows join the settings. Over the start
+//! then what sets it, then the way into Game Mode and the way out, so a row
+//! keeps its place whatever applies; where a bookmark's site settings do, its
+//! reader view stands in for the tab's and its reset row, and outside a game
+//! its launch row, join the settings. Over the start
 //! page the focused bookmark's rows lead, before the page's own. The header
 //! names what the rows act on.
 //! Quick rows are [`crate::overlay::settings`] rows flagged `quick`: the same
@@ -183,7 +184,6 @@ type Layout = &'static [&'static [Slot]];
 const ACCESS_BROWSER: Layout = &[
     &[
         Slot::Row(Entry::Reload),
-        Slot::Row(Entry::Enter),
         Slot::Row(Entry::Run(Action::Bookmark)),
     ],
     &[
@@ -390,8 +390,8 @@ impl Press {
 }
 
 /// The runs of entries `strip` shows `over` a tab or Home, in its
-/// table's order, with `tabs` as its open tabs and without the way out (see
-/// [`way_out`]).
+/// table's order, with `tabs` as its open tabs and without the rows that end
+/// it (see [`ending_rows`]).
 fn groups(strip: Strip, over: Over, tabs: &[usize]) -> Vec<Vec<Entry>> {
     let layout = match (strip, over) {
         (Strip::QuickAccess, Over::Home) => ACCESS_HOME,
@@ -434,15 +434,20 @@ fn groups(strip: Strip, over: Over, tabs: &[usize]) -> Vec<Vec<Entry>> {
     layout.iter().map(|group| expand(group)).collect()
 }
 
-/// The row that ends Quick Access, if any: leaving a launched bookmark, else
-/// in a game leaving Game Mode.
-fn way_out(strip: Strip, over: Over, launched: bool) -> Option<Entry> {
-    match (strip, over, launched) {
-        (Strip::Menu, ..) => None,
-        (_, _, true) => Some(Entry::Leave),
-        (_, Over::Tab(TabMode::Game), false) => Some(Entry::Exit),
-        _ => None,
+/// The rows that end Quick Access: over a page the way into Game Mode, then
+/// the way out: leaving a launched bookmark, else in a game leaving Game Mode.
+fn ending_rows(strip: Strip, over: Over, launched: bool) -> Vec<Entry> {
+    if strip == Strip::Menu {
+        return Vec::new();
     }
+    let game = over == Over::Tab(TabMode::Game);
+    let enter = (!game && over != Over::Home).then_some(Entry::Enter);
+    let out = match (game, launched) {
+        (_, true) => Some(Entry::Leave),
+        (true, false) => Some(Entry::Exit),
+        (false, false) => None,
+    };
+    enter.into_iter().chain(out).collect()
 }
 
 /// What the header reads over a tab: in Quick Access its site's bookmark
@@ -633,13 +638,16 @@ impl QuickAccess {
                     *row = Entry::Options(OptionsRow::Reader);
                 }
             }
-            settings.push(Entry::Options(OptionsRow::LaunchAs));
+            // Over a game stepping it would rerun the tab, a second way out.
+            if over != Over::Tab(TabMode::Game) {
+                settings.push(Entry::Options(OptionsRow::LaunchAs));
+            }
             if site.overrides > 0 {
                 settings.push(Entry::ResetSite);
             }
         }
         if let Some(last) = groups.last_mut() {
-            last.extend(way_out(strip, over, opening.launched));
+            last.extend(ending_rows(strip, over, opening.launched));
         }
         let mut rows: Vec<Row> = Vec::new();
         for group in groups.into_iter().filter(|group| !group.is_empty()) {
@@ -712,7 +720,8 @@ impl QuickAccess {
         let own_rows = rows.len();
         let page = groups(Strip::QuickAccess, Over::Home, &[]).concat();
         rows.extend(page.into_iter().map(Row::new));
-        rows.extend(way_out(Strip::QuickAccess, Over::Home, launched.is_some()).map(Row::new));
+        let ending = ending_rows(Strip::QuickAccess, Over::Home, launched.is_some());
+        rows.extend(ending.into_iter().map(Row::new));
         if let Some(first) = rows.get_mut(own_rows).filter(|_| own_rows > 0) {
             first.above = Some(Break::Head(HOME_HEAD.to_string()));
         }
@@ -1041,18 +1050,18 @@ mod tests {
             labels,
             [
                 "Reload",
-                "Enter game mode",
                 "Bookmark",
                 "User agent",
                 "Ad blocker",
                 "Reader view",
                 "Theme",
                 "Zoom",
-                "Font size"
+                "Font size",
+                "Enter game mode"
             ]
         );
         panel.move_sel(-1);
-        assert_eq!(panel.label(panel.selected()), "Font size");
+        assert_eq!(panel.label(panel.selected()), "Enter game mode");
     }
 
     #[test]
@@ -1203,7 +1212,8 @@ mod tests {
     }
 
     /// A site leaves every row of the tab's where it was: its reader view takes
-    /// the tab's place, launch and reset join the settings before the way out.
+    /// the tab's place, launch (outside a game) and reset join the settings
+    /// before the rows that end the strip.
     #[test]
     fn a_site_keeps_the_tabs_rows_in_place() {
         let config = AppConfig::default();
@@ -1231,17 +1241,20 @@ mod tests {
                 },
                 &config,
             );
-            let out = way_out(Strip::QuickAccess, over, launched);
+            let ending = ending_rows(Strip::QuickAccess, over, launched);
             let mut want: Vec<Entry> = plain
                 .iter()
-                .filter(|row| Some(**row) != out)
+                .filter(|row| !ending.contains(row))
                 .map(|row| match row {
                     Entry::Run(Action::Reader) => Entry::Options(OptionsRow::Reader),
                     row => *row,
                 })
                 .collect();
-            want.extend([Entry::Options(OptionsRow::LaunchAs), Entry::ResetSite]);
-            want.extend(out);
+            if mode != TabMode::Game {
+                want.push(Entry::Options(OptionsRow::LaunchAs));
+            }
+            want.push(Entry::ResetSite);
+            want.extend(ending);
             assert_eq!(entries_of(&panel), want);
             assert_eq!(breaks_of(&panel), breaks);
             assert_eq!(panel.title(), "itch.io");
@@ -1249,9 +1262,9 @@ mod tests {
         }
     }
 
-    /// A game's site steps how it launches, with no reader view.
+    /// A game's site shows neither how it launches nor a reader view.
     #[test]
-    fn a_games_site_launches_without_reader_view() {
+    fn a_games_site_shows_neither_launch_nor_reader_view() {
         let mut panel = QuickAccess::new();
         let over = Over::Tab(TabMode::Game);
         panel.open(
@@ -1263,7 +1276,7 @@ mod tests {
             &AppConfig::default(),
         );
         assert_eq!(panel.row(), Entry::Reload);
-        assert!(entries_of(&panel).contains(&Entry::Options(OptionsRow::LaunchAs)));
+        assert!(!entries_of(&panel).contains(&Entry::Options(OptionsRow::LaunchAs)));
         assert!(!entries_of(&panel).contains(&Entry::Options(OptionsRow::Reader)));
         panel.open(
             &Opening {

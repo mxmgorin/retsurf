@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-hide toolbar slides in and out (at once with `software_render`); at the top it moves the page down instead of covering it
 - Hub rows are two lines: the title over the address, visit time or download status, beside a larger site icon
 - Hub section bar and Menu show the tab count and download progress the way the toolbar does
+- Quick Access: Enter game mode is the last row, where Exit game mode is in a game; Launch as is not shown over a game
 
 ### Fixed
 
