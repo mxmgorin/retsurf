@@ -17,7 +17,7 @@
   <a href="https://github.com/mxmgorin/retsurf/discussions">Discussions</a>
 </p>
 
-retsurf is a portable web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It features a console-like interface designed for gamepads and keyboards, with touch support, a virtual cursor and Vimium-style link hints. It also offers fullscreen mode, remappable controls, scaling and shaders for games. It runs on retro handhelds, Kindles, phones and desktops; see **[supported platforms](#install)**.
+retsurf is a console-like web browser built on [Servo](https://servo.org/), an independent web engine written in Rust. It is designed for gamepads and keyboards, with touch support, a virtual cursor and Vimium-style link hints, and launches sites as apps and games from Home. It also offers fullscreen mode, remappable controls, scaling and shaders for games. It runs on retro handhelds down to a 128 MB Miyoo Mini with no GPU, on Kindles, phones and desktops; see **[supported platforms](#install)**.
 
 > **Work in progress.** Early development — expect bugs. See [Limitations](#limitations).
 
@@ -44,11 +44,14 @@ More screenshots and device photos are on the [website](https://retsurf.app/).
 
 ## Features
 
-- **Broad device support**<br>
-  Runs on devices ranging from 128 MB handhelds to desktops and e-ink Kindles. Uses SDL2's available video backend, without requiring X11 or Wayland. Renders through OpenGL ES or entirely on the CPU.
-
 - **Console-like interface**<br>
   Navigate the entire browser with a gamepad or keyboard. Use a virtual cursor, Vimium-style link hints, and an on-screen keyboard with grid and wheel layouts. Rebind browser actions with support for taps, holds, and button combinations.
+
+- **Home as a launcher**<br>
+  Open each bookmark as a site, as an app without browser UI, or as a game in Game Mode. Filter by sites, apps, games, or tags; sort manually, by name, or by last opened; switch between grid and list layouts. Keep per-bookmark settings such as user agent, dark mode, and Game Mode.
+
+- **Broad device support**<br>
+  Runs on devices ranging from 128 MB handhelds to desktops and e-ink Kindles. Uses SDL2's available video backend, without requiring X11 or Wayland. Renders through OpenGL ES or entirely on the CPU.
 
 - **Game Mode**<br>
   Hide the browser UI and route input directly to the page. Remap buttons and sticks to keys, mouse, or raw gamepad input using the in-app editor. Launch games without browser UI using `--kiosk` ([Command line](docs/CLI.md)).
