@@ -34,6 +34,14 @@ const RING_POINTS: f32 = 48.0;
 const UNKNOWN_SWEEP: f32 = TAU / 4.0;
 const UNKNOWN_STEP: f32 = TAU / 8.0;
 
+/// The width of a column that holds glyphs `glyph` px tall and any mark alike.
+pub(super) fn column_width(glyph: f32) -> f32 {
+    [Mark::Tabs(0), Mark::Downloads(Chip::Hidden)]
+        .iter()
+        .map(|mark| mark.size(glyph).x)
+        .fold(glyph, f32::max)
+}
+
 /// A painted icon and the state it shows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Mark {

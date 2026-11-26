@@ -97,7 +97,6 @@ impl App {
             page_js: Some(page_js.as_str()).filter(|p| !p.is_empty()),
             page_font_size: Some(self.browser.page_font_size()).filter(|&size| size != 0),
             saved: !url.is_empty() && self.ui.hub.is_bookmarked(&url),
-            tabs: self.browser.tab_count(),
             input_map: input_map.as_deref(),
             recent_tabs: &recent_tabs,
         };

@@ -806,10 +806,6 @@ impl AppUi {
         // Before the idle wakes are scheduled: an ending mark adds one.
         self.download_chip
             .refresh(self.hub.downloads.progress(), Instant::now());
-        if self.quick_access.visible {
-            self.quick_access
-                .set_downloads(self.hub.downloads.progress());
-        }
 
         // The cursor draws only while it lingers; wake at the end of the linger
         // so it gets erased without another event.
@@ -1113,15 +1109,14 @@ impl AppUi {
                     if self.quick_access.visible {
                         // Same as the Hub's: a focused row would activate twice.
                         drop_egui_focus(ctx);
-                        quick_access::add_quick_access(
-                            ctx,
-                            &self.quick_access,
-                            &tab_infos,
-                            &self.page_icons,
+                        let view = quick_access::QuickAccessView {
+                            tabs: &tab_infos,
+                            downloads: self.download_chip.shown(),
+                            icons: &self.page_icons,
                             face,
-                            self.button_hints,
-                            commands,
-                        );
+                            button_hints: self.button_hints,
+                        };
+                        quick_access::add_quick_access(ctx, &self.quick_access, &view, commands);
                     }
                     // Over the strip too, which names a bookmark through it.
                     if self.osk.visible {

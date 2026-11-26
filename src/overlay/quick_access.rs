@@ -13,7 +13,6 @@
 
 use crate::browser::TabMode;
 use crate::config::AppConfig;
-use crate::data::downloads::Progress;
 use crate::event::bindings::Action;
 use crate::overlay::hub::Section;
 use crate::overlay::settings::{self, Kind, Settings};
@@ -539,8 +538,6 @@ pub struct Opening<'a> {
     pub page_font_size: Option<u32>,
     /// Whether the shown page is bookmarked.
     pub saved: bool,
-    /// How many tabs are open, for the Tabs row.
-    pub tabs: usize,
     /// The name of the input map the game runs, over a game.
     pub input_map: Option<&'a str>,
     /// The tabs Menu lists, the latest shown first: the first is on
@@ -568,7 +565,6 @@ impl Opening<'static> {
             page_js: None,
             page_font_size: None,
             saved: false,
-            tabs: 0,
             input_map: None,
             recent_tabs: &[],
         }
@@ -672,7 +668,6 @@ impl QuickAccess {
         self.page_font_size = opening.page_font_size;
         let saved = if opening.saved { SAVED } else { "" };
         self.set_value(Entry::Run(Action::Bookmark), saved.to_string());
-        self.set_value(Entry::List(Section::Tabs), opening.tabs.to_string());
         if let Some(name) = opening.input_map {
             self.set_value(Entry::InputMap, name.to_string());
         }
@@ -809,13 +804,6 @@ impl QuickAccess {
             n => format!("Reset {n} site settings"),
         };
         self.set_label(Entry::ResetSite, label);
-    }
-
-    /// The Downloads row's indicator: how far the downloads in flight are while
-    /// their size is known, else how many.
-    pub fn set_downloads(&mut self, progress: Option<Progress>) {
-        let value = progress.map(|p| p.indicator()).unwrap_or_default();
-        self.set_value(Entry::List(Section::Downloads), value);
     }
 
     /// The tab on screen, while Menu lists it.
@@ -1557,7 +1545,6 @@ mod tests {
         let mut panel = QuickAccess::new();
         let menu = Opening {
             recent_tabs: &tabs,
-            tabs: 3,
             ..Opening::bare(Strip::Menu, Over::Tab(TabMode::Page))
         };
         panel.open(&menu, &AppConfig::default());
@@ -1585,29 +1572,6 @@ mod tests {
         panel.open(&launched, &AppConfig::default());
         let address = Entry::Run(Action::Address);
         assert!(!entries_of(&panel).contains(&address));
-    }
-
-    /// The Downloads row shows how far the downloads in flight are, else how many.
-    #[test]
-    fn the_downloads_row_shows_what_is_in_flight() {
-        let mut panel = QuickAccess::new();
-        let menu = Opening::bare(Strip::Menu, Over::Tab(TabMode::Page));
-        panel.open(&menu, &AppConfig::default());
-        let at = entries_of(&panel)
-            .iter()
-            .position(|row| *row == Entry::List(Section::Downloads))
-            .expect("a page's Menu lists the downloads");
-        let progress = |active, received, total| Progress {
-            active,
-            received,
-            total,
-        };
-        panel.set_downloads(Some(progress(1, 45, Some(100))));
-        assert_eq!(panel.value(at), "45%");
-        panel.set_downloads(Some(progress(2, 45, None)));
-        assert_eq!(panel.value(at), "2 active");
-        panel.set_downloads(None);
-        assert_eq!(panel.value(at), "");
     }
 
     /// The header names the page's site, else the strip; Menu always
@@ -1706,12 +1670,6 @@ mod tests {
         panel.open(&game, &AppConfig::default());
         assert_eq!(value_of(&panel, Entry::Run(Action::Bookmark)), SAVED);
         assert_eq!(value_of(&panel, Entry::InputMap), "Keyboard (WASD)");
-        let menu = Opening {
-            tabs: 3,
-            ..Opening::bare(Strip::Menu, Over::Tab(TabMode::Page))
-        };
-        panel.open(&menu, &AppConfig::default());
-        assert_eq!(value_of(&panel, Entry::List(Section::Tabs)), "3");
     }
 
     /// A slot naming a quick row by its label names one, so a renamed row

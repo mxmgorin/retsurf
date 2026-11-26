@@ -16,9 +16,11 @@ use crate::overlay::hub::Section;
 use crate::overlay::quick_access::{Break, Entry, OptionsRow, QuickAccess, Strip};
 use crate::overlay::settings::Settings;
 use crate::ui::brand;
+use crate::ui::download_chip::Chip;
 use crate::ui::favicon::PageIcons;
 use crate::ui::hub;
 use crate::ui::keys::{self, BUTTON_HINT_FONT};
+use crate::ui::mark::Mark;
 use crate::ui::panel::{
     self, center_selected, Lead, RowIcon, Tone, Trail, DIVIDER_H, EPSILON, HEAD_FONT, HEAD_LEAD,
     ROW_GAP, ROW_H,
@@ -57,15 +59,30 @@ const SUN_AT: f32 = 0.2;
 /// Clearance between the last row and the top of the sun's halo.
 const HORIZON_GAP: f32 = ROW_GAP * 3.0;
 
+/// What the strip draws besides its own state.
+pub(in crate::ui) struct QuickAccessView<'a> {
+    pub tabs: &'a [TabInfo],
+    /// The downloads in flight or just ended.
+    pub downloads: Chip,
+    pub icons: &'a PageIcons,
+    pub face: FaceLabels,
+    /// Whether a footer names what the buttons do.
+    pub button_hints: bool,
+}
+
 pub(in crate::ui) fn add_quick_access(
     ctx: &egui::Context,
     panel: &QuickAccess,
-    tabs: &[TabInfo],
-    icons: &PageIcons,
-    face: FaceLabels,
-    button_hints: bool,
+    view: &QuickAccessView,
     commands: &mut Vec<AppCommand>,
 ) {
+    let QuickAccessView {
+        tabs,
+        icons,
+        face,
+        button_hints,
+        ..
+    } = *view;
     let screen = ctx.content_rect();
     // A shadow rather than a line: the edges on the screen's border cast it off
     // screen, so only the one facing the page shows.
@@ -127,7 +144,7 @@ pub(in crate::ui) fn add_quick_access(
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
                     .max_height((room - below).max(0.0))
-                    .show(ui, |ui| add_rows(ui, width, panel, tabs, icons, commands));
+                    .show(ui, |ui| add_rows(ui, width, panel, view, commands));
                 if button_hints {
                     let h = add_footer(ui, width, panel, face);
                     if (h - footer_h).abs() > EPSILON {
@@ -146,10 +163,15 @@ fn add_rows(
     ui: &mut egui::Ui,
     width: f32,
     panel: &QuickAccess,
-    tabs: &[TabInfo],
-    icons: &PageIcons,
+    view: &QuickAccessView,
     commands: &mut Vec<AppCommand>,
 ) {
+    let QuickAccessView {
+        tabs,
+        downloads,
+        icons,
+        ..
+    } = *view;
     for (index, row) in panel.rows().iter().enumerate() {
         match &row.above {
             Some(Break::Rule) => panel::divider(ui, width),
@@ -165,6 +187,10 @@ fn add_rows(
                 .filter(|tab| tab.url != HOME_URL)
                 .and_then(|tab| hub::site_icon(icons, &tab.url))
                 .map(RowIcon::Image),
+            Entry::List(Section::Tabs) => Some(RowIcon::Mark(Mark::Tabs(tabs.len()))),
+            Entry::List(Section::Downloads) if downloads != Chip::Hidden => {
+                Some(RowIcon::Mark(Mark::Downloads(downloads)))
+            }
             _ => None,
         };
         let icon = icon.unwrap_or(RowIcon::Glyph(glyph(entry)));

@@ -81,17 +81,6 @@ pub struct Progress {
     pub total: Option<u64>,
 }
 
-impl Progress {
-    /// The downloads' indicator: how far they are while their size is known,
-    /// else how many run.
-    pub fn indicator(&self) -> String {
-        match self.total {
-            Some(total) if total > 0 => format!("{}%", self.received.min(total) * 100 / total),
-            _ => format!("{} active", self.active),
-        }
-    }
-}
-
 impl Download {
     pub fn is_active(&self) -> bool {
         matches!(self.state, State::Active)

@@ -2,7 +2,7 @@
 //! frame with its close button, the section bar, the bounded section scroll.
 
 use super::keys::{centered_button_hints, ButtonHint, BUTTON_HINT_FONT};
-use super::mark::Mark;
+use super::mark::{self, Mark};
 use super::theme::{close_button, icon_fill, palette, CLOSE_SIZE, ROW_FONT};
 use egui_sdl2::egui;
 use egui_sdl2::egui::AtomExt as _;
@@ -147,10 +147,45 @@ pub(super) struct Lead<'a> {
     pub dot: bool,
 }
 
-/// A row's leading icon: a glyph in the label's colour, or a picture.
+/// A row's leading icon: a glyph in the label's colour, a picture, or a mark.
 pub(super) enum RowIcon<'a> {
     Glyph(&'static str),
     Image(egui::Atom<'a>),
+    Mark(Mark),
+}
+
+impl Lead<'_> {
+    /// Its icon's mark, when the icon is one.
+    fn mark(&self) -> Option<Mark> {
+        match self.icon {
+            RowIcon::Mark(mark) => Some(mark),
+            RowIcon::Glyph(_) | RowIcon::Image(_) => None,
+        }
+    }
+}
+
+/// The custom atom a [`Mark`] is painted into.
+fn mark_id() -> egui::Id {
+    egui::Id::new("mark")
+}
+
+/// Show a row's `button` at `width` as `add_sized` would, painting `mark` into
+/// its icon's column in `tone`'s colour: only `atom_ui` reports that rect.
+fn add_row_button(
+    ui: &mut egui::Ui,
+    width: f32,
+    button: egui::Button<'_>,
+    mark: Option<Mark>,
+    tone: Tone,
+) -> egui::AtomLayoutResponse {
+    let layout = egui::Layout::centered_and_justified(ui.layout().main_dir());
+    let resp = ui
+        .allocate_ui_with_layout(egui::vec2(width, ROW_H), layout, |ui| button.atom_ui(ui))
+        .inner;
+    if let (Some(mark), Some(rect)) = (mark, resp.rect(mark_id())) {
+        mark.paint(ui.painter(), rect, ROW_FONT, tone_color(tone));
+    }
+    resp
 }
 
 /// A row with `lead` at its leading edge and `trail` at its trailing one, its
@@ -175,11 +210,12 @@ pub(super) fn marked_row(
         trail.value,
         trail.after.unwrap_or_default()
     ));
-    // An icon is square at the row's type size.
-    let label_w = text_w(lead.label.to_string()) + ROW_FONT;
+    let label_w = text_w(lead.label.to_string()) + icon_column().x;
     let label_gives = (selected && trail_w <= width * (1.0 - LABEL_KEEP)) || label_w > trail_w;
     let value = value_text(trail.value);
-    let mut atoms = lead_atoms(lead, tone, label_gives);
+    let mark = lead.mark();
+    let icon_id = ui.next_auto_id().with("icon");
+    let mut atoms = lead_atoms(lead, tone, label_gives, icon_id);
     atoms.push_right(egui::Atom::grow());
     atoms.push_right(match label_gives {
         true => value.into(),
@@ -192,12 +228,10 @@ pub(super) fn marked_row(
                 .size(ROW_FONT),
         );
     }
-    ui.add_sized(
-        [width, ROW_H],
-        egui::Button::selectable(selected, atoms)
-            .corner_radius(ROW_RADIUS)
-            .truncate(),
-    )
+    let button = egui::Button::selectable(selected, atoms)
+        .corner_radius(ROW_RADIUS)
+        .truncate();
+    add_row_button(ui, width, button, mark, tone).response
 }
 
 /// The share of a [`stepper_row`]'s width its stepper takes: each side a
@@ -217,17 +251,15 @@ pub(super) fn stepper_row(
 ) -> (egui::Response, Option<i32>) {
     let id = egui::Id::new("stepper");
     let stepper_w = width * STEPPER_SHARE - ui.spacing().button_padding.x;
-    let mut atoms = lead_atoms(lead, tone, true);
+    let mark = lead.mark();
+    let icon_id = ui.next_auto_id().with("icon");
+    let mut atoms = lead_atoms(lead, tone, true, icon_id);
     atoms.push_right(egui::Atom::grow());
     atoms.push_right(egui::Atom::custom(id, egui::vec2(stepper_w, ROW_FONT)));
     let button = egui::Button::selectable(selected, atoms)
         .corner_radius(ROW_RADIUS)
         .truncate();
-    // `add_sized`'s layout by hand: only `atom_ui` reports the stepper's rect.
-    let layout = egui::Layout::centered_and_justified(ui.layout().main_dir());
-    let resp = ui
-        .allocate_ui_with_layout(egui::vec2(width, ROW_H), layout, |ui| button.atom_ui(ui))
-        .inner;
+    let resp = add_row_button(ui, width, button, mark, tone);
     let Some(rect) = resp.rect(id) else {
         return (resp.response, None);
     };
@@ -270,16 +302,20 @@ pub(super) fn stepper_row(
 }
 
 /// `lead`'s icon, label and dot, its label in `tone`'s colour and, when
-/// `shrink`, giving way to what follows.
-fn lead_atoms<'a>(lead: Lead<'a>, tone: Tone, shrink: bool) -> egui::Atoms<'a> {
+/// `shrink`, giving way to what follows; `icon_id` names the icon's box.
+fn lead_atoms<'a>(lead: Lead<'a>, tone: Tone, shrink: bool, icon_id: egui::Id) -> egui::Atoms<'a> {
     let label = label_text(lead.label, tone);
     let mut atoms = egui::Atoms::default();
+    let column = icon_column();
     atoms.push_right(match lead.icon {
-        RowIcon::Glyph(glyph) => egui::RichText::new(glyph)
-            .color(tone_color(tone))
-            .size(ROW_FONT)
-            .into(),
-        RowIcon::Image(image) => image,
+        RowIcon::Glyph(glyph) => {
+            let glyph = egui::RichText::new(glyph)
+                .color(tone_color(tone))
+                .size(ROW_FONT);
+            centered(glyph.into(), column, icon_id)
+        }
+        RowIcon::Image(image) => centered(image, column, icon_id),
+        RowIcon::Mark(_) => egui::Atom::custom(mark_id(), column),
     });
     atoms.push_right(match shrink {
         true => label.atom_shrink(true),
@@ -292,6 +328,22 @@ fn lead_atoms<'a>(lead: Lead<'a>, tone: Tone, shrink: bool) -> egui::Atoms<'a> {
         atoms.push_right(dot);
     }
     atoms
+}
+
+/// The box every row icon is centred in, so labels line up beside the widest
+/// mark: that mark with a row gap's air around it.
+fn icon_column() -> egui::Vec2 {
+    egui::vec2(mark::column_width(ROW_FONT) + ROW_GAP, ROW_FONT)
+}
+
+/// `atom` centred in a box of `size`. The box registers as a widget, so `id`
+/// must differ from its row's, which egui would otherwise hand it too.
+fn centered(atom: egui::Atom<'_>, size: egui::Vec2, id: egui::Id) -> egui::Atom<'_> {
+    let layout = egui::AtomLayout::new(atom)
+        .id(id)
+        .min_size(size)
+        .align2(egui::Align2::CENTER_CENTER);
+    egui::Atom::layout(layout)
 }
 
 /// The colour of a label in `tone`.
@@ -523,14 +575,13 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
             .color(palette().text)
             .size(ROW_FONT)
     };
-    let mark_id = egui::Id::new("section_mark");
     ui.horizontal(|ui| {
         // The gap turns the flush button row into a segmented control.
         ui.spacing_mut().item_spacing.x = SECTION_GAP;
         for &section in sections {
             let mark = mark(section);
             let mut atoms = egui::Atoms::new(match mark {
-                Some(mark) => egui::Atom::custom(mark_id, mark.size(ROW_FONT)),
+                Some(mark) => egui::Atom::custom(mark_id(), mark.size(ROW_FONT)),
                 None => text(icon(section).to_string()).into(),
             });
             let min_w = match fits || section == active {
@@ -545,7 +596,7 @@ pub(super) fn section_bar<T: Copy + PartialEq>(
                 .min_size(egui::vec2(min_w, SECTION_H))
                 .gap(0.0)
                 .atom_ui(ui);
-            if let (Some(mark), Some(rect)) = (mark, tab.rect(mark_id)) {
+            if let (Some(mark), Some(rect)) = (mark, tab.rect(mark_id())) {
                 mark.paint(ui.painter(), rect, ROW_FONT, palette().text);
             }
             if tab.response.clicked() {
