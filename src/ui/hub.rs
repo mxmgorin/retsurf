@@ -542,26 +542,29 @@ fn add_tabs_section(
             let resp = two_line_row(ui, full_w, sel);
             let icon = tab_icon(icons, tab);
             let home = tab.url == HOME_URL;
-            let text = actions_start(resp.rect, 2);
+            // The active tab's check takes a slot beside the actions, in line with them.
+            let text = actions_start(resp.rect, 2 + usize::from(tab.active));
             let slots = RowSlots::of(ui, text, icon.is_some(), !home);
             let painter = ui.painter();
             if let Some(icon) = icon {
                 paint_icon(painter, slots.icon, icon);
             }
-            let mut title = slots.title;
-            if tab.active {
-                let check = paint_line(
-                    painter,
-                    title,
-                    bold::CHECK,
-                    palette().accent,
-                    egui::Align::Max,
-                );
-                title.max.x = check.left() - TEXT_GAP;
-            }
-            paint_line(painter, title, &tab.title, palette().text, egui::Align::Min);
+            paint_line(
+                painter,
+                slots.title,
+                &tab.title,
+                palette().text,
+                egui::Align::Min,
+            );
             if !home {
                 paint_url(ui, slots.detail, &tab.url);
+            }
+            if tab.active {
+                let check = theme::icon(bold::CHECK).size(ICON).color(palette().accent);
+                ui.put(
+                    action_slot(resp.rect, 2),
+                    egui::Label::new(check).selectable(false),
+                );
             }
             if sel {
                 center_selected(&resp);
