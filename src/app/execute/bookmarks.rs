@@ -309,7 +309,6 @@ impl App {
         let bookmark = &self.ui.hub.bookmarks.all()[at];
         HomeTile {
             id: bookmark.id.clone(),
-            title: bookmark_label(bookmark),
             site: site_of(&bookmark.url),
             manual: self.config.home.bookmarks.sort == HomeSort::Manual,
             game: bookmark.launch == Launch::Game,
@@ -370,8 +369,7 @@ impl App {
                 }
                 self.refresh_access();
             }
-            OptionsRow::Open
-            | OptionsRow::Rename
+            OptionsRow::Rename
             | OptionsRow::Tags
             | OptionsRow::MoveLeft
             | OptionsRow::MoveRight
@@ -387,10 +385,6 @@ impl App {
         };
         let bookmark = &self.ui.hub.bookmarks.all()[at];
         match row {
-            OptionsRow::Open => {
-                self.ui.quick_access.close();
-                self.open_bookmark(at, out);
-            }
             OptionsRow::LaunchAs | OptionsRow::Reader => self.step_options_row(row, 1, out),
             OptionsRow::Rename => {
                 let name = bookmark_label(bookmark);
@@ -428,7 +422,11 @@ impl App {
         match what {
             OptionsText::Name => {
                 store.rename(at, text.to_string());
-                if let Some(at) = self.options_bookmark() {
+                // Over Home the header reads the tile's site, which a rename keeps.
+                if let Some(at) = self
+                    .options_bookmark()
+                    .filter(|_| !self.browser.on_home_page())
+                {
                     let title = bookmark_label(&self.ui.hub.bookmarks.all()[at]);
                     self.ui.quick_access.set_title(title);
                 }

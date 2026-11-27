@@ -389,7 +389,6 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::List(Section::Bookmarks) => bold::BOOKMARK_SIMPLE,
         Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
-        Entry::Options(OptionsRow::Open) => bold::ARROW_SQUARE_OUT,
         Entry::Options(OptionsRow::LaunchAs) => bold::APP_WINDOW,
         Entry::Options(OptionsRow::Reader) => bold::BOOK_OPEN,
         Entry::Options(OptionsRow::Rename) => bold::PENCIL_SIMPLE,
@@ -460,7 +459,6 @@ mod tests {
         }
         let tile = HomeTile {
             id: "a".into(),
-            title: "A".into(),
             site: "a.example".into(),
             manual: true,
             game: false,

@@ -39,7 +39,6 @@ impl Strip {
 /// A row of a bookmark's options.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OptionsRow {
-    Open,
     /// Step how it opens.
     LaunchAs,
     /// Whether its site's articles open in reader view; not for a game.
@@ -74,7 +73,6 @@ impl OptionsText {
 /// The Home tile whose rows lead Quick Access.
 pub struct HomeTile {
     pub id: String,
-    pub title: String,
     /// Where it leads: the name alone says nothing once renamed.
     pub site: String,
     /// Whether the grid is in the manual order, which alone the moves act on.
@@ -241,7 +239,6 @@ const MENU_GAME: Layout = &[&[Slot::Row(Entry::Settings), Slot::Row(Entry::Quit)
 
 /// A bookmark's options; the moves show only where the order is the manual one.
 const OPTIONS: &[Slot] = &[
-    Slot::Row(Entry::Options(OptionsRow::Open)),
     Slot::Row(Entry::Options(OptionsRow::LaunchAs)),
     Slot::Row(Entry::Options(OptionsRow::Reader)),
     Slot::Row(Entry::Options(OptionsRow::Rename)),
@@ -271,7 +268,6 @@ impl Entry {
             Entry::Leave => "Close",
             Entry::ResetSite => "Reset site settings",
             Entry::Quit => "Quit retsurf",
-            Entry::Options(OptionsRow::Open) => "Open",
             Entry::Options(OptionsRow::LaunchAs) => "Launch as",
             Entry::Options(OptionsRow::Reader) => "Reader view",
             Entry::Options(OptionsRow::Rename) => "Rename...",
@@ -730,9 +726,8 @@ impl QuickAccess {
         self.refresh(config);
         self.title = tile
             .as_ref()
-            .map_or_else(|| HOME_HEAD.to_string(), |tile| tile.title.clone());
+            .map_or_else(|| HOME_HEAD.to_string(), |tile| tile.site.clone());
         if let Some(tile) = tile {
-            self.set_value(Entry::Options(OptionsRow::Open), tile.site);
             self.bookmark = Some(OptionsBookmark {
                 id: tile.id,
                 naming: None,
@@ -1354,7 +1349,6 @@ mod tests {
     fn tile(manual: bool, game: bool) -> HomeTile {
         HomeTile {
             id: "a".into(),
-            title: "A".into(),
             site: "a.example".into(),
             manual,
             game,
@@ -1376,8 +1370,7 @@ mod tests {
             breaks_of(&panel),
             [(options.len(), Break::Head(HOME_HEAD.to_string()))]
         );
-        assert_eq!(panel.title(), "A");
-        assert_eq!(panel.value(0), "a.example");
+        assert_eq!(panel.title(), "a.example");
         panel.set_title("B".into());
         assert_eq!(panel.title(), "B");
         panel.open_home(None, None, &AppConfig::default());

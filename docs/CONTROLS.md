@@ -56,7 +56,7 @@ it to a gesture you never press.
 | Pad | Mouse | Effect |
 | --- | --- | --- |
 | A on a tile | click | open the bookmark |
-| X on a tile | right-click | Quick Access on the bookmark: open, launch as, reader view, rename, tags, move left / right, remove |
+| X on a tile | right-click | Quick Access on the bookmark: launch as, reader view, rename, tags, move left / right, remove |
 | L1 / R1 | click a filter | previous / next filter |
 | Y | the Sort row of Quick Access | next sort |
 
