@@ -93,6 +93,8 @@ pub(super) struct HomeView<'a> {
 pub(super) struct FilterRow<'a> {
     pub filters: &'a [Filter],
     pub filter: &'a Filter,
+    /// Keeps its scroll state apart from another filter row's.
+    pub salt: &'static str,
 }
 
 /// One footer hint: the buttons that do it, then what it does.
@@ -437,7 +439,13 @@ pub(super) fn add_home(
                                     ui.add_space(ROW_GAP);
                                 }
                                 let end_buttons = buttons && !view.search.shown();
-                                add_filter_row(ui, view.filter_row, block_w, end_buttons, commands);
+                                let row = view.filter_row;
+                                if let Some(filter) =
+                                    add_filter_row(ui, row, block_w, end_buttons, commands)
+                                {
+                                    let token = filter.token();
+                                    commands.push(AppCommand::Home(HomeAction::SetFilter(token)));
+                                }
                                 ui.add_space(ROW_GAP);
                                 let tiles = view.tiles;
                                 let look = (view.layout, view.size);
@@ -546,7 +554,7 @@ fn add_footer(ui: &mut egui::Ui, row: egui::Rect, footer: &[FooterHint]) -> f32 
 
 /// The scroll areas' ids: the stack, and the filter row when it overflows.
 const STACK_SALT: &str = "home_stack";
-const FILTERS_SALT: &str = "home_filters";
+pub(super) const FILTERS_SALT: &str = "home_filters";
 
 /// The search bar: the field, between the toolbar's strip buttons when
 /// `buttons` (Menu at the left, Quick Access at the right, as the toolbar
@@ -702,17 +710,18 @@ const MARK_SCALE: f32 = 0.85;
 const MARK_GLYPH: f32 = 1.2;
 
 /// The filter row: the filters centred; with `buttons`, the strip buttons at
-/// either end.
-fn add_filter_row(
+/// either end. Returns the filter clicked.
+pub(super) fn add_filter_row<'a>(
     ui: &mut egui::Ui,
-    row: FilterRow,
+    row: FilterRow<'a>,
     width: f32,
     buttons: bool,
     commands: &mut Vec<AppCommand>,
-) {
+) -> Option<&'a Filter> {
     // Painted under the filters once the row's place is known.
     let rule = ui.painter().add(egui::Shape::Noop);
-    let row = ui.allocate_ui_with_layout(
+    let mut clicked = None;
+    let drawn = ui.allocate_ui_with_layout(
         egui::vec2(width, FILTER_H),
         egui::Layout::right_to_left(egui::Align::Center),
         |ui| {
@@ -729,23 +738,24 @@ fn add_filter_row(
                         strip_button(ui, Strip::Menu, commands);
                     }
                     if row.filters.len() > 1 {
-                        add_filters(ui, row, commands);
+                        clicked = add_filters(ui, row);
                     }
                 },
             );
         },
     );
-    let rect = row.response.rect;
+    let rect = drawn.response.rect;
     let y = rect.bottom() - LINE_W / 2.0;
     let stroke = egui::Stroke::new(LINE_W, palette().border);
     ui.painter()
         .set(rule, egui::Shape::hline(rect.x_range(), y, stroke));
+    clicked
 }
 
 /// The filters in what is left of the row, a rule parting the kinds from
 /// the tags: centred when they fit, else scrolled to keep the active one in
-/// view when it changes, the clipped end fading out.
-fn add_filters(ui: &mut egui::Ui, row: FilterRow, commands: &mut Vec<AppCommand>) {
+/// view when it changes, the clipped end fading out. Returns the filter clicked.
+fn add_filters<'a>(ui: &mut egui::Ui, row: FilterRow<'a>) -> Option<&'a Filter> {
     let pad = 2.0 * ui.spacing().button_padding.x;
     let labels: Vec<String> = row.filters.iter().map(Filter::label).collect();
     let parted = |at: usize| {
@@ -763,10 +773,11 @@ fn add_filters(ui: &mut egui::Ui, row: FilterRow, commands: &mut Vec<AppCommand>
         .sum::<f32>()
         - FILTER_GAP;
     let room = ui.available_width();
-    let shown = egui::Id::new("home_filters_active");
+    let shown = egui::Id::new(row.salt).with("active");
     let token = row.filter.token();
     let moved = ui.ctx().data(|d| d.get_temp::<String>(shown)) != Some(token.clone());
-    let add = |ui: &mut egui::Ui, commands: &mut Vec<AppCommand>| {
+    let mut clicked = None;
+    let mut add = |ui: &mut egui::Ui| {
         for (at, (filter, label)) in row.filters.iter().zip(&labels).enumerate() {
             if parted(at) {
                 divider(ui);
@@ -777,23 +788,23 @@ fn add_filters(ui: &mut egui::Ui, row: FilterRow, commands: &mut Vec<AppCommand>
                 resp.scroll_to_me(None);
             }
             if resp.clicked() {
-                commands.push(AppCommand::Home(HomeAction::SetFilter(filter.token())));
+                clicked = Some(filter);
             }
         }
     };
     if filters_w <= room {
         ui.add_space((room - filters_w) / 2.0);
-        add(ui, commands);
+        add(ui);
     } else {
-        let drawn = scroll_offset(ui, FILTERS_SALT);
+        let drawn = scroll_offset(ui, row.salt);
         let scroll = egui::ScrollArea::horizontal()
-            .id_salt(FILTERS_SALT)
+            .id_salt(row.salt)
             .max_width(room)
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = FILTER_GAP;
-                    add(ui, commands);
+                    add(ui);
                 });
             });
         settle(ui, drawn, &scroll);
@@ -813,6 +824,7 @@ fn add_filters(ui: &mut egui::Ui, row: FilterRow, commands: &mut Vec<AppCommand>
     if moved {
         ui.ctx().data_mut(|d| d.insert_temp(shown, token));
     }
+    clicked
 }
 
 /// One filter: its name, muted unless active or hovered, the active one

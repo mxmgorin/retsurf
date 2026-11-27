@@ -342,8 +342,10 @@ impl Bookmark {
 pub struct Bookmarks {
     /// In manual order (see [`manual_order`]).
     items: Vec<Bookmark>,
-    /// Highlighted row in the Hub's Bookmarks section.
+    /// Highlighted row in the Hub's Bookmarks section, counted in [`Self::shown`].
     cursor: super::ListCursor,
+    /// Which bookmarks the Hub's Bookmarks section lists.
+    filter: Filter,
 }
 
 impl Bookmarks {
@@ -361,6 +363,7 @@ impl Bookmarks {
         Self {
             items,
             cursor: super::ListCursor::new(0),
+            filter: Filter::All,
         }
     }
 
@@ -403,11 +406,15 @@ impl Bookmarks {
         self.items.sort_by(manual_order);
     }
 
-    /// Remove the bookmark at `index` in [`Self::all`] and its file.
+    /// Remove the bookmark at `index` in [`Self::all`] and its file. A filter
+    /// left with nothing to list falls back to All.
     pub fn remove(&mut self, index: usize) {
         if index < self.items.len() {
             self.items.remove(index).delete();
-            self.cursor.clamp(self.items.len());
+            if !self.items.iter().any(|b| self.filter.admits(b)) {
+                self.filter = Filter::All;
+            }
+            self.cursor.clamp(self.shown().len());
         }
     }
 
@@ -525,22 +532,56 @@ impl Bookmarks {
 
     /// The highlighted row's index in [`Self::all`].
     pub fn selected_index(&self) -> Option<usize> {
-        self.cursor.entry_index().filter(|&i| i < self.items.len())
+        self.cursor
+            .entry_index()
+            .and_then(|row| self.shown().get(row).copied())
     }
 
-    /// Reset the highlight to the top (called when the Hub opens).
+    /// Indices into [`Self::all`] of the bookmarks the Hub lists, in manual order.
+    pub fn shown(&self) -> Vec<usize> {
+        (0..self.items.len())
+            .filter(|&i| self.filter.admits(&self.items[i]))
+            .collect()
+    }
+
+    /// Show every bookmark, the highlight at the top.
     pub fn reset(&mut self) {
+        self.filter = Filter::All;
         self.cursor.reset(self.items.len());
     }
 
     /// Move the highlight by `dy` rows, clamped to the list.
     pub fn move_sel(&mut self, dy: i32) {
-        self.cursor.move_sel(dy, self.items.len());
+        self.cursor.move_sel(dy, self.shown().len());
     }
 
     /// Put the highlight on row `index`, counted as [`Self::move_sel`] does.
     pub fn select(&mut self, index: usize) {
-        self.cursor.select(index, self.items.len());
+        self.cursor.select(index, self.shown().len());
+    }
+
+    /// The filter the Hub lists by.
+    pub fn filter(&self) -> &Filter {
+        &self.filter
+    }
+
+    /// The filters worth offering in the Hub; see [`filters`].
+    pub fn filters(&self) -> Vec<Filter> {
+        filters(&self.items, &self.filter)
+    }
+
+    /// List by `filter`, the highlight at the top.
+    pub fn set_filter(&mut self, filter: Filter) {
+        self.filter = filter;
+        self.cursor.reset(self.shown().len());
+    }
+
+    /// List by the next filter offered, past the last back to All.
+    pub fn next_filter(&mut self) {
+        let offered = self.filters();
+        let at = offered.iter().position(|f| *f == self.filter).unwrap_or(0);
+        let next = offered[crate::list::wrap(at, 1, offered.len())].clone();
+        self.set_filter(next);
     }
 }
 
@@ -671,6 +712,7 @@ fn first_run() -> Vec<Bookmark> {
     let mut store = Bookmarks {
         items: Vec::new(),
         cursor: super::ListCursor::new(0),
+        filter: Filter::All,
     };
     for (name, url) in DEFAULTS {
         store.add(url, name.to_string(), Launch::Site);
@@ -835,6 +877,7 @@ mod tests {
         Bookmarks {
             items,
             cursor: crate::data::ListCursor::new(0),
+            filter: Filter::All,
         }
     }
 
@@ -951,6 +994,23 @@ mod tests {
         assert_eq!(offered.len(), 2);
         assert_eq!(offered[1].label(), "News");
         assert_eq!(split_tags("News, news"), ["News"]);
+    }
+
+    #[test]
+    fn the_hub_filter_steps_round_and_picks_from_its_list() {
+        let mut store = store(vec![
+            tagged("a", Launch::Site, &["news"], 0),
+            tagged("b", Launch::Site, &[], 0),
+            tagged("c", Launch::Site, &["news"], 0),
+        ]);
+        store.next_filter();
+        assert_eq!(store.filter(), &Filter::Tag("news".to_string()));
+        assert_eq!(store.shown(), [0, 2]);
+        store.move_sel(1);
+        assert_eq!(store.selected_index(), Some(2));
+        store.next_filter();
+        assert_eq!(store.filter(), &Filter::All);
+        assert_eq!(store.selected_index(), Some(0));
     }
 
     #[test]

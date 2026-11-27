@@ -4,6 +4,7 @@
 //! contextual [`InputCommand`]s through its central router.
 
 use crate::browser::BrowserCommand;
+use crate::data::bookmarks::Filter;
 use crate::overlay::hub::Section;
 use crate::overlay::osk::{OskCommand, PadInput};
 use crate::overlay::quick_access::Strip;
@@ -264,6 +265,8 @@ pub enum HubAction {
     OpenDownload(usize),
     /// Open the bookmark at this index of the store.
     OpenBookmark(usize),
+    /// List the Bookmarks section by this filter.
+    FilterBookmarks(Filter),
     ToggleBookmark(String),
     /// Remove the entry at `index` in the active section.
     RemoveAt(usize),

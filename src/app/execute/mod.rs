@@ -113,6 +113,7 @@ impl App {
             HubAction::OpenUrl(url) => self.open_url(url.clone(), out),
             HubAction::OpenDownload(at) => self.open_download(*at, out),
             HubAction::OpenBookmark(at) => self.open_bookmark(*at, out),
+            HubAction::FilterBookmarks(filter) => self.ui.hub.bookmarks.set_filter(filter.clone()),
             HubAction::ToggleBookmark(url) => self.toggle_bookmark(url),
             HubAction::RemoveAt(index) => match self.ui.hub.section() {
                 Section::Bookmarks => self.remove_bookmark(*index),
@@ -294,6 +295,7 @@ impl App {
 
     /// The selected entry's second action: bookmark it in History or Tabs, or
     /// fetch a failed download again.
+    /// In Bookmarks, list by the next filter.
     pub(super) fn hub_y_action(&mut self) {
         match self.ui.hub.section() {
             Section::History => {
@@ -321,7 +323,7 @@ impl App {
                     self.ui.hub.downloads.remove(at);
                 }
             }
-            Section::Bookmarks => {}
+            Section::Bookmarks => self.ui.hub.bookmarks.next_filter(),
         }
     }
 

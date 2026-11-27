@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [Glossary](docs/GLOSSARY.md) of the screens, controls and modes
 - WebGL 2 pages can draw into floating-point textures (`EXT_color_buffer_float`)
+- Hub Bookmarks filter by kind or tag, as on Home: Y steps through the filters, a click picks one
 
 ### Changed
 

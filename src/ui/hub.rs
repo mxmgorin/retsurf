@@ -368,16 +368,19 @@ fn row_verbs(hub: &Hub, tabs: &[TabInfo]) -> RowVerbs {
             }
             None => [Some("new tab"), None, None],
         },
-        Section::Bookmarks => match hub.bookmarks.selected_index() {
-            Some(at) => {
-                let open = match hub.bookmarks.all()[at].launch {
-                    Launch::Site => "open",
-                    Launch::App | Launch::Game => "launch",
-                };
-                [Some(open), Some("remove"), None]
+        Section::Bookmarks => {
+            let y = (hub.bookmarks.filters().len() > 1).then_some("filter");
+            match hub.bookmarks.selected_index() {
+                Some(at) => {
+                    let open = match hub.bookmarks.all()[at].launch {
+                        Launch::Site => "open",
+                        Launch::App | Launch::Game => "launch",
+                    };
+                    [Some(open), Some("remove"), y]
+                }
+                None => [None, None, y],
             }
-            None => [None; 3],
-        },
+        }
         Section::History if hub.clear_selected() => [Some(clear()), None, None],
         Section::History => match hub.selected_url() {
             Some(url) => [Some("open"), Some("remove"), Some(bookmark(&url))],
@@ -884,6 +887,9 @@ pub(super) fn site_icon(icons: &PageIcons, url: &str) -> Option<egui::Atom<'stat
     })
 }
 
+/// The Bookmarks section's filter row, apart from Home's.
+const BOOKMARK_FILTERS_SALT: &str = "hub_bookmark_filters";
+
 /// Bookmarks section: the bookmarks in manual order, highlighted row selected;
 /// a named one shows its name and address, an unnamed one its site and path.
 fn add_bookmarks_section(
@@ -906,10 +912,23 @@ fn add_bookmarks_section(
     // Fixed widths derived from the screen (not `ui.available_width()`, which is
     // unreliable inside a scroll area and made the list jump horizontally).
     let row_w = screen.width() - SIDES;
+    let filters = bookmarks.filters();
+    if filters.len() > 1 {
+        let row = super::home::FilterRow {
+            filters: &filters,
+            filter: bookmarks.filter(),
+            salt: BOOKMARK_FILTERS_SALT,
+        };
+        if let Some(filter) = super::home::add_filter_row(ui, row, row_w, false, commands) {
+            commands.push(AppCommand::Hub(HubAction::FilterBookmarks(filter.clone())));
+        }
+        ui.add_space(ROW_GAP);
+    }
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
-        for (i, bookmark) in bookmarks.all().iter().enumerate() {
-            let selected = i == bookmarks.selected();
+        for (row, i) in bookmarks.shown().into_iter().enumerate() {
+            let bookmark = &bookmarks.all()[i];
+            let selected = row == bookmarks.selected();
             let url = &bookmark.url;
             let resp = two_line_row(ui, row_w, selected);
             let icon = page_icon(icons, url);
@@ -954,7 +973,7 @@ fn add_bookmarks_section(
             if delete_button(ui, action_slot(resp.rect, 0), selected, dim).clicked() {
                 commands.push(AppCommand::Hub(HubAction::RemoveAt(i)));
             }
-            follow_pointer(&resp, &resp, selected, i, commands);
+            follow_pointer(&resp, &resp, selected, row, commands);
         }
     });
 }

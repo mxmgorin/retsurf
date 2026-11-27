@@ -1003,6 +1003,7 @@ impl AppUi {
                     let filter_row = home::FilterRow {
                         filters: &list.filters,
                         filter: &list.filter,
+                        salt: home::FILTERS_SALT,
                     };
                     let home_caret = caret_for(OskField::Home);
                     let tiles = home::Tiles {
