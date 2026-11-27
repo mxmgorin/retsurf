@@ -3,6 +3,9 @@
 # stylo reads this at compile time (option_env! in stylo/parallel.rs).
 [env]
 SERVO_STYLE_THREAD_STACK_SIZE_KB = "2048"
+# log2 of the largest page an Android kernel uses: jemalloc bakes its page size in
+# and fails on a kernel with larger pages.
+AARCH64_LINUX_ANDROID_JEMALLOC_SYS_WITH_LG_PAGE = "14"
 
 # Android link fixes, scoped to the cross-compile target so desktop builds are
 # untouched. Paths are relative to the repo root (cargo's rustc cwd):

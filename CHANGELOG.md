@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Engine on Servo `main` as of 2026-11-26
 - ResizeObserver always on, `[experimental] resize_observer` removed
 - Faster promise chains and async functions, canvas text and PNG decoding
+- Faster page scripts and layout on Android
 
 ### Fixed
 
