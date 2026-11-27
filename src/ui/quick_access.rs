@@ -398,7 +398,7 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::Options(OptionsRow::MoveRight) => bold::ARROW_RIGHT,
         Entry::Options(OptionsRow::Remove) => bold::TRASH,
         Entry::Tab(_) => bold::BROWSER,
-        Entry::NewTab => bold::PLUS,
+        Entry::NewTab => bold::PLUS_CIRCLE,
         Entry::Quick(field) => match Settings::fields()[field].quick_label() {
             "Scaling" => bold::FRAME_CORNERS,
             "Shader" => bold::TELEVISION_SIMPLE,

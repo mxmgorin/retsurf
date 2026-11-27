@@ -490,6 +490,28 @@ pub(super) fn add_hub(
     }
 }
 
+/// The Tabs section's leading row, laid out as a tab row so it reads as one:
+/// a plus in the site icons' column, or before the label with icons off.
+fn new_tab_row(ui: &mut egui::Ui, width: f32, selected: bool, icons: &PageIcons) -> egui::Response {
+    let resp = two_line_row(ui, width, selected);
+    let color = palette().text;
+    let slots = RowSlots::of(ui, resp.rect, icons.enabled(), false);
+    let painter = ui.painter();
+    let label = match icons.enabled() {
+        true => {
+            let plus = ListIcon::Glyph(bold::PLUS_CIRCLE, color);
+            paint_icon(painter, slots.icon, plus);
+            NEW_TAB.to_string()
+        }
+        false => format!("{} {NEW_TAB}", bold::PLUS_CIRCLE),
+    };
+    paint_line(painter, slots.title, &label, color, egui::Align::Min);
+    resp
+}
+
+/// The label of the row and card that open a new tab.
+const NEW_TAB: &str = "New tab";
+
 /// Tabs section: a leading "+ New tab" row (selection index 0) over the open tabs
 /// (indices `1..=tabs.len()`), each with a bookmark toggle and a close button.
 fn add_tabs_section(
@@ -506,15 +528,7 @@ fn add_tabs_section(
     section_scroll(ui, screen, foot).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = ROW_GAP;
         let full_w = screen.width() - SIDES;
-        let new_tab = action_row(
-            ui,
-            full_w,
-            selected == 0,
-            bold::PLUS,
-            "New tab",
-            "",
-            Tone::Plain,
-        );
+        let new_tab = new_tab_row(ui, full_w, selected == 0, icons);
         if selected == 0 {
             center_selected(&new_tab);
         }
@@ -667,9 +681,9 @@ fn add_tab_card(
     );
     match tab {
         None => {
-            paint_card_glyph(ui.painter(), picture, bold::PLUS);
-            let plus = ListIcon::Glyph(bold::PLUS, palette().text);
-            paint_card_title(ui.painter(), head, Some(plus), "New tab", false);
+            paint_card_glyph(ui.painter(), picture, bold::PLUS_CIRCLE);
+            let plus = ListIcon::Glyph(bold::PLUS_CIRCLE, palette().text);
+            paint_card_title(ui.painter(), head, Some(plus), NEW_TAB, false);
         }
         Some((_, tab)) => {
             paint_tab_picture(ui, picture, tab, view, selected);
