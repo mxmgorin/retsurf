@@ -932,20 +932,23 @@ fn add_bookmarks_section(
             let url = &bookmark.url;
             let resp = two_line_row(ui, row_w, selected);
             let icon = page_icon(icons, url);
-            let text = actions_start(resp.rect, 1);
-            let slots = RowSlots::of(ui, text, icon.is_some(), true);
+            let pad = ui.spacing().button_padding.x;
+            let mut text = actions_start(resp.rect, 1);
+            // Centred down the row, in line with the actions.
+            let tags_right = text.right() - pad;
+            let tags_budget = row_w * super::home::TAGS_SHARE;
+            let y = resp.rect.center().y;
             let painter = ui.painter();
+            let tags_left =
+                super::home::paint_tags(painter, &bookmark.tags, tags_right, y, tags_budget);
+            if tags_left < tags_right {
+                text.max.x = tags_left - TEXT_GAP + pad;
+            }
+            let slots = RowSlots::of(ui, text, icon.is_some(), true);
             if let Some(icon) = icon {
                 paint_icon(painter, slots.icon, icon);
             }
-            let mut title = slots.title;
-            let tags_budget = row_w * super::home::TAGS_SHARE;
-            let tags_w = super::home::tags_width(painter, &bookmark.tags, tags_budget);
-            if tags_w > 0.0 {
-                let y = title.center().y;
-                super::home::paint_tags(painter, &bookmark.tags, title.right(), y, tags_budget);
-                title.max.x -= tags_w + TEXT_GAP;
-            }
+            let title = slots.title;
             let label = labels::bookmark_label(bookmark);
             let text = palette().text;
             match bookmark.launch {

@@ -1049,6 +1049,7 @@ pub(super) fn paint_tags(
     budget: f32,
 ) -> f32 {
     let mut x = right;
+    let letters = x_middle(painter, font(TAG_FONT));
     for galley in tag_pills(painter, tags, budget).into_iter().rev() {
         let rect = egui::Rect::from_min_max(
             egui::pos2(x - pill_width(&galley), y - TAG_H / 2.0),
@@ -1056,7 +1057,7 @@ pub(super) fn paint_tags(
         );
         let stroke = egui::Stroke::new(LINE_W, palette().border);
         painter.rect_stroke(rect, TAG_H / 2.0, stroke, egui::StrokeKind::Inside);
-        let at = rect.center() - galley.size() / 2.0;
+        let at = egui::pos2(rect.center().x - galley.size().x / 2.0, y - letters);
         painter.galley(at, galley, palette().muted);
         x = rect.left() - TAG_GAP;
     }
@@ -1066,11 +1067,18 @@ pub(super) fn paint_tags(
     }
 }
 
-/// The width [`paint_tags`] takes for `tags` within `budget`; none without tags.
-pub(super) fn tags_width(painter: &egui::Painter, tags: &[String], budget: f32) -> f32 {
-    let pills = tag_pills(painter, tags, budget);
-    let gaps = pills.len().saturating_sub(1) as f32 * TAG_GAP;
-    pills.iter().map(pill_width).sum::<f32>() + gaps
+/// How far below the top of a line of `font` the middle of its lowercase
+/// letters sits: the point to centre a lowercase label on.
+fn x_middle(painter: &egui::Painter, font: egui::FontId) -> f32 {
+    let galley = painter.layout_no_wrap("x".to_owned(), font, egui::Color32::WHITE);
+    let x = galley
+        .rows
+        .first()
+        .and_then(|row| Some((row, row.row.glyphs.first()?)));
+    match x {
+        Some((row, glyph)) => row.pos.y + glyph.pos.y + glyph.uv_rect.offset.y / 2.0,
+        None => galley.size().y / 2.0,
+    }
 }
 
 /// The pills `tags` show within `budget` across: those that fit, then a `+N`
