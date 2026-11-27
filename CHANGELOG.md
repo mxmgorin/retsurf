@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hub rows are two lines: the title over the address, visit time or download status, beside a larger site icon
 - Hub section bar and Menu show the tab count and download progress the way the toolbar does
 - Quick Access: Enter game mode is the last row, where Exit game mode is in a game; Launch as is not shown over a game
+- One bookmark icon in the Hub, Menu and Quick Access, filled for a bookmarked page; Quick Access shows it in place of Saved
 - Engine on Servo `main` as of 2026-11-26
 - ResizeObserver always on, `[experimental] resize_observer` removed
 - Faster promise chains and async functions, canvas text and PNG decoding

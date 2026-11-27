@@ -150,6 +150,8 @@ pub(super) struct Lead<'a> {
 /// A row's leading icon: a glyph in the label's colour, a picture, or a mark.
 pub(super) enum RowIcon<'a> {
     Glyph(&'static str),
+    /// An [`egui_phosphor::fill`] glyph in the accent: the row's "on" state.
+    Fill(&'static str),
     Image(egui::Atom<'a>),
     Mark(Mark),
 }
@@ -159,7 +161,7 @@ impl Lead<'_> {
     fn mark(&self) -> Option<Mark> {
         match self.icon {
             RowIcon::Mark(mark) => Some(mark),
-            RowIcon::Glyph(_) | RowIcon::Image(_) => None,
+            RowIcon::Glyph(_) | RowIcon::Fill(_) | RowIcon::Image(_) => None,
         }
     }
 }
@@ -312,6 +314,10 @@ fn lead_atoms<'a>(lead: Lead<'a>, tone: Tone, shrink: bool, icon_id: egui::Id) -
             let glyph = egui::RichText::new(glyph)
                 .color(tone_color(tone))
                 .size(ROW_FONT);
+            centered(glyph.into(), column, icon_id)
+        }
+        RowIcon::Fill(glyph) => {
+            let glyph = icon_fill(glyph).color(palette().accent).size(ROW_FONT);
             centered(glyph.into(), column, icon_id)
         }
         RowIcon::Image(image) => centered(image, column, icon_id),

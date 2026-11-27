@@ -167,7 +167,7 @@ impl App {
         }
         if self.browser.launched().is_some() && self.ui.hub.is_bookmarked(&url) {
             self.ui
-                .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+                .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Already in bookmarks"));
             return;
         }
         self.toggle_bookmark(&url);
@@ -210,7 +210,7 @@ impl App {
         };
         self.ui.hub.bookmarks.add(url, name, launch);
         self.ui
-            .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmarked"));
+            .toast(Toast::new(bold::BOOKMARK_SIMPLE, "Bookmark added"));
     }
 
     /// Remove the bookmark at `index`. One with settings or tags takes a second

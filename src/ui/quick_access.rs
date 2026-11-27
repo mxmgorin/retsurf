@@ -26,7 +26,7 @@ use crate::ui::panel::{
     ROW_GAP, ROW_H,
 };
 use crate::ui::theme::{self, palette, ROW_FONT};
-use egui_phosphor::bold;
+use egui_phosphor::{bold, fill};
 use egui_sdl2::egui;
 
 /// The strip's width where the screen has room for it; a narrower screen gets
@@ -187,6 +187,9 @@ fn add_rows(
                 .filter(|tab| tab.url != HOME_URL)
                 .and_then(|tab| hub::site_icon(icons, &tab.url))
                 .map(RowIcon::Image),
+            Entry::Run(Action::Bookmark) if panel.saved => {
+                Some(RowIcon::Fill(fill::BOOKMARK_SIMPLE))
+            }
             Entry::List(Section::Tabs) => Some(RowIcon::Mark(Mark::Tabs(tabs.len()))),
             Entry::List(Section::Downloads) if downloads != Chip::Hidden => {
                 Some(RowIcon::Mark(Mark::Downloads(downloads)))
@@ -378,12 +381,12 @@ fn glyph(entry: Entry) -> &'static str {
         Entry::Settings => bold::GEAR,
         Entry::Quit => bold::POWER,
         Entry::Run(Action::Reader) => bold::BOOK_OPEN,
-        Entry::Run(Action::Bookmark) => bold::STAR,
+        Entry::Run(Action::Bookmark) => bold::BOOKMARK_SIMPLE,
         Entry::Run(Action::Home) => bold::HOUSE,
         Entry::Run(Action::Address) => bold::MAGNIFYING_GLASS,
         Entry::Run(_) => NO_ICON,
         Entry::List(Section::Tabs) => bold::TABS,
-        Entry::List(Section::Bookmarks) => bold::BOOKMARKS,
+        Entry::List(Section::Bookmarks) => bold::BOOKMARK_SIMPLE,
         Entry::List(Section::History) => bold::CLOCK_COUNTER_CLOCKWISE,
         Entry::List(Section::Downloads) => bold::DOWNLOAD_SIMPLE,
         Entry::Options(OptionsRow::Open) => bold::ARROW_SQUARE_OUT,

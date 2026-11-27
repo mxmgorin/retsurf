@@ -576,11 +576,10 @@ impl Opening<'static> {
     }
 }
 
-/// The Bookmark row's value while the shown page is bookmarked.
-const SAVED: &str = "Saved";
-
 pub struct QuickAccess {
     pub visible: bool,
+    /// Whether the shown page is bookmarked.
+    pub saved: bool,
     strip: Strip,
     rows: Vec<Row>,
     /// The global values a site's own stand in for, while one applies.
@@ -606,6 +605,7 @@ impl QuickAccess {
     pub fn new() -> Self {
         Self {
             visible: false,
+            saved: false,
             strip: Strip::QuickAccess,
             rows: Vec::new(),
             global: None,
@@ -674,8 +674,7 @@ impl QuickAccess {
         }
         self.page_js = opening.page_js.map(str::to_string);
         self.page_font_size = opening.page_font_size;
-        let saved = if opening.saved { SAVED } else { "" };
-        self.set_value(Entry::Run(Action::Bookmark), saved.to_string());
+        self.saved = opening.saved;
         if let Some(name) = opening.input_map {
             self.set_value(Entry::InputMap, name.to_string());
         }
@@ -689,6 +688,7 @@ impl QuickAccess {
     /// Show `rows` as `strip`, highlighting the first, with no values yet.
     fn show(&mut self, strip: Strip, rows: Vec<Row>) {
         self.visible = true;
+        self.saved = false;
         self.strip = strip;
         self.bookmark = None;
         self.page_js = None;
@@ -1681,7 +1681,7 @@ mod tests {
             ..Opening::bare(Strip::QuickAccess, Over::Tab(TabMode::Game))
         };
         panel.open(&game, &AppConfig::default());
-        assert_eq!(value_of(&panel, Entry::Run(Action::Bookmark)), SAVED);
+        assert!(panel.saved);
         assert_eq!(value_of(&panel, Entry::InputMap), "Keyboard (WASD)");
     }
 

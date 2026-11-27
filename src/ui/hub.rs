@@ -46,12 +46,12 @@ fn bookmark_button(
     bookmarked: bool,
     dim: egui::Color32,
 ) -> egui::Response {
-    let star = if bookmarked {
-        theme::icon_fill(fill::STAR).color(palette().accent)
+    let glyph = if bookmarked {
+        theme::icon_fill(fill::BOOKMARK_SIMPLE).color(palette().accent)
     } else {
-        theme::icon(bold::STAR).color(dim)
+        theme::icon(bold::BOOKMARK_SIMPLE).color(dim)
     };
-    row_action(ui, slot, star)
+    row_action(ui, slot, glyph)
 }
 
 /// A row's action at `slot` inside the row: a bare glyph, framed under the
@@ -331,7 +331,7 @@ fn url_without_scheme(url: &str) -> &str {
 fn section_icon(section: Section) -> &'static str {
     match section {
         Section::Tabs => bold::TABS,
-        Section::Bookmarks => bold::BOOKMARKS,
+        Section::Bookmarks => bold::BOOKMARK_SIMPLE,
         Section::History => bold::CLOCK_COUNTER_CLOCKWISE,
         Section::Downloads => bold::DOWNLOAD_SIMPLE,
     }
@@ -557,15 +557,15 @@ fn add_tabs_section(
             }
             // Close sits at the far right, so the toggle's slot stays when it can't act.
             let marked = hub.is_bookmarked(&tab.url);
-            let star_slot = action_slot(resp.rect, 1);
+            let bookmark_slot = action_slot(resp.rect, 1);
             if !hub.can_toggle_bookmark(tab) {
                 if marked {
-                    let star = theme::icon_fill(fill::STAR)
+                    let glyph = theme::icon_fill(fill::BOOKMARK_SIMPLE)
                         .size(ICON)
                         .color(palette().accent);
-                    ui.put(star_slot, egui::Label::new(star).selectable(false));
+                    ui.put(bookmark_slot, egui::Label::new(glyph).selectable(false));
                 }
-            } else if bookmark_button(ui, star_slot, marked, dim).clicked() {
+            } else if bookmark_button(ui, bookmark_slot, marked, dim).clicked() {
                 commands.push(AppCommand::Hub(HubAction::ToggleBookmark(tab.url.clone())));
             }
             if delete_button(ui, action_slot(resp.rect, 0), sel, dim).clicked() {
